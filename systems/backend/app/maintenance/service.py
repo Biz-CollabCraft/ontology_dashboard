@@ -30,6 +30,7 @@ from .cost_analysis_schema import (
     CostAnalysisBasis,
     MaintenanceActionCode,
 )
+from .cost_basis import CostBasisResolutionContext
 from .cost_calculator import (
     MaintenanceCostAnalysisInput,
     calculate_maintenance_cost_scenarios,
@@ -809,8 +810,9 @@ class MaintenanceLoopService:
 
         Scope, equipment, Diagnosis lineage, and Action candidate identity are
         resolved from canonical Maintenance records. TOOL_REPLACEMENT economic
-        inputs come from the versioned Backend provider; the caller supplies
-        only the Action and the SOP reference it consulted.
+        inputs come from the versioned Backend provider, while its no-action
+        probability is read from the authorized source Product Result. The
+        caller supplies only the Action and the SOP reference it consulted.
         """
 
         inspection_result = self.repository.get_inspection_result(
@@ -873,6 +875,51 @@ class MaintenanceLoopService:
         resolution_context = derive_cost_basis_resolution_context(inspection_result)
         resolution_context.require_complete_for(action_code.value)
         if action_code is MaintenanceActionCode.TOOL_REPLACEMENT:
+            projection = self._event_evidence_projection(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                event_id=inspection_result.event_id,
+            )
+            subject = projection.get("subject")
+            artifact = projection.get("artifact_reference")
+            assessment = projection.get("assessment")
+            if not all(
+                isinstance(value, Mapping)
+                for value in (subject, artifact, assessment)
+            ):
+                raise ValueError(
+                    "Event Evidence Projection is missing cost probability sections"
+                )
+            if (
+                self._required_text(artifact, "artifact_id")
+                != source_product_result_id
+            ):
+                raise ValueError("cost analysis Product Result lineage mismatch")
+            if self._required_text(projection, "evidence_id") != source_evidence_id:
+                raise ValueError("cost analysis Evidence lineage mismatch")
+            if (
+                self._required_text(subject, "equipment_id")
+                != inspection_result.asset_id
+            ):
+                raise ValueError("cost analysis equipment identity mismatch")
+            failure_probability = assessment.get("failure_probability")
+            if (
+                isinstance(failure_probability, bool)
+                or not isinstance(failure_probability, (int, float))
+                or not 0 <= float(failure_probability) <= 1
+            ):
+                raise ValueError(
+                    "cost analysis requires a valid source Product Result failure_probability"
+                )
+            resolution_context = CostBasisResolutionContext.model_validate(
+                {
+                    **resolution_context.model_dump(),
+                    "source_product_result_id": source_product_result_id,
+                    "source_evidence_id": source_evidence_id,
+                    "source_failure_probability": float(failure_probability),
+                }
+            )
             cost_basis = self.cost_basis_provider.tool_replacement_basis(
                 calculated_at=timestamp,
                 context=resolution_context,

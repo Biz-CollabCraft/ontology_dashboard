@@ -26,6 +26,19 @@ const ACTION_LABEL: Record<MaintenanceActionCode, string> = {
   COOLING_SYSTEM_RESTORE: "냉각 시스템 복구",
 };
 
+const DEMO_SOP_BY_ACTION: Partial<
+  Record<MaintenanceActionCode, Pick<MvpInspectionGuidance, "sopId" | "version">>
+> = {
+  TOOL_REPLACEMENT: {
+    sopId: "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+    version: "demo-2026-08-28",
+  },
+  COOLING_SYSTEM_RESTORE: {
+    sopId: "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+    version: "demo-2026-08-28",
+  },
+};
+
 const CONFIDENCE_LABEL = {
   high: "높음",
   medium: "보통",
@@ -106,6 +119,19 @@ export function buildCostRequest(
   };
 }
 
+export function resolveCostAnalysisSopReference(
+  guidance: Pick<MvpInspectionGuidance, "sopId" | "version"> | null,
+  actionCode: MaintenanceActionCode | null,
+): Pick<MvpInspectionGuidance, "sopId" | "version"> | null {
+  if (guidance?.sopId.trim() && guidance.version.trim()) {
+    return {
+      sopId: guidance.sopId.trim(),
+      version: guidance.version.trim(),
+    };
+  }
+  return actionCode ? DEMO_SOP_BY_ACTION[actionCode] ?? null : null;
+}
+
 function requestKey(prefix: string): string {
   const suffix = globalThis.crypto?.randomUUID?.()
     ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -137,8 +163,6 @@ export function MaintenanceCostDecisionPanel({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sopId, setSopId] = useState(guidance?.sopId ?? "");
-  const [sopVersion, setSopVersion] = useState(guidance?.version ?? "");
 
   const load = async (signal?: AbortSignal) => {
     setLoading(true);
@@ -188,11 +212,6 @@ export function MaintenanceCostDecisionPanel({
     return () => controller.abort();
   }, [projectId, workspaceId, eventId]);
 
-  useEffect(() => {
-    if (guidance?.sopId) setSopId(guidance.sopId);
-    if (guidance?.version) setSopVersion(guidance.version);
-  }, [guidance?.sopId, guidance?.version]);
-
   const inspection = useMemo(() => latestEligibleInspection(lineage), [lineage]);
   const stageOpen = useMemo(
     () => isCostAnalysisStageOpen(lineage, inspection),
@@ -211,10 +230,14 @@ export function MaintenanceCostDecisionPanel({
   const isImmediateCooling = selectedActionCode === "COOLING_SYSTEM_RESTORE";
   const visibleCalculationComplete = visibleOptions.length > 0
     && visibleOptions.every((option) => option.calculation_status === "calculated");
+  const sopReference = useMemo(
+    () => resolveCostAnalysisSopReference(guidance, selectedActionCode),
+    [guidance, selectedActionCode],
+  );
   const calculate = async () => {
     if (!inspection || !selectedActionCode) return;
-    if (!sopId.trim() || !sopVersion.trim()) {
-      setError("점검에 참고한 SOP ID와 버전을 입력해 주세요.");
+    if (!sopReference) {
+      setError("선택한 정비 Action에 연결된 SOP 기준정보가 없습니다.");
       return;
     }
     setSubmitting(true);
@@ -224,10 +247,7 @@ export function MaintenanceCostDecisionPanel({
         projectId,
         workspaceId,
         inspection.inspection_result_id,
-        buildCostRequest(
-          { sopId: sopId.trim(), version: sopVersion.trim() },
-          selectedActionCode,
-        ),
+        buildCostRequest(sopReference, selectedActionCode),
         requestKey("cost-analysis"),
       );
       await load();
@@ -240,9 +260,7 @@ export function MaintenanceCostDecisionPanel({
   };
 
   const blocker = actionCandidates.length === 0
-      ? "점검 결과에서 실행 가능한 정비 Action 후보가 확인되지 않았습니다."
-    : !sopId.trim() || !sopVersion.trim()
-      ? "점검에 참고한 SOP 기준정보가 필요합니다."
+    ? "점검 결과에서 실행 가능한 정비 Action 후보가 확인되지 않았습니다."
     : null;
   if (loading || !inspection || !stageOpen) return null;
 
@@ -250,22 +268,25 @@ export function MaintenanceCostDecisionPanel({
     <section className="mvp-maintenance-cost-panel" aria-label="정비 비용 분석">
       <header>
         <Calculator size={14} />
-        <strong>{isImmediateCooling ? "즉시 복구 예상 비용" : "정비 비용 분석"}</strong>
+        <div>
+          <span>1단계</span>
+          <strong>{isImmediateCooling ? "즉시 복구 비용 확인" : "정비 비용 확인"}</strong>
+        </div>
         <button type="button" className="mvp-icon-button" onClick={() => void load()} disabled={loading} aria-label="비용 분석 새로고침">
           <RefreshCw size={13} />
         </button>
       </header>
       <p>
         {isImmediateCooling
-          ? "현재 데이터로 근거를 확인할 수 있는 즉시 냉각 복구 비용만 제공합니다. 버튼을 누르기 전에는 계산하지 않습니다."
-          : "점검 결과에서 확인된 정비 Action 후보의 비용만 비교합니다. 버튼을 누르기 전에는 분석하지 않습니다."}
+          ? "점검 결과로 확인된 냉각 복구 후보의 현재 예상 비용을 계산합니다."
+          : "점검 결과로 확인된 정비 후보의 예상 비용을 비교합니다."}
       </p>
       {blocker ? <small className="mvp-cost-warning">{blocker}</small> : null}
       {error ? <small className="mvp-cost-error">{error}</small> : null}
 
       {actionCandidates.length ? (
         <div className="mvp-cost-action-candidates" aria-label="정비 Action 후보">
-          <strong>정비 Action 후보</strong>
+          <strong>점검 결과</strong>
           {actionCandidates.map((candidate) => (
             <button
               key={candidate.action_candidate_id}
@@ -284,18 +305,29 @@ export function MaintenanceCostDecisionPanel({
 
       {selectedActionCode ? (
         <div className="mvp-cost-inputs">
-          <p>
-            {selectedActionCode === "TOOL_REPLACEMENT"
-              ? "인서트 1개 비용과 노무 기준은 Backend의 버전 관리 기준정보를 사용합니다."
-              : "사내 냉각 경로 세척·막힘 해소·동작 확인 범위의 비용 기준은 Backend가 관리합니다. 부품 교체가 필요하면 이 기준을 사용할 수 없습니다."}
-            {" "}{isImmediateCooling
-              ? "현재 서버 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다."
-              : "즉시·12시간 후 비용 산정 가정 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다."}
-          </p>
-          <small>참고 SOP: {sopId || "-"} · {sopVersion || "-"}</small>
-          <button type="button" className="mvp-button" disabled={Boolean(blocker) || loading || submitting} onClick={() => void calculate()}>
+          {sopReference ? (
+            <div className="mvp-cost-sop-summary">
+              <span>자동 선택된 참고 SOP</span>
+              <strong>{sopReference.sopId}</strong>
+              <small>{sopReference.version} · 데모 SOP 기준</small>
+            </div>
+          ) : (
+            <div className="mvp-cost-sop-summary is-missing">
+              <span>참고 SOP</span>
+              <strong>연결된 기준정보 없음</strong>
+              <small>이 Action에 적용할 승인된 SOP를 먼저 연결해야 합니다.</small>
+            </div>
+          )}
+          <div className="mvp-cost-request-row">
+            <small>
+              {selectedActionCode === "TOOL_REPLACEMENT"
+                ? "인서트·노무 기준은 Backend 버전 기준정보를 사용합니다."
+                : "냉각 복구 기준은 Backend 버전 기준정보를 사용합니다."}
+            </small>
+            <button type="button" className="mvp-button" disabled={Boolean(blocker) || !sopReference || loading || submitting} onClick={() => void calculate()}>
             {isImmediateCooling ? "즉시 복구 비용 확인" : "비용 분석 요청"}
-          </button>
+            </button>
+          </div>
         </div>
       ) : null}
 

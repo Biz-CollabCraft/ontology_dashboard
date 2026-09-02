@@ -358,6 +358,35 @@ def test_technician_executes_and_requests_replay_without_caller_lineage() -> Non
     ]
 
 
+def test_process_engineer_can_also_execute_maintenance_and_request_replay() -> None:
+    client, service = client_for("process_engineer")
+
+    started = client.post(
+        f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/start",
+        json={},
+        headers={"Idempotency-Key": "maintenance-start-engineer-001"},
+    )
+    completed = client.post(
+        f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/complete",
+        json={"outcome": "tool replaced"},
+        headers={"Idempotency-Key": "maintenance-complete-engineer-001"},
+    )
+    replay = client.post(
+        f"{BASE}/maintenance-events/MAINTENANCE-EVENT-1/replay",
+        json={"restart_at": "2026-08-24T09:35:00Z"},
+        headers={"Idempotency-Key": "maintenance-replay-engineer-001"},
+    )
+
+    assert started.status_code == 200
+    assert completed.status_code == 200
+    assert replay.status_code == 200
+    assert [name for name, _ in service.calls] == [
+        "maintenance_start",
+        "maintenance_complete",
+        "maintenance_replay",
+    ]
+
+
 def test_maintenance_commands_reject_caller_supplied_canonical_lineage() -> None:
     client, service = client_for("maintenance_technician")
 

@@ -113,6 +113,7 @@ def canonical_projection(
     dataset_version: str = "fixture-compatibility",
     source_sha256: str | None = None,
     decision: str | None = "review_shutdown",
+    failure_probability: float | None = 0.82,
 ) -> dict:
     actions = [] if decision is None else [{"action_id": decision, "basis": ["factor.1"]}]
     return {
@@ -134,7 +135,10 @@ def canonical_projection(
             "evidence_payload_reference": artifact_id,
             "source_sha256": source_sha256,
         },
-        "assessment": {"operational_decision_kind": decision},
+        "assessment": {
+            "operational_decision_kind": decision,
+            "failure_probability": failure_probability,
+        },
         "report_projection": {"recommended_actions": actions},
         "provenance": {
             "model_version": model_version,
@@ -162,6 +166,7 @@ def snapshot_basis(projection: dict) -> dict:
 class StaticCostBasisProvider:
     def __init__(self, basis: ToolReplacementCostBasis) -> None:
         self.basis = basis
+        self.tool_context: CostBasisResolutionContext | None = None
 
     def tool_replacement_basis(
         self,
@@ -169,7 +174,8 @@ class StaticCostBasisProvider:
         calculated_at: datetime,
         context: CostBasisResolutionContext,
     ) -> ToolReplacementCostBasis:
-        del calculated_at, context
+        del calculated_at
+        self.tool_context = context
         return self.basis
 
     def cooling_system_restore_basis(
@@ -1197,6 +1203,13 @@ def test_cost_analysis_resolves_lineage_and_persists_read_only_snapshot(tmp_path
         "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
         "sop_version": "demo-2026-08-28",
     }
+    assert isinstance(loop.cost_basis_provider, StaticCostBasisProvider)
+    assert loop.cost_basis_provider.tool_context is not None
+    assert loop.cost_basis_provider.tool_context.source_product_result_id == "RESULT-001"
+    assert loop.cost_basis_provider.tool_context.source_evidence_id == (
+        "EVD-EVT-RESULT-001"
+    )
+    assert loop.cost_basis_provider.tool_context.source_failure_probability == 0.82
     assert {
         option["action_candidate_id"] for option in result["options"]
     } == {
@@ -1259,6 +1272,31 @@ def test_cost_analysis_resolves_lineage_and_persists_read_only_snapshot(tmp_path
         workspace_id="workspace-1",
         analysis_id=created["analysis_id"],
     ) == result
+
+
+def test_cost_analysis_fails_closed_without_source_product_result_probability(
+    tmp_path,
+) -> None:
+    query = ProjectionQuery(canonical_projection(failure_probability=0.82))
+    loop = service(tmp_path, query=query)
+    _work_order_id, inspection_result_id = run_completed_inspection(loop)
+    query.projection = canonical_projection(failure_probability=None)
+
+    with pytest.raises(ValueError, match="Product Result failure_probability"):
+        loop.calculate_tool_replacement_cost(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            inspection_result_id=inspection_result_id,
+            payload=cost_analysis_request(),
+            actor_id="manager-1",
+            idempotency_key="cost-analysis-missing-probability-001",
+        )
+
+    assert loop.repository.list_cost_analyses(
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+    ) == ()
 
 
 def test_manual_recommendation_preserves_consulted_analysis_without_selecting_option(

@@ -853,7 +853,7 @@ function WorkStatusFixedBar({
         onClick={onAction}
       >
         {loading ? <RefreshCw className="mvp-action-spinner" size={14} /> : <ClipboardCheck size={14} />}
-        {loading ? "처리 중" : actionDisabled ? "액션 대기" : nextActionLabel}
+        {loading ? "처리 중" : nextActionLabel}
       </button>
     </section>
   );
@@ -2209,6 +2209,16 @@ function AssetPreviewPanel({
                 </p>
               </section>
               {eventId ? (
+                <MaintenanceCostDecisionPanel
+                  projectId={projectId}
+                  workspaceId={workspaceId}
+                  eventId={eventId}
+                  guidance={inspectionTargets.find((item) => item.target?.inspectionGuidance)?.target?.inspectionGuidance ?? null}
+                  onChanged={refreshWorkflow}
+                  onEligibilityChanged={(eligible) => setCostReviewEventId(eligible ? eventId : null)}
+                />
+              ) : null}
+              {eventId ? (
                 <MaintenanceWorkflowActionPanel
                   key={`${eventId}:${workflowRevision}:manager`}
                   projectId={projectId}
@@ -2225,16 +2235,6 @@ function AssetPreviewPanel({
                   onChanged={refreshWorkflow}
                   onStatusChanged={setWorkflowStatus}
                   onPostMaintenancePrediction={reportPostMaintenancePrediction}
-                />
-              ) : null}
-              {eventId ? (
-                <MaintenanceCostDecisionPanel
-                  projectId={projectId}
-                  workspaceId={workspaceId}
-                  eventId={eventId}
-                  guidance={inspectionTargets.find((item) => item.target?.inspectionGuidance)?.target?.inspectionGuidance ?? null}
-                  onChanged={refreshWorkflow}
-                  onEligibilityChanged={(eligible) => setCostReviewEventId(eligible ? eventId : null)}
                 />
               ) : null}
             </>

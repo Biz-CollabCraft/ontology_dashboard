@@ -36,14 +36,21 @@ def _require_scope(
 
 
 def _require_product_role(principal: Any, project_id: str, role: str) -> None:
+    _require_any_product_role(principal, project_id, role)
+
+
+def _require_any_product_role(
+    principal: Any, project_id: str, *allowed_roles: str
+) -> None:
     roles = set(principal.roles)
     roles.update(principal.project_roles.get(project_id, []))
     if principal.active_project_id == project_id:
         roles.update(principal.active_project_roles)
-    if role not in roles:
+    if not roles.intersection(allowed_roles):
+        role_label = " 또는 ".join(allowed_roles)
         raise AuthError(
             "role_context_denied",
-            f"이 작업은 {role} 역할에서만 수행할 수 있습니다.",
+            f"이 작업은 {role_label} 역할에서만 수행할 수 있습니다.",
         )
 
 
@@ -466,7 +473,12 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "maintenance_technician")
+        _require_any_product_role(
+            principal,
+            project_id,
+            "process_engineer",
+            "maintenance_technician",
+        )
         return _execute(
             lambda: service.start_maintenance(
                 organization_id=principal.organization_id,
@@ -500,7 +512,12 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "maintenance_technician")
+        _require_any_product_role(
+            principal,
+            project_id,
+            "process_engineer",
+            "maintenance_technician",
+        )
         return _execute(
             lambda: service.complete_maintenance(
                 organization_id=principal.organization_id,
@@ -534,7 +551,12 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "maintenance_technician")
+        _require_any_product_role(
+            principal,
+            project_id,
+            "process_engineer",
+            "maintenance_technician",
+        )
         return _execute(
             lambda: service.request_maintenance_replay(
                 organization_id=principal.organization_id,

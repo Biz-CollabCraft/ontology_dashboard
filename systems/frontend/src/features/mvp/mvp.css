@@ -822,6 +822,8 @@
 
 .mvp-maintenance-cost-panel { display: grid; gap: 10px; padding: 11px; border: 1px solid rgba(92, 167, 255, .24); border-radius: 7px; background: rgba(24, 85, 145, .09); }
 .mvp-maintenance-cost-panel > header { display: flex; align-items: center; gap: 7px; }
+.mvp-maintenance-cost-panel > header > div { display: grid; gap: 1px; }
+.mvp-maintenance-cost-panel > header span { color: #82b8f5; font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .mvp-maintenance-cost-panel > header strong { font-size: 12px; }
 .mvp-maintenance-cost-panel > header button { margin-left: auto; }
 .mvp-maintenance-cost-panel .mvp-button:not(.ghost) { color: #fff; background: #2f73c9; border-color: #4c90f0; }
@@ -843,6 +845,14 @@
 .mvp-cost-action-candidates > strong { width: 100%; color: var(--mvp-muted); font-size: 10px; }
 .mvp-cost-inputs { display: grid; gap: 9px; }
 .mvp-cost-sop-reference { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 7px; }
+.mvp-cost-sop-summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 8px 9px; border: 1px solid rgba(181, 196, 214, .13); border-radius: 6px; background: rgba(255, 255, 255, .02); }
+.mvp-cost-sop-summary > span { color: var(--mvp-dim); font-size: 9px; font-weight: 800; }
+.mvp-cost-sop-summary > strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.mvp-cost-sop-summary > small { color: var(--mvp-muted); font-size: 9px; }
+.mvp-cost-sop-summary.is-missing { border-color: rgba(245, 194, 115, .24); background: rgba(126, 79, 15, .09); }
+.mvp-cost-sop-summary.is-missing > strong { color: #f5d29b; }
+.mvp-cost-request-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 9px; }
+.mvp-cost-request-row > small { color: var(--mvp-dim); font-size: 9px; line-height: 1.4; }
 .mvp-cost-inputs fieldset { min-width: 0; margin: 0; padding: 9px; border: 1px solid rgba(181, 196, 214, .13); border-radius: 6px; }
 .mvp-cost-inputs legend { padding: 0 5px; color: #b7d4ff; font-size: 10px; font-weight: 900; }
 .mvp-cost-inputs fieldset > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
@@ -2047,6 +2057,8 @@
   .mvp-system-admin-summary { grid-template-columns: 1fr; }
   .mvp-system-log-line { grid-template-columns: 18px minmax(0, 1fr); padding: 7px 6px; }
   .mvp-system-log-line code { font-size: 11px; }
+  .mvp-cost-request-row { grid-template-columns: 1fr; }
+  .mvp-cost-request-row > .mvp-button { width: 100%; justify-content: center; }
   .mvp-panel-actions .mvp-button { padding: 0 8px; }
   .mvp-report-toolbar .mvp-button { padding: 0 9px; }
   .mvp-report-cover-brand { align-items: flex-start; flex-direction: column; }
