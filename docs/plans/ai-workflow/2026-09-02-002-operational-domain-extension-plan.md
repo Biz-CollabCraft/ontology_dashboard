@@ -1024,6 +1024,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U5. Impact Simulation
 
+- **Status:** Partially Verified. versioned assumptions와 context version set을 사용하는 세 선택지 결정론적 계산, quality/readiness blocker, intermediate values와 limitation 보존을 구현했다. Agent/UI consumer와 실제 운영값 평가는 미구현이다.
 - 제품 코드의 결정론적 simulation policy와 versioned result contract 구현
 - 세 선택지 계산과 `not_calculable` 처리
 - assumptions/formula/intermediate values/source refs 보존
