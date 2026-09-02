@@ -1035,13 +1035,17 @@ def _production_impact(estimated_downtime_minutes: Any) -> str | None:
 
 
 def _closed_loop_context_from_lineage(lineage: dict[str, Any]) -> dict[str, Any]:
-    work_orders = [_work_order_context(item) for item in lineage.get("work_orders") or []]
+    activities = list(lineage.get("activities") or [])
+    work_orders = [
+        _work_order_context(item, activities=activities)
+        for item in lineage.get("work_orders") or []
+    ]
     return {
         "work_orders": work_orders,
         "inspection_results": list(lineage.get("inspection_results") or []),
         "maintenance_actions": list(lineage.get("maintenance_actions") or []),
         "maintenance_events": list(lineage.get("maintenance_events") or []),
-        "activities": list(lineage.get("activities") or []),
+        "activities": activities,
         "available_actions": _available_closed_loop_actions(work_orders),
         "runtime_status": None,
     }
@@ -1060,13 +1064,31 @@ def _has_closed_loop_records(context: dict[str, Any]) -> bool:
     )
 
 
-def _work_order_context(item: dict[str, Any]) -> dict[str, Any]:
+def _work_order_context(
+    item: dict[str, Any],
+    *,
+    activities: list[dict[str, Any]],
+) -> dict[str, Any]:
+    assignment_activity = next(
+        (
+            activity
+            for activity in reversed(activities)
+            if activity.get("work_order_id") == item.get("work_order_id")
+            and activity.get("activity_type") == "work_order.assigned"
+        ),
+        None,
+    )
     return {
         "work_order_id": str(item.get("work_order_id") or ""),
         "work_type": str(item.get("work_type") or ""),
         "status": str(item.get("status") or ""),
         "assigned_to": item.get("assigned_to"),
-        "actor_display_name": item.get("actor_display_name"),
+        "actor_display_name": (
+            None
+            if assignment_activity is None
+            else assignment_activity.get("actor_display_name")
+        ),
+        "assigned_at": item.get("assigned_at"),
         "created_at": item.get("created_at"),
         "updated_at": item.get("updated_at"),
     }
@@ -1080,12 +1102,12 @@ def _available_closed_loop_actions(work_orders: list[dict[str, Any]]) -> list[di
         work_order_id = str(work_order.get("work_order_id") or "")
         actions.append(
             {
-                "action_id": "approve_inspection_work_order",
+                "action_id": "accept_inspection_work_order",
                 "target_type": "work_order",
                 "target_id": work_order_id,
-                "label": "점검 승인",
+                "label": "요청 수락·내게 배정",
                 "disabled_reason": (
-                    "데모 ViewModel은 읽기 전용입니다. 실제 승인은 Closed-loop mutation API 연결 후 처리합니다."
+                    "데모 ViewModel은 읽기 전용입니다. 실제 수락은 Closed-loop mutation API 연결 후 처리합니다."
                 ),
             }
         )

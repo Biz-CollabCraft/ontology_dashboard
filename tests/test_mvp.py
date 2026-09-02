@@ -1569,7 +1569,7 @@ def test_inspection_request_decision_and_activity_reach_detail_and_agent_packet(
     ]
     assert detail["closed_loop"]["activities"][0]["activity_type"] == "work_order.requested"
     assert detail["closed_loop"]["lifecycle_summary"]["current_step"] == "inspection_requested"
-    assert detail["closed_loop"]["primary_action"]["action_id"] == "approve_inspection_work_order"
+    assert detail["closed_loop"]["primary_action"]["action_id"] == "accept_inspection_work_order"
     assert detail["closed_loop"]["timeline"][0]["label"] == "작업요청 생성"
     history = packet["maintenance_history_summary"]
     assert history["provider"] == "closed_loop_maintenance_history_adapter"
@@ -2030,9 +2030,9 @@ def test_asset_detail_view_model_accepts_7d_feature_history_window(
     assert closed_loop["work_orders"][0]["work_type"] == "inspection"
     assert closed_loop["work_orders"][0]["status"] == "requested"
     assert closed_loop["activities"][0]["activity_type"] == "work_order.requested"
-    assert closed_loop["available_actions"][0]["action_id"] == "approve_inspection_work_order"
+    assert closed_loop["available_actions"][0]["action_id"] == "accept_inspection_work_order"
     assert closed_loop["lifecycle_summary"]["current_step"] == "inspection_requested"
-    assert closed_loop["primary_action"]["owner_role"] == "process_manager"
+    assert closed_loop["primary_action"]["owner_role"] == "process_engineer"
     assert closed_loop["timeline"][0]["target_id"] == "WO-INS-GS-004-001"
     assert closed_loop["maintenance_actions"] == []
     assert closed_loop["maintenance_events"] == []

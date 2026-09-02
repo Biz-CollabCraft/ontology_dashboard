@@ -278,6 +278,8 @@ class WorkOrder(ScopedRecord):
     asset_type: str = Field(min_length=1, max_length=160)
     work_type: WorkOrderType
     status: WorkOrderStatus = WorkOrderStatus.REQUESTED
+    assigned_to: str | None = Field(default=None, min_length=1, max_length=240)
+    assigned_at: datetime | None = None
     idempotency_key: str = Field(min_length=8, max_length=200)
     authorization: WorkOrderAuthorization
 
@@ -287,6 +289,12 @@ class WorkOrder(ScopedRecord):
             raise ValueError("work order type must match its authorization")
         if self.asset_id != self.equipment_id:
             raise ValueError("MVP work order requires equipment_id = asset_id")
+        if self.work_type is WorkOrderType.INSPECTION:
+            if self.status is WorkOrderStatus.REQUESTED:
+                if self.assigned_to is not None or self.assigned_at is not None:
+                    raise ValueError("requested inspection work order cannot be assigned")
+            elif self.assigned_to is None or self.assigned_at is None:
+                raise ValueError("accepted inspection work order requires an assignee")
         return self
 
 

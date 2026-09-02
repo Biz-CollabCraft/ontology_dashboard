@@ -190,6 +190,7 @@ function closedLoopFromAssetDetailViewModel(viewModel: AssetDetailViewModel): Mv
       workType: item.work_type,
       status: item.status,
       assignedTo: item.assigned_to ?? null,
+      assignedAt: item.assigned_at ?? null,
       actorDisplayName: item.actor_display_name ?? null,
       createdAt: item.created_at ?? null,
       updatedAt: item.updated_at ?? null,

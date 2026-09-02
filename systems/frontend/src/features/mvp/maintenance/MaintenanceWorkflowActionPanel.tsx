@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
-  approveInspectionWorkOrder,
+  acceptInspectionWorkOrder,
   approveMaintenanceWorkOrder,
   completeInspectionWorkOrder,
   completeMaintenanceAction,
@@ -112,6 +112,7 @@ export function MaintenanceWorkflowActionPanel({
   assetId,
   assetType,
   role,
+  currentUserId,
   snapshotBasis,
   canManage,
   canFieldExecute,
@@ -126,6 +127,7 @@ export function MaintenanceWorkflowActionPanel({
   assetId: string;
   assetType: string;
   role: MvpRoleLens;
+  currentUserId: string;
   snapshotBasis: MvpEvidenceSnapshotBasis | null;
   canManage: boolean;
   canFieldExecute: boolean;
@@ -391,13 +393,8 @@ export function MaintenanceWorkflowActionPanel({
         idempotencyKey: commandKey(eventId, "inspection-request", snapshotBasis.artifactId ?? eventId),
       }) : null;
     } else if (state.inspectionWorkOrder.status === "requested") {
-      label = "점검 작업요청 승인";
-      helper = "승인 후 현장 관리자가 점검을 시작할 수 있습니다.";
-      enabled = canManage;
-      command = () => approveInspectionWorkOrder({
-        projectId, workspaceId, workOrderId: state.inspectionWorkOrder!.work_order_id,
-        idempotencyKey: commandKey(eventId, "inspection-approve", state.inspectionWorkOrder!.work_order_id),
-      });
+      label = "현장 관리자 수락 대기";
+      helper = "현장 관리자가 요청을 수락하면 해당 관리자에게 자동 배정됩니다.";
     } else if (state.inspectionResult?.outcome === "no_action_required") {
       label = "점검 완료 · 정비 불필요";
       helper = "현장 점검 결과 추가 정비가 필요하지 않은 것으로 기록됐습니다.";
@@ -451,10 +448,21 @@ export function MaintenanceWorkflowActionPanel({
       });
     }
   } else {
-    if (state.inspectionWorkOrder?.status === "approved") {
-      label = "점검 시작";
-      helper = "SOP를 확인한 뒤 현장 점검을 시작합니다.";
+    if (state.inspectionWorkOrder?.status === "requested") {
+      label = "요청 수락·내게 배정";
+      helper = "수락과 동시에 이 점검 요청의 담당자로 배정됩니다.";
       enabled = canFieldExecute;
+      command = () => acceptInspectionWorkOrder({
+        projectId, workspaceId, workOrderId: state.inspectionWorkOrder!.work_order_id,
+        idempotencyKey: commandKey(eventId, "inspection-accept", state.inspectionWorkOrder!.work_order_id),
+      });
+    } else if (state.inspectionWorkOrder?.status === "approved") {
+      label = "점검 시작";
+      const assignedToCurrentUser = state.inspectionWorkOrder.assigned_to === currentUserId;
+      helper = assignedToCurrentUser
+        ? "SOP를 확인한 뒤 현장 점검을 시작합니다."
+        : `이 요청은 ${state.inspectionWorkOrder.assigned_to ?? "다른 담당자"}에게 배정되었습니다.`;
+      enabled = canFieldExecute && assignedToCurrentUser;
       command = () => startInspectionWorkOrder({
         projectId, workspaceId, workOrderId: state.inspectionWorkOrder!.work_order_id,
         idempotencyKey: commandKey(eventId, "inspection-start", state.inspectionWorkOrder!.work_order_id),

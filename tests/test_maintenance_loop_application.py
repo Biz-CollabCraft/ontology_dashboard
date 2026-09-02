@@ -30,7 +30,7 @@ from app.maintenance.cost_basis import (
     CostBasisResolutionContext,
     ToolReplacementCostBasis,
 )
-from app.maintenance.maintenance_domain import IdempotencyConflict
+from app.maintenance.maintenance_domain import IdempotencyConflict, InvalidTransition
 from app.maintenance.maintenance_schema import RecommendationDisposition, WorkOrderStatus
 from app.maintenance.service import MaintenanceLoopService
 
@@ -345,9 +345,9 @@ def run_completed_inspection(
         workspace_id="workspace-1",
         work_order_id=work_order_id,
         target=WorkOrderStatus.APPROVED,
-        actor_id="manager-1",
-        actor_display_name="Manager One",
-        idempotency_key="inspection-approve-001",
+        actor_id="engineer-1",
+        actor_display_name="Engineer One",
+        idempotency_key="inspection-accept-001",
     )
     loop.transition_inspection(
         organization_id="org-1",
@@ -402,6 +402,91 @@ def run_requested_maintenance(loop: MaintenanceLoopService) -> str:
     )
     assert decided["work_order_id"] is not None
     return decided["work_order_id"]
+
+
+def test_field_operator_accepts_assignment_and_only_assignee_can_execute(tmp_path) -> None:
+    loop = service(tmp_path)
+    requested = loop.request_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        payload=inspection_request(),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="inspection-request-assignment-001",
+    )
+    work_order_id = requested["work_order_id"]
+    accepted_at = datetime(2026, 9, 2, 10, 0, tzinfo=timezone.utc)
+
+    accepted = loop.transition_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        work_order_id=work_order_id,
+        target=WorkOrderStatus.APPROVED,
+        actor_id="engineer-1",
+        actor_display_name="Engineer One",
+        idempotency_key="inspection-accept-assignment-001",
+        transitioned_at=accepted_at,
+    )
+
+    assert accepted["work_order_status"] == "approved"
+    assert accepted["assigned_to"] == "engineer-1"
+    stored = loop.repository.get_work_order(
+        workspace_id="workspace-1",
+        work_order_id=work_order_id,
+    )
+    assert stored is not None
+    assert stored.assigned_to == "engineer-1"
+    assert stored.assigned_at == accepted_at
+
+    with pytest.raises(InvalidTransition):
+        loop.transition_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            target=WorkOrderStatus.APPROVED,
+            actor_id="engineer-2",
+            actor_display_name="Engineer Two",
+            idempotency_key="inspection-accept-race-002",
+        )
+
+    with pytest.raises(PermissionError, match="assigned field operator"):
+        loop.transition_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            target=WorkOrderStatus.IN_PROGRESS,
+            actor_id="engineer-2",
+            actor_display_name="Engineer Two",
+            idempotency_key="inspection-start-wrong-assignee-001",
+        )
+
+    started = loop.transition_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        work_order_id=work_order_id,
+        target=WorkOrderStatus.IN_PROGRESS,
+        actor_id="engineer-1",
+        actor_display_name="Engineer One",
+        idempotency_key="inspection-start-assignment-001",
+    )
+    assert started["work_order_status"] == "in_progress"
+
+    with pytest.raises(PermissionError, match="assigned field operator"):
+        loop.complete_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=inspection_result("no_action_required"),
+            actor_id="engineer-2",
+            actor_display_name="Engineer Two",
+            idempotency_key="inspection-complete-wrong-assignee-001",
+        )
 
 
 def test_two_stage_inspection_to_maintenance_work_order_lineage(tmp_path) -> None:
@@ -807,7 +892,7 @@ def test_no_action_inspection_cannot_create_maintenance_recommendation(tmp_path)
     )
     work_order_id = requested["work_order_id"]
     for target, actor, key in (
-        (WorkOrderStatus.APPROVED, "manager-1", "inspection-approve-001"),
+        (WorkOrderStatus.APPROVED, "engineer-1", "inspection-accept-001"),
         (WorkOrderStatus.IN_PROGRESS, "engineer-1", "inspection-start-001"),
     ):
         loop.transition_inspection(

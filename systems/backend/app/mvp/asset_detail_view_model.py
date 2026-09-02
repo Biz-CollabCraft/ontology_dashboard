@@ -859,7 +859,7 @@ _LIFECYCLE_STEP_LABELS = {
     "prediction": "예측 생성",
     "evidence": "근거 연결",
     "decision": "운영 판단",
-    "inspection_requested": "점검 승인 대기",
+    "inspection_requested": "현장 수락·배정 대기",
     "inspection_approved": "점검 시작 대기",
     "inspection_in_progress": "점검 진행 중",
     "inspection_completed": "점검 결과 확인",
@@ -909,7 +909,7 @@ _ACTION_OWNER_BY_ID = {
     "create_inspection_work_order": ("process_manager", "생산 운영 의사결정자"),
     "request_inspection_work_order": ("process_manager", "생산 운영 의사결정자"),
     "request_inspection": ("process_manager", "생산 운영 의사결정자"),
-    "approve_inspection_work_order": ("process_manager", "생산 운영 의사결정자"),
+    "accept_inspection_work_order": ("process_engineer", "현장 관리자"),
     "start_inspection_work_order": ("process_engineer", "현장 엔지니어"),
     "start_inspection": ("process_engineer", "현장 엔지니어"),
     "complete_inspection_work_order": ("process_engineer", "현장 엔지니어"),
@@ -1114,6 +1114,7 @@ def _activity_target(activity: dict[str, Any]) -> tuple[str | None, Any]:
 def _activity_label(activity_type: str) -> str:
     labels = {
         "work_order.requested": "작업요청 생성",
+        "work_order.assigned": "요청 수락·담당 배정",
         "work_order.approved": "작업요청 승인",
         "work_order.started": "작업 시작",
         "work_order.completed": "작업 완료",

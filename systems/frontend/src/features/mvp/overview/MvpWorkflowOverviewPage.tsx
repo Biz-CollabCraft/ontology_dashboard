@@ -14,7 +14,12 @@ import {
   Wrench,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { createMvpAgentReviewSummary, getMvpAgentReviewSummary } from "../../../api";
+import {
+  createMvpAgentReviewSummary,
+  getMvpAgentReviewSummary,
+  getOpenInspectionWorkOrders,
+  type OpenInspectionWorkOrderReadModel,
+} from "../../../api";
 import type {
   MvpAgentReviewSummary,
   MvpAgentReviewSummaryResponse,
@@ -212,7 +217,7 @@ const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
 
 const WORK_STATUS_ACTION: Record<WorkStatus, { label: string; disabled: boolean }> = {
   candidate_recommended: { label: "작업 요청", disabled: false },
-  work_requested: { label: "점검 시작", disabled: false },
+  work_requested: { label: "요청 수락·내게 배정", disabled: false },
   assigned: { label: "점검 시작", disabled: false },
   inspection_started: { label: "점검 결과 기록", disabled: false },
   inspection_completed: { label: "비용 확인·정비 판단", disabled: true },
@@ -227,7 +232,7 @@ const CLOSED_LOOP_LIFECYCLE_LABEL: Record<MvpClosedLoopLifecycleStep, string> = 
   evidence: "근거 확인",
   decision: "판단",
   inspection_requested: "점검 요청",
-  inspection_approved: "점검 승인",
+  inspection_approved: "담당 배정",
   inspection_in_progress: "점검 중",
   inspection_completed: "점검 완료",
   recommendation_proposed: "정비안 제안",
@@ -773,7 +778,7 @@ function workStatusFromClosedLoop(closedLoop: MvpClosedLoopSummary | null | unde
 function closedLoopActionForStatus(closedLoop: MvpClosedLoopSummary | null | undefined, status: WorkStatus) {
   const actionIdsByStatus: Record<WorkStatus, string[]> = {
     candidate_recommended: ["create_inspection_work_order", "request_inspection_work_order", "request_inspection"],
-    work_requested: ["approve_inspection_work_order", "start_inspection_work_order", "start_inspection"],
+    work_requested: ["accept_inspection_work_order"],
     assigned: ["start_inspection_work_order", "start_inspection"],
     inspection_started: ["complete_inspection_work_order", "complete_inspection", "complete_work_order"],
     inspection_completed: [],
@@ -974,16 +979,27 @@ function WorkStatusQueueBoard({
   candidates,
   role,
   selectedAssetId,
+  workOrders,
+  loadError,
   onPreview,
 }: {
   candidates: WorkOrderCandidate[];
   role: MvpRoleLens;
   selectedAssetId: string | null;
+  workOrders: OpenInspectionWorkOrderReadModel[];
+  loadError: string | null;
   onPreview: (assetId: string, eventId: string | null) => void;
 }) {
   const items = candidates.map((candidate) => {
-    const status = workStatusForAsset(candidate.asset, candidate.event);
-    return { candidate, status, column: workQueueColumn(status) };
+    const workOrder = workOrders.find((item) => item.asset_id === candidate.event.assetId) ?? null;
+    const status: WorkStatus = workOrder?.status === "requested"
+      ? "work_requested"
+      : workOrder?.status === "approved"
+        ? "assigned"
+        : workOrder?.status === "in_progress"
+          ? "inspection_started"
+          : workStatusForAsset(candidate.asset, candidate.event);
+    return { candidate, workOrder, status, column: workQueueColumn(status) };
   });
   return (
     <section className="mvp-work-queue-board" aria-label="작업 상태 큐">
@@ -992,7 +1008,7 @@ function WorkStatusQueueBoard({
           <span>{role === "field_operator" ? "현장 작업 큐" : "생산 판단 큐"}</span>
           <strong>작업 상태 큐</strong>
         </div>
-        <small>후보 분류 보드 · 실제 전이 상태는 Closed-loop read model 연결 후 반영</small>
+        <small>{loadError ?? "실제 전이 상태는 열린 점검 WorkOrder 기준으로 반영됩니다."}</small>
       </header>
       <div className="mvp-work-kanban" role="list">
         {WORK_QUEUE_COLUMNS.map((column) => {
@@ -1004,10 +1020,13 @@ function WorkStatusQueueBoard({
                 <b>{columnItems.length}</b>
               </header>
               <div>
-                {columnItems.length ? columnItems.map(({ candidate, status }) => {
+                {columnItems.length ? columnItems.map(({ candidate, workOrder, status }) => {
                   const assetName = candidate.asset ? displayAssetName(candidate.asset) : displayEventAssetName(candidate.event);
                   const lineLabel = candidate.asset?.line || candidate.asset?.cell || candidate.event.line || "라인 미지정";
-                  const assignee = candidate.event.assignedEngineer ?? candidate.asset?.assignedEngineer ?? "미배정";
+                  const assignee = workOrder?.assigned_to
+                    ?? candidate.event.assignedEngineer
+                    ?? candidate.asset?.assignedEngineer
+                    ?? "미배정";
                   const secondary = role === "field_operator"
                     ? `${candidate.suspectedPart} · ${displayPartLabel(candidate.event.sparePartAvailable)}`
                     : `${lineLabel} · ${DECISION_LABEL[candidate.event.recommendedDecision]}`;
@@ -1016,7 +1035,10 @@ function WorkStatusQueueBoard({
                       type="button"
                       key={candidate.event.eventId}
                       className={selectedAssetId === candidate.event.assetId ? "mvp-work-kanban-card is-selected" : "mvp-work-kanban-card"}
-                      onClick={() => onPreview(candidate.event.assetId, candidate.event.eventId)}
+                      onClick={() => onPreview(
+                        candidate.event.assetId,
+                        workOrder?.event_id ?? candidate.event.eventId,
+                      )}
                     >
                       <MvpStatusBadge status={candidate.event.status} />
                       <strong>{assetName}</strong>
@@ -1188,6 +1210,7 @@ export function MvpWorkflowOverviewPage({
   canMaterializeAgentSummary,
   canManageWorkflow,
   canExecuteFieldWorkflow,
+  currentUserId,
   onSensorWindowChange,
   onPreviewAsset,
   onRefresh,
@@ -1202,6 +1225,7 @@ export function MvpWorkflowOverviewPage({
   canMaterializeAgentSummary: boolean;
   canManageWorkflow: boolean;
   canExecuteFieldWorkflow: boolean;
+  currentUserId: string;
   onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
   onRefresh: () => void;
@@ -1215,6 +1239,36 @@ export function MvpWorkflowOverviewPage({
     const asset = model.assets.find((item) => item.assetId === event.assetId) ?? null;
     return { event, asset, suspectedPart: suspectedPartLabel(event, asset) };
   });
+  const [openInspectionWorkOrders, setOpenInspectionWorkOrders] = useState<OpenInspectionWorkOrderReadModel[]>([]);
+  const [openInspectionWorkOrdersError, setOpenInspectionWorkOrdersError] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void getOpenInspectionWorkOrders(
+      model.context.projectId,
+      model.context.workspaceId,
+      controller.signal,
+    ).then((response) => {
+      setOpenInspectionWorkOrders(response.items);
+      setOpenInspectionWorkOrdersError(null);
+    }).catch((reason) => {
+      if (!controller.signal.aborted) {
+        setOpenInspectionWorkOrders([]);
+        setOpenInspectionWorkOrdersError(
+          reason instanceof Error ? reason.message : "열린 점검 요청을 불러오지 못했습니다.",
+        );
+      }
+    });
+    return () => controller.abort();
+  }, [model.context.projectId, model.context.refreshedAt, model.context.workspaceId]);
+  const queueCandidates = [...workOrderCandidates];
+  for (const workOrder of openInspectionWorkOrders) {
+    if (queueCandidates.some((candidate) => candidate.event.assetId === workOrder.asset_id)) continue;
+    const event = model.events.find((item) => item.eventId === workOrder.event_id)
+      ?? model.events.find((item) => item.assetId === workOrder.asset_id);
+    if (!event) continue;
+    const asset = model.assets.find((item) => item.assetId === workOrder.asset_id) ?? null;
+    queueCandidates.push({ event, asset, suspectedPart: suspectedPartLabel(event, asset) });
+  }
   const lineImpactSummaries = buildLineImpactSummaries(model.assets);
   const factoryCells = buildFactoryCellLayout(model.assets, lineImpactSummaries);
   const selectedAsset = model.assets.find((asset) => asset.assetId === selectedAssetId)
@@ -1290,13 +1344,30 @@ export function MvpWorkflowOverviewPage({
     ? null
     : Math.round(drawerAsset.failureProbability * 100);
   const drawerDetail = drawerAsset && detail?.event.assetId === drawerAsset.assetId ? detail : null;
-  const drawerEventId = drawerDetail?.snapshotBasis?.eventId
+  const drawerOpenInspectionWorkOrder = drawerAsset
+    ? openInspectionWorkOrders.find((item) => item.asset_id === drawerAsset.assetId) ?? null
+    : null;
+  const drawerEventId = drawerOpenInspectionWorkOrder?.event_id
+    ?? drawerDetail?.snapshotBasis?.eventId
     ?? drawerDetail?.event.eventId
     ?? drawerEvent?.eventId
     ?? drawerAsset?.eventId
     ?? null;
-  const drawerClosedLoop = drawerDetail?.closedLoop ?? null;
-  const drawerClosedLoopStatus = workStatusFromClosedLoop(drawerClosedLoop);
+  const drawerDetailEventId = drawerDetail?.snapshotBasis?.eventId
+    ?? drawerDetail?.event.eventId
+    ?? null;
+  const drawerClosedLoop = drawerOpenInspectionWorkOrder
+    && drawerDetailEventId !== drawerOpenInspectionWorkOrder.event_id
+    ? null
+    : drawerDetail?.closedLoop ?? null;
+  const drawerClosedLoopStatus = (drawerOpenInspectionWorkOrder?.status === "requested"
+      ? "work_requested"
+      : drawerOpenInspectionWorkOrder?.status === "approved"
+        ? "assigned"
+        : drawerOpenInspectionWorkOrder?.status === "in_progress"
+          ? "inspection_started"
+          : null)
+    ?? workStatusFromClosedLoop(drawerClosedLoop);
   const drawerLifecycleSummary = drawerClosedLoop?.lifecycleSummary ?? null;
   const drawerClosedLoopAction = primaryClosedLoopAction(drawerClosedLoop, drawerClosedLoopStatus);
   const drawerPlanningImpact = planningImpactFromOperationContext(drawerDetail);
@@ -1304,9 +1375,14 @@ export function MvpWorkflowOverviewPage({
     ? drawerClosedLoopStatus ?? workStatusForAsset(drawerAsset, drawerEvent)
     : "candidate_recommended";
   const drawerAssignee = drawerAsset
-    ? closedLoopAssignee(drawerClosedLoop) ?? drawerAsset.assignedEngineer ?? drawerEvent?.assignedEngineer ?? "미배정"
+    ? drawerOpenInspectionWorkOrder?.assigned_to
+      ?? closedLoopAssignee(drawerClosedLoop)
+      ?? drawerAsset.assignedEngineer
+      ?? drawerEvent?.assignedEngineer
+      ?? "미배정"
     : "미배정";
-  const drawerWorkId = closedLoopWorkIdLabel(drawerClosedLoop);
+  const drawerWorkId = drawerOpenInspectionWorkOrder?.work_order_id
+    ?? closedLoopWorkIdLabel(drawerClosedLoop);
   const drawerActionLabel = drawerClosedLoopAction?.label ?? null;
   const drawerWorkActionDisabled = true;
   const drawerActionHelper = drawerClosedLoop
@@ -1540,9 +1616,11 @@ export function MvpWorkflowOverviewPage({
       )}
 
       <WorkStatusQueueBoard
-        candidates={workOrderCandidates}
+        candidates={queueCandidates}
         role={role}
         selectedAssetId={selectedAsset?.assetId ?? null}
+        workOrders={openInspectionWorkOrders}
+        loadError={openInspectionWorkOrdersError}
         onPreview={previewInDrawer}
       />
 
@@ -1555,7 +1633,7 @@ export function MvpWorkflowOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "ViewModel" : drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} currentUserId={currentUserId} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "ViewModel" : drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -1792,6 +1870,7 @@ function AssetPreviewPanel({
   detailError,
   sensorWindow,
   role,
+  currentUserId,
   activeTab,
   workStatus,
   workStatusSource,
@@ -1827,6 +1906,7 @@ function AssetPreviewPanel({
   detailError: string | null;
   sensorWindow: MvpSensorWindowId;
   role: MvpRoleLens;
+  currentUserId: string;
   activeTab: DrawerTab;
   workStatus: WorkStatus;
   workStatusSource: string;
@@ -2138,6 +2218,7 @@ function AssetPreviewPanel({
                   assetId={asset.assetId}
                   assetType={asset.assetType}
                   role={role}
+                  currentUserId={currentUserId}
                   snapshotBasis={detail?.snapshotBasis ?? null}
                   canManage={canManageWorkflow}
                   canFieldExecute={canExecuteFieldWorkflow}
@@ -2357,7 +2438,7 @@ function AssetPreviewPanel({
                 <div><dt>다음 액션</dt><dd>{workActionLabel ?? planningImpact?.nextAction ?? "현장 점검 요청"}</dd></div>
               </dl>
               <p className="mvp-action-note">
-                현장 관리자는 승인된 점검과 정비 Action만 실행할 수 있습니다.
+                현장 관리자는 요청을 수락해 본인에게 배정한 뒤 점검을 시작할 수 있습니다.
               </p>
             </section>
             {eventId ? (
@@ -2370,6 +2451,7 @@ function AssetPreviewPanel({
                 assetId={asset.assetId}
                 assetType={asset.assetType}
                 role={role}
+                currentUserId={currentUserId}
                 snapshotBasis={detail?.snapshotBasis ?? null}
                 canManage={canManageWorkflow}
                 canFieldExecute={canExecuteFieldWorkflow}

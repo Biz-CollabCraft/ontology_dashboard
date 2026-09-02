@@ -297,7 +297,7 @@
   "closed_loop_boundary": {
     "mutation_allowed": false,
     "available_action_ids": [
-      "approve_inspection_work_order"
+      "accept_inspection_work_order"
     ],
     "forbidden_actions": [
       "create_work_order",

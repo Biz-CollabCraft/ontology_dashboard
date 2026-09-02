@@ -594,6 +594,8 @@ export interface MaintenanceEventLineageReadModel {
     work_order_id: string;
     work_type: "inspection" | "maintenance";
     status: string;
+    assigned_to?: string | null;
+    assigned_at?: string | null;
   }>;
   inspection_results: MaintenanceInspectionResultReadModel[];
   cost_analyses: MaintenanceCostAnalysisReadModel[];
@@ -624,6 +626,18 @@ export interface MaintenanceEventLineageReadModel {
   activities?: Array<Record<string, unknown>>;
 }
 
+export interface OpenInspectionWorkOrderReadModel {
+  work_order_id: string;
+  event_id: string;
+  asset_id: string;
+  equipment_id: string;
+  asset_type: string;
+  work_type: "inspection";
+  status: "requested" | "approved" | "in_progress";
+  assigned_to?: string | null;
+  assigned_at?: string | null;
+}
+
 export interface MaintenanceCostAnalysisRequest {
   action_code: MaintenanceActionCode;
   sop_id: string;
@@ -644,6 +658,17 @@ export function getMaintenanceEventLineage(
 ): Promise<MaintenanceEventLineageReadModel> {
   return request<MaintenanceEventLineageReadModel>(
     `${maintenanceBase(projectId, workspaceId)}/events/${encodeURIComponent(eventId)}/lineage`,
+    { signal },
+  );
+}
+
+export function getOpenInspectionWorkOrders(
+  projectId: string,
+  workspaceId: string,
+  signal?: AbortSignal,
+): Promise<{ items: OpenInspectionWorkOrderReadModel[] }> {
+  return request<{ items: OpenInspectionWorkOrderReadModel[] }>(
+    `${maintenanceBase(projectId, workspaceId)}/inspection-work-orders`,
     { signal },
   );
 }
@@ -1276,14 +1301,14 @@ function maintenanceCommand(
   });
 }
 
-export function approveInspectionWorkOrder(input: {
+export function acceptInspectionWorkOrder(input: {
   projectId: string;
   workspaceId: string;
   workOrderId: string;
   idempotencyKey: string;
 }) {
   return maintenanceCommand(
-    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/accept`,
     {},
     input.idempotencyKey,
   );
