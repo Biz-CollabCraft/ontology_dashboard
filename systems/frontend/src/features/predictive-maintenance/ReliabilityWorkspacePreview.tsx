@@ -30,108 +30,7 @@ import type {
   MvpView,
 } from "../mvp/api/mvpContracts";
 import "./reliability-workspace-preview.css";
-
-type ExperienceKind = "executive" | "operations" | "engineering" | "maintenance";
-
-interface Experience {
-  kind: ExperienceKind;
-  koLabel: string;
-  enLabel: string;
-  nav: Array<{ view: MvpView; ko: string; en: string; koDetail: string; enDetail: string }>;
-}
-
-const EXPERIENCES: Record<ExperienceKind, Experience> = {
-  executive: {
-    kind: "executive",
-    koLabel: "경영 보고",
-    enLabel: "Executive briefing",
-    nav: [
-      { view: "overview", ko: "브리핑", en: "Briefing", koDetail: "생산 연속성 · 경영 판단", enDetail: "Continuity · executive decisions" },
-      { view: "reports", ko: "보고서", en: "Reports", koDetail: "상황 보고 · 의사결정 기록", enDetail: "Situation reports · decision record" },
-      { view: "objects", ko: "상세 근거", en: "Evidence", koDetail: "필요할 때만 설비 단위 확인", enDetail: "Asset detail only when needed" },
-    ],
-  },
-  operations: {
-    kind: "operations",
-    koLabel: "생산 운영",
-    enLabel: "Production operations",
-    nav: [
-      { view: "overview", ko: "운영 현황", en: "Operations", koDetail: "라인 위험 · 생산 영향", enDetail: "Line risk · production impact" },
-      { view: "operations", ko: "판단 및 작업", en: "Decisions & work", koDetail: "점검 · 판단 · 작업 진행", enDetail: "Inspection · decision · work progress" },
-      { view: "objects", ko: "설비", en: "Assets", koDetail: "설비별 위험과 근거", enDetail: "Asset risk and evidence" },
-      { view: "reports", ko: "보고", en: "Reports", koDetail: "운영 보고서 작성", enDetail: "Operational reporting" },
-    ],
-  },
-  engineering: {
-    kind: "engineering",
-    koLabel: "신뢰성 분석",
-    enLabel: "Reliability analysis",
-    nav: [
-      { view: "overview", ko: "진단 현황", en: "Diagnostics", koDetail: "이상 신호 · 원인 후보", enDetail: "Signals · suspected causes" },
-      { view: "objects", ko: "설비 진단", en: "Asset analysis", koDetail: "센서 · 예측 · 근거", enDetail: "Sensors · predictions · evidence" },
-      { view: "operations", ko: "점검 기록", en: "Inspection record", koDetail: "현장 결과 · 분석 이력", enDetail: "Field findings · analysis history" },
-      { view: "reports", ko: "분석 보고", en: "Analysis report", koDetail: "근거 검토 · 보고서 작성", enDetail: "Evidence review · reporting" },
-    ],
-  },
-  maintenance: {
-    kind: "maintenance",
-    koLabel: "정비 실행",
-    enLabel: "Maintenance execution",
-    nav: [
-      { view: "operations", ko: "내 작업", en: "My work", koDetail: "승인 작업 · 진행 상태", enDetail: "Approved work · progress" },
-      { view: "objects", ko: "작업 대상", en: "Work targets", koDetail: "위치 · 상태 · 근거", enDetail: "Location · condition · evidence" },
-      { view: "overview", ko: "현장 현황", en: "Field status", koDetail: "점검 · 정비 진행 상황", enDetail: "Inspection · maintenance progress" },
-      { view: "reports", ko: "작업 이력", en: "Work history", koDetail: "완료 결과 · 기록", enDetail: "Completion results · record" },
-    ],
-  },
-};
-
-function resolveExperience(user: AuthUser): Experience {
-  const roles = user.active_project_roles.length ? user.active_project_roles : user.roles;
-  if (roles.includes("executive_viewer")) return EXPERIENCES.executive;
-  if (roles.includes("process_manager") || user.is_admin) return EXPERIENCES.operations;
-  if (roles.includes("maintenance_technician")) return EXPERIENCES.maintenance;
-  return EXPERIENCES.engineering;
-}
-
-function pageCopy(kind: ExperienceKind, view: MvpView, english: boolean) {
-  if (kind === "executive") {
-    if (view === "reports") return english
-      ? ["REPORTS", "Executive situation report", "Start with the conclusion and drill into evidence only when needed."]
-      : ["보고서", "경영 상황 보고", "핵심 결론을 먼저 보고 필요한 근거만 내려봅니다."];
-    if (view === "objects") return english
-      ? ["EVIDENCE", "Asset-level evidence", "Use this view only to validate a conclusion from the executive briefing."]
-      : ["상세 근거", "설비 단위 근거 확인", "브리핑의 결론을 검증할 때만 사용하는 상세 화면입니다."];
-    return english
-      ? ["BRIEFING", "Production continuity and decisions", "Prioritize business impact and executive decision requests over raw equipment metrics."]
-      : ["브리핑", "생산 안정성과 의사결정", "설비 수치가 아니라 경영진이 확인해야 할 영향과 판단 요청을 우선합니다."];
-  }
-  if (kind === "maintenance") {
-    if (view === "objects") return english
-      ? ["WORK TARGETS", "Equipment location and work evidence", "Show only the information needed to perform approved work safely."]
-      : ["작업 대상", "설비 위치와 작업 근거", "승인된 작업을 수행하는 데 필요한 설비 정보만 확인합니다."];
-    return english
-      ? ["MY WORK", "Approved maintenance work", "Start with where to go, what to do, and the required sequence."]
-      : ["내 작업", "승인된 정비 작업", "어디에서 무엇을 해야 하는지 작업 순서 중심으로 확인합니다."];
-  }
-  if (kind === "engineering") {
-    if (view === "objects") return english
-      ? ["ASSET ANALYSIS", "Equipment signals and causal evidence", "Analyze sensors, predictions, contribution factors, and history in one flow."]
-      : ["설비 진단", "설비 신호와 원인 근거", "센서, 예측, 원인 기여와 이력을 한 흐름에서 분석합니다."];
-    return english
-      ? ["DIAGNOSTICS", "Equipment anomaly signals and evidence", "Start from measurements and sensor changes to narrow suspected causes."]
-      : ["진단 현황", "설비 이상 신호와 근거", "수치와 센서 변화부터 탐색해 원인 후보를 좁혀갑니다."];
-  }
-  if (view === "objects") return english
-    ? ["ASSETS", "Asset risk and production impact", "Review how risk signals translate into operational impact by asset."]
-    : ["설비", "설비별 위험과 생산 영향", "위험 신호가 실제 운영에 미치는 영향을 설비 단위로 확인합니다."];
-  if (view === "operations") return english
-    ? ["DECISIONS & WORK", "Pending decisions and work progress", "Connect field findings, production impact, and the next operational decision."]
-    : ["판단 및 작업", "검토 대기와 작업 진행", "현장 점검 결과와 생산 영향, 다음 운영 판단을 연결합니다."];
-  return english
-    ? ["OPERATIONS", "Production risk and response status", "See which lines are exposed and what decisions are required first."]
-    : ["운영 현황", "생산 리스크와 조치 현황", "어느 라인이 영향을 받고 무엇을 판단해야 하는지부터 확인합니다."];
-}
+import { reliabilityPageCopy, resolveReliabilityRoleExperience } from "./workspace/roleExperience";
 
 function probability(value: number | null) {
   return value === null ? "—" : `${Math.round(value * 100)}%`;
@@ -178,10 +77,13 @@ export function ReliabilityWorkspacePreview({
   const { locale, setLocale } = useI18n();
   const { preferences, setPreset, setShowTechnicalMetadata } = useDisplayPreferences();
   const english = locale === "en-US";
-  const experience = useMemo(() => resolveExperience(user), [user]);
+  const experience = useMemo(() => resolveReliabilityRoleExperience(user), [user]);
   const preset = displayPreset(preferences);
-  const activeNav = experience.nav.find((item) => item.view === activeView) ?? experience.nav[0];
-  const [eyebrow, title, detailCopy] = pageCopy(experience.kind, activeView, english);
+  const activeNav = experience.navigation.find((item) => item.view === activeView) ?? experience.navigation[0];
+  const activePageCopy = reliabilityPageCopy(experience, activeView);
+  const eyebrow = english ? activePageCopy.eyebrow.en : activePageCopy.eyebrow.ko;
+  const title = english ? activePageCopy.title.en : activePageCopy.title.ko;
+  const detailCopy = english ? activePageCopy.detail.en : activePageCopy.detail.ko;
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const saved = window.localStorage.getItem("ontology-dashboard-theme");
     return saved === "light" ? "light" : "dark";
@@ -246,23 +148,23 @@ export function ReliabilityWorkspacePreview({
         <div className="rw-preview-topbar-left">
           <button type="button" className="rw-preview-icon-button" onClick={() => setLeftOpen((value) => !value)} aria-label={leftOpen ? "Collapse navigation" : "Open navigation"}>{leftOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}</button>
           <div className="rw-preview-brand"><span><Activity size={15} /></span><strong>Reliability Operations</strong></div>
-          <div className="rw-preview-breadcrumb"><span>{context.projectName}</span><i>/</i><strong>{english ? activeNav.en : activeNav.ko}</strong></div>
+          <div className="rw-preview-breadcrumb"><span>{context.projectName}</span><i>/</i><strong>{english ? activeNav.label.en : activeNav.label.ko}</strong></div>
         </div>
         <div className="rw-preview-topbar-right">
           <button type="button" className="rw-preview-search"><Search size={14} /><span>{english ? "Search" : "검색"}</span><kbd>⌘K</kbd></button>
           <button type="button" className={`rw-preview-assistant-toggle ${assistantOpen ? "is-active" : ""}`} onClick={() => setAssistantOpen((value) => !value)}>{assistantOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}<span>Assistant</span></button>
-          <div className="rw-preview-user"><span><UserRound size={13} /></span><div><strong>{user.display_name}</strong><small>{english ? experience.enLabel : experience.koLabel}</small></div></div>
+          <div className="rw-preview-user"><span><UserRound size={13} /></span><div><strong>{user.display_name}</strong><small>{english ? experience.label.en : experience.label.ko}</small></div></div>
         </div>
       </header>
 
       <div className="rw-preview-body">
         <aside className="rw-preview-left">
-          <div className="rw-preview-left-heading"><span>{english ? experience.enLabel : experience.koLabel}</span><strong>{english ? "Workspace" : "업무 공간"}</strong></div>
+          <div className="rw-preview-left-heading"><span>{english ? experience.label.en : experience.label.ko}</span><strong>{english ? "Workspace" : "업무 공간"}</strong></div>
           <nav>
-            {experience.nav.map((item, index) => (
-              <button type="button" key={item.view} className={activeView === item.view ? "is-active" : ""} onClick={() => onNavigate(item.view)} title={!leftOpen ? (english ? item.en : item.ko) : undefined}>
+            {experience.navigation.map((item, index) => (
+              <button type="button" key={item.view} className={activeView === item.view ? "is-active" : ""} onClick={() => onNavigate(item.view)} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
-                <div><strong>{english ? item.en : item.ko}</strong><small>{english ? item.enDetail : item.koDetail}</small></div>
+                <div><strong>{english ? item.label.en : item.label.ko}</strong><small>{english ? item.detail.en : item.detail.ko}</small></div>
               </button>
             ))}
           </nav>
