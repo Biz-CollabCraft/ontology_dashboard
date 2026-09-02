@@ -996,6 +996,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U2. Production Decision Context
 
+- **Status:** Partially Verified. 공통 read port와 기존 synthetic production-planning fixture adapter를 구현했으며, 실제 ProductionOrder/WIP/Alternative Capacity source와 consumer 연결은 미구현이다.
 - Production Order/WIP read port
 - Alternative Resource/Capacity read port
 - synthetic fixture와 격리 DB adapter
