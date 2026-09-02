@@ -373,6 +373,33 @@ describe("MVP adapter contract", () => {
           label: "점검 승인",
           disabled_reason: null,
         }],
+        lifecycle_summary: {
+          current_step: "inspection_requested",
+          current_step_label: "점검 승인 대기",
+          completed_steps: ["prediction", "evidence", "decision"],
+          next_step: "inspection_approved",
+          source: "backend_closed_loop_policy",
+        },
+        primary_action: {
+          action_id: "approve_inspection_work_order",
+          target_type: "work_order",
+          target_id: "WO-INS-001",
+          label: "점검 승인",
+          owner_role: "process_manager",
+          owner_label: "생산 운영 의사결정자",
+          disabled_reason: null,
+          requires_input: false,
+        },
+        timeline: [{
+          timeline_id: "ACT-001",
+          event_type: "work_order.requested",
+          label: "작업요청 생성",
+          status: "completed",
+          actor_display_name: "윤하린",
+          occurred_at: "2026-08-06T03:10:00Z",
+          target_type: "work_order",
+          target_id: "WO-INS-001",
+        }],
         runtime_status: null,
       },
     });
@@ -424,6 +451,22 @@ describe("MVP adapter contract", () => {
     }));
     expect(enriched.closedLoop?.availableActions[0]).toEqual(expect.objectContaining({
       actionId: "approve_inspection_work_order",
+      targetId: "WO-INS-001",
+    }));
+    expect(enriched.closedLoop?.lifecycleSummary).toEqual(expect.objectContaining({
+      currentStep: "inspection_requested",
+      currentStepLabel: "점검 승인 대기",
+      nextStep: "inspection_approved",
+    }));
+    expect(enriched.closedLoop?.primaryAction).toEqual(expect.objectContaining({
+      actionId: "approve_inspection_work_order",
+      ownerRole: "process_manager",
+      ownerLabel: "생산 운영 의사결정자",
+      requiresInput: false,
+    }));
+    expect(enriched.closedLoop?.timeline[0]).toEqual(expect.objectContaining({
+      timelineId: "ACT-001",
+      label: "작업요청 생성",
       targetId: "WO-INS-001",
     }));
     expect(enriched.closedLoop?.activities[0]).toEqual(expect.objectContaining({

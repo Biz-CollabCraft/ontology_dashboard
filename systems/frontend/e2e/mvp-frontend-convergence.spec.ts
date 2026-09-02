@@ -11,9 +11,19 @@ const ACCOUNTS = {
   manager: ["manager@ontology.local", "Manager!2026"],
   engineer: ["engineer@ontology.local", "Engineer!2026"],
 } as const;
+let loginAttempt = 0;
 
 async function login(page: Page, returnTo = MVP_PATH, account: keyof typeof ACCOUNTS = "manager") {
   const [email, password] = ACCOUNTS[account];
+  const forwardedFor = `127.0.0.${++loginAttempt}`;
+  await page.route("**/api/auth/login", async (route) => {
+    await route.continue({
+      headers: {
+        ...route.request().headers(),
+        "X-Forwarded-For": forwardedFor,
+      },
+    });
+  }, { times: 1 });
   await page.goto(`/login?returnTo=${encodeURIComponent(returnTo)}`);
   await page.getByLabel("이메일").fill(email);
   await page.getByLabel("비밀번호").fill(password);
@@ -131,7 +141,12 @@ test("shows stored AI review summaries to engineers as read-only", async ({ page
   await expect(preview.getByText("점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.")).toBeVisible();
 });
 
-test("keeps system administrator logs behind the admin persona", async ({ page }) => {
+test("keeps the system administrator tab visible while gating log data", async ({ page }) => {
+  await login(page, `${MVP_PATH}?view=system&dashboard=workflow`, "manager");
+  await expect(page.locator(".mvp-navigation nav").getByRole("button", { name: /시스템 관리자/ })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("시스템 관리자 권한 필요");
+  await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+
   await login(page, `${MVP_PATH}?view=system&dashboard=workflow`, "admin");
   await expect(page.locator(".mvp-page-heading").getByRole("heading", { name: "AI 요약 처리 로그", exact: true })).toBeVisible();
   await expect(page.locator(".mvp-navigation nav").getByRole("button", { name: /시스템 관리자/ })).toBeVisible();
@@ -140,7 +155,7 @@ test("keeps system administrator logs behind the admin persona", async ({ page }
 test("completes Overview to Objects to Operations to Reports Executive Brief without Analysis", async ({ page }) => {
   await login(page, CLASSIC_OVERVIEW_PATH);
   await expect(page.locator(".mvp-app")).toBeVisible();
-  await expect(page.locator(".mvp-navigation nav button")).toHaveCount(4);
+  await expect(page.locator(".mvp-navigation nav button")).toHaveCount(5);
   await expect(page.getByText("Analysis", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("mvp-overview")).toBeVisible();
   await expect(page.locator(".mvp-kpi")).toHaveCount(6);

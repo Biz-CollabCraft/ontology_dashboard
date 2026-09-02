@@ -24,7 +24,16 @@ from app.identity import (
 )
 from app.infra.llm import OpenAICompatibleProvider, VertexAIProvider, configured_provider
 from app.main import app
-from app.dependencies import build_manufacturing_service, get_identity_service, get_service
+from app.dependencies import (
+    build_manufacturing_service,
+    get_identity_service,
+    get_maintenance_loop_service,
+    get_service,
+)
+from app.infra.db.maintenance_repository import MaintenanceRepository
+from app.infra.db.project_repository import SQLiteProjectContextResolver
+from app.maintenance.api_schema import InspectionWorkOrderCreateRequest, RecommendationInput
+from app.maintenance.service import MaintenanceLoopService
 from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.mvp.agent_review_summary_workflow import AGENT_REVIEW_SUMMARY_FLOW_VERSION, AgentReviewSummaryWorkflow
 from app.mvp.agent_review_summary_materialization import summary_key, summary_key_payload
@@ -1437,6 +1446,93 @@ def test_agent_review_summary_does_not_mutate_closed_loop_or_expose_actions(
     assert payload["trace"]["materialization"]["status"] == "ready"
 
 
+def test_inspection_request_decision_and_activity_reach_detail_and_agent_packet(
+    client: TestClient,
+    database_path: Path,
+    service: FactorySignalService,
+) -> None:
+    maintenance_service = MaintenanceLoopService(
+        MaintenanceRepository(
+            database_path,
+            project_context=SQLiteProjectContextResolver(database_path),
+        ),
+        event_evidence_query=service,
+    )
+    app.dependency_overrides[get_maintenance_loop_service] = lambda: maintenance_service
+    event_id = "EVT-GS-002"
+    asset_id = "CNC-S04-L04-01"
+    before = client.get(f"/api/objects/{asset_id}/detail-view")
+    assert before.status_code == 200
+    assert before.json().get("closed_loop", {}).get("work_orders") in (None, [])
+    recommendation_input = maintenance_service.recommendation_input(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        event_id=event_id,
+        snapshot_basis=InspectionWorkOrderCreateRequest(
+            event_id=event_id,
+            snapshot_basis=before.json()["snapshot_basis"],
+        ).snapshot_basis,
+    )
+    assert RecommendationInput.model_validate(recommendation_input)
+    assert recommendation_input["snapshot_basis"] == before.json()["snapshot_basis"]
+    assert recommendation_input["equipment"]["asset_id"] == asset_id
+    assert recommendation_input["operational_decision_kind"] == "request_inspection"
+
+    work_order = client.post(
+        (
+            "/api/projects/manufacturing-demo-project/workspaces/"
+            "manufacturing-demo/maintenance/inspection-work-orders"
+        ),
+        headers={**csrf_headers(client), "Idempotency-Key": "mvp-inspection-flow-001"},
+        json=InspectionWorkOrderCreateRequest(
+            event_id=event_id,
+            snapshot_basis=before.json()["snapshot_basis"],
+        ).model_dump(mode="json"),
+    )
+    decision = client.post(
+        f"/api/events/{event_id}/decision",
+        headers=csrf_headers(client),
+        json={
+            "actor": "spoofed",
+            "decision": "request_inspection",
+            "note": "현장 점검 요청 생성 후 판단 기록",
+        },
+    )
+
+    assert work_order.status_code == 200, work_order.text
+    assert decision.status_code == 200, decision.text
+    activity = client.get(f"/api/events/{event_id}/activity").json()
+    detail = client.get(f"/api/objects/{asset_id}/detail-view").json()
+    packet = client.get(f"/api/objects/{asset_id}/agent-review-packet").json()
+    report, _ = service.report(event_id, ReportRequest(role="manager", use_llm=False))
+
+    assert activity["decisions"][0]["decision"] == "request_inspection"
+    assert detail["snapshot_basis"] == recommendation_input["snapshot_basis"]
+    assert packet["snapshot_basis"] == recommendation_input["snapshot_basis"]
+    assert report.recommended_decision == recommendation_input["operational_decision_kind"]
+    assert detail["closed_loop"]["work_orders"][0]["work_order_id"] == work_order.json()[
+        "work_order_id"
+    ]
+    assert detail["closed_loop"]["activities"][0]["activity_type"] == "work_order.requested"
+    assert detail["closed_loop"]["lifecycle_summary"]["current_step"] == "inspection_requested"
+    assert detail["closed_loop"]["primary_action"]["action_id"] == "approve_inspection_work_order"
+    assert detail["closed_loop"]["timeline"][0]["label"] == "작업요청 생성"
+    history = packet["maintenance_history_summary"]
+    assert history["provider"] == "closed_loop_maintenance_history_adapter"
+    assert history["work_orders"][0]["record_id"] == work_order.json()["work_order_id"]
+    assert history["activities"][0]["activity_type"] == "work_order.requested"
+    assert "create_work_order" in packet["closed_loop_boundary"]["forbidden_actions"]
+    summary = compose_deterministic_agent_review_summary(packet)
+    process_quote = next(
+        item["quote"]
+        for item in summary["role_summaries"]
+        if item["role"] == "process_manager"
+    )
+    assert "요청됨 상태" in process_quote
+    assert set(summary["source_refs"]).issubset(set(packet["source_refs"]))
+
+
 def test_agent_review_summary_absorbs_adapter_context_into_role_quotes(
     service: FactorySignalService,
 ) -> None:
@@ -1853,6 +1949,9 @@ def test_asset_detail_view_model_accepts_7d_feature_history_window(
     assert closed_loop["work_orders"][0]["status"] == "requested"
     assert closed_loop["activities"][0]["activity_type"] == "work_order.requested"
     assert closed_loop["available_actions"][0]["action_id"] == "approve_inspection_work_order"
+    assert closed_loop["lifecycle_summary"]["current_step"] == "inspection_requested"
+    assert closed_loop["primary_action"]["owner_role"] == "process_manager"
+    assert closed_loop["timeline"][0]["target_id"] == "WO-INS-GS-004-001"
     assert closed_loop["maintenance_actions"] == []
     assert closed_loop["maintenance_events"] == []
     assert closed_loop["runtime_status"] is None

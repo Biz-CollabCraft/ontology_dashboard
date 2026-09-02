@@ -773,6 +773,78 @@ def test_composer_marks_missing_series_as_gaps_without_synthesizing_values() -> 
     assert all(feature["history"]["points"] == [] for feature in payload["features"])
 
 
+def test_composer_projects_closed_loop_lifecycle_action_and_timeline() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=ARTIFACT,
+        closed_loop={
+            "work_orders": [
+                {
+                    "work_order_id": "WO-INS-001",
+                    "work_type": "inspection",
+                    "status": "requested",
+                    "assigned_to": None,
+                    "actor_display_name": "윤하린",
+                    "created_at": "2026-08-06T03:10:00Z",
+                    "updated_at": "2026-08-06T03:10:00Z",
+                }
+            ],
+            "activities": [
+                {
+                    "activity_id": "ACT-001",
+                    "activity_type": "work_order.requested",
+                    "work_type": "inspection",
+                    "actor_display_name": "윤하린",
+                    "before_status": None,
+                    "after_status": "requested",
+                    "created_at": "2026-08-06T03:10:00Z",
+                    "work_order_id": "WO-INS-001",
+                }
+            ],
+            "available_actions": [
+                {
+                    "action_id": "approve_inspection_work_order",
+                    "target_type": "work_order",
+                    "target_id": "WO-INS-001",
+                    "label": "점검 승인",
+                    "disabled_reason": None,
+                }
+            ],
+            "runtime_status": None,
+        },
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    closed_loop = payload["closed_loop"]
+    assert closed_loop["lifecycle_summary"] == {
+        "current_step": "inspection_requested",
+        "current_step_label": "점검 승인 대기",
+        "completed_steps": ["prediction", "evidence", "decision"],
+        "next_step": "inspection_approved",
+        "source": "backend_closed_loop_policy",
+    }
+    assert closed_loop["primary_action"] == {
+        "action_id": "approve_inspection_work_order",
+        "target_type": "work_order",
+        "target_id": "WO-INS-001",
+        "label": "점검 승인",
+        "owner_role": "process_manager",
+        "owner_label": "생산 운영 의사결정자",
+        "disabled_reason": None,
+        "requires_input": False,
+    }
+    assert closed_loop["timeline"][0] == {
+        "timeline_id": "ACT-001",
+        "event_type": "work_order.requested",
+        "label": "작업요청 생성",
+        "status": "completed",
+        "actor_display_name": "윤하린",
+        "occurred_at": "2026-08-06T03:10:00Z",
+        "target_type": "work_order",
+        "target_id": "WO-INS-001",
+    }
+
+
 def test_composer_preserves_empty_recommendation_as_gap_without_synthesizing_action() -> None:
     artifact = json.loads(json.dumps(ARTIFACT))
     artifact["evidence_payload"]["recommended_actions"] = []

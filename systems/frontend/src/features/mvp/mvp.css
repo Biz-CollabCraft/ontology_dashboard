@@ -499,13 +499,19 @@
 .mvp-work-status-bar div { min-width: 0; display: grid; gap: 3px; }
 .mvp-work-status-bar span { color: var(--mvp-dim); font-size: 9px; font-weight: 900; }
 .mvp-work-status-bar strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mvp-text); font-size: 12px; }
-.mvp-work-status-timeline { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.mvp-work-status-timeline { display: grid; grid-template-columns: repeat(auto-fit,minmax(54px,1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
 .mvp-work-status-timeline li { min-width: 0; display: grid; gap: 5px; align-content: start; color: var(--mvp-dim); font-size: 9px; font-weight: 850; text-align: center; }
 .mvp-work-status-timeline i { width: 100%; height: 4px; border-radius: 999px; background: rgba(181,196,214,.13); }
 .mvp-work-status-timeline .is-active { color: #d8e8ff; }
 .mvp-work-status-timeline .is-active i { background: var(--mvp-accent); }
 .mvp-work-status-timeline .is-done { color: #9fdcbf; }
 .mvp-work-status-timeline .is-done i { background: var(--mvp-success); }
+.mvp-closed-loop-activity-timeline { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.mvp-closed-loop-activity-timeline li { display: grid; grid-template-columns: 8px minmax(0,1fr); gap: 8px; align-items: start; color: #d8e8ff; }
+.mvp-closed-loop-activity-timeline i { width: 8px; height: 8px; margin-top: 4px; border-radius: 999px; background: var(--mvp-success); box-shadow: 0 0 0 3px rgba(68,211,138,.12); }
+.mvp-closed-loop-activity-timeline div { min-width: 0; display: grid; gap: 2px; }
+.mvp-closed-loop-activity-timeline strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.mvp-closed-loop-activity-timeline small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mvp-dim); font-size: 9px; }
 .mvp-work-primary-action { display: grid; gap: 6px; }
 .mvp-work-primary-action .mvp-button { width: 100%; justify-content: center; }
 .mvp-work-primary-action small { color: var(--mvp-dim); font-size: 10px; line-height: 1.45; }

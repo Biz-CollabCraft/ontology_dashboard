@@ -195,7 +195,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Approved Wording:** Use "standard-aligned demo adapter fixture" or "demo adapter assumption aligned with maintenance/resource/logistics context." Do not use "industry-standard spare-part master," "standards-compliant asset catalog," or "all CNC/compressor parts are covered." For Korean product/docs wording, prefer "표준 정비 데이터 범주와 정렬된 데모 어댑터 근거" and avoid "업계 표준 부품 마스터를 구현했다."
 - **Question Backlog:** `agent_context_question_backlog.jsonl` separates current coverage from future KG pressure. Current Level 0 covers component/location/spare/similar-event explanation and read-only boundaries. Level 1 candidates require new source contracts for CMMS work-order history, ERP/WMS inventory lots and supplier lead time, MES/APS schedule impact, structured SOP steps/tools/safety constraints, and multi-asset topology.
 - **RDB/KG Comparison Order:** Do not run a speed benchmark yet. With the current fixture size, RDB-style packet projection should trivially win and would not be useful evidence. First expand the question set and source contracts, then compare the same questions under the same answer schema across packet/RDB projection and graph traversal.
-- **Domain Loading Decision:** Do not add loading/ingestion logic for the newly expanded demo domains yet. The current source path is intentionally `fixture JSON -> DomainReviewContextAdapter -> AgentReviewPacket -> AI summary/KG eval`. Adding RDB ingestion before source contracts exist would make the fixture look more authoritative than it is and would blur the Product Evidence/Closed-loop trust boundary.
+- **Domain Loading Decision:** Do not add loading/ingestion logic for newly expanded demo domains until their source contracts exist. Maintenance history is the first promoted non-SOP domain: canonical Closed-loop work-order/activity storage is read back through `MaintenanceHistoryContextProvider` into `AgentReviewPacket`. Inventory, work schedule, MES actuals, and richer SOP step/tool/safety sources remain deferred; pretending their fixture hints are source-of-truth would blur the Product Evidence/Closed-loop trust boundary.
 - **Domain Section Decision:** The packet is domain-sectioned before it is physically split. `domain_sections` is the near-term contract for testing ownership and source boundaries. Physical split into separate domain ViewModels or APIs is deferred until a domain needs independent storage/freshness/retry semantics, or until tool trajectory eval proves that runtime tool selection needs domain-specific contracts outside one packet.
 - **RDB Migration Timing:** Do not move the spare-part, similar-event, inspection-location, operation-context, or structured SOP demo fixtures into RDB yet. JSON fixture plus adapter is the right current shape because the goal is AI/KG workflow evidence, not operational storage. Move them into an RDB read model when at least one of these becomes true: UI, AI summary, Report, and Closed-loop need to share the same auxiliary context; snapshot consistency must prove that UI and Closed-loop consumed the same context version; watcher diff triggers need `source_updated_at`, `snapshot_hash`, or `materialized_at`; local/live demo needs stored summaries that survive side-view reopens; or a real RDB-vs-KG query comparison requires a relational baseline table. Until then, keep RDB as the current production-style packet baseline and keep demo fixtures as adapter-owned source context.
 - **Fixture-to-DB Promotion Evidence Required:** Before moving a fixture domain into DB, add one contract test that proves the domain has a local update trigger and one API/read-model test that proves `source_updated_at` or equivalent version metadata reaches the packet. Static reference domains may remain fixture-backed if their only change path is repository deploy. Dynamic domains should move first in this order: Agent Review Summary store, similar-event history from completed local outcomes, SOP revision candidates, operation-context versions, spare-part candidate versions, and inspection-location reference versions.
@@ -294,7 +294,7 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Watcher materialization creates `polling_watcher` runs and the `System Admin` tab shows trigger source.
   - Failed or fallback runs render status and reason without exposing mutation controls.
   - Operator log rows link back to existing summary/run ids without raw prompt or hidden domain DB reads.
-- **Verification:** Backend tests prove the read-only workflow-run listing returns runs without triggering a new summary. Frontend type checking passed. Existing packet/eval tests passed. Browser e2e should verify stored summary reuse, manual regeneration, System Admin terminal rendering, read-only detail disclosure, and absence of Closed-loop mutation controls in the AI runtime log.
+- **Verification:** Backend tests prove the read-only workflow-run listing returns runs without triggering a new summary and remains behind the administrator audit permission. Frontend type checking passed. Existing packet/eval tests passed. Browser e2e verifies stored summary reuse, permitted manager manual regeneration, engineer read-only summary access, System Admin terminal rendering, read-only detail disclosure, and absence of Closed-loop mutation controls in the AI runtime log. Docker-backed PostgreSQL replay/integration tests apply migrations against a local PostgreSQL service and verify the persistence path beyond SQLite.
 
 #### LangGraph Implementation Plan
 
@@ -393,16 +393,17 @@ The packet must preserve all displayable expressions that Backend can trust afte
 
 Current state:
 
-- Fixture-built Product Result artifacts already preserve `top_factors`, `ranked_factor_evidence`, observation/history windows, sensor evidence, component hypotheses, recommended actions, source fields, evidence gaps, and provenance.
-- Generator batch promotion currently preserves score, selected threshold, model/schema checksums, lineage, asset criticality, and Backend policy output, but it synthesizes generic factors such as `generator_failure_score`, `model_selected_threshold`, `asset_criticality_adjustment`, and `generator_model_artifact_manifest`.
-- Therefore the live Generator path is a safe minimum promotion path, not yet a full expression-preserving path.
+- Fixture-built Product Result artifacts preserve `top_factors`, `ranked_factor_evidence`, observation/history windows, sensor evidence, component hypotheses, recommended actions, source fields, evidence gaps, and provenance.
+- Generator batch promotion now accepts the optional `results[].explanation` contract from `prediction-result-batch.schema.json`, including `top_factors[]`, `confidence_label`, `explanation_method`, `feature_snapshot_ref`, `sensor_window_ref`, `display_labels`, and checksum-backed factor `source_ref` values.
+- Backend materialization absorbs trusted Generator explanation into Product Result `top_factors`, `ranked_factor_evidence`, and `evidence_payload.source_fields` after batch validation. The Backend still owns `status_grade`, policy mapping, and `recommended_action`.
+- If Generator explanation is absent, promotion falls back to generic but explicit factors such as `generator_failure_score`, `model_selected_threshold`, `asset_criticality_adjustment`, and `generator_model_artifact_manifest`; this is a safe minimum path, not a synthesized normal explanation.
+- Agent Review Packet exposes trusted model expressions through `model_expression_context`, while keeping untrusted raw Generator payloads out of the LLM prompt.
 
-Required next contract work:
+Remaining contract gate before 120-run evaluation:
 
-- Add optional Generator batch expression fields, for example `explanation.top_factors[]`, `feature_values` or `feature_snapshot_ref`, `sensor_window_ref`, `display_labels`, `confidence_label`, `explanation_method`, and checksum-backed `source_refs`.
-- Backend materialization may absorb these only after source/checksum validation. The Backend still owns `status_grade`, policy mapping, and `recommended_action`.
-- Expressions that are present but not promotable should be recorded as `unpromoted_expression_refs` or a similar diagnostic field, not silently lost and not shown as trusted facts.
-- Agent Review Packet should expose trusted model expressions through `model_expression_context`, while keeping untrusted raw Generator payloads out of the LLM prompt.
+- Ensure the 8-case Agent Review Packet gold set includes at least one Generator batch explanation case so `model_expression_context.top_factors[].source_ref` and display labels are covered by the LLM eval input set.
+- Keep absent expression data as a visible evidence gap or safe generic fallback; do not silently turn it into normal field evidence.
+- If future Generator payloads include expression blocks that fail source/checksum validation, record them as unpromoted expression diagnostics before they are eligible for trusted packet exposure.
 
 Closed-loop history should be handled the same way: use existing work-order, inspection-result, maintenance-action, maintenance-event, equipment-state, and activity tables as source records, then project a read-only `maintenance_history_summary` for AI. Do not let AI create or mutate those records.
 
@@ -498,9 +499,26 @@ Useful but deferred metrics:
 - Summary freshness and stale materialization rate.
 - Cost and latency per materialized summary.
 
+## Adoption Gates for LangGraph and RAG Runtime
+
+LangGraph, GraphRAG, Vector DB, and LlamaIndex are not rejected technologies in this workflow. They remain open adoption gates: if their trigger conditions are met, the system can promote them behind the existing packet, workflow, and validation boundaries without changing the AI authority model.
+
+The current production default stays conservative: structured adapter context enters the `AgentReviewPacket`, `AgentReviewSummaryWorkflow` runs as the simple engine, and the validator rejects unsupported or authority-leaking output. This is enough while domain context is resolved inside one service boundary and SOP/ontology context is structured metadata rather than live unstructured retrieval.
+
+LangGraph becomes a production candidate when the workflow needs graph-owned orchestration, not merely because multiple context facets exist. Adoption is justified when independently authorized runtime tools need ordered calls, node-specific retry/resume state, durable human pause/resume, or branching graph state that no longer fits a service method. The current experiment proves the candidate path can preserve the same read-only tool trajectory as the simple engine; it does not yet prove that switching the production watcher/runtime would reduce complexity or risk.
+
+GraphRAG, Vector DB, or LlamaIndex become production candidates when SOP and ontology evidence stop being reliably represented by structured adapter metadata. Adoption is justified when site SOPs arrive as free-form PDFs or overlapping versions, retrieval context precision/recall becomes a release gate, retrieved chunks carry source checksum and freshness metadata, and every retrieval result is bound back to the packet snapshot consumed by UI, Report, AI, and Closed-loop. Until those metrics exist, runtime RAG would add moving evidence without proving better groundedness.
+
+Current limitations:
+
+- The LangGraph gate currently measures tool trajectory parity and boundary behavior, not final Korean summary quality or production watcher reliability.
+- The RAG-family gate currently records adoption criteria, but does not yet measure retrieval precision, retrieval recall, source freshness, or chunk-level citation coverage.
+- The 120-run LLM evaluation should report that the runtime source is structured adapter context unless a separate retrieval eval passes first.
+- PR #154 cost-basis must be merged into `main` and rechecked before final 120-run claims that compare AI summary evidence and Closed-loop recommendation input on the same trusted snapshot.
+
 ## Scope Boundaries
 
-Deferred:
+Conditionally deferred until adoption gates pass:
 
 - Production GraphRAG store.
 - Vector DB or LlamaIndex runtime retrieval.
@@ -578,7 +596,7 @@ The reason U3 comes after the adapter and ontology work is simple: materializing
 
 ## Open Questions
 
-- Should `ontology_context` be added to the packet as a first-class schema section, or should ontology remain a hidden implementation detail behind `inspection_targets` and `sop_guidance` for one more slice?
-- Should materialized summaries be persisted in SQLite/PostgreSQL now, or should a file/checksum trace be enough for MVP review?
-- Should role-specific copy be generated by LLM, deterministic templates, or a hybrid where LLM may only rewrite the quote text?
-- What is the first non-SOP domain adapter after operation context: inventory, work schedule, MES production actuals, or maintenance history?
+- Resolved for this slice: `ontology_context` is a first-class read-only packet section for bounded traversal evidence; it is not a production graph store or mutation tool.
+- Resolved for this slice: materialized summaries are persisted in SQLite/PostgreSQL tables with workflow-run trace rows, summary keys, source/context hashes, fallback status, and stale running-run recovery.
+- Resolved for this slice: role-specific copy uses a hybrid contract. Deterministic fallback is always available, while LLM candidates may be stored only after schema, structured grounding, natural-language boundary, and negative-claim validation pass.
+- Resolved for this slice: the first non-SOP domain adapter after operation context is maintenance history. It projects existing Closed-loop, activity, and equipment-history records into read-only `maintenance_history_summary`, and the MVP decision/work-order flow verifies DB storage is visible again in detail ViewModel, Agent Review Packet, and deterministic summary. Inventory, work schedule, and MES actuals remain future adapters until they have current source contracts and eval-backed grounding checks.
