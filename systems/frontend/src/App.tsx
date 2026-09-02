@@ -21,9 +21,6 @@ import {
 } from "./routing";
 import { ApiError, getProject, getProjectWorkspaces } from "./api";
 import { AuthProvider, useAuth } from "./features/auth/AuthContext";
-import { LoginPage } from "./features/auth/LoginPage";
-import { PendingPage } from "./features/auth/PendingPage";
-import { RegisterPage } from "./features/auth/RegisterPage";
 import { DisplayPreferencesProvider } from "./ui/foundry/displayPreferences";
 import { I18nProvider } from "./ui/i18n/I18nProvider";
 import { WorkbenchState } from "./ui/foundry/WorkbenchState";
@@ -35,6 +32,15 @@ import {
 
 const AdminApp = lazy(() =>
   import("./features/admin/AdminApp").then((module) => ({ default: module.AdminApp })),
+);
+const LoginPage = lazy(() =>
+  import("./features/auth/LoginPage").then((module) => ({ default: module.LoginPage })),
+);
+const PendingPage = lazy(() =>
+  import("./features/auth/PendingPage").then((module) => ({ default: module.PendingPage })),
+);
+const RegisterPage = lazy(() =>
+  import("./features/auth/RegisterPage").then((module) => ({ default: module.RegisterPage })),
 );
 const ManufacturingApp = lazy(() =>
   import("./features/manufacturing/ManufacturingApp").then((module) => ({ default: module.ManufacturingApp })),
@@ -242,12 +248,12 @@ function AppRouter() {
   }
 
   if (!user) {
-    if (pathname === "/register") return <RegisterPage />;
-    if (pathname === "/pending") return <PendingPage />;
+    if (pathname === "/register") return <Suspense fallback={<RouteLoading operation="Loading registration" />}><RegisterPage /></Suspense>;
+    if (pathname === "/pending") return <Suspense fallback={<RouteLoading operation="Loading account status" />}><PendingPage /></Suspense>;
     if (pathname !== "/login" && pathname !== "/") {
       return <Redirect to={loginPath(`${pathname}${window.location.search}`)} />;
     }
-    return <LoginPage />;
+    return <Suspense fallback={<RouteLoading operation="Loading sign in" />}><LoginPage /></Suspense>;
   }
 
   if (pathname === "/admin") return user.is_admin ? <AdminApp /> : <ForbiddenPage />;
