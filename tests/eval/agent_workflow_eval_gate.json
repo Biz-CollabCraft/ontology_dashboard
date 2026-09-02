@@ -10,7 +10,8 @@
     "summary_reuse",
     "fallback_retry",
     "domain_context_grounding",
-    "closed_loop_boundary"
+    "closed_loop_boundary",
+    "baseline_comparison"
   ],
   "minimum_release_gates": {
     "output_contract": [
@@ -48,6 +49,14 @@
       "ai_summary_is_read_only",
       "closed_loop_recommendation_input_is_derived_from_same_packet_snapshot",
       "no_approval_or_work_order_mutation_tool"
+    ],
+    "baseline_comparison": [
+      "B1_direct_llm_uses_minimally_normalized_raw_input",
+      "B2_uses_evidence_packet_without_workflow_orchestration",
+      "B3_uses_current_workflow_controls",
+      "same_provider_model_generation_schema_rubric_and_permissions",
+      "not_measured_and_not_applicable_are_null_and_distinct",
+      "quality_and_fault_injection_are_reported_separately"
     ]
   },
   "adopt_langgraph_when_any": [

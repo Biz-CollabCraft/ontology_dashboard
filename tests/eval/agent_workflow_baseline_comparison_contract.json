@@ -1,0 +1,240 @@
+{
+  "contract_id": "agent-workflow-baseline-comparison-v1",
+  "status": "planned",
+  "execution_status": "unverified",
+  "case_design": {
+    "target_case_count": {
+      "min": 20,
+      "max": 30
+    },
+    "categories": [
+      "normal",
+      "boundary",
+      "contradictory",
+      "insufficient_evidence"
+    ],
+    "iterations_per_case": {
+      "min": 3,
+      "max": 5
+    },
+    "randomize_execution_order": true
+  },
+  "arms": {
+    "B1": {
+      "label": "direct_llm",
+      "input": "minimally_normalized_raw_input",
+      "uses": [
+        "same_read_only_output_schema"
+      ],
+      "excludes": [
+        "evidence_packet",
+        "workflow_orchestration",
+        "saved_summary_reuse",
+        "retry",
+        "fallback",
+        "db_workflow_trace"
+      ]
+    },
+    "B2": {
+      "label": "evidence_packet_llm",
+      "input": "agent_review_packet",
+      "uses": [
+        "evidence_packet",
+        "same_read_only_output_schema"
+      ],
+      "excludes": [
+        "workflow_orchestration",
+        "saved_summary_reuse",
+        "retry",
+        "fallback",
+        "db_workflow_trace"
+      ]
+    },
+    "B3": {
+      "label": "current_workflow",
+      "input": "agent_review_packet",
+      "uses": [
+        "evidence_packet",
+        "output_validation",
+        "saved_summary_reuse",
+        "bounded_retry",
+        "deterministic_fallback",
+        "db_workflow_trace",
+        "stale_running_recovery",
+        "snapshot_consistency",
+        "side_effect_blocking"
+      ],
+      "excludes": []
+    }
+  },
+  "controls": [
+    "same_case",
+    "same_provider",
+    "same_model",
+    "same_temperature",
+    "same_generation_settings",
+    "same_output_schema",
+    "same_rubric",
+    "same_read_only_permissions"
+  ],
+  "value_deltas": {
+    "B2-B1": "evidence_packet_and_structuring",
+    "B3-B2": "validation_orchestration_reuse_fallback_trace",
+    "B3-B1": "total_pipeline_effect"
+  },
+  "metric_groups": {
+    "response_quality": [
+      "grounded_claim_rate",
+      "unsupported_claim_rate",
+      "required_field_omission_rate",
+      "schema_validation_pass_rate",
+      "recommendation_input_consistency",
+      "critical_risk_and_evidence_omission_rate",
+      "critical_human_review_error_count"
+    ],
+    "repeat_consistency": [
+      "core_judgment_agreement_rate",
+      "evidence_reference_agreement_rate",
+      "major_field_variation_rate",
+      "identical_input_output_variance"
+    ],
+    "efficiency": [
+      "latency_p50_ms",
+      "latency_p95_ms",
+      "input_tokens",
+      "output_tokens",
+      "estimated_cost",
+      "rerun_count",
+      "retry_count"
+    ],
+    "operational_control": [
+      "saved_summary_reuse",
+      "fallback",
+      "fallback_reason",
+      "terminal_failure",
+      "stale_recovery",
+      "abnormal_running_rows",
+      "invalid_output_containment",
+      "snapshot_mismatch_blocked",
+      "blocked_side_effect",
+      "workflow_trace_completeness"
+    ]
+  },
+  "value_states": {
+    "measured": "value was observed by an executed evaluation",
+    "not_measured": "metric applies but no trustworthy measurement was captured; value must be null",
+    "not_applicable": "feature or metric does not exist for the comparison arm; value must be null",
+    "planned": "evaluation is designed but has not run",
+    "unverified": "contract or fixture exists without live repeated LLM evidence"
+  },
+  "row_contract": {
+    "required": [
+      "case_id",
+      "iteration",
+      "arm",
+      "execution_order",
+      "provider",
+      "model",
+      "generation_config",
+      "output_schema_version",
+      "rubric_version",
+      "execution_status",
+      "metrics"
+    ],
+    "nullable_metric_shape": {
+      "value": null,
+      "state": "not_measured",
+      "reason": "required when state is not_measured or not_applicable"
+    }
+  },
+  "aggregate_contract": {
+    "group_by": [
+      "arm",
+      "case_category",
+      "execution_status"
+    ],
+    "report_separately": [
+      "quality",
+      "repeat_consistency",
+      "efficiency",
+      "operational_control",
+      "fault_injection"
+    ],
+    "missing_value_policy": "exclude null values from numeric denominators and report state counts",
+    "comparison_columns": [
+      "B1",
+      "B2",
+      "B3",
+      "B2-B1",
+      "B3-B2",
+      "B3-B1"
+    ]
+  },
+  "fault_injection": {
+    "primary_arm": "B3",
+    "scenarios": [
+      "timeout",
+      "429",
+      "transient_5xx",
+      "malformed_output",
+      "concurrent_same_summary_key",
+      "stale_running",
+      "db_trace_write_failure",
+      "snapshot_mismatch",
+      "action_request_during_fallback"
+    ],
+    "combined_with_quality_score": false
+  },
+  "review_split": {
+    "automated": [
+      "schema_validation_pass_rate",
+      "required_field_omission_rate",
+      "source_reference_membership",
+      "latency",
+      "tokens",
+      "estimated_cost",
+      "retry_count",
+      "reuse",
+      "fallback",
+      "terminal_state",
+      "stale_recovery",
+      "abnormal_running_rows",
+      "snapshot_mismatch_blocked",
+      "blocked_side_effect",
+      "workflow_trace_completeness"
+    ],
+    "human": [
+      "grounded_claim_rate_semantic_review",
+      "unsupported_claim_severity",
+      "critical_risk_and_evidence_omission",
+      "recommendation_input_consistency_semantic_review",
+      "critical_human_review_error_count"
+    ]
+  },
+  "sample_row": {
+    "case_id": "TBD",
+    "iteration": 1,
+    "arm": "B1",
+    "execution_order": null,
+    "provider": "TBD",
+    "model": "TBD",
+    "generation_config": {
+      "temperature": "TBD"
+    },
+    "output_schema_version": "agent-review-summary-v1.0",
+    "rubric_version": "baseline-rubric-v1",
+    "execution_status": "planned",
+    "metrics": {
+      "grounded_claim_rate": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "live repeated evaluation not run"
+      },
+      "saved_summary_reuse": {
+        "value": null,
+        "state": "not_applicable",
+        "reason": "B1 has no saved-summary layer"
+      }
+    }
+  }
+}
