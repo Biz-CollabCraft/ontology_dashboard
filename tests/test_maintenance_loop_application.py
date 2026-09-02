@@ -786,6 +786,14 @@ def test_manual_recommendation_replay_dedupe_and_conflict(tmp_path) -> None:
         raise AssertionError("reusing an idempotency key with another body must conflict")
 
 
+def test_manual_recommendation_request_rejects_incomplete_cost_reference() -> None:
+    with pytest.raises(ValidationError, match="cost_analysis_id and action_candidate_id"):
+        OperationsManualRecommendationCreateRequest(
+            basis=("replace worn tool",),
+            cost_analysis_id="cost-analysis-001",
+        )
+
+
 def test_no_action_inspection_cannot_create_maintenance_recommendation(tmp_path) -> None:
     loop = service(tmp_path)
     requested = loop.request_inspection(
@@ -1166,6 +1174,44 @@ def test_cost_analysis_resolves_lineage_and_persists_read_only_snapshot(tmp_path
         workspace_id="workspace-1",
         analysis_id=created["analysis_id"],
     ) == result
+
+
+def test_manual_recommendation_preserves_consulted_analysis_without_selecting_option(
+    tmp_path,
+) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(loop)
+    created = loop.calculate_tool_replacement_cost(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=cost_analysis_request(),
+        actor_id="manager-1",
+        idempotency_key="cost-analysis-reference-001",
+    )
+    result = created["cost_analysis"]
+    action_candidate_id = result["options"][0]["action_candidate_id"]
+
+    recommendation = loop.create_manual_recommendation(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=OperationsManualRecommendationCreateRequest(
+            basis=("manager reviewed cost analysis",),
+            cost_analysis_id=created["analysis_id"],
+            action_candidate_id=action_candidate_id,
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="manual-recommendation-with-cost-reference-001",
+    )["recommendation"]
+
+    assert recommendation["source_cost_analysis_id"] == created["analysis_id"]
+    assert recommendation["source_action_candidate_id"] == action_candidate_id
+    assert recommendation["source_cost_option_id"] is None
+    assert recommendation["status"] == "proposed"
 
 
 def test_cost_analysis_is_idempotent_but_new_request_appends_snapshot(tmp_path) -> None:

@@ -148,7 +148,22 @@ def test_operations_manual_requires_complete_inspection_and_author_lineage() -> 
         OperationalRecommendedAction.model_validate(payload)
 
 
-def test_cost_selected_recommendation_requires_complete_cost_lineage() -> None:
+def test_cost_referenced_recommendation_allows_analysis_without_option_selection() -> None:
+    referenced = _manual_recommendation(
+        source_cost_analysis_id="cost-analysis-001",
+        source_action_candidate_id="action-candidate-001",
+    )
+    assert referenced.source_cost_analysis_id == "cost-analysis-001"
+    assert referenced.source_cost_option_id is None
+    assert referenced.source_action_candidate_id == "action-candidate-001"
+
+    payload = referenced.model_dump()
+    payload["source_action_candidate_id"] = None
+    with pytest.raises(ValidationError, match="analysis and action candidate lineage"):
+        OperationalRecommendedAction.model_validate(payload)
+
+
+def test_cost_selected_recommendation_preserves_complete_option_lineage() -> None:
     selected = _manual_recommendation(
         source_cost_analysis_id="cost-analysis-001",
         source_cost_option_id="cost-option-001",
@@ -157,11 +172,6 @@ def test_cost_selected_recommendation_requires_complete_cost_lineage() -> None:
     assert selected.source_cost_analysis_id == "cost-analysis-001"
     assert selected.source_cost_option_id == "cost-option-001"
     assert selected.source_action_candidate_id == "action-candidate-001"
-
-    payload = selected.model_dump()
-    payload["source_cost_option_id"] = None
-    with pytest.raises(ValidationError, match="complete cost lineage"):
-        OperationalRecommendedAction.model_validate(payload)
 
 
 def test_cost_selected_recommendation_must_use_validating_command_path(tmp_path) -> None:

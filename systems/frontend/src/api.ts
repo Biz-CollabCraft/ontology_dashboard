@@ -1321,6 +1321,8 @@ export function createOperationsManualRecommendation(input: {
   workspaceId: string;
   inspectionResultId: string;
   actionCode: MaintenanceActionCode;
+  costAnalysisId: string;
+  actionCandidateId: string;
   idempotencyKey: string;
 }) {
   return maintenanceCommand(
@@ -1328,6 +1330,8 @@ export function createOperationsManualRecommendation(input: {
     buildOperationsManualRecommendationPayload(
       input.inspectionResultId,
       input.actionCode,
+      input.costAnalysisId,
+      input.actionCandidateId,
     ),
     input.idempotencyKey,
   );
@@ -1336,10 +1340,14 @@ export function createOperationsManualRecommendation(input: {
 export function buildOperationsManualRecommendationPayload(
   inspectionResultId: string,
   actionCode: MaintenanceActionCode,
+  costAnalysisId: string,
+  actionCandidateId: string,
 ) {
   return {
     action_code: actionCode,
     basis: [`inspection_result:${inspectionResultId}`],
+    cost_analysis_id: costAnalysisId,
+    action_candidate_id: actionCandidateId,
   };
 }
 

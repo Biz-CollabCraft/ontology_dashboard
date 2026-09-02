@@ -246,9 +246,6 @@ def create_maintenance_router(
                 actor_id=principal.user_id,
                 actor_display_name=principal.display_name,
                 idempotency_key=idempotency_key,
-                source_cost_analysis_id=payload.cost_analysis_id,
-                source_cost_option_id=payload.cost_option_id,
-                source_action_candidate_id=payload.action_candidate_id,
             )
         )
 

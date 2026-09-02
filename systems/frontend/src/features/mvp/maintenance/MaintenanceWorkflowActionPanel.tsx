@@ -419,10 +419,12 @@ export function MaintenanceWorkflowActionPanel({
         workspaceId,
         inspectionResultId: state.inspectionResult!.inspection_result_id,
         actionCode: state.selectedActionCandidate!.action_code,
+        costAnalysisId: state.costAnalysis!.analysis_id,
+        actionCandidateId: state.selectedActionCandidate!.action_candidate_id,
         idempotencyKey: commandKey(
           eventId,
           "recommendation-create",
-          state.selectedActionCandidate!.action_candidate_id,
+          `${state.selectedActionCandidate!.action_candidate_id}:${state.costAnalysis!.analysis_id}`,
         ),
       }) : null;
     } else if (state.recommendation && !state.maintenanceWorkOrder) {
