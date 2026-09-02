@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import random
+import statistics
 import time
 from pathlib import Path
 from typing import Any, Protocol
@@ -346,12 +347,36 @@ def _row(
     gold = legacy._gold_accuracy(candidate, packet=packet) if candidate else None
     return {
         "case_id": packet["snapshot_basis"]["event_id"],
+        "fixture_id": packet["snapshot_basis"]["event_id"].replace("EVT-", ""),
         "iteration": iteration,
+        "run_id": f"{arm}:{packet['snapshot_basis']['event_id']}:{iteration}",
         "arm": arm,
         "provider": getattr(provider, "name", "unknown"),
+        "model": getattr(provider, "model", None),
         "status": trace["status"],
         "accepted": not errors,
         "schema_valid": not errors,
+        "schema_validation": {"passed": not errors, "errors": errors},
+        "llm_output": candidate,
+        "gold_accuracy": gold,
+        "accuracy_goldset_score": (
+            gold.get("accuracy_goldset_score") if isinstance(gold, dict) else None
+        ),
+        "matched_required_points": (
+            gold.get("matched_required_points") if isinstance(gold, dict) else None
+        ),
+        "missing_required_points": (
+            gold.get("missing_required_points") if isinstance(gold, dict) else None
+        ),
+        "role_required_points": (
+            gold.get("role_scores") if isinstance(gold, dict) else None
+        ),
+        "forbidden_claims": (
+            gold.get("must_not_claim_violations") if isinstance(gold, dict) else None
+        ),
+        "unsupported_claims": (
+            gold.get("must_not_claim_violations") if isinstance(gold, dict) else None
+        ),
         "unsupported_claim_count": (
             gold.get("unsupported_claim_count") if isinstance(gold, dict) else None
         ),
@@ -371,6 +396,7 @@ def _row(
         "blocked_side_effect": False,
         "workflow_trace": trace if arm == "B3" else None,
         "usage": usage,
+        "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
         "estimated_cost": _cost(usage, reused=reused),
     }
 
@@ -391,16 +417,17 @@ def run_suite(
     ]
     random.Random(seed).shuffle(jobs)
     state = SimulationState()
-    rows = [
-        run_arm(
+    rows: list[dict[str, Any]] = []
+    for execution_order, (arm, packet, iteration) in enumerate(jobs, start=1):
+        row = run_arm(
             arm=arm,
             packet=packet,
             iteration=iteration,
             provider=provider,
             state=state,
         )
-        for arm, packet, iteration in jobs
-    ]
+        row["execution_order"] = execution_order
+        rows.append(row)
     return {
         "status": "measured",
         "case_count": len(packets),
@@ -408,6 +435,17 @@ def run_suite(
         "arms": list(ARMS),
         "sample_size": len(rows),
         "seed": seed,
+        "control_config": {
+            "provider": getattr(provider, "name", "unknown"),
+            "model": getattr(provider, "model", None),
+            "temperature": (
+                "provider_default_for_model"
+                if str(getattr(provider, "model", "")).startswith("gpt-5")
+                else 0
+            ),
+            "same_provider_model_and_generation_settings_for_all_arms": True,
+            "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
+        },
         "rows": rows,
         "aggregate": aggregate(rows),
     }
@@ -449,34 +487,82 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     for arm in ARMS:
         arm_rows = [row for row in rows if row["arm"] == arm]
         valid = [row for row in arm_rows if row["schema_valid"] is True]
+        scores = [
+            float(row["accuracy_goldset_score"])
+            for row in arm_rows
+            if row.get("accuracy_goldset_score") is not None
+        ]
         costs = [
             row["estimated_cost"]["value"]
             for row in arm_rows
             if row["estimated_cost"]["state"] == "measured"
         ]
-        valid_costs = [
-            row["estimated_cost"]["value"]
-            for row in valid
-            if row["estimated_cost"]["state"] == "measured"
-        ]
+        fixture_scores: dict[str, list[float]] = {}
+        required_matched = required_total = 0
+        role_totals = {
+            "field_operator": {"matched": 0, "total": 0},
+            "process_manager": {"matched": 0, "total": 0},
+        }
+        for row in arm_rows:
+            score = row.get("accuracy_goldset_score")
+            if score is not None:
+                fixture_scores.setdefault(row["fixture_id"], []).append(float(score))
+            gold = row.get("gold_accuracy") or {}
+            required_matched += len(gold.get("matched_required_points") or [])
+            required_total += len(gold.get("matched_required_points") or []) + len(
+                gold.get("missing_required_points") or []
+            )
+            for role, bucket in role_totals.items():
+                role_score = (gold.get("role_scores") or {}).get(role) or {}
+                bucket["matched"] += len(role_score.get("matched_points") or [])
+                bucket["total"] += len(role_score.get("matched_points") or []) + len(
+                    role_score.get("missing_points") or []
+                )
         judgments: dict[str, set[str]] = {}
         for row in arm_rows:
             judgments.setdefault(row["case_id"], set()).add(
                 json.dumps(row.get("core_judgment"), ensure_ascii=False, sort_keys=True)
             )
+        cost_state = "measured" if len(costs) == len(arm_rows) else "not_measured"
+        total_cost = round(sum(costs), 8) if cost_state == "measured" else None
         by_arm[arm] = {
             "runs": len(arm_rows),
-            "schema_validation_pass_rate": len(valid) / len(arm_rows) if arm_rows else None,
+            "gold_score_mean": round(statistics.mean(scores), 6) if scores else None,
+            "gold_score_median": round(statistics.median(scores), 6) if scores else None,
+            "gold_score_variance": round(statistics.pvariance(scores), 8) if scores else None,
+            "gold_score_range": round(max(scores) - min(scores), 6) if scores else None,
+            "fixture_gold_scores": {
+                fixture_id: {
+                    "mean": round(statistics.mean(values), 6),
+                    "scores": values,
+                    "range": round(max(values) - min(values), 6),
+                }
+                for fixture_id, values in sorted(fixture_scores.items())
+            },
+            "required_point_satisfaction_rate": (
+                required_matched / required_total if required_total else None
+            ),
+            "role_required_point_satisfaction_rate": {
+                role: (bucket["matched"] / bucket["total"] if bucket["total"] else None)
+                for role, bucket in role_totals.items()
+            },
+            "missing_required_point_count": sum(
+                len(row.get("missing_required_points") or []) for row in arm_rows
+            ),
+            "forbidden_claim_count": sum(
+                len(row.get("forbidden_claims") or []) for row in arm_rows
+            ),
             "unsupported_claim_count": sum(
                 row["unsupported_claim_count"] or 0 for row in arm_rows
             ),
-            "critical_evidence_omission_count": sum(
-                row["critical_evidence_omission_count"] or 0 for row in arm_rows
-            ),
-            "core_judgment_agreement_rate": (
+            "schema_validation_pass_rate": len(valid) / len(arm_rows) if arm_rows else None,
+            "structural_core_field_exact_match_rate": (
                 sum(len(values) == 1 for values in judgments.values()) / len(judgments)
                 if judgments else None
             ),
+            "input_tokens": sum(int(row["usage"]["input_tokens"]) for row in arm_rows),
+            "output_tokens": sum(int(row["usage"]["output_tokens"]) for row in arm_rows),
+            "total_tokens": sum(int(row["usage"]["total_tokens"]) for row in arm_rows),
             "fallback_count": sum(bool(row["fallback"]) for row in arm_rows),
             "retry_count": sum(max(0, int(row["attempt_count"]) - 1) for row in arm_rows),
             "reuse_count": sum(bool(row["reused"]) for row in arm_rows),
@@ -485,14 +571,60 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 / len(arm_rows)
                 if arm == "B3" and arm_rows else None
             ),
-            "estimated_total_cost": round(sum(costs), 8) if len(costs) == len(arm_rows) else None,
-            "estimated_cost_per_valid_output": (
-                round(sum(valid_costs) / len(valid), 8)
-                if valid and len(valid_costs) == len(valid) else None
+            "estimated_total_cost": total_cost,
+            "estimated_cost_per_run": (
+                round(total_cost / len(arm_rows), 8)
+                if total_cost is not None and arm_rows else None
             ),
-            "cost_state": "measured" if len(costs) == len(arm_rows) else "not_measured",
+            "estimated_cost_per_valid_output": (
+                round(total_cost / len(valid), 8)
+                if total_cost is not None and valid else None
+            ),
+            "cost_state": cost_state,
         }
-    return {"by_arm": by_arm, "primary_comparison": "B3-B1"}
+
+    def delta(left: str, right: str) -> dict[str, Any]:
+        l = by_arm[left]
+        r = by_arm[right]
+        return {
+            "gold_score_mean_delta": _subtract(l["gold_score_mean"], r["gold_score_mean"]),
+            "required_point_satisfaction_rate_delta": _subtract(
+                l["required_point_satisfaction_rate"], r["required_point_satisfaction_rate"]
+            ),
+            "field_operator_satisfaction_rate_delta": _subtract(
+                l["role_required_point_satisfaction_rate"]["field_operator"],
+                r["role_required_point_satisfaction_rate"]["field_operator"],
+            ),
+            "process_manager_satisfaction_rate_delta": _subtract(
+                l["role_required_point_satisfaction_rate"]["process_manager"],
+                r["role_required_point_satisfaction_rate"]["process_manager"],
+            ),
+            "schema_validation_pass_rate_delta": _subtract(
+                l["schema_validation_pass_rate"], r["schema_validation_pass_rate"]
+            ),
+            "total_token_delta": l["total_tokens"] - r["total_tokens"],
+        }
+
+    return {
+        "by_arm": by_arm,
+        "primary_comparison": "B3-B1",
+        "comparison_order": ["B3-B1", "B2-B1", "B3-B2"],
+        "comparisons": {
+            "B3-B1": delta("B3", "B1"),
+            "B2-B1": delta("B2", "B1"),
+            "B3-B2": delta("B3", "B2"),
+        },
+        "structural_metric_note": (
+            "structural_core_field_exact_match_rate is an exact-match consistency metric over "
+            "selected structural fields, not semantic judgment agreement."
+        ),
+    }
+
+
+def _subtract(left: float | None, right: float | None) -> float | None:
+    if left is None or right is None:
+        return None
+    return round(left - right, 6)
 
 
 def _load_legacy_harness() -> Any:

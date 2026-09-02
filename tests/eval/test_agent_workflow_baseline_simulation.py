@@ -36,6 +36,9 @@ def test_minimal_suite_builds_72_randomized_rows(monkeypatch) -> None:
     assert result["iterations_per_case"] == 3
     assert result["sample_size"] == 72
     assert {row["arm"] for row in result["rows"]} == {"B1", "B2", "B3"}
+    assert sorted(row["execution_order"] for row in result["rows"]) == list(range(1, 73))
+    assert result["control_config"]["same_provider_model_and_generation_settings_for_all_arms"] is True
+    assert result["control_config"]["usage_measurement"] == "estimated_from_serialized_payload_and_output_chars"
     assert result["aggregate"]["primary_comparison"] == "B3-B1"
     assert all(result["aggregate"]["by_arm"][arm]["runs"] == 24 for arm in module.ARMS)
     assert result["aggregate"]["by_arm"]["B3"]["reuse_count"] == 16
@@ -44,6 +47,47 @@ def test_minimal_suite_builds_72_randomized_rows(monkeypatch) -> None:
         result["aggregate"]["by_arm"][arm]["cost_state"] == "measured"
         for arm in module.ARMS
     )
+    assert result["aggregate"]["comparison_order"] == ["B3-B1", "B2-B1", "B3-B2"]
+    assert set(result["aggregate"]["comparisons"]) == {"B3-B1", "B2-B1", "B3-B2"}
+    for arm in module.ARMS:
+        aggregate = result["aggregate"]["by_arm"][arm]
+        assert aggregate["gold_score_mean"] is not None
+        assert aggregate["gold_score_median"] is not None
+        assert len(aggregate["fixture_gold_scores"]) == 8
+        assert aggregate["required_point_satisfaction_rate"] is not None
+        assert set(aggregate["role_required_point_satisfaction_rate"]) == {
+            "field_operator",
+            "process_manager",
+        }
+        assert aggregate["input_tokens"] >= 0
+        assert aggregate["output_tokens"] >= 0
+        assert aggregate["total_tokens"] >= 0
+        assert "structural_core_field_exact_match_rate" in aggregate
+        assert "core_judgment_agreement_rate" not in aggregate
+
+
+def test_row_preserves_full_gold_rubric_and_output() -> None:
+    module = _load()
+    row = module.run_arm(
+        arm="B2",
+        packet=_packet(module),
+        iteration=2,
+        provider=module.MockJsonProvider(),
+        state=module.SimulationState(),
+    )
+
+    assert row["fixture_id"] == "GS-002"
+    assert row["run_id"] == "B2:EVT-GS-002:2"
+    assert row["llm_output"]["summary"]
+    assert row["schema_validation"] == {"passed": True, "errors": []}
+    assert row["gold_accuracy"]
+    assert row["accuracy_goldset_score"] == row["gold_accuracy"]["accuracy_goldset_score"]
+    assert row["matched_required_points"] == row["gold_accuracy"]["matched_required_points"]
+    assert row["missing_required_points"] == row["gold_accuracy"]["missing_required_points"]
+    assert row["role_required_points"] == row["gold_accuracy"]["role_scores"]
+    assert row["forbidden_claims"] == row["gold_accuracy"]["must_not_claim_violations"]
+    assert row["unsupported_claims"] == row["gold_accuracy"]["must_not_claim_violations"]
+    assert row["usage_measurement"] == "estimated_from_serialized_payload_and_output_chars"
 
 
 def test_cost_is_not_measured_without_versioned_rates(monkeypatch) -> None:
