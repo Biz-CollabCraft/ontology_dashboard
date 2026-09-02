@@ -15,6 +15,11 @@ date: 2026-09-01
 차단을 테스트와 평가 지표로 확인하는 것이 목표다. AI 정확성, 재현성, XAI 시각화 평가는 별도 계획으로
 분리한다.
 
+품질 평가, B1/B2/B3 비교, 실제 서비스·DB reliability 실행과 최종 리포트의 전체 순서는
+`2026-09-02-001-agent-workflow-final-evaluation-plan.md`를 따른다. 이 안정성 계획의 최종 수치
+평가는 계획된 도메인·워크플로 확장 구현과 candidate version freeze 이후에 수행한다. 확장 전 결과는
+contract 또는 smoke evidence로만 취급한다.
+
 ---
 
 ## Problem Frame
