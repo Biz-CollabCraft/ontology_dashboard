@@ -1595,6 +1595,35 @@ def test_domain_adapter_cnc_sop_guidance_does_not_match_compressor_assets() -> N
     assert adapter.inspection_guidance(fixture=fixture, artifact=artifact) == {}
 
 
+def test_domain_adapter_cnc_sop_guidance_covers_drive_power_hypothesis() -> None:
+    adapter = ManufacturingFixtureReviewContextAdapter(ROOT)
+    fixture = {
+        "equipment": {
+            "asset_type": "cnc",
+            "criticality": "high",
+        },
+        "operation_context": {
+            "production_impact": "high",
+        },
+        "expected": {
+            "predicted_failure_type": "power_or_overstrain_failure",
+        },
+    }
+    artifact = {
+        "asset_type": "cnc",
+        "predicted_failure_type": "power_or_overstrain_failure",
+        "status_grade": "warning",
+        "top_factors": [{"feature": "torque_nm"}],
+        "evidence_payload": {
+            "component_hypotheses": [{"component_id": "drive_power"}],
+        },
+    }
+
+    guidance = adapter.inspection_guidance(fixture=fixture, artifact=artifact)
+
+    assert guidance["drive_power"]["sop_id"] == "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+
+
 def test_domain_adapter_spare_parts_cover_cnc_inspection_components() -> None:
     adapter = ManufacturingFixtureReviewContextAdapter(ROOT)
     cnc_location_contract = next(

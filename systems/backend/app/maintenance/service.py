@@ -618,7 +618,46 @@ class MaintenanceLoopService:
                 "operations manual recommendation requires maintenance_recommended inspection outcome"
             )
         action_code = MaintenanceActionCode(payload.action_code)
-        self._derive_action_candidate(inspection_result, action_code)
+        action_candidate = self._derive_action_candidate(inspection_result, action_code)
+        supplied_cost_lineage = (
+            source_cost_analysis_id,
+            source_cost_option_id,
+            source_action_candidate_id,
+        )
+        if any(supplied_cost_lineage):
+            if not all(supplied_cost_lineage):
+                raise ValueError("manual recommendation requires complete cost analysis lineage")
+            if source_action_candidate_id != action_candidate.action_candidate_id:
+                raise ValueError("manual recommendation action candidate mismatch")
+            cost_analysis = self.repository.get_cost_analysis(
+                workspace_id=workspace_id,
+                analysis_id=str(source_cost_analysis_id),
+            )
+            if cost_analysis is None:
+                raise KeyError(source_cost_analysis_id)
+            self._require_scope(
+                cost_analysis,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+            )
+            if cost_analysis.based_on.inspection_result_id != inspection_result_id:
+                raise ValueError("manual recommendation cost analysis lineage mismatch")
+            selected_cost_option = next(
+                (
+                    option
+                    for option in cost_analysis.options
+                    if option.option_id == source_cost_option_id
+                ),
+                None,
+            )
+            if selected_cost_option is None:
+                raise ValueError("manual recommendation cost option does not exist")
+            if (
+                selected_cost_option.action_candidate_id != action_candidate.action_candidate_id
+                or selected_cost_option.action_code is not action_code
+            ):
+                raise ValueError("manual recommendation cost option action mismatch")
         inspection_work_order = self.repository.get_work_order(
             workspace_id=workspace_id,
             work_order_id=inspection_result.work_order_id,

@@ -62,6 +62,7 @@ import type {
   PredictiveMaintenanceObservationResponse,
   PredictiveMaintenanceReleaseOverview,
   PredictiveMaintenanceRuntimeContext,
+  GovernedProductResultSummary,
   ProductResultPage,
   ReplaySessionSnapshot,
 } from "./features/predictive-maintenance/types";
@@ -487,6 +488,11 @@ export interface MaintenanceCostAnalysisReadModel {
 
 export interface MaintenanceEventLineageReadModel {
   event_id: string;
+  decisions?: Array<{
+    decision_id: string;
+    recommendation_id: string;
+    disposition: "accept" | "reject" | "defer";
+  }>;
   work_orders: Array<{
     work_order_id: string;
     work_type: "inspection" | "maintenance";
@@ -504,6 +510,21 @@ export interface MaintenanceEventLineageReadModel {
     source_action_candidate_id?: string | null;
     action_code?: string | null;
   }>;
+  maintenance_actions?: Array<{
+    maintenance_action_id: string;
+    work_order_id: string;
+    status: string;
+    action_code: MaintenanceActionCode;
+    simulation_session_id: string;
+    restart_at?: string | null;
+  }>;
+  maintenance_events?: Array<{
+    maintenance_event_id: string;
+    maintenance_action_id: string;
+    completed_at: string;
+    restart_at?: string | null;
+  }>;
+  activities?: Array<Record<string, unknown>>;
 }
 
 export interface MaintenanceCostAnalysisRequest {
@@ -657,6 +678,23 @@ export function getPredictiveMaintenanceLatestResults(
   if (datasetVersionId) params.set("dataset_version_id", datasetVersionId);
   return request<ProductResultPage>(
     `${predictiveMaintenanceBase(projectId, workspaceId)}/results/latest?${params.toString()}`,
+    { signal },
+  );
+}
+
+export function getPostMaintenanceProductResults(
+  projectId: string,
+  workspaceId: string,
+  assetId: string,
+  maintenanceEventId: string,
+  signal?: AbortSignal,
+): Promise<GovernedProductResultSummary | null> {
+  const params = new URLSearchParams({
+    asset_id: assetId,
+    maintenance_event_id: maintenanceEventId,
+  });
+  return request<GovernedProductResultSummary | null>(
+    `${predictiveMaintenanceBase(projectId, workspaceId)}/results/post-maintenance?${params.toString()}`,
     { signal },
   );
 }
@@ -1126,6 +1164,179 @@ export function requestInspectionWorkOrder(input: {
         snapshot_basis: input.snapshotBasis,
       }),
     },
+  );
+}
+
+function maintenanceCommand(
+  path: string,
+  body: Record<string, unknown>,
+  idempotencyKey: string,
+): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(path, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(body),
+  });
+}
+
+export function approveInspectionWorkOrder(input: {
+  projectId: string;
+  workspaceId: string;
+  workOrderId: string;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
+    {},
+    input.idempotencyKey,
+  );
+}
+
+export function startInspectionWorkOrder(input: {
+  projectId: string;
+  workspaceId: string;
+  workOrderId: string;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/start`,
+    {},
+    input.idempotencyKey,
+  );
+}
+
+export function completeInspectionWorkOrder(input: {
+  projectId: string;
+  workspaceId: string;
+  workOrderId: string;
+  actionCode: MaintenanceActionCode;
+  idempotencyKey: string;
+}) {
+  const cooling = input.actionCode === "COOLING_SYSTEM_RESTORE";
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/complete`,
+    {
+      outcome: "maintenance_recommended",
+      checklist: [
+        {
+          item_id: cooling ? "cooling-system-condition" : "tool-wear",
+          status: "fail",
+          note: cooling ? "냉각 계통 복구 필요 확인" : "공구 마모 한계 초과 확인",
+        },
+        { item_id: "cost-basis-in-house", status: "pass", note: "사내 정비 수행" },
+        { item_id: "cost-basis-spare-part-available", status: "pass", note: "필요 부품 확보" },
+        { item_id: "cost-basis-vendor-dispatch-required", status: "fail", note: "외부 출동 불필요" },
+      ],
+      measurements: cooling
+        ? [{ name: "process_temperature_k", value: 315, unit: "K" }]
+        : [{ name: "tool_wear_min", value: 220, unit: "min" }],
+      findings: [cooling ? "cooling_system_restore_required" : "tool_wear_limit_exceeded"],
+      note: cooling ? "냉각 계통 복구 검토가 필요합니다." : "공구 인서트 교체 검토가 필요합니다.",
+    },
+    input.idempotencyKey,
+  );
+}
+
+export function createOperationsManualRecommendation(input: {
+  projectId: string;
+  workspaceId: string;
+  inspectionResultId: string;
+  actionCode: MaintenanceActionCode;
+  costAnalysisId: string;
+  costOptionId: string;
+  actionCandidateId: string;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-results/${encodeURIComponent(input.inspectionResultId)}/recommendations`,
+    {
+      action_code: input.actionCode,
+      cost_analysis_id: input.costAnalysisId,
+      cost_option_id: input.costOptionId,
+      action_candidate_id: input.actionCandidateId,
+      basis: [
+        `inspection_result:${input.inspectionResultId}`,
+        `cost_analysis:${input.costAnalysisId}`,
+        `cost_option:${input.costOptionId}`,
+      ],
+    },
+    input.idempotencyKey,
+  );
+}
+
+export function decideOperationsManualRecommendation(input: {
+  projectId: string;
+  workspaceId: string;
+  recommendationId: string;
+  disposition: "accept" | "reject" | "defer";
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/recommendations/${encodeURIComponent(input.recommendationId)}/decisions`,
+    { disposition: input.disposition, note: "사용자 명시적 판단" },
+    input.idempotencyKey,
+  );
+}
+
+export async function approveMaintenanceWorkOrder(input: {
+  projectId: string;
+  workspaceId: string;
+  workOrderId: string;
+  datasetVersionId: string;
+  idempotencyKey: string;
+}) {
+  const replay = await startPredictiveMaintenanceReplay(input.projectId, input.workspaceId, {
+    dataset_version_id: input.datasetVersionId,
+    speed_minutes_per_second: 60,
+  });
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
+    { simulation_session_id: replay.cursor.session_id },
+    input.idempotencyKey,
+  );
+}
+
+export function startMaintenanceAction(input: {
+  projectId: string;
+  workspaceId: string;
+  maintenanceActionId: string;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-actions/${encodeURIComponent(input.maintenanceActionId)}/start`,
+    {},
+    input.idempotencyKey,
+  );
+}
+
+export function completeMaintenanceAction(input: {
+  projectId: string;
+  workspaceId: string;
+  maintenanceActionId: string;
+  actionCode: MaintenanceActionCode;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-actions/${encodeURIComponent(input.maintenanceActionId)}/complete`,
+    {
+      outcome: input.actionCode === "COOLING_SYSTEM_RESTORE"
+        ? "냉각 계통을 복구하고 정상 상태를 확인했습니다."
+        : "공구 인서트 1개를 교체하고 정상 체결을 확인했습니다.",
+    },
+    input.idempotencyKey,
+  );
+}
+
+export function requestMaintenanceReplay(input: {
+  projectId: string;
+  workspaceId: string;
+  maintenanceEventId: string;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-events/${encodeURIComponent(input.maintenanceEventId)}/replay`,
+    { restart_at: new Date().toISOString() },
+    input.idempotencyKey,
   );
 }
 

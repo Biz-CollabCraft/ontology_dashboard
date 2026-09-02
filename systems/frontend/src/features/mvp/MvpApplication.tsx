@@ -238,6 +238,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
 
   const canDecide = Boolean(user?.permissions.includes("events.decision"));
   const canNote = Boolean(user?.permissions.includes("events.note"));
+  const canExecuteFieldWorkflow = Boolean(user?.permissions.includes("field.tasks.update"));
   const canMaterializeAgentSummary = canMaterializeAgentReviewSummary(user?.permissions);
   const canReadSystemLogs = canReadMvpSystemLogs(user?.permissions);
   const selectedAssetId = selection.assetId;
@@ -254,7 +255,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       ? <MvpSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />
       : <MvpState kind="error" title="시스템 관리자 권한 필요" detail="AI 요약 처리 로그는 관리자 감사 권한이 있는 사용자만 조회할 수 있습니다." />;
   } else {
-    content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
   return (

@@ -8,6 +8,7 @@ import type { MvpInspectionGuidance } from "../api/mvpContracts";
 import {
   buildCostRequest,
   costOptionsForDisplay,
+  isCostAnalysisStageOpen,
   latestCostAnalysisForInspection,
   latestEligibleInspection,
 } from "./MaintenanceCostDecisionPanel";
@@ -37,19 +38,10 @@ function lineage(): MaintenanceEventLineageReadModel {
   return {
     event_id: "EVT-1",
     work_orders: [
-      { work_order_id: "WO-OPEN", work_type: "inspection", status: "in_progress" },
       { work_order_id: "WO-DONE", work_type: "inspection", status: "completed" },
+      { work_order_id: "WO-OPEN", work_type: "inspection", status: "in_progress" },
     ],
     inspection_results: [
-      {
-        inspection_result_id: "RESULT-OPEN",
-        work_order_id: "WO-OPEN",
-        event_id: "EVT-1",
-        asset_id: "CNC-1",
-        equipment_id: "CNC-1",
-        outcome: "maintenance_recommended",
-        recorded_at: "2026-08-31T02:00:00Z",
-      },
       {
         inspection_result_id: "RESULT-DONE",
         work_order_id: "WO-DONE",
@@ -58,6 +50,15 @@ function lineage(): MaintenanceEventLineageReadModel {
         equipment_id: "CNC-1",
         outcome: "maintenance_recommended",
         recorded_at: "2026-08-31T01:00:00Z",
+      },
+      {
+        inspection_result_id: "RESULT-OPEN",
+        work_order_id: "WO-OPEN",
+        event_id: "EVT-1",
+        asset_id: "CNC-1",
+        equipment_id: "CNC-1",
+        outcome: "maintenance_recommended",
+        recorded_at: "2026-08-31T02:00:00Z",
       },
     ],
     cost_analyses: [],
@@ -117,8 +118,33 @@ function costAnalysis(
 }
 
 describe("MaintenanceCostDecisionPanel helpers", () => {
-  it("uses only a completed inspection with a maintenance recommendation", () => {
-    expect(latestEligibleInspection(lineage())?.inspection_result_id).toBe("RESULT-DONE");
+  it("does not reuse an older completed inspection while the latest inspection is open", () => {
+    expect(latestEligibleInspection(lineage())).toBeNull();
+  });
+
+  it("opens cost analysis only after the latest inspection is completed", () => {
+    const completed = lineage();
+    completed.work_orders[1].status = "completed";
+
+    expect(latestEligibleInspection(completed)?.inspection_result_id).toBe("RESULT-OPEN");
+    expect(
+      isCostAnalysisStageOpen(completed, latestEligibleInspection(completed)),
+    ).toBe(true);
+  });
+
+  it("closes the current cost-analysis stage after an operations recommendation exists", () => {
+    const completed = lineage();
+    completed.work_orders[1].status = "completed";
+    completed.recommendations = [{
+      recommendation_id: "REC-1",
+      status: "proposed",
+      source_inspection_work_order_id: "WO-OPEN",
+      source_inspection_reference: "RESULT-OPEN",
+    }];
+    const latestInspection = latestEligibleInspection(completed);
+
+    expect(latestInspection?.inspection_result_id).toBe("RESULT-OPEN");
+    expect(isCostAnalysisStageOpen(completed, latestInspection)).toBe(false);
   });
 
   it("does not expose an older inspection's cost analysis for the latest inspection", () => {
@@ -170,7 +196,7 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
     });
   });
 
-  it("shows only the immediate option for cooling while preserving tool comparison", () => {
+  it("shows cooling immediate only and hides tool reinspection from the product UI", () => {
     const analysis = costAnalysis(
       "ANALYSIS-COOLING",
       "RESULT-DONE",
@@ -202,6 +228,9 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
       costOptionsForDisplay(analysis, "COOLING_SYSTEM_RESTORE")
         .map((option) => option.execution_timing),
     ).toEqual(["immediate"]);
-    expect(costOptionsForDisplay(analysis, "TOOL_REPLACEMENT")).toHaveLength(4);
+    expect(
+      costOptionsForDisplay(analysis, "TOOL_REPLACEMENT")
+        .map((option) => option.execution_timing),
+    ).toEqual(["immediate", "planned_window", "no_action_baseline"]);
   });
 });

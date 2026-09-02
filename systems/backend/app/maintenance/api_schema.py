@@ -97,6 +97,9 @@ class OperationsManualRecommendationCreateRequest(StrictCommand):
         "TOOL_REPLACEMENT"
     )
     basis: tuple[str, ...] = Field(min_length=1)
+    cost_analysis_id: str | None = Field(default=None, min_length=1, max_length=240)
+    cost_option_id: str | None = Field(default=None, min_length=1, max_length=240)
+    action_candidate_id: str | None = Field(default=None, min_length=1, max_length=240)
 
 
 class MaintenanceCostAnalysisCreateRequest(StrictCommand):

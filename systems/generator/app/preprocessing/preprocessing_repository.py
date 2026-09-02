@@ -466,8 +466,11 @@ class PreprocessingRepository:
         if target_plan_path.exists():
             raise PreprocessingPlanPublishError(f"Plan 파일이 이미 존재합니다 (불변 파일 덮어쓰기 금지): {target_plan_path}")
 
-        temp_plan_path = plan_dir / f".tmp_{uuid.uuid4().hex}_{plan_id}.json"
-        temp_latest_path = plan_dir / f".tmp_{uuid.uuid4().hex}_latest.json"
+        # Keep atomic staging names short. Dataset/version identifiers already make
+        # this directory deep enough to exceed the legacy Windows MAX_PATH limit
+        # when the complete plan UUID is repeated in the temporary filename.
+        temp_plan_path = plan_dir / f".tmp_{uuid.uuid4().hex}.json"
+        temp_latest_path = plan_dir / f".tmp_{uuid.uuid4().hex}.json"
 
         try:
             # 1. Write and validate immutable plan JSON

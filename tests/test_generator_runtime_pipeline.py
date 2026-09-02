@@ -1255,6 +1255,26 @@ def test_duplicate_source_identity_enqueue_blocked(isolated_runtime_env):
     assert items[0].job_id == "job-dup-1"
 
 
+def test_failed_source_redelivery_requires_explicit_retry(isolated_runtime_env):
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    src_file, sha = create_sample_observation_jsonl(
+        incoming_dir / "failed_redelivery.jsonl", num_rows=2
+    )
+    runtime_input = create_test_runtime_input_identity(
+        source_uri=str(src_file), source_checksum=sha
+    )
+    queue.enqueue(job_id="job-failed-original", runtime_input=runtime_input)
+    queue.mark_failed("job-failed-original", "PIPELINE_HISTORY_INSUFFICIENT")
+
+    with pytest.raises(PipelineDuplicateInputError) as exc_info:
+        queue.enqueue(job_id="job-failed-redelivery", runtime_input=runtime_input)
+
+    assert exc_info.value.code == "PIPELINE_DUPLICATE_INPUT"
+    assert len(queue.list_items()) == 1
+
+
 # =====================================================================
 # 14. Same Path Different Checksum Enqueued as Separate Job Test
 # =====================================================================
@@ -1703,6 +1723,26 @@ def test_safe_cleanup_removes_run_dedicated_intermediates_preserves_models(isola
     # Run-dedicated pipeline dataset directory MUST be removed
     run_dataset_dir = env["repository"].base_dir / "pipeline_datasets" / run_state.run_id
     assert not run_dataset_dir.exists()
+
+
+def test_safe_cleanup_accepts_configured_runtime_feature_root(tmp_path, monkeypatch):
+    run_id = "run-configured-feature-root"
+    feature_root = tmp_path / "external-runtime-features"
+    feature_file = feature_root / run_id / "features.npy"
+    feature_file.parent.mkdir(parents=True)
+    feature_file.write_bytes(b"runtime-features")
+    monkeypatch.setattr(PATHS, "runtime_feature_root", feature_root)
+    repository = PipelineRepository(base_dir=tmp_path / "data_preprocessed")
+
+    cleaned, deleted, error = repository.cleanup_run_intermediate_outputs(
+        run_id,
+        [ArtifactReference(uri=str(feature_file), sha256="a" * 64, role="runtime_features")],
+    )
+
+    assert cleaned is True
+    assert error is None
+    assert str(feature_file.resolve()) in deleted
+    assert not feature_file.exists()
 
 
 # =====================================================================
