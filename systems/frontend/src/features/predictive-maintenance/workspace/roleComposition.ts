@@ -67,14 +67,14 @@ const COMPOSITIONS: Record<ReliabilityExperienceKind, Record<Exclude<OperationsV
 
 const SURFACE_COMPOSITIONS: Partial<Record<ReliabilitySurfaceId, ReliabilityBlockId[]>> = {
   "executive-brief": ["operational-kpis", "report-summary", "production-exposure", "decision-queue", "case-lineage", "business-kpis", "risk-portfolio", "context-evidence"],
-  "operational-risk": ["risk-metrics", "factory-map", "operational-kpis", "risk-portfolio", "line-risk", "risk-queue"],
+  "operational-risk": ["risk-metrics", "operational-kpis", "risk-portfolio", "line-risk", "risk-queue", "production-exposure"],
   "executive-kpi": ["operational-kpis", "risk-metrics", "business-kpis", "production-exposure", "decision-history", "line-risk"],
   "executive-reports": ["report-summary", "operational-kpis", "case-lineage", "business-kpis", "decision-history", "context-evidence"],
   "decision-bottleneck": ["operational-kpis", "decision-queue", "case-lineage", "workflow-lifecycle", "production-exposure", "context-evidence"],
   "maintenance-effect": ["maintenance-effect", "maintenance-history", "production-exposure", "risk-portfolio", "material-context", "context-evidence"],
   roadmap: ["business-kpis", "decision-history", "maintenance-history", "material-context", "context-evidence"],
 
-  "operations-status": ["risk-metrics", "factory-map", "operational-kpis", "line-risk", "risk-queue", "decision-queue"],
+  "operations-status": ["risk-metrics", "operational-kpis", "line-risk", "risk-queue", "decision-queue", "production-exposure"],
   "pending-decisions": ["operational-kpis", "risk-metrics", "decision-queue", "production-exposure", "case-lineage", "workflow-lifecycle", "workflow-actions", "material-context", "context-evidence"],
   "decision-case": ["asset-brief", "case-lineage", "decision-queue", "production-exposure", "evidence-factors", "workflow-lifecycle", "decision-history", "context-evidence"],
   "production-impact": ["production-exposure", "business-kpis", "material-context", "risk-queue", "line-risk"],
@@ -82,7 +82,7 @@ const SURFACE_COMPOSITIONS: Partial<Record<ReliabilitySurfaceId, ReliabilityBloc
   backlog: ["operational-kpis", "risk-metrics", "decision-queue", "decision-history", "line-risk", "context-evidence"],
   "report-draft": ["report-summary", "operational-kpis", "case-lineage", "production-exposure", "decision-history", "business-kpis", "context-evidence"],
 
-  monitoring: ["risk-metrics", "factory-map", "risk-queue", "feature-trend", "sensor-signals", "evidence-factors", "case-lineage"],
+  monitoring: ["risk-metrics", "risk-queue", "feature-trend", "sensor-signals", "evidence-factors", "case-lineage"],
   assets: ["asset-brief", "feature-trend", "sensor-signals", "evidence-factors", "case-lineage", "maintenance-history", "maintenance-effect", "material-context"],
   "sensor-features": ["feature-trend", "sensor-signals", "evidence-factors", "maintenance-history"],
   inspection: ["inspection-targets", "case-lineage", "workflow-lifecycle", "workflow-actions", "evidence-factors", "maintenance-history"],

@@ -35,6 +35,7 @@ import {
 } from "../predictive-maintenance/ReliabilityWorkspacePreview";
 import { resolveReliabilityRoleExperience } from "../predictive-maintenance/workspace/roleExperience";
 import { RoleComposedWorkspace } from "../predictive-maintenance/workspace/RoleComposedWorkspace";
+import type { ReliabilitySearchEntity } from "../predictive-maintenance/workspace/ReliabilityCommandPalette";
 import {
   defaultReliabilitySurface,
   reliabilitySurfaceForView,
@@ -115,10 +116,6 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
     await logout();
     navigate("/login", { replace: true });
   }, [logout]);
-
-  useEffect(() => {
-    document.documentElement.lang = "ko-KR";
-  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -267,6 +264,50 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
     updateSelection({ eventId: event.eventId, assetId: event.assetId });
   }, [updateSelection]);
 
+  const searchEntities = useMemo<ReliabilitySearchEntity[]>(() => {
+    if (!model) return [];
+    const eventAssetIds = new Set(model.events.map((event) => event.assetId));
+    const eventItems: ReliabilitySearchEntity[] = model.events.map((event) => ({
+      id: `event:${event.eventId}`,
+      kind: "event",
+      label: event.assetName || event.assetId,
+      detail: `${event.eventId} · ${event.line} · ${event.failureProbability !== null ? `${Math.round(event.failureProbability * 100)}% risk` : "risk n/a"}`,
+      assetId: event.assetId,
+      eventId: event.eventId,
+      keywords: `${event.status} ${event.predictedFailureType ?? ""} ${event.recommendedDecision}`,
+    }));
+    const assetItems: ReliabilitySearchEntity[] = model.assets
+      .filter((asset) => !eventAssetIds.has(asset.assetId))
+      .map((asset) => ({
+        id: `asset:${asset.assetId}`,
+        kind: "asset",
+        label: asset.displayName,
+        detail: `${asset.assetId} · ${asset.line} · ${asset.failureProbability !== null ? `${Math.round(asset.failureProbability * 100)}% risk` : "risk n/a"}`,
+        assetId: asset.assetId,
+        eventId: asset.eventId,
+        keywords: `${asset.status} ${asset.assetType}`,
+      }));
+    return [...eventItems, ...assetItems];
+  }, [model]);
+
+  const selectSearchEntity = useCallback((entity: ReliabilitySearchEntity) => {
+    const preferredSurfaceId = experienceKind === "engineering"
+      ? "assets"
+      : experienceKind === "operations"
+        ? entity.eventId ? "decision-case" : "factory-status"
+        : experienceKind === "executive"
+          ? "factory-status"
+          : entity.eventId ? "work-targets" : "field-status";
+    const targetSurface = reliabilitySurfaces(experienceKind, backupMode).find((item) => item.id === preferredSurfaceId)
+      ?? defaultReliabilitySurface(experienceKind, backupMode);
+    updateSelection({
+      surface: targetSurface.id,
+      view: targetSurface.view,
+      assetId: entity.assetId,
+      eventId: entity.eventId,
+    });
+  }, [backupMode, experienceKind, updateSelection]);
+
   const openEventAsset = useCallback((event: OperationsEvent) => {
     updateSelection({ view: "objects", eventId: event.eventId, assetId: event.assetId });
   }, [updateSelection]);
@@ -378,6 +419,8 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
         onRefresh={refresh}
         refreshing={loading}
         onLogout={signOut}
+        searchEntities={searchEntities}
+        onSearchSelect={selectSearchEntity}
         backupMode={backupMode}
       >
         {body}

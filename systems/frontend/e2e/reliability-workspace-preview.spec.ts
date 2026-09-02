@@ -6,9 +6,9 @@ const REPORT_PATH = `/app/projects/${PROJECT}/operations/report-draft?view=repor
 
 async function login(page: Page) {
   await page.goto(`/login?returnTo=${encodeURIComponent(PATH)}`);
-  await page.getByLabel("이메일").fill("manager@ontology.local");
-  await page.getByLabel("비밀번호").fill("Manager!2026");
-  await page.getByRole("button", { name: "로그인", exact: true }).click();
+  await page.getByLabel(/이메일|Email/).fill("manager@ontology.local");
+  await page.getByLabel(/비밀번호|Password/).fill("Manager!2026");
+  await page.getByRole("button", { name: /로그인|Sign in/, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/app/projects/${PROJECT}/operations`), { timeout: 10_000 });
 }
 
@@ -114,9 +114,9 @@ test("keeps login and reliability workspace inside a phone viewport", async ({ p
   }));
   expect(loginGeometry.documentWidth).toBeLessThanOrEqual(loginGeometry.viewport + 1);
 
-  await page.getByLabel("이메일").fill("manager@ontology.local");
-  await page.getByLabel("비밀번호").fill("Manager!2026");
-  await page.getByRole("button", { name: "로그인", exact: true }).click();
+  await page.getByLabel(/이메일|Email/).fill("manager@ontology.local");
+  await page.getByLabel(/비밀번호|Password/).fill("Manager!2026");
+  await page.getByRole("button", { name: /로그인|Sign in/, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/app/projects/${PROJECT}/operations`), { timeout: 10_000 });
 
   const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
@@ -190,6 +190,7 @@ test("uses wall-clock assets and renders connected observation history", async (
   await expect(drawer).toBeVisible();
   await expect(drawer.getByText("최신 관측 기준", { exact: false })).toBeVisible({ timeout: 15_000 });
   const featureMonitor = drawer.locator(".operations-live-feature-monitor");
+  await expect(featureMonitor).not.toContainText("센서 이력 로딩 중", { timeout: 15_000 });
   const featureSeriesCount = await featureMonitor.locator(".asset-series-line").count();
   if (featureSeriesCount === 0) await expect(featureMonitor).toContainText("센서 이력 없음");
   else expect(featureSeriesCount).toBeGreaterThan(0);
@@ -222,4 +223,88 @@ test("requires report type review before opening the browser print flow", async 
   }
   await expect(outputDialog.getByLabel("선택한 출력 내용 확인")).toBeVisible();
   await expect(outputDialog.getByRole("button", { name: "확인 후 출력" })).toBeVisible();
+});
+
+test("connects search, settings dismissal, locale, theme, presets, and assistant prompts", async ({ page }) => {
+  await page.goto(`/login?returnTo=${encodeURIComponent(PATH)}`);
+  const display = page.locator(".od-display-menu");
+  await display.locator(":scope > summary").click();
+  await page.getByRole("button", { name: "English", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+  await expect(page.getByRole("heading", { name: "Find abnormal equipment by location and alert first." })).toBeVisible();
+  await expect(page.getByLabel("Email")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+  await page.mouse.click(12, 180);
+  await expect(display).not.toHaveAttribute("open", "");
+
+  await display.locator(":scope > summary").click();
+  await page.getByRole("button", { name: "Dark", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "한국어", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "ko-KR");
+  await expect(page.getByRole("heading", { name: "이상 설비를 위치와 알림으로 먼저 찾습니다." })).toBeVisible();
+  await page.mouse.click(12, 180);
+
+  await page.getByLabel("이메일").fill("manager@ontology.local");
+  await page.getByLabel("비밀번호").fill("Manager!2026");
+  await page.getByRole("button", { name: "로그인", exact: true }).click();
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+
+  await shell.getByRole("button", { name: "Reliability Operations 검색" }).click();
+  const palette = page.getByRole("dialog", { name: "Reliability Operations 검색" });
+  await expect(palette).toBeVisible();
+  await palette.getByLabel("메뉴, 설비 또는 Event 검색").fill("Decision Case");
+  await palette.getByRole("button", { name: /Decision Case/ }).first().click();
+  await expect(page).toHaveURL(/\/operations\/decision-case/);
+  await expect(shell.getByRole("heading", { name: "하나의 사건을 끝까지 추적" })).toBeVisible();
+
+  await shell.getByRole("button", { name: "환경설정" }).click();
+  await expect(shell.locator(".rw-preview-settings-panel")).toBeVisible();
+  await shell.locator(".rw-preview-page-heading").click({ position: { x: 12, y: 12 } });
+  await expect(shell.locator(".rw-preview-settings-panel")).toBeHidden();
+
+  await shell.getByRole("button", { name: "환경설정" }).click();
+  await shell.getByRole("button", { name: "발표/프로젝터", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-density", "comfortable");
+  const presentationCopySize = await shell.locator(".rw-composed-list small").first().evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+  expect(presentationCopySize).toBeGreaterThanOrEqual(12);
+  await shell.getByRole("button", { name: "데스크톱", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-density", "standard");
+  await shell.locator(".rw-preview-page-heading").click({ position: { x: 12, y: 12 } });
+
+  await shell.getByRole("button", { name: /Assistant/ }).click();
+  const assistant = page.getByRole("dialog", { name: "Reliability Assistant" });
+  await expect(assistant).toBeVisible();
+  await assistant.getByRole("button", { name: "생산 영향은 어느 정도인가요?", exact: true }).click();
+  await expect(assistant.locator(".rw-context-assistant__message.is-user")).toHaveCount(1);
+  await expect(assistant.locator(".rw-context-assistant__message.is-assistant:not(.is-loading)")).toHaveCount(1, { timeout: 12_000 });
+  await expect(assistant.locator(".rw-context-assistant__message.is-loading")).toHaveCount(0, { timeout: 12_000 });
+});
+
+test("keeps factory status focused and avoids repeating the full map on operations status", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await login(page);
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+  await expect(shell).toHaveAttribute("data-active-surface", "factory-status");
+  await expect(shell.locator(".operations-live-kpi-grid")).toBeVisible();
+  await expect(shell.locator(".operations-factory-map-panel")).toBeVisible();
+  await expect(shell.locator(".operations-monitoring-summary")).toBeHidden();
+  await expect(shell.locator(".operations-work-queue-board")).toBeHidden();
+  const zoneColumns = await shell.locator(".operations-factory-line-map").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
+  expect(zoneColumns).toBe(2);
+
+  const mainGeometry = await shell.locator(".rw-preview-main").evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(mainGeometry.scrollHeight / Math.max(1, mainGeometry.clientHeight)).toBeLessThan(2.2);
+
+  await shell.locator(".rw-preview-left nav button").filter({ hasText: "운영 현황" }).click();
+  await expect(page).toHaveURL(/\/operations\/operations-status/);
+  const composed = shell.locator('[data-surface="operations-status"]');
+  await expect(composed).toBeVisible();
+  await expect(composed).not.toHaveAttribute("data-composition", /factory-map/);
+  await expect(composed.locator(".rw-factory-map")).toHaveCount(0);
 });

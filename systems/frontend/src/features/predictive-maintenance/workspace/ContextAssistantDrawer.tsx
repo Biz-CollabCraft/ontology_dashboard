@@ -18,7 +18,7 @@ export interface ContextAssistantDrawerProps {
   context?: ReliabilityAssistantContext | null;
   messages?: ReliabilityAssistantMessage[];
   prompts?: ReliabilityAssistantPrompt[];
-  onSubmit?: (question: string) => void;
+  onSubmit?: (question: string) => void | Promise<void>;
   locale?: ReliabilityAssistantLocale;
   loading?: boolean;
   submitting?: boolean;
@@ -79,7 +79,7 @@ export function ContextAssistantDrawer({
   function submit(question: string) {
     const trimmed = question.trim();
     if (!trimmed || !onSubmit) return;
-    onSubmit(trimmed);
+    void onSubmit(trimmed);
     setDraft("");
   }
 
@@ -186,6 +186,10 @@ export function ContextAssistantDrawer({
               : "선택된 실시간 이벤트, Agent Review Packet, 저장된 근거 기반 AI 요약과 연결 retrieval metadata를 사용해 답합니다."}</p>
           </div>
         )}
+        {submitting ? <article className="rw-context-assistant__message is-assistant is-loading" aria-live="polite">
+          <span>{english ? "CONNECTED DATA" : "연결 데이터 요약"}</span>
+          <p>{english ? "Checking linked evidence and the current case context…" : "연결 근거와 현재 Case 문맥을 확인하고 있습니다…"}</p>
+        </article> : null}
       </section>
 
       <form className="rw-context-assistant__composer" onSubmit={submitDraft}>

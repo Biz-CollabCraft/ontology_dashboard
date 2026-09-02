@@ -13,7 +13,7 @@ import {
   Settings2,
   UserRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   createOperationsAgentReviewSummary,
   getOperationsAgentReviewPacket,
@@ -35,6 +35,7 @@ import type {
 import { displayAssetName, displayExplanationMethod, displayLineLabel, displaySensorLabel } from "../operations/displayLabels";
 import "./reliability-workspace-preview.css";
 import { ContextAssistantDrawer } from "./workspace/ContextAssistantDrawer";
+import { ReliabilityCommandPalette, type ReliabilitySearchEntity } from "./workspace/ReliabilityCommandPalette";
 import { LifecycleInstrument } from "./workspace/LifecycleInstrument";
 import { OperationalFocus } from "./workspace/OperationalFocus";
 import {
@@ -263,6 +264,8 @@ export function ReliabilityWorkspacePreview({
   onRefresh,
   refreshing,
   onLogout,
+  searchEntities = [],
+  onSearchSelect,
   backupMode = false,
   children,
 }: {
@@ -276,6 +279,8 @@ export function ReliabilityWorkspacePreview({
   onRefresh: () => void;
   refreshing: boolean;
   onLogout: () => void | Promise<void>;
+  searchEntities?: ReliabilitySearchEntity[];
+  onSearchSelect?: (entity: ReliabilitySearchEntity) => void;
   backupMode?: boolean;
   children: ReactNode;
 }) {
@@ -294,6 +299,8 @@ export function ReliabilityWorkspacePreview({
   const [leftOpen, setLeftOpen] = useState(() => window.innerWidth > 860);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const settingsRef = useRef<HTMLElement>(null);
   const [messages, setMessages] = useState<ReliabilityAssistantMessage[]>([]);
   const [agentPacket, setAgentPacket] = useState<OperationsAgentReviewPacket | null>(null);
   const [agentSummaryResponse, setAgentSummaryResponse] = useState<OperationsAgentReviewSummaryResponse | null>(null);
@@ -318,6 +325,29 @@ export function ReliabilityWorkspacePreview({
     setAgentSummaryResponse(null);
     setAssistantError(null);
   }, [selectedEvent?.eventId]);
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSettingsOpen(false);
+        setSearchOpen(true);
+      }
+      if (event.key === "Escape" && settingsOpen) setSettingsOpen(false);
+    }
+    document.addEventListener("keydown", handleShortcut);
+    return () => document.removeEventListener("keydown", handleShortcut);
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    function handlePointerDown(event: PointerEvent) {
+      if (!(event.target instanceof Node)) return;
+      if (!settingsRef.current?.contains(event.target)) setSettingsOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [settingsOpen]);
 
   useEffect(() => {
     const assetId = selectedEvent?.assetId;
@@ -505,7 +535,8 @@ export function ReliabilityWorkspacePreview({
     setAssistantError(null);
 
     try {
-      const run = await runAgentQuery({
+      const run = await Promise.race([
+        runAgentQuery({
         project_id: context.projectId,
         workspace_id: context.workspaceId,
         question: trimmed,
@@ -515,7 +546,9 @@ export function ReliabilityWorkspacePreview({
         object_id: selectedEvent?.assetId ?? undefined,
         event_id: selectedEvent?.eventId ?? undefined,
         top_k: 8,
-      });
+        }),
+        new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("assistant_query_timeout")), 9_000)),
+      ]);
       const evidenceStores = [...new Set(run.state.evidence.map((item) => item.store))];
       const hasGroundedEvidence = run.state.status === "succeeded" && run.state.evidence.length > 0;
       const answer = hasGroundedEvidence && run.state.answer.trim()
@@ -547,7 +580,9 @@ export function ReliabilityWorkspacePreview({
         contextHint: english ? "Current asset context" : "현재 설비 문맥",
       }]);
       setAssistantError(reason instanceof Error
-        ? (english ? "Additional evidence lookup was unavailable, so the current asset context was used." : "추가 근거 조회가 지연되어 현재 선택 설비의 연결 데이터를 기준으로 답변했습니다.")
+        ? (reason.message === "assistant_query_timeout"
+          ? (english ? "Grounded evidence lookup exceeded 9 seconds. A deterministic answer from the current case context is shown instead." : "근거 조회가 9초를 넘겨 현재 Case 문맥의 결정론적 답변으로 전환했습니다.")
+          : (english ? "Additional evidence lookup was unavailable, so the current asset context was used." : "추가 근거 조회가 지연되어 현재 선택 설비의 연결 데이터를 기준으로 답변했습니다."))
         : (english ? "The current asset context was used for this answer." : "현재 선택 설비의 연결 데이터를 기준으로 답변했습니다."));
     } finally {
       setAssistantQueryLoading(false);
@@ -555,7 +590,7 @@ export function ReliabilityWorkspacePreview({
   }
 
   return (
-    <main className={`rw-preview-shell role-${experience.kind} ${leftOpen ? "left-open" : "left-collapsed"} ${assistantOpen ? "assistant-open" : "assistant-closed"}`} data-primary-surface={experience.primarySurface}>
+    <main className={`rw-preview-shell role-${experience.kind} ${leftOpen ? "left-open" : "left-collapsed"} ${assistantOpen ? "assistant-open" : "assistant-closed"}`} data-primary-surface={experience.primarySurface} data-active-surface={activeNav.id}>
       <header className="rw-preview-topbar">
         <div className="rw-preview-topbar-left">
           <button type="button" className="rw-preview-icon-button" onClick={() => setLeftOpen((value) => !value)} aria-label={leftOpen ? "Collapse navigation" : "Open navigation"}>{leftOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}</button>
@@ -563,8 +598,8 @@ export function ReliabilityWorkspacePreview({
           <div className="rw-preview-breadcrumb"><span>{context.projectName}</span><i>/</i><strong>{english ? activeNav.label.en : activeNav.label.ko}</strong></div>
         </div>
         <div className="rw-preview-topbar-right">
-          <button type="button" className="rw-preview-search"><Search size={14} /><span>{english ? "Search" : "검색"}</span><kbd>⌘K</kbd></button>
-          <button type="button" className={`rw-preview-assistant-toggle ${assistantOpen ? "is-active" : ""}`} onClick={() => setAssistantOpen((value) => !value)}>{assistantOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}<span>Assistant</span></button>
+          <button type="button" className="rw-preview-search" onClick={() => { setSettingsOpen(false); setSearchOpen(true); }} aria-label={english ? "Search Reliability Operations" : "Reliability Operations 검색"}><Search size={14} /><span>{english ? "Search" : "검색"}</span><kbd>⌘K</kbd></button>
+          <button type="button" className={`rw-preview-assistant-toggle ${assistantOpen ? "is-active" : ""}`} onClick={() => { setSettingsOpen(false); setAssistantOpen((value) => !value); }}>{assistantOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}<span>Assistant</span></button>
           <div className="rw-preview-user"><span><UserRound size={13} /></span><div><strong>{user.display_name}</strong><small>{english ? experience.label.en : experience.label.ko}</small></div></div>
         </div>
       </header>
@@ -574,14 +609,14 @@ export function ReliabilityWorkspacePreview({
           <div className="rw-preview-left-heading"><span>{english ? experience.label.en : experience.label.ko}</span><strong>{english ? "Workspace" : "업무 공간"}</strong></div>
           <nav>
             {navigation.map((item, index) => (
-              <button type="button" key={item.id} className={activeNav.id === item.id ? "is-active" : ""} onClick={() => onNavigate(item.id, item.view)} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
+              <button type="button" key={item.id} className={activeNav.id === item.id ? "is-active" : ""} onClick={() => { setSettingsOpen(false); onNavigate(item.id, item.view); }} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <div><strong>{english ? item.label.en : item.label.ko}</strong><small>{english ? item.detail.en : item.detail.ko}</small></div>
               </button>
             ))}
           </nav>
           <section className="rw-preview-scope"><span>{english ? "SCOPE" : "현재 범위"}</span><strong>{context.workspaceName}</strong><small>{context.sourceStatus}</small></section>
-          <section className={`rw-preview-settings ${settingsOpen ? "is-open" : ""}`}>
+          <section ref={settingsRef} className={`rw-preview-settings ${settingsOpen ? "is-open" : ""}`}>
             <button type="button" className="rw-preview-settings-trigger" onClick={() => { if (!leftOpen) setLeftOpen(true); setSettingsOpen((value) => !value); }}><Settings2 size={14} /><span>{english ? "Settings" : "환경설정"}</span></button>
             {settingsOpen && leftOpen ? <div className="rw-preview-settings-panel">
               <header><strong>{english ? "Workspace settings" : "사용자 환경"}</strong><small>{user.display_name}</small></header>
@@ -641,6 +676,16 @@ export function ReliabilityWorkspacePreview({
           <div className="rw-preview-content">{children}</div>
         </section>
       </div>
+
+      <ReliabilityCommandPalette
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        navigation={navigation}
+        entities={searchEntities}
+        onNavigate={onNavigate}
+        onSelectEntity={(entity) => onSearchSelect?.(entity)}
+        english={english}
+      />
 
       <ContextAssistantDrawer
         open={assistantOpen}

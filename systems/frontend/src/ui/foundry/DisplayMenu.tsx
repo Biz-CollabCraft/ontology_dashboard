@@ -1,4 +1,5 @@
 import { Laptop, Moon, RotateCcw, SlidersHorizontal, Sun } from "lucide-react";
+import { useEffect, useRef } from "react";
 import {
   DISPLAY_DENSITY_OPTIONS,
   DISPLAY_PRESET_OPTIONS,
@@ -9,6 +10,7 @@ import {
 import { useI18n } from "../i18n/I18nProvider";
 
 export function DisplayMenu({ className = "" }: { className?: string }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
   const { preferences, setDensity, setPreset, setShowTechnicalMetadata, setTextSize, setTheme, reset } = useDisplayPreferences();
   const { locale, setLocale, t } = useI18n();
   const preset = displayPreset(preferences);
@@ -29,8 +31,24 @@ export function DisplayMenu({ className = "" }: { className?: string }) {
     : value === "standard"
       ? t("display.density.standard")
       : t("display.density.comfortable");
+
+  useEffect(() => {
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (!(event.target instanceof Node)) return;
+      if (!detailsRef.current?.contains(event.target)) detailsRef.current?.removeAttribute("open");
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") detailsRef.current?.removeAttribute("open");
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
   return (
-    <details className={`od-display-menu ${className}`.trim()}>
+    <details ref={detailsRef} className={`od-display-menu ${className}`.trim()}>
       <summary aria-label={t("display.title")} title={t("display.title")}>
         <SlidersHorizontal size={15} />
         <span>{t("display.title")}</span>

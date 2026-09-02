@@ -102,7 +102,7 @@ function minutesBetween(start: string | null | undefined, end: string | null | u
 }
 
 function duration(value: number | null | undefined) {
-  if (typeof value !== "number") return "근거 없음";
+  if (typeof value !== "number") return "—";
   if (value < 60) return `${value}분`;
   const hours = Math.floor(value / 60);
   const minutes = value % 60;
@@ -255,12 +255,21 @@ function OperationalKpisBlock({
     ["점검 처리 시간", duration(inspectionLeadTime)],
     ["승인→정비 착수", duration(maintenanceLeadTime)],
     ["판단 Backlog", `${model.metrics.pendingDecisions.toLocaleString("ko-KR")}건`],
-    ["생산 손실 노출", value.lostUnits !== null ? `${value.lostUnits.toLocaleString("ko-KR")}개` : "근거 없음"],
+    ["생산 손실 노출", value.lostUnits !== null ? `${value.lostUnits.toLocaleString("ko-KR")}개` : "—"],
     ["공헌이익 노출", compactMoney(value.contributionExposure)],
     ["동일 설비 과거 정비", `${repeatedMaintenance.toLocaleString("ko-KR")}건`],
   ];
+  const missingEvidence = [
+    decisionLeadTime === null ? "Decision Lead Time" : null,
+    reportLeadTime === null ? "Report Lead Time" : null,
+    inspectionLeadTime === null ? "점검 처리 시간" : null,
+    maintenanceLeadTime === null ? "승인→정비 착수" : null,
+    value.lostUnits === null ? "생산 손실" : null,
+    value.contributionExposure === null ? "공헌이익 노출" : null,
+  ].filter((item): item is string => Boolean(item));
   return <Block title="운영 의사결정 KPI" eyebrow="CASE OPERATING KPI" icon={<TimerReset size={15} />} className="span-12">
     <div className="rw-operational-kpis">{metrics.map(([label, valueLabel]) => <article key={label}><span>{label}</span><strong>{valueLabel}</strong></article>)}</div>
+    {missingEvidence.length ? <p className="rw-kpi-data-notice">현재 Case에서 아직 연결되지 않은 KPI 근거: {missingEvidence.join(" · ")}</p> : null}
   </Block>;
 }
 

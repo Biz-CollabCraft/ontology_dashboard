@@ -4,23 +4,24 @@ import { navigate, operationsProjectPath, safeApplicationReturnPath } from "../.
 import type { AuthUser } from "../../types";
 import { useAuth } from "./AuthContext";
 import { AuthShell } from "./AuthShell";
+import { useI18n } from "../../ui/i18n/I18nProvider";
 
 const DEMO_ACCOUNTS = [
   {
-    label: "운영 관리자",
-    description: "판단 대기 · 생산 영향 · 정비 승인 · 보고 초안",
+    label: { ko: "운영 관리자", en: "Operations Manager" },
+    description: { ko: "판단 대기 · 생산 영향 · 정비 승인 · 보고 초안", en: "Pending decisions · production impact · maintenance approval · report draft" },
     email: "manager@ontology.local",
     password: "Manager!2026",
   },
   {
-    label: "설비/공정 엔지니어",
-    description: "설비 상태 · 센서 피쳐 · 점검 · 정비 이력 · 현장 메모",
+    label: { ko: "설비/공정 엔지니어", en: "Equipment / Process Engineer" },
+    description: { ko: "설비 상태 · 센서 피쳐 · 점검 · 정비 이력 · 현장 메모", en: "Factory status · sensor features · inspection · maintenance history · field notes" },
     email: "engineer@ontology.local",
     password: "Engineer!2026",
   },
   {
-    label: "경영진",
-    description: "Executive Brief · 운영 리스크 · KPI · 의사결정 병목",
+    label: { ko: "경영진", en: "Executive" },
+    description: { ko: "Executive Brief · 운영 리스크 · KPI · 의사결정 병목", en: "Executive Brief · operational risk · KPI · decision bottlenecks" },
     email: "executive@ontology.local",
     password: "Executive!2026",
   },
@@ -64,6 +65,8 @@ function roleAwareLandingPath(user: AuthUser): string {
 
 export function LoginPage() {
   const { login } = useAuth();
+  const { locale } = useI18n();
+  const english = locale === "en-US";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -82,7 +85,7 @@ export function LoginPage() {
         navigate(`/pending?email=${encodeURIComponent(email)}`);
         return;
       }
-      setError(reason instanceof Error ? reason.message : "로그인하지 못했습니다.");
+      setError(reason instanceof Error ? reason.message : (english ? "Unable to sign in." : "로그인하지 못했습니다."));
     } finally {
       setSubmitting(false);
     }
@@ -97,13 +100,15 @@ export function LoginPage() {
 
   return (
     <AuthShell
-      eyebrow="PREDICTIVE MAINTENANCE DECISION WORKSPACE"
-      title="실시간 설비 현황에서 운영 판단과 경영 보고까지"
-      description="같은 설비 이상 사건과 근거를 엔지니어의 조사, 운영 관리자의 판단, 경영진의 보고 언어로 연결합니다."
+      eyebrow="HANBIT TECH · RELIABILITY OPERATIONS"
+      title={english ? "From live equipment status to operational decisions and executive reporting" : "실시간 설비 현황에서 운영 판단과 경영 보고까지"}
+      description={english
+        ? "Connect the same equipment event and evidence across engineering investigation, operational decisions, and executive reporting."
+        : "같은 설비 이상 사건과 근거를 엔지니어의 조사, 운영 관리자의 판단, 경영진의 보고 언어로 연결합니다."}
     >
       <form className="auth-form" onSubmit={submit}>
         <label>
-          이메일
+          {english ? "Email" : "이메일"}
           <input
             type="email"
             autoComplete="username"
@@ -114,26 +119,26 @@ export function LoginPage() {
           />
         </label>
         <label>
-          비밀번호
+          {english ? "Password" : "비밀번호"}
           <input
             type="password"
             autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="비밀번호"
+            placeholder={english ? "Password" : "비밀번호"}
             required
           />
         </label>
         {error ? <div className="auth-error" role="alert">{error}</div> : null}
         <button className="primary auth-submit" type="submit" disabled={submitting}>
-          {submitting ? "로그인 중…" : "로그인"}
+          {submitting ? (english ? "Signing in…" : "로그인 중…") : (english ? "Sign in" : "로그인")}
         </button>
       </form>
 
       {shouldShowDemoAccounts() ? (
         <details className="demo-account-picker" open>
-          <summary>역할별 Decision Workspace 계정</summary>
-          <div className="demo-account-grid" role="group" aria-label="역할별 계정">
+          <summary>{english ? "Role-based Reliability Operations accounts" : "역할별 Reliability Operations 계정"}</summary>
+          <div className="demo-account-grid" role="group" aria-label={english ? "Role accounts" : "역할별 계정"}>
             {DEMO_ACCOUNTS.map((account) => (
               <button
                 key={account.email}
@@ -141,18 +146,20 @@ export function LoginPage() {
                 type="button"
                 onClick={() => selectDemo(account.email)}
               >
-                <strong>{account.label}</strong>
-                <span>{account.description}</span>
+                <strong>{english ? account.label.en : account.label.ko}</strong>
+                <span>{english ? account.description.en : account.description.ko}</span>
                 <small>{account.email}</small>
               </button>
             ))}
           </div>
-          <small>데이터는 하나지만 메뉴, KPI, 액션, Assistant 질문과 보고 흐름은 역할에 따라 달라집니다.</small>
+          <small>{english
+            ? "The operational data is shared, while menus, KPI, actions, Assistant questions, and reporting flows adapt to each role."
+            : "데이터는 하나지만 메뉴, KPI, 액션, Assistant 질문과 보고 흐름은 역할에 따라 달라집니다."}</small>
         </details>
       ) : null}
 
       <p className="auth-footer-copy">
-        계정이 없나요? <button className="link-button" type="button" onClick={() => navigate("/register")}>회원가입</button>
+        {english ? "Need an account? " : "계정이 없나요? "}<button className="link-button" type="button" onClick={() => navigate("/register")}>{english ? "Create account" : "회원가입"}</button>
       </p>
     </AuthShell>
   );

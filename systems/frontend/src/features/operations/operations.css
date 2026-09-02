@@ -2578,3 +2578,84 @@
   border-color: rgba(116, 86, 181, 0.34) !important;
   background: #f5f2ff !important;
 }
+
+/* Reliability product hierarchy: the dedicated factory-status surface is a
+   visual control room, not another long operational overview. */
+.rw-preview-shell[data-active-surface="factory-status"] .operations-monitoring-hero,
+.rw-preview-shell[data-active-surface="factory-status"] .operations-planning-context-strip,
+.rw-preview-shell[data-active-surface="factory-status"] .operations-monitoring-summary,
+.rw-preview-shell[data-active-surface="factory-status"] .operations-role-overview,
+.rw-preview-shell[data-active-surface="factory-status"] .operations-work-queue-board {
+  display: none !important;
+}
+.rw-preview-shell[data-active-surface="factory-status"] .operations-overview-page { gap: 9px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-live-kpi-grid { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 6px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card { min-height: 68px; padding: 8px 9px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card strong { font-size: 18px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-map-panel .operations-panel-body { gap: 6px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-note { padding-block: 5px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-map { gap: 6px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-map-legend { gap: 6px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-line-map { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-line-row { grid-template-columns: 1fr; gap: 6px; padding: 7px; align-items: stretch; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-line-row > header { min-height: 26px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-line-row header > div { display: flex; align-items: baseline; gap: 7px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-line-row header strong { font-size: 12px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-line-row header small { font-size: 9px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-grid { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 4px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-card { gap: 4px; padding: 4px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-card header { min-height: 17px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-card header strong { font-size: 9px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-card header small { display: none; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-slots { gap: 3px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-slots .operations-factory-asset-node { min-height: 25px; aspect-ratio: auto; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-slots .compressor { min-height: 22px; aspect-ratio: auto; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-asset-node span { max-width: 100%; font-size: 9px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-asset-alert-badge { top: -5px; right: -5px; }
+
+/* Desktop is the readable operational baseline. Small semantic copy should
+   not collapse into 7-8px console text. */
+:root[data-density="standard"] .rw-preview-shell .operations-page small,
+:root[data-density="standard"] .rw-preview-shell .operations-page .operations-panel-header span,
+:root[data-density="standard"] .rw-preview-shell .operations-page .operations-work-status-timeline li,
+:root[data-density="standard"] .rw-preview-shell .operations-page .operations-agent-review-meta span,
+:root[data-density="standard"] .rw-preview-shell .operations-page .operations-agent-evidence-grid em {
+  font-size: 10px !important;
+  line-height: 1.4;
+}
+:root[data-density="standard"] .rw-preview-shell .operations-page p,
+:root[data-density="standard"] .rw-preview-shell .operations-page dd { font-size: 11px; line-height: 1.5; }
+:root[data-density="standard"] .rw-preview-shell .operations-page dt,
+:root[data-density="standard"] .rw-preview-shell .operations-plan-impact-card > span { font-size: 10px; }
+
+/* Report/print keeps rows dense on screen; print rules still remove chrome. */
+:root[data-density="compact"] .rw-preview-shell .operations-page small { font-size: 8px !important; }
+:root[data-density="compact"] .rw-preview-shell .operations-page p,
+:root[data-density="compact"] .rw-preview-shell .operations-page dd { font-size: 9px; line-height: 1.35; }
+:root[data-density="compact"] .rw-preview-shell .operations-panel-body { padding: 7px; }
+:root[data-density="compact"] .rw-preview-shell .operations-plan-impact-card { min-height: 54px; padding: 6px 7px; }
+
+/* Presentation/projector mode must scale the operational content, not only
+   the workspace heading and navigation rail. */
+:root[data-density="comfortable"] .rw-preview-shell .operations-page small,
+:root[data-density="comfortable"] .rw-preview-shell .operations-page .operations-panel-header span,
+:root[data-density="comfortable"] .rw-preview-shell .operations-page .operations-work-status-timeline li,
+:root[data-density="comfortable"] .rw-preview-shell .operations-page .operations-agent-review-meta span,
+:root[data-density="comfortable"] .rw-preview-shell .operations-page .operations-agent-evidence-grid em {
+  font-size: 12px !important;
+  line-height: 1.5;
+}
+:root[data-density="comfortable"] .rw-preview-shell .operations-page p,
+:root[data-density="comfortable"] .rw-preview-shell .operations-page dd { font-size: 13px !important; line-height: 1.6; }
+:root[data-density="comfortable"] .rw-preview-shell .operations-page dt,
+:root[data-density="comfortable"] .rw-preview-shell .operations-plan-impact-card > span { font-size: 12px !important; }
+:root[data-density="comfortable"] .rw-preview-shell .operations-panel-header h2 { font-size: 17px; }
+:root[data-density="comfortable"] .rw-preview-shell .operations-plan-impact-card { min-height: 94px; padding: 13px 14px; }
+:root[data-density="comfortable"] .rw-preview-shell .operations-plan-impact-card strong { font-size: 24px; }
+:root[data-density="comfortable"] .rw-preview-shell .operations-button { min-height: 42px; font-size: 13px; }
+:root[data-density="comfortable"] .rw-preview-shell .operations-factory-asset-node span { font-size: 11px; }
+
+@media (max-width: 760px) {
+  .rw-preview-shell[data-active-surface="factory-status"] .operations-live-kpi-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-line-map { grid-template-columns: 1fr; }
+}
