@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
-from app.mvp.operational_domain_schema import ProductionDecisionContext
+from app.mvp.operational_domain_schema import (
+    MaintenanceReadinessContext,
+    ProductionDecisionContext,
+)
 from app.mvp.operational_context_contract import (
     FreshnessMetadata,
     FreshnessState,
@@ -314,6 +317,238 @@ class FixtureProductionDecisionContextReadPort:
             data=data,
             limitations=limitations,
         )
+
+
+@dataclass(frozen=True)
+class FixtureMaintenanceReadinessContextReadPort:
+    context: dict[str, Any]
+    source_ref: str
+    freshness_policy_version: str = "maintenance-readiness-fixture-v1"
+    max_age_seconds: int = 172_800
+    owner_domain: str = "maintenance_readiness"
+
+    def lookup(
+        self,
+        *,
+        identity: OperationalRequestIdentity,
+        retrieved_at: datetime,
+    ) -> OperationalContextEnvelope:
+        scope = self.context.get("scope") or {}
+        if (
+            str(scope.get("organization_id") or ""),
+            str(scope.get("project_id") or ""),
+            str(scope.get("workspace_id") or ""),
+        ) != (
+            identity.organization_id,
+            identity.project_id,
+            identity.workspace_id,
+        ):
+            raise ValueError("maintenance readiness configured scope mismatch")
+
+        parsed = MaintenanceReadinessContext.model_validate(
+            {
+                "source_classification": self.context.get(
+                    "source_classification"
+                ),
+                "asset_id": self.context.get("asset_id"),
+                "action_code": self.context.get("action_code"),
+                "required_skill_codes": self.context.get(
+                    "required_skill_codes"
+                )
+                or [],
+                "maintenance_windows": self.context.get(
+                    "maintenance_windows"
+                )
+                or [],
+                "part_requirements": self.context.get("part_requirements")
+                or [],
+                "inventory_snapshots": self.context.get(
+                    "inventory_snapshots"
+                )
+                or [],
+                "technician_candidates": self.context.get(
+                    "technician_candidates"
+                )
+                or [],
+                "limitations": self.context.get("limitations") or [],
+            }
+        )
+        if parsed.asset_id != identity.asset_id:
+            return self._unavailable_for_asset(
+                identity=identity,
+                retrieved_at=retrieved_at,
+                limitation="No maintenance readiness context exists for the requested asset.",
+            )
+
+        temporal = self.context.get("temporal_scope") or {}
+        generated_at = _parse_required_datetime(
+            temporal.get("generated_at"), "temporal_scope.generated_at"
+        )
+        valid_from = _parse_required_datetime(
+            temporal.get("valid_from"), "temporal_scope.valid_from"
+        )
+        valid_to = _parse_required_datetime(
+            temporal.get("valid_to"), "temporal_scope.valid_to"
+        )
+        freshness_state = classify_freshness(
+            source_updated_at=generated_at,
+            retrieved_at=retrieved_at,
+            max_age_seconds=self.max_age_seconds,
+        )
+        in_window = valid_from <= identity.decision_as_of < valid_to
+        available = in_window and freshness_state is FreshnessState.FRESH
+        status = (
+            OperationalContextStatus.AVAILABLE
+            if available
+            else OperationalContextStatus.STALE
+        )
+        limitations = parsed.limitations
+        data: dict[str, Any] = {}
+        if available:
+            data = {
+                "source_classification": parsed.source_classification,
+                "asset_id": parsed.asset_id,
+                "action_code": parsed.action_code,
+                "required_skill_codes": list(parsed.required_skill_codes),
+                "maintenance_windows": [
+                    item.model_dump(mode="json")
+                    for item in parsed.maintenance_windows
+                ],
+                "part_requirements": [
+                    item.model_dump(mode="json")
+                    for item in parsed.part_requirements
+                ],
+                "inventory_snapshots": [
+                    item.model_dump(mode="json")
+                    for item in parsed.inventory_snapshots
+                ],
+                "technician_candidates": [
+                    item.model_dump(mode="json")
+                    for item in parsed.technician_candidates
+                ],
+                "readiness": _maintenance_readiness(parsed),
+                "execution_records": {
+                    "part_reservations": [],
+                    "part_issues": [],
+                    "part_usage": [],
+                    "technician_assignments": [],
+                    "maintenance_actions": [],
+                    "maintenance_events": [],
+                },
+            }
+        elif not in_window:
+            limitations = (
+                *limitations,
+                "Requested decision_as_of is outside the readiness context window.",
+            )
+        else:
+            limitations = (
+                *limitations,
+                "Maintenance readiness exceeded its freshness policy.",
+            )
+
+        snapshot_id = str(temporal.get("snapshot_id") or "")
+        if not snapshot_id:
+            raise ValueError("maintenance readiness requires snapshot_id")
+        return OperationalContextEnvelope(
+            owner_domain=self.owner_domain,
+            scope=OperationalScope(
+                organization_id=identity.organization_id,
+                project_id=identity.project_id,
+                workspace_id=identity.workspace_id,
+                asset_id=identity.asset_id,
+            ),
+            status=status,
+            source_version=snapshot_id,
+            source_updated_at=generated_at,
+            retrieved_at=retrieved_at,
+            as_of=identity.decision_as_of,
+            freshness=FreshnessMetadata(
+                policy_version=self.freshness_policy_version,
+                max_age_seconds=self.max_age_seconds,
+                state=(
+                    FreshnessState.FRESH
+                    if available
+                    else FreshnessState.STALE
+                ),
+            ),
+            source_refs=(self.source_ref,),
+            data=data,
+            limitations=limitations,
+        )
+
+    def _unavailable_for_asset(
+        self,
+        *,
+        identity: OperationalRequestIdentity,
+        retrieved_at: datetime,
+        limitation: str,
+    ) -> OperationalContextEnvelope:
+        return OperationalContextEnvelope(
+            owner_domain=self.owner_domain,
+            scope=OperationalScope(
+                organization_id=identity.organization_id,
+                project_id=identity.project_id,
+                workspace_id=identity.workspace_id,
+                asset_id=identity.asset_id,
+            ),
+            status=OperationalContextStatus.UNAVAILABLE,
+            retrieved_at=retrieved_at,
+            as_of=identity.decision_as_of,
+            freshness=FreshnessMetadata(
+                policy_version=self.freshness_policy_version,
+                max_age_seconds=self.max_age_seconds,
+                state=FreshnessState.UNKNOWN,
+            ),
+            source_refs=(self.source_ref,),
+            limitations=(limitation,),
+        )
+
+
+def _maintenance_readiness(
+    context: MaintenanceReadinessContext,
+) -> dict[str, Any]:
+    inventory_by_part = {
+        item.part_id: item for item in context.inventory_snapshots
+    }
+    part_blockers: list[str] = []
+    for requirement in context.part_requirements:
+        satisfied = any(
+            inventory_by_part[part_id].available_quantity
+            >= requirement.required_quantity
+            for part_id in requirement.acceptable_part_ids
+            if part_id in inventory_by_part
+        )
+        if not satisfied:
+            part_blockers.append(requirement.part_requirement_id)
+
+    window_ready = any(
+        not item.active_work_order_conflict
+        for item in context.maintenance_windows
+    )
+    skill_ready = any(
+        set(context.required_skill_codes).issubset(item.skill_codes)
+        for item in context.technician_candidates
+    )
+    blockers: list[str] = []
+    if not window_ready:
+        blockers.append("maintenance_window")
+    if part_blockers:
+        blockers.append("part_inventory")
+    if not skill_ready:
+        blockers.append("technician_skill")
+
+    return {
+        "overall_state": "blocked" if blockers else "ready_for_human_approval",
+        "window_ready": window_ready,
+        "part_ready": not part_blockers,
+        "skill_candidate_ready": skill_ready,
+        "blocked_part_requirement_ids": part_blockers,
+        "blockers": blockers,
+        "approval_state": "pending_human_approval",
+        "assignment_state": "candidate_only",
+        "execution_state": "not_started",
+    }
 
 
 def _parse_required_datetime(value: Any, field_name: str) -> datetime:

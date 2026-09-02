@@ -1005,6 +1005,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U3. Maintenance Readiness Context
 
+- **Status:** Partially Verified. synthetic Maintenance Window, ActionCandidate-PartRequirement, InventorySnapshot, Technician/Skill 후보와 결정론적 blocker 판정을 versioned read port로 구현했다. 실제 CMMS/WMS/인력 source 및 예약·출고·배정 command 연결은 미구현이다.
 - Maintenance Window read port
 - MaintenanceAction/ActionCandidate 기반 PartRequirement read contract
 - Spare Part Readiness와 InventorySnapshot read port

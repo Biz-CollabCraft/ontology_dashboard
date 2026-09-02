@@ -112,6 +112,135 @@ class ProductionDecisionContext(FrozenModel):
         return self
 
 
+class MaintenanceWindow(FrozenModel):
+    window_id: str = Field(min_length=1, max_length=240)
+    asset_id: str = Field(min_length=1, max_length=240)
+    available_from: datetime
+    available_to: datetime
+    expected_duration_minutes: int = Field(gt=0)
+    approval_required: bool
+    active_work_order_conflict: bool
+    relationship_state: RelationshipState
+    source_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_window(self) -> MaintenanceWindow:
+        _require_aware(self.available_from, "available_from")
+        _require_aware(self.available_to, "available_to")
+        if self.available_from >= self.available_to:
+            raise ValueError("maintenance available_from must be before available_to")
+        return self
+
+
+class PartRequirement(FrozenModel):
+    part_requirement_id: str = Field(min_length=1, max_length=240)
+    action_candidate_id: str | None = Field(default=None, max_length=240)
+    maintenance_action_id: str | None = Field(default=None, max_length=240)
+    action_code: str = Field(min_length=1, max_length=120)
+    target_component_id: str = Field(min_length=1, max_length=240)
+    required_part_spec: str = Field(min_length=1, max_length=240)
+    required_quantity: int = Field(gt=0)
+    acceptable_part_ids: tuple[str, ...] = Field(min_length=1)
+    requirement_version: str = Field(min_length=1, max_length=240)
+    status: str = Field(min_length=1, max_length=80)
+    relationship_state: RelationshipState
+    source_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_action_identity(self) -> PartRequirement:
+        identities = [
+            value
+            for value in (self.action_candidate_id, self.maintenance_action_id)
+            if value
+        ]
+        if len(identities) != 1:
+            raise ValueError(
+                "part requirement requires exactly one action candidate or action"
+            )
+        if self.status == "candidate" and not self.action_candidate_id:
+            raise ValueError("candidate requirement requires action_candidate_id")
+        if self.status == "confirmed" and not self.maintenance_action_id:
+            raise ValueError("confirmed requirement requires maintenance_action_id")
+        return self
+
+
+class PartInventorySnapshot(FrozenModel):
+    part_id: str = Field(min_length=1, max_length=240)
+    on_hand_quantity: int = Field(ge=0)
+    reserved_quantity: int = Field(ge=0)
+    available_quantity: int = Field(ge=0)
+    expected_replenishment_at: datetime | None = None
+    inventory_location_ref: str | None = Field(default=None, max_length=240)
+    relationship_state: RelationshipState
+    source_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_inventory(self) -> PartInventorySnapshot:
+        if self.reserved_quantity > self.on_hand_quantity:
+            raise ValueError("reserved quantity must not exceed on-hand quantity")
+        if self.available_quantity != self.on_hand_quantity - self.reserved_quantity:
+            raise ValueError("available quantity must equal on-hand minus reserved")
+        if self.expected_replenishment_at is not None:
+            _require_aware(
+                self.expected_replenishment_at,
+                "expected_replenishment_at",
+            )
+        return self
+
+
+class TechnicianReadiness(FrozenModel):
+    technician_id: str = Field(min_length=1, max_length=240)
+    skill_codes: tuple[str, ...] = Field(min_length=1)
+    available_from: datetime
+    available_to: datetime
+    assignment_state: str = Field(min_length=1, max_length=80)
+    relationship_state: RelationshipState
+    source_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_availability(self) -> TechnicianReadiness:
+        _require_aware(self.available_from, "available_from")
+        _require_aware(self.available_to, "available_to")
+        if self.available_from >= self.available_to:
+            raise ValueError("technician available_from must be before available_to")
+        return self
+
+
+class MaintenanceReadinessContext(FrozenModel):
+    source_classification: str = Field(min_length=1, max_length=120)
+    asset_id: str = Field(min_length=1, max_length=240)
+    action_code: str = Field(min_length=1, max_length=120)
+    required_skill_codes: tuple[str, ...] = Field(min_length=1)
+    maintenance_windows: tuple[MaintenanceWindow, ...]
+    part_requirements: tuple[PartRequirement, ...]
+    inventory_snapshots: tuple[PartInventorySnapshot, ...]
+    technician_candidates: tuple[TechnicianReadiness, ...]
+    limitations: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_readiness_relationships(self) -> MaintenanceReadinessContext:
+        part_ids = {
+            snapshot.part_id for snapshot in self.inventory_snapshots
+        }
+        for requirement in self.part_requirements:
+            if requirement.action_code != self.action_code:
+                raise ValueError("part requirement action code mismatch")
+            if not set(requirement.acceptable_part_ids).intersection(part_ids):
+                raise ValueError(
+                    f"part requirement {requirement.part_requirement_id} "
+                    "has no inventory snapshot"
+                )
+        required_skills = set(self.required_skill_codes)
+        for technician in self.technician_candidates:
+            if not required_skills.intersection(technician.skill_codes):
+                raise ValueError(
+                    f"technician {technician.technician_id} lacks required skill"
+                )
+        if any(window.asset_id != self.asset_id for window in self.maintenance_windows):
+            raise ValueError("maintenance window asset mismatch")
+        return self
+
+
 def _require_aware(value: datetime, field_name: str) -> None:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{field_name} must be timezone-aware")
