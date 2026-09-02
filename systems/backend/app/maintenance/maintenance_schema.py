@@ -163,7 +163,7 @@ class OperationalRecommendedAction(ScopedRecord):
             self.authored_by,
             self.authored_at,
         )
-        cost_selection_fields = (
+        cost_reference_fields = (
             self.source_cost_analysis_id,
             self.source_cost_option_id,
             self.source_action_candidate_id,
@@ -171,7 +171,7 @@ class OperationalRecommendedAction(ScopedRecord):
         if self.recommendation_origin == "product_result_projection":
             if any(
                 value is not None
-                for value in (*manual_required_fields, *cost_selection_fields)
+                for value in (*manual_required_fields, *cost_reference_fields)
             ):
                 raise ValueError(
                     "product_result_projection cannot contain operations_manual lineage"
@@ -181,11 +181,18 @@ class OperationalRecommendedAction(ScopedRecord):
             raise ValueError(
                 "operations_manual requires inspection, action, and author lineage"
             )
-        if any(value is not None for value in cost_selection_fields) and any(
-            value is None for value in cost_selection_fields
+        if (self.source_cost_analysis_id is None) != (
+            self.source_action_candidate_id is None
         ):
             raise ValueError(
-                "cost-selected operations_manual requires complete cost lineage"
+                "cost-referenced operations_manual requires analysis and action candidate lineage"
+            )
+        if (
+            self.source_cost_option_id is not None
+            and self.source_cost_analysis_id is None
+        ):
+            raise ValueError(
+                "cost-selected operations_manual requires analysis and action candidate lineage"
             )
         if self.kind != self.action_code:
             raise ValueError("operations_manual kind must match action_code")

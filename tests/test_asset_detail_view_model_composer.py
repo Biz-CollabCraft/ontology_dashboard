@@ -107,6 +107,7 @@ def _request() -> AssetDetailRequest:
         start=datetime(2026, 7, 31, 18, tzinfo=timezone.utc),
         end=datetime(2026, 8, 1, 0, tzinfo=timezone.utc),
         dataset_version_id="canonical-ai4i-physics-v3.1",
+        event_id="RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
         grain="1h",
     )
 
@@ -119,8 +120,8 @@ def test_service_reads_only_contracted_sources_and_returns_schema_valid_view_mod
 
     assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
     assert [name for name, _ in port.calls] == [
-        "asset_summary",
         "latest_result_artifact",
+        "asset_summary",
         "feature_series",
         "runtime_prediction_history",
         "equipment_history",
@@ -128,10 +129,38 @@ def test_service_reads_only_contracted_sources_and_returns_schema_valid_view_mod
     ]
     feature_call = dict(port.calls)["feature_series"]
     risk_call = dict(port.calls)["runtime_prediction_history"]
+    artifact_call = dict(port.calls)["latest_result_artifact"]
+    asset_call = dict(port.calls)["asset_summary"]
+    status_call = dict(port.calls)["data_status"]
+    assert artifact_call["event_id"] == _request().event_id
+    assert asset_call["event_id"] == _request().event_id
+    assert status_call["event_id"] == _request().event_id
     assert feature_call["dataset_version_id"] == "canonical-ai4i-physics-v3.1"
     assert feature_call["grain"] == "1h"
     assert risk_call["start"] == _request().start
     assert risk_call["end"] == _request().end
+
+
+def test_latest_detail_view_anchors_history_and_snapshot_to_selected_event() -> None:
+    port = FakeAssetDetailReadPort()
+    service = AssetDetailViewModelService(port)
+
+    payload = service.latest_detail_view(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        asset_id="CMP-S03-L03-01",
+        dataset_version_id="canonical-ai4i-physics-v3.1",
+        event_id="RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
+        history_window="24h",
+    )
+
+    feature_call = dict(port.calls)["feature_series"]
+    assert feature_call["end"] == datetime(2026, 7, 31, 15, tzinfo=timezone.utc)
+    assert feature_call["start"] == datetime(2026, 7, 30, 15, tzinfo=timezone.utc)
+    assert payload["snapshot_basis"]["event_id"] == (
+        "RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00"
+    )
 
 
 def test_service_rejects_mismatched_result_artifact_asset() -> None:
@@ -771,6 +800,78 @@ def test_composer_marks_missing_series_as_gaps_without_synthesizing_values() -> 
     assert {"features[].history.points", "risk_series", "equipment_history"} <= gap_fields
     assert payload["risk_series"] == []
     assert all(feature["history"]["points"] == [] for feature in payload["features"])
+
+
+def test_composer_projects_closed_loop_lifecycle_action_and_timeline() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=ARTIFACT,
+        closed_loop={
+            "work_orders": [
+                {
+                    "work_order_id": "WO-INS-001",
+                    "work_type": "inspection",
+                    "status": "requested",
+                    "assigned_to": None,
+                    "actor_display_name": "윤하린",
+                    "created_at": "2026-08-06T03:10:00Z",
+                    "updated_at": "2026-08-06T03:10:00Z",
+                }
+            ],
+            "activities": [
+                {
+                    "activity_id": "ACT-001",
+                    "activity_type": "work_order.requested",
+                    "work_type": "inspection",
+                    "actor_display_name": "윤하린",
+                    "before_status": None,
+                    "after_status": "requested",
+                    "created_at": "2026-08-06T03:10:00Z",
+                    "work_order_id": "WO-INS-001",
+                }
+            ],
+            "available_actions": [
+                {
+                    "action_id": "approve_inspection_work_order",
+                    "target_type": "work_order",
+                    "target_id": "WO-INS-001",
+                    "label": "점검 승인",
+                    "disabled_reason": None,
+                }
+            ],
+            "runtime_status": None,
+        },
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    closed_loop = payload["closed_loop"]
+    assert closed_loop["lifecycle_summary"] == {
+        "current_step": "inspection_requested",
+        "current_step_label": "점검 승인 대기",
+        "completed_steps": ["prediction", "evidence", "decision"],
+        "next_step": "inspection_approved",
+        "source": "backend_closed_loop_policy",
+    }
+    assert closed_loop["primary_action"] == {
+        "action_id": "approve_inspection_work_order",
+        "target_type": "work_order",
+        "target_id": "WO-INS-001",
+        "label": "점검 승인",
+        "owner_role": "process_manager",
+        "owner_label": "생산 운영 의사결정자",
+        "disabled_reason": None,
+        "requires_input": False,
+    }
+    assert closed_loop["timeline"][0] == {
+        "timeline_id": "ACT-001",
+        "event_type": "work_order.requested",
+        "label": "작업요청 생성",
+        "status": "completed",
+        "actor_display_name": "윤하린",
+        "occurred_at": "2026-08-06T03:10:00Z",
+        "target_type": "work_order",
+        "target_id": "WO-INS-001",
+    }
 
 
 def test_composer_preserves_empty_recommendation_as_gap_without_synthesizing_action() -> None:

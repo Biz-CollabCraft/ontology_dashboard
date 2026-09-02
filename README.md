@@ -145,6 +145,36 @@ PostgreSQL 기반 live runtime과 Closed-loop 작업요청까지 확인:
 bash scripts/run_local_live.sh
 ```
 
+gen_data의 모든 설비 Tick부터 Generator Runtime Prediction, Backend
+Product Result/Evidence 승격, Maintenance Replay Overlay, Frontend 자동 갱신까지
+한 번에 실행하려면 다음 명령을 사용합니다. 최초 실행에서는 Canonical V3.1로
+CNC/Compressor Model Artifact를 발행하므로 몇 분이 걸릴 수 있으며, 이후에는
+검증된 로컬 Artifact를 재사용합니다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_local_realtime.py
+```
+
+```bash
+.venv/bin/python scripts/run_local_realtime.py
+```
+
+이 실행은 `Backend 직접 추론` 우회 경로를 사용하지 않습니다. Canonical/Live와
+정비 후 Overlay Observation 모두 불변 snapshot으로 Generator에 전달되고,
+Generator의 Prediction Result Batch를 Backend가 최종 판정으로 승격합니다.
+실행 로그와 세션 출력은 Git에서 제외되는
+`data_preprocessed/local-realtime/sessions/` 아래에 저장됩니다.
+반복 실행 시에는 DB에 저장된 마지막 Observation의 정확히 10분 뒤부터
+Simulation Clock을 이어서 시작합니다. 이전 세션의 서로 다른 시작 시각이 최근
+이력에 섞여 Model Artifact의 10분 cadence 계약을 깨뜨리는 것을 방지하면서도
+기존 Closed-loop 이력은 보존합니다.
+로컬 실행기는 가속된 합성 Simulation Clock을 명시적으로 활성화합니다. 일반
+Backend 실행은 계속해서 현재 시각보다 2분 이상 미래인 센서 Observation을
+거부하므로 실제 센서 운영 경계에는 영향을 주지 않습니다.
+또한 MVP 화면이 정적 Canonical V3.1 기본값에 머물지 않도록 로컬 데모 Project
+사용자들의 명시적 Dataset 선택을 Live Dataset Version으로 맞춥니다. 기존 선택을
+유지하려면 `--keep-dataset-selection`을 사용합니다.
+
 V3.1 예지보전 데모 패키지가
 `data/raw/predictive_maintenance_canonical_v3.1`에 있으면 자동으로 감지해
 PostgreSQL에 적재하고 Product Result를 물질화합니다. 이 로컬 데이터 패키지는

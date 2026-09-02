@@ -258,6 +258,9 @@ Cost What-if는 읽기 전용 의사결정 참고 기능이다. 비용 option과
 `lowest_calculated_cost_option_id`는 Operations manual Recommendation, 승인, WorkOrder,
 MaintenanceAction을 생성하지 않는다. 사용자의 실제 정비 판단은 Inspection Result와
 Action 후보를 근거로 기존 Maintenance command에서 별도로 수행한다.
+다만 사용자가 참고한 비용 분석 snapshot과 직접 선택한 Action 후보의 식별자는 감사
+lineage로 Recommendation에 보존한다. 특정 비용 option을 직접 선택하지 않은 경우에는
+`source_cost_option_id`를 기록하지 않으며, 최저비용 option을 사후 선택으로 간주하지 않는다.
 
 | ID | 요구사항 | 완료 기준 |
 |---|---|---|

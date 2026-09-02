@@ -18,13 +18,14 @@ from app.equipment.equipment_router import register_equipment_routes
 from .contracts import AgentQueryRequest, DecisionRequest, FollowUpRequest, LayoutRequest, NoteRequest, ReportRequest
 from .agent_context_tool_pipeline import run_read_only_tool_pipeline
 from .agent_review_summary import compose_deterministic_agent_review_summary, validate_agent_review_summary_contract
-from .asset_detail_view_model import compose_asset_detail_view_model
+from .asset_detail_view_model import AssetDetailViewModelService, compose_asset_detail_view_model
 from app.dependencies import (
     MANUFACTURING_WORKSPACE,
     get_identity_service,
     get_ontology_service,
     get_predictive_maintenance_runtime_service,
     get_rate_limiter,
+    get_runtime_asset_detail_service,
     get_service,
     rate_limit_subject,
     require_csrf,
@@ -968,15 +969,33 @@ def get_event(
 def get_asset_detail_view(
     asset_id: str,
     project_id: str = Query(default="manufacturing-demo-project"),
+    workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
     dataset_version_id: str | None = Query(default=None, max_length=160),
+    event_id: str | None = Query(default=None, max_length=240),
     history_window: Literal["24h", "7d", "30d"] = Query(default="24h"),
     principal: Principal = Depends(require_permission("events.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+    runtime_detail: AssetDetailViewModelService | None = Depends(get_runtime_asset_detail_service),
 ):
     if not principal.is_admin and project_id not in principal.project_scopes:
         raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 Object입니다.")
+    if not principal.is_admin and workspace_id not in principal.workspace_scopes:
+        raise AuthError(403, "workspace_scope_denied", "허용된 Workspace 범위를 벗어난 Object입니다.")
     if principal.active_project_id != project_id:
         raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
+    if dataset_version_id and event_id and runtime_detail is not None:
+        try:
+            return runtime_detail.latest_detail_view(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                asset_id=asset_id,
+                dataset_version_id=dataset_version_id,
+                event_id=event_id,
+                history_window=history_window,
+            )
+        except KeyError as exc:
+            raise EventNotFound(event_id) from exc
     try:
         return service.asset_detail_view_model(
             asset_id,
@@ -988,7 +1007,7 @@ def get_asset_detail_view(
         return _runtime_asset_detail_view_model(
             asset_id=asset_id,
             project_id=project_id,
-            workspace_id=MANUFACTURING_WORKSPACE,
+            workspace_id=workspace_id,
             dataset_version_id=dataset_version_id,
             history_window=history_window,
             principal=principal,

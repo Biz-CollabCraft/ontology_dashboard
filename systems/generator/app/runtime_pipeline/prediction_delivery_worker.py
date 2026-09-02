@@ -40,6 +40,10 @@ class PredictionDeliveryWorker:
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
 
+    @property
+    def is_running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
     def recover_interrupted_items(self) -> int:
         """Startup recovery hook: recover any outbox items left in 'sending' state due to prior shutdown."""
         items = self.service.list_outbox_items(status="sending")

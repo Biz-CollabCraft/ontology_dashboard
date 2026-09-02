@@ -45,7 +45,12 @@ from .contracts import (
     UILayout,
 )
 from app.planner.contracts import IntentRouter, deterministic_answer
-from .ports import AuditRepositoryPort, LayoutPlannerPort, ReportAgentPort
+from .ports import (
+    AuditRepositoryPort,
+    LayoutPlannerPort,
+    MaintenanceLineageQueryPort,
+    ReportAgentPort,
+)
 
 RISK_PRIORITY = {"critical": 0, "warning": 1, "attention": 2, "data_quality_hold": 3, "normal": 4}
 AGENT_REVIEW_RUNNING_LEASE_SECONDS = 120
@@ -70,6 +75,8 @@ class ManufacturingPredictiveMaintenanceService:
         agent_review_summary_provider: AgentReviewSummaryProvider | None = None,
         agent_review_context_registry: AgentReviewContextRegistry | None = None,
         domain_review_context_adapter: DomainReviewContextAdapter | None = None,
+        maintenance_lineage_query: MaintenanceLineageQueryPort | None = None,
+        workspace_id: str = "manufacturing-demo",
     ) -> None:
         self.root = Path(root)
         fixture_root = self.root / "data" / "fixtures"
@@ -97,11 +104,30 @@ class ManufacturingPredictiveMaintenanceService:
         self.context_provider_factory = context_provider_factory
         self.agent_review_summary_provider = agent_review_summary_provider
         self.agent_review_context_registry = agent_review_context_registry
+        self.maintenance_lineage_query = maintenance_lineage_query
+        self.workspace_id = workspace_id
         self.domain_review_context_adapter = (
             domain_review_context_adapter
             or ManufacturingFixtureReviewContextAdapter(self.root)
         )
         self.intent_router = IntentRouter()
+
+    def _closed_loop_context_for_fixture(
+        self,
+        fixture: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        event_id = str(fixture.get("event_id") or "")
+        if not event_id or self.maintenance_lineage_query is None:
+            return fixture.get("closed_loop")
+        try:
+            lineage = self.maintenance_lineage_query.event_lineage(
+                workspace_id=self.workspace_id,
+                event_id=event_id,
+            )
+        except Exception:
+            return fixture.get("closed_loop")
+        context = _closed_loop_context_from_lineage(lineage)
+        return context if _has_closed_loop_records(context) else fixture.get("closed_loop")
 
     def _fixture(self, event_id: str) -> dict[str, Any]:
         try:
@@ -144,11 +170,13 @@ class ManufacturingPredictiveMaintenanceService:
             package["lineage"]["dataset_version"] = str(fixture["dataset_version"])
         return package
 
-    def event_evidence_projection(self, event_id: str) -> dict[str, Any]:
+    def event_evidence_projection(self, event_id: str, **_: Any) -> dict[str, Any]:
         fixture = self._fixture(event_id)
         projection = self._event_evidence_projection(fixture)
         projection["event_id"] = fixture["event_id"]
+        projection["evidence_id"] = f"EVD-{fixture['event_id']}"
         projection["scenario_id"] = fixture["scenario_id"]
+        projection["artifact_reference"]["event_id"] = fixture["event_id"]
         return projection
 
     def evidence(self, event_id: str, *, view: str = "legacy") -> dict[str, Any]:
@@ -224,7 +252,7 @@ class ManufacturingPredictiveMaintenanceService:
                 artifact=artifact,
                 project_id=self._fixture_project_id(fixture),
             ) or fixture.get("operation_context"),
-            closed_loop=fixture.get("closed_loop"),
+            closed_loop=self._closed_loop_context_for_fixture(fixture),
             inspection_guidance=self.domain_review_context_adapter.inspection_guidance(
                 fixture=fixture,
                 artifact=artifact,
@@ -1004,6 +1032,64 @@ def _production_impact(estimated_downtime_minutes: Any) -> str | None:
     if estimated_downtime_minutes > 0:
         return "low"
     return "none"
+
+
+def _closed_loop_context_from_lineage(lineage: dict[str, Any]) -> dict[str, Any]:
+    work_orders = [_work_order_context(item) for item in lineage.get("work_orders") or []]
+    return {
+        "work_orders": work_orders,
+        "inspection_results": list(lineage.get("inspection_results") or []),
+        "maintenance_actions": list(lineage.get("maintenance_actions") or []),
+        "maintenance_events": list(lineage.get("maintenance_events") or []),
+        "activities": list(lineage.get("activities") or []),
+        "available_actions": _available_closed_loop_actions(work_orders),
+        "runtime_status": None,
+    }
+
+
+def _has_closed_loop_records(context: dict[str, Any]) -> bool:
+    return any(
+        context.get(key)
+        for key in (
+            "work_orders",
+            "inspection_results",
+            "maintenance_actions",
+            "maintenance_events",
+            "activities",
+        )
+    )
+
+
+def _work_order_context(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "work_order_id": str(item.get("work_order_id") or ""),
+        "work_type": str(item.get("work_type") or ""),
+        "status": str(item.get("status") or ""),
+        "assigned_to": item.get("assigned_to"),
+        "actor_display_name": item.get("actor_display_name"),
+        "created_at": item.get("created_at"),
+        "updated_at": item.get("updated_at"),
+    }
+
+
+def _available_closed_loop_actions(work_orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    actions = []
+    for work_order in work_orders:
+        if work_order.get("work_type") != "inspection" or work_order.get("status") != "requested":
+            continue
+        work_order_id = str(work_order.get("work_order_id") or "")
+        actions.append(
+            {
+                "action_id": "approve_inspection_work_order",
+                "target_type": "work_order",
+                "target_id": work_order_id,
+                "label": "점검 승인",
+                "disabled_reason": (
+                    "데모 ViewModel은 읽기 전용입니다. 실제 승인은 Closed-loop mutation API 연결 후 처리합니다."
+                ),
+            }
+        )
+    return actions
 
 
 # Temporary compatibility alias for integrations that still import the historical

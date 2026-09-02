@@ -111,6 +111,9 @@ export function OperationsOperationsPage({
   const SelectedDecisionIcon = selectedDecisionOption.Icon;
   const isInspectionRequestDecision = decision === "request_inspection" || decision === "review_shutdown";
   const canSubmitDecision = canDecide && (!isInspectionRequestDecision || Boolean(detail?.snapshotBasis));
+  const snapshotBasisFailed = Boolean(
+    detail?.warnings.some((warning) => warning.startsWith("설비 상세 조회 지연:")),
+  );
   const decisionActionLabel = isInspectionRequestDecision ? "작업요청 생성" : `${DECISION_LABEL[decision]} 기록`;
   const recommendedOption = selectedEvent
     ? DECISION_OPTIONS.find((option) => option.decision === selectedEvent.recommendedDecision) ?? DECISION_OPTIONS[0]
@@ -118,7 +121,7 @@ export function OperationsOperationsPage({
   const gapCount = detail?.evidenceGaps.length ?? 0;
   const evidenceStatus = detailLoading
     ? "근거 확인 중"
-    : detailError
+    : detailError || snapshotBasisFailed
       ? "근거 확인 실패"
       : detail
         ? "근거 연결됨"
@@ -211,7 +214,11 @@ export function OperationsOperationsPage({
                   <div>
                     <span>다음 처리</span>
                     <strong>{recommendedOption.title}</strong>
-                    <p>{gapCount > 0 ? `${gapCount}개 제한을 확인한 뒤 기록하세요.` : "현재 Product Result/Evidence snapshot과 생산 영향 근거를 함께 확인한 뒤 판단을 기록합니다."}</p>
+                    <p>{snapshotBasisFailed
+                      ? "현재 선택한 예측의 정본 근거를 불러오지 못했습니다. 상세 조회를 다시 시도하세요."
+                      : gapCount > 0
+                        ? `${gapCount}개 제한을 확인한 뒤 기록하세요.`
+                        : "현재 Product Result/Evidence snapshot과 생산 영향 근거를 함께 확인한 뒤 판단을 기록합니다."}</p>
                   </div>
                   <div>
                     {canDecide ? (
@@ -237,7 +244,7 @@ export function OperationsOperationsPage({
                   </div>
                 </section>
                 <ol className="operations-decision-flow" aria-label="업무 진행 상태">
-                  <li className={detailError ? "is-warning" : "is-complete"}><span>1</span><div><strong>{evidenceStatus}</strong><small>근거 확인</small></div></li>
+                  <li className={detailError || snapshotBasisFailed ? "is-warning" : "is-complete"}><span>1</span><div><strong>{evidenceStatus}</strong><small>근거 확인</small></div></li>
                   <li className={gapCount > 0 ? "is-warning" : "is-complete"}><span>2</span><div><strong>{limitationStatus}</strong><small>제한 확인</small></div></li>
                   <li className={latestDecision ? "is-complete" : "is-current"}><span>3</span><div><strong>{decisionStatus}</strong><small>판단 기록</small></div></li>
                 </ol>

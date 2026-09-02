@@ -272,7 +272,11 @@ def test_overlay_enqueue_payload_rejects_non_overlay_source_kind() -> None:
 
 @pytest.mark.parametrize(
     "code",
-    ["PIPELINE_SOURCE_ALREADY_REGISTERED", "PIPELINE_SOURCE_ALREADY_PROCESSED"],
+    [
+        "PIPELINE_DUPLICATE_INPUT",
+        "PIPELINE_SOURCE_ALREADY_REGISTERED",
+        "PIPELINE_SOURCE_ALREADY_PROCESSED",
+    ],
 )
 def test_generator_enqueue_client_treats_same_source_redelivery_as_reuse(code: str) -> None:
     transport = httpx.MockTransport(

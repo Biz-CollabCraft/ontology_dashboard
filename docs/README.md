@@ -27,6 +27,11 @@ API 계약과 팀 공유 문서를 관리한다.
   - [2026-08 Week 2 history](./operations/history/2026-08-week2/)
 - [AI 코드 리뷰 컨텍스트](./ai-code-review-context.md)
 
+## 개인 기여 문서
+
+- [Backend Runtime / Evidence Delivery Contribution](./contributions/hb-backend-runtime-evidence.md)
+- [AI Review / Evidence Boundary Contribution](./contributions/hb-ai-review-evidence.md)
+
 ## 공유 계약 (Shared Contracts)
 
 시스템 간 공유 계약은 저장소 최상위 `contracts/`에서 관리한다.

@@ -24,7 +24,17 @@ from app.identity import (
 )
 from app.infra.llm import OpenAICompatibleProvider, VertexAIProvider, configured_provider
 from app.main import app
-from app.dependencies import build_manufacturing_service, get_identity_service, get_service
+from app.dependencies import (
+    build_manufacturing_service,
+    get_identity_service,
+    get_maintenance_loop_service,
+    get_runtime_asset_detail_service,
+    get_service,
+)
+from app.infra.db.maintenance_repository import MaintenanceRepository
+from app.infra.db.project_repository import SQLiteProjectContextResolver
+from app.maintenance.api_schema import InspectionWorkOrderCreateRequest, RecommendationInput
+from app.maintenance.service import MaintenanceLoopService
 from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.operations.agent_review_summary_workflow import AGENT_REVIEW_SUMMARY_FLOW_VERSION, AgentReviewSummaryWorkflow
 from app.operations.agent_review_summary_materialization import summary_key, summary_key_payload
@@ -446,6 +456,58 @@ def test_planner_rejects_unregistered_data_field(service: FactorySignalService) 
     )
     with pytest.raises(ValueError):
         planner.validate(layout, evidence)
+
+
+def test_live_asset_detail_route_uses_selected_event_scope(client: TestClient) -> None:
+    class RecordingAssetDetailService:
+        def __init__(self) -> None:
+            self.query: dict[str, object] | None = None
+
+        def latest_detail_view(self, **query: object) -> dict[str, object]:
+            self.query = query
+            return {"event_id": query["event_id"], "asset_id": query["asset_id"]}
+
+    runtime_detail = RecordingAssetDetailService()
+    app.dependency_overrides[get_runtime_asset_detail_service] = lambda: runtime_detail
+    try:
+        response = client.get(
+            "/api/objects/CNC-LIVE-01/detail-view",
+            params={
+                "project_id": "manufacturing-demo-project",
+                "workspace_id": "manufacturing-demo",
+                "dataset_version_id": "dsv-live",
+                "event_id": "RESULT#GEN-live-01",
+                "history_window": "7d",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_runtime_asset_detail_service, None)
+
+    assert response.status_code == 200
+    assert runtime_detail.query == {
+        "organization_id": "org-ontology-demo",
+        "project_id": "manufacturing-demo-project",
+        "workspace_id": "manufacturing-demo",
+        "asset_id": "CNC-LIVE-01",
+        "dataset_version_id": "dsv-live",
+        "event_id": "RESULT#GEN-live-01",
+        "history_window": "7d",
+    }
+
+
+def test_asset_detail_route_rejects_out_of_scope_workspace(client: TestClient) -> None:
+    response = client.get(
+        "/api/objects/CNC-LIVE-01/detail-view",
+        params={
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "other-workspace",
+            "dataset_version_id": "dsv-live",
+            "event_id": "RESULT#GEN-live-01",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "workspace_scope_denied"
 
 
 def test_api_contract_and_state_changes(client: TestClient, service: FactorySignalService) -> None:
@@ -1437,6 +1499,93 @@ def test_agent_review_summary_does_not_mutate_closed_loop_or_expose_actions(
     assert payload["trace"]["materialization"]["status"] == "ready"
 
 
+def test_inspection_request_decision_and_activity_reach_detail_and_agent_packet(
+    client: TestClient,
+    database_path: Path,
+    service: FactorySignalService,
+) -> None:
+    maintenance_service = MaintenanceLoopService(
+        MaintenanceRepository(
+            database_path,
+            project_context=SQLiteProjectContextResolver(database_path),
+        ),
+        event_evidence_query=service,
+    )
+    app.dependency_overrides[get_maintenance_loop_service] = lambda: maintenance_service
+    event_id = "EVT-GS-002"
+    asset_id = "CNC-S04-L04-01"
+    before = client.get(f"/api/objects/{asset_id}/detail-view")
+    assert before.status_code == 200
+    assert before.json().get("closed_loop", {}).get("work_orders") in (None, [])
+    recommendation_input = maintenance_service.recommendation_input(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        event_id=event_id,
+        snapshot_basis=InspectionWorkOrderCreateRequest(
+            event_id=event_id,
+            snapshot_basis=before.json()["snapshot_basis"],
+        ).snapshot_basis,
+    )
+    assert RecommendationInput.model_validate(recommendation_input)
+    assert recommendation_input["snapshot_basis"] == before.json()["snapshot_basis"]
+    assert recommendation_input["equipment"]["asset_id"] == asset_id
+    assert recommendation_input["operational_decision_kind"] == "request_inspection"
+
+    work_order = client.post(
+        (
+            "/api/projects/manufacturing-demo-project/workspaces/"
+            "manufacturing-demo/maintenance/inspection-work-orders"
+        ),
+        headers={**csrf_headers(client), "Idempotency-Key": "mvp-inspection-flow-001"},
+        json=InspectionWorkOrderCreateRequest(
+            event_id=event_id,
+            snapshot_basis=before.json()["snapshot_basis"],
+        ).model_dump(mode="json"),
+    )
+    decision = client.post(
+        f"/api/events/{event_id}/decision",
+        headers=csrf_headers(client),
+        json={
+            "actor": "spoofed",
+            "decision": "request_inspection",
+            "note": "현장 점검 요청 생성 후 판단 기록",
+        },
+    )
+
+    assert work_order.status_code == 200, work_order.text
+    assert decision.status_code == 200, decision.text
+    activity = client.get(f"/api/events/{event_id}/activity").json()
+    detail = client.get(f"/api/objects/{asset_id}/detail-view").json()
+    packet = client.get(f"/api/objects/{asset_id}/agent-review-packet").json()
+    report, _ = service.report(event_id, ReportRequest(role="manager", use_llm=False))
+
+    assert activity["decisions"][0]["decision"] == "request_inspection"
+    assert detail["snapshot_basis"] == recommendation_input["snapshot_basis"]
+    assert packet["snapshot_basis"] == recommendation_input["snapshot_basis"]
+    assert report.recommended_decision == recommendation_input["operational_decision_kind"]
+    assert detail["closed_loop"]["work_orders"][0]["work_order_id"] == work_order.json()[
+        "work_order_id"
+    ]
+    assert detail["closed_loop"]["activities"][0]["activity_type"] == "work_order.requested"
+    assert detail["closed_loop"]["lifecycle_summary"]["current_step"] == "inspection_requested"
+    assert detail["closed_loop"]["primary_action"]["action_id"] == "approve_inspection_work_order"
+    assert detail["closed_loop"]["timeline"][0]["label"] == "작업요청 생성"
+    history = packet["maintenance_history_summary"]
+    assert history["provider"] == "closed_loop_maintenance_history_adapter"
+    assert history["work_orders"][0]["record_id"] == work_order.json()["work_order_id"]
+    assert history["activities"][0]["activity_type"] == "work_order.requested"
+    assert "create_work_order" in packet["closed_loop_boundary"]["forbidden_actions"]
+    summary = compose_deterministic_agent_review_summary(packet)
+    process_quote = next(
+        item["quote"]
+        for item in summary["role_summaries"]
+        if item["role"] == "process_manager"
+    )
+    assert "요청됨 상태" in process_quote
+    assert set(summary["source_refs"]).issubset(set(packet["source_refs"]))
+
+
 def test_agent_review_summary_absorbs_adapter_context_into_role_quotes(
     service: FactorySignalService,
 ) -> None:
@@ -1497,6 +1646,35 @@ def test_domain_adapter_cnc_sop_guidance_does_not_match_compressor_assets() -> N
     }
 
     assert adapter.inspection_guidance(fixture=fixture, artifact=artifact) == {}
+
+
+def test_domain_adapter_cnc_sop_guidance_covers_drive_power_hypothesis() -> None:
+    adapter = ManufacturingFixtureReviewContextAdapter(ROOT)
+    fixture = {
+        "equipment": {
+            "asset_type": "cnc",
+            "criticality": "high",
+        },
+        "operation_context": {
+            "production_impact": "high",
+        },
+        "expected": {
+            "predicted_failure_type": "power_or_overstrain_failure",
+        },
+    }
+    artifact = {
+        "asset_type": "cnc",
+        "predicted_failure_type": "power_or_overstrain_failure",
+        "status_grade": "warning",
+        "top_factors": [{"feature": "torque_nm"}],
+        "evidence_payload": {
+            "component_hypotheses": [{"component_id": "drive_power"}],
+        },
+    }
+
+    guidance = adapter.inspection_guidance(fixture=fixture, artifact=artifact)
+
+    assert guidance["drive_power"]["sop_id"] == "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
 
 
 def test_domain_adapter_spare_parts_cover_cnc_inspection_components() -> None:
@@ -1853,6 +2031,9 @@ def test_asset_detail_view_model_accepts_7d_feature_history_window(
     assert closed_loop["work_orders"][0]["status"] == "requested"
     assert closed_loop["activities"][0]["activity_type"] == "work_order.requested"
     assert closed_loop["available_actions"][0]["action_id"] == "approve_inspection_work_order"
+    assert closed_loop["lifecycle_summary"]["current_step"] == "inspection_requested"
+    assert closed_loop["primary_action"]["owner_role"] == "process_manager"
+    assert closed_loop["timeline"][0]["target_id"] == "WO-INS-GS-004-001"
     assert closed_loop["maintenance_actions"] == []
     assert closed_loop["maintenance_events"] == []
     assert closed_loop["runtime_status"] is None

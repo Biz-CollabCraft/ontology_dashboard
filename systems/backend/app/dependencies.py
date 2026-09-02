@@ -18,7 +18,7 @@ from argon2 import PasswordHasher
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from app.common.rate_limit import RateLimiter
-from app.common.runtime_settings import project_root, trust_proxy_headers, trusted_proxy_networks
+from app.common.runtime_settings import app_environment, project_root, trust_proxy_headers, trusted_proxy_networks
 from app.dashboard import DashboardService
 from app.dashboard.dashboard_schema import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
 from app.dashboard.visualizations import (
@@ -76,6 +76,7 @@ from app.infra.maintenance_cost_basis_provider import JsonMaintenanceCostBasisPr
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.maintenance.live_service import LivePredictiveMaintenanceService
 from app.maintenance.service import MaintenanceLoopService
+from app.operations.asset_detail_view_model import AssetDetailViewModelService
 from app.ontology import OntologyService
 from app.planner import LayoutPlanner, OntologyDashboardPlannerService
 from app.project import ProjectService
@@ -161,6 +162,18 @@ def build_manufacturing_service(
         if is_postgresql(target)
         else AuditRepository(target)
     )
+    maintenance_lineage_query = (
+        PostgreSQLMaintenanceRepository(
+            target,
+            project_context=PostgreSQLProjectContextResolver(target),
+            connection_factory=postgres_repository_connection,
+        )
+        if is_postgresql(target)
+        else MaintenanceRepository(
+            target,
+            project_context=RuntimeProjectContextResolver(target),
+        )
+    )
     provider = configured_provider()
     equipment_service = EquipmentService(
         FixtureEquipmentRepository(_operations_fixture_masters(root))
@@ -175,6 +188,8 @@ def build_manufacturing_service(
         agent_review_summary_provider=AgentReviewSummaryProvider(provider),
         agent_review_context_registry=default_agent_review_context_registry(),
         domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
+        maintenance_lineage_query=maintenance_lineage_query,
+        workspace_id=MANUFACTURING_WORKSPACE,
     )
 
 
@@ -269,16 +284,27 @@ def build_live_predictive_maintenance_service(
     from app.infra.generator_runtime_pipeline import GeneratorRuntimePipelineClient
 
     target = database_url or database_target()
+    enqueue_client = GeneratorRuntimePipelineClient()
     shared = {
         "predictor_factory": configured_predictor,
         "artifact_builder": build_product_result_artifact,
     }
     return LivePredictiveMaintenanceService(
-        dataset=LiveDatasetIngestionAdapter(target, **shared),
-        diagnosis=LiveDiagnosisApplicationAdapter(**shared),
+        dataset=LiveDatasetIngestionAdapter(
+            target,
+            **shared,
+            allow_accelerated_simulation=os.getenv(
+                "ONTOLOGY_DASHBOARD_ALLOW_ACCELERATED_SIMULATION", "0"
+            ).lower()
+            in {"1", "true", "yes"},
+        ),
+        diagnosis=LiveDiagnosisApplicationAdapter(
+            snapshot_root=runtime_pipeline_input_root,
+            enqueue_client=enqueue_client,
+        ),
         maintenance=LiveMaintenanceOverlayAdapter(
             snapshot_root=runtime_pipeline_input_root,
-            enqueue_client=GeneratorRuntimePipelineClient(),
+            enqueue_client=enqueue_client,
         ),
         ontology=LiveOntologyProjectionAdapter(),
     )
@@ -434,6 +460,56 @@ def get_predictive_maintenance_runtime_service() -> PredictiveMaintenanceRuntime
 
 
 @lru_cache(maxsize=1)
+def get_runtime_asset_detail_service() -> AssetDetailViewModelService | None:
+    """Return the authoritative PostgreSQL AssetDetail read boundary when available."""
+
+    target = database_target()
+    if not is_postgresql(target):
+        return None
+    from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
+
+    return AssetDetailViewModelService(
+        PostgreSQLAssetDetailReadAdapter(PredictiveMaintenanceRuntimeRepository(target))
+    )
+
+
+class _RuntimeThenDemoEvidenceProjection:
+    """Resolve production runtime evidence first and local MVP fixtures second.
+
+    The fallback is deliberately restricted to the local demonstration scope.
+    It lets the two-role MVP exercise the real Maintenance command boundary
+    without teaching Maintenance how fixture Product Results are built.
+    """
+
+    def __init__(
+        self,
+        runtime: PredictiveMaintenanceRuntimeService,
+        demo: ManufacturingPredictiveMaintenanceService,
+    ) -> None:
+        self.runtime = runtime
+        self.demo = demo
+
+    def event_evidence_projection(self, **scope: Any) -> dict[str, Any] | None:
+        projection = self.runtime.event_evidence_projection(**scope)
+        if projection is not None:
+            return projection
+        if app_environment() not in {"development", "demo", "test"}:
+            return None
+        if (
+            scope.get("project_id") != "manufacturing-demo-project"
+            or scope.get("workspace_id") != MANUFACTURING_WORKSPACE
+        ):
+            return None
+        event_id = str(scope.get("event_id") or "")
+        try:
+            if self.demo.project_id_for_event(event_id) != scope.get("project_id"):
+                return None
+            return self.demo.event_evidence_projection(event_id)
+        except KeyError:
+            return None
+
+
+@lru_cache(maxsize=1)
 def get_maintenance_loop_service() -> MaintenanceLoopService:
     """Compose the canonical Maintenance command/read boundary."""
 
@@ -454,7 +530,10 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
     diagnosis_runtime = get_predictive_maintenance_runtime_service()
     return MaintenanceLoopService(
         repository,
-        event_evidence_query=diagnosis_runtime,
+        event_evidence_query=_RuntimeThenDemoEvidenceProjection(
+            diagnosis_runtime,
+            get_service(),
+        ),
         replay_session_query=diagnosis_runtime,
         cost_basis_provider=JsonMaintenanceCostBasisProvider(
             ROOT

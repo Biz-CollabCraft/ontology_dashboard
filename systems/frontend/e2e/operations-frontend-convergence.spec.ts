@@ -12,9 +12,19 @@ const ACCOUNTS = {
   engineer: ["engineer@ontology.local", "Engineer!2026"],
   executive: ["executive@ontology.local", "Executive!2026"],
 } as const;
+let loginAttempt = 0;
 
 async function login(page: Page, returnTo = OPERATIONS_PATH, account: keyof typeof ACCOUNTS = "manager") {
   const [email, password] = ACCOUNTS[account];
+  const forwardedFor = `127.0.0.${++loginAttempt}`;
+  await page.route("**/api/auth/login", async (route) => {
+    await route.continue({
+      headers: {
+        ...route.request().headers(),
+        "X-Forwarded-For": forwardedFor,
+      },
+    });
+  }, { times: 1 });
   await page.goto(`/login?returnTo=${encodeURIComponent(returnTo)}`);
   await page.getByLabel("이메일").fill(email);
   await page.getByLabel("비밀번호").fill(password);

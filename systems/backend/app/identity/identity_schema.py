@@ -109,8 +109,11 @@ DEMO_ACCOUNTS: tuple[dict[str, Any], ...] = (
     {
         "email": "technician@ontology.local",
         "password": "Technician!2026",
-        "display_name": "현장 작업자",
-        "roles": ["maintenance_technician"],
+        "display_name": "현장 관리자",
+        # The MVP exposes one field-operator persona.  Keep the two backend
+        # capabilities explicit for audit/RBAC while allowing that persona to
+        # carry an inspection from field verification through maintenance.
+        "roles": ["process_engineer", "maintenance_technician"],
     },
     {
         "email": "quality@ontology.local",
