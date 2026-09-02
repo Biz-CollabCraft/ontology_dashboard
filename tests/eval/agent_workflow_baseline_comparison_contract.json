@@ -2,21 +2,17 @@
   "contract_id": "agent-workflow-baseline-comparison-v1",
   "status": "planned",
   "execution_status": "unverified",
-  "case_design": {
-    "target_case_count": {
-      "min": 20,
-      "max": 30
-    },
-    "categories": [
-      "normal",
-      "boundary",
-      "contradictory",
-      "insufficient_evidence"
+  "execution_profile": {
+    "name": "presentation_minimum",
+    "case_count": 8,
+    "case_source": "GS-001..GS-008",
+    "arms": [
+      "B1",
+      "B2",
+      "B3"
     ],
-    "iterations_per_case": {
-      "min": 3,
-      "max": 5
-    },
+    "iterations_per_case": 3,
+    "total_llm_runs": 72,
     "randomize_execution_order": true
   },
   "arms": {
@@ -60,7 +56,6 @@
         "bounded_retry",
         "deterministic_fallback",
         "db_workflow_trace",
-        "stale_running_recovery",
         "snapshot_consistency",
         "side_effect_blocking"
       ],
@@ -77,48 +72,58 @@
     "same_rubric",
     "same_read_only_permissions"
   ],
+  "primary_comparison": "B3-B1",
+  "secondary_diagnostic_comparisons": [
+    "B2-B1",
+    "B3-B2"
+  ],
   "value_deltas": {
     "B2-B1": "evidence_packet_and_structuring",
-    "B3-B2": "validation_orchestration_reuse_fallback_trace",
-    "B3-B1": "total_pipeline_effect"
+    "B3-B2": "validation_reuse_fallback_trace",
+    "B3-B1": "llm_only_vs_full_pipeline_total_effect"
   },
-  "metric_groups": {
+  "core_metrics": {
     "response_quality": [
-      "grounded_claim_rate",
-      "unsupported_claim_rate",
-      "required_field_omission_rate",
       "schema_validation_pass_rate",
-      "recommendation_input_consistency",
-      "critical_risk_and_evidence_omission_rate",
-      "critical_human_review_error_count"
-    ],
-    "repeat_consistency": [
-      "core_judgment_agreement_rate",
-      "evidence_reference_agreement_rate",
-      "major_field_variation_rate",
-      "identical_input_output_variance"
-    ],
-    "efficiency": [
-      "latency_p50_ms",
-      "latency_p95_ms",
-      "input_tokens",
-      "output_tokens",
-      "estimated_cost",
-      "rerun_count",
-      "retry_count"
+      "unsupported_claim_rate",
+      "critical_evidence_omission_rate",
+      "core_judgment_agreement_rate"
     ],
     "operational_control": [
-      "saved_summary_reuse",
       "fallback",
-      "fallback_reason",
-      "terminal_failure",
-      "stale_recovery",
-      "abnormal_running_rows",
-      "invalid_output_containment",
-      "snapshot_mismatch_blocked",
-      "blocked_side_effect",
+      "retry_count",
+      "saved_summary_reuse",
       "workflow_trace_completeness"
+    ],
+    "cost": [
+      "input_tokens",
+      "output_tokens",
+      "estimated_cost_per_run",
+      "estimated_cost_per_valid_output"
     ]
+  },
+  "deferred_metrics": [
+    "latency_p50_p95",
+    "fine_grained_field_variance",
+    "evidence_reference_agreement",
+    "stale_recovery_rate",
+    "abnormal_running_row_rate"
+  ],
+  "fault_injection": {
+    "primary_arm": "B3",
+    "execution_scope": [
+      "malformed_output",
+      "provider_timeout",
+      "snapshot_mismatch"
+    ],
+    "contract_test_only": [
+      "429",
+      "transient_5xx",
+      "concurrent_same_summary_key",
+      "stale_running",
+      "db_trace_write_failure"
+    ],
+    "combined_with_quality_score": false
   },
   "value_states": {
     "measured": "value was observed by an executed evaluation",
@@ -150,17 +155,15 @@
   "aggregate_contract": {
     "group_by": [
       "arm",
-      "case_category",
       "execution_status"
     ],
     "report_separately": [
       "quality",
-      "repeat_consistency",
-      "efficiency",
       "operational_control",
       "fault_injection"
     ],
     "missing_value_policy": "exclude null values from numeric denominators and report state counts",
+    "cost_policy": "use provider-reported token usage and versioned configured rates; otherwise value=null and state=not_measured; never synthesize zero",
     "comparison_columns": [
       "B1",
       "B2",
@@ -170,49 +173,28 @@
       "B3-B1"
     ]
   },
-  "fault_injection": {
-    "primary_arm": "B3",
-    "scenarios": [
-      "timeout",
-      "429",
-      "transient_5xx",
-      "malformed_output",
-      "concurrent_same_summary_key",
-      "stale_running",
-      "db_trace_write_failure",
-      "snapshot_mismatch",
-      "action_request_during_fallback"
-    ],
-    "combined_with_quality_score": false
-  },
   "review_split": {
     "automated": [
       "schema_validation_pass_rate",
-      "required_field_omission_rate",
+      "required_field_presence",
       "source_reference_membership",
-      "latency",
-      "tokens",
+      "input_tokens",
+      "output_tokens",
       "estimated_cost",
       "retry_count",
-      "reuse",
+      "saved_summary_reuse",
       "fallback",
-      "terminal_state",
-      "stale_recovery",
-      "abnormal_running_rows",
-      "snapshot_mismatch_blocked",
-      "blocked_side_effect",
       "workflow_trace_completeness"
     ],
     "human": [
-      "grounded_claim_rate_semantic_review",
       "unsupported_claim_severity",
-      "critical_risk_and_evidence_omission",
-      "recommendation_input_consistency_semantic_review",
-      "critical_human_review_error_count"
-    ]
+      "critical_evidence_omission",
+      "core_judgment_consistency"
+    ],
+    "human_sampling": "review one final output per case and arm; expand only when an error is found"
   },
   "sample_row": {
-    "case_id": "TBD",
+    "case_id": "GS-001",
     "iteration": 1,
     "arm": "B1",
     "execution_order": null,
@@ -225,10 +207,15 @@
     "rubric_version": "baseline-rubric-v1",
     "execution_status": "planned",
     "metrics": {
-      "grounded_claim_rate": {
+      "schema_validation_pass_rate": {
         "value": null,
         "state": "not_measured",
-        "reason": "live repeated evaluation not run"
+        "reason": "72-run evaluation not run"
+      },
+      "estimated_cost_per_run": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "provider token usage and versioned price rates have not been captured"
       },
       "saved_summary_reuse": {
         "value": null,

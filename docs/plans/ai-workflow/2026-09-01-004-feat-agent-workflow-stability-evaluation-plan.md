@@ -317,8 +317,9 @@ report에 남는지 확인한다.
 
 ### 목적과 현재 검증 상태
 
-현재 workflow의 복잡성이 실제 가치를 만드는지 확인하기 위해 동일 사례를 세 경로로 비교한다. 이 비교는
-LLM 응답 품질과 운영 장애 복구를 하나의 점수로 합치지 않는다. 현재 상태는 **planned / unverified**이며,
+현재 workflow의 복잡성이 실제 가치를 만드는지 확인하기 위해 동일 사례를 세 경로로 비교한다. 발표의
+주 비교는 **LLM only(B1)와 전체 pipeline 적용 후(B3)**이며, B2는 차이가 Evidence Packet 때문인지
+운영 계층 때문인지 설명하는 보조 진단군이다. LLM 응답 품질과 운영 장애 복구를 하나의 점수로 합치지 않는다. 현재 상태는 **planned / unverified**이며,
 실제 반복 LLM 호출 결과나 우열 수치는 아직 없다. 계약 fixture와 contract test는 평가 구조만 검증한다.
 
 | Arm | 입력과 사용 계층 | 의도적으로 제외하는 계층 | 비교 목적 |
@@ -333,7 +334,7 @@ Direct LLM에는 완성된 Evidence Packet을 제공하지 않는다. B1에 pack
 ### 공정한 비교와 실행 설계
 
 - 동일 사례, provider/model, temperature/generation 설정, 출력 schema, rubric, read-only 권한을 사용한다.
-- 정상/경계/모순/근거 부족을 포함한 대표 사례 20~30개를 구성하고 arm별 사례당 3~5회 반복한다.
+- 기존 `GS-001~GS-008` 8개 사례를 사용하고 arm별 사례당 3회 반복해 총 72회 실행한다.
 - 실행 순서는 arm과 사례 순서를 섞고, 실제 순서를 evaluation row에 기록한다.
 - B1/B2/B3 모두 WorkOrder와 MaintenanceAction 생성 권한을 갖지 않는다.
 - 측정하지 못한 적용 가능 값은 `value=null, state=not_measured`로 기록한다.
@@ -360,19 +361,21 @@ Aggregate는 arm과 case category별로 품질, 반복 일관성, 효율성, 운
 
 | Metric group | Metrics |
 |---|---|
-| 응답 품질 | grounded/unsupported claim rate, required-field omission, schema pass, recommendation/input consistency, 핵심 위험·증거 누락, 치명적 사람 검토 오류 |
-| 반복 일관성 | 핵심 판단 일치율, evidence reference 일치율, 주요 필드 변동률, 동일 입력 결과 분산 |
-| 효율성 | latency p50/p95, input/output token, estimated cost, 재실행·retry 횟수 |
-| 운영 통제 | reuse, fallback와 원인, terminal failure, stale recovery, 비정상 running row, invalid-output containment, snapshot mismatch, blocked side effect, trace 완전성 |
+| 응답 품질 | schema 통과율, unsupported claim rate, 핵심 근거 누락률, 반복 핵심 판단 일치율 |
+| 운영 통제 | fallback, retry 횟수, saved-summary reuse, workflow trace 완전성 |
+| 비용 | input/output token, 실행당 추정 비용, valid output당 추정 비용 |
 
-자동 평가는 schema/필수 필드/source-ref membership, latency/token/cost, retry/reuse/fallback/terminal state,
-stale recovery, running row, snapshot/side-effect 차단, trace 완전성을 담당한다. 사람이 grounded claim의
-의미적 타당성, unsupported claim의 심각도, 핵심 위험·증거 누락, recommendation/input 의미 정합성,
-치명적 오류 수를 검토한다. 자동 점수만으로 치명적 오류를 0이라고 판단하지 않는다.
+비용은 provider가 반환한 token usage와 version이 명시된 설정 단가로 계산한다. usage 또는 단가가 없으면
+0원으로 만들지 않고 `null + not_measured`로 남긴다. latency, 세부 필드 변동, evidence reference 일치율, stale recovery 비율과 비정상 running row 비율은 이번 72-run의 필수 지표에서 제외한다. 이미 계약 테스트가 있는 동시 요청, stale running, DB trace 저장 실패도 live 장애 실험으로 중복 구현하지 않는다.
+
+자동 평가는 schema/필수 필드/source-ref membership, retry/reuse/fallback, trace 완전성을 담당한다.
+사람은 사례·arm별 최종 출력 1개만 검토해 unsupported claim의 심각도, 핵심 근거 누락, 핵심 판단
+일관성을 확인한다. 오류가 발견된 사례만 추가 표본을 검토한다.
 
 ### 계층별 기여도와 결과 해석
 
-비교표에는 B1, B2, B3 원값과 `B2-B1`, `B3-B2`, `B3-B1`을 함께 둔다.
+비교표에는 B1, B2, B3 원값과 `B2-B1`, `B3-B2`, `B3-B1`을 함께 두되, 최종 판단은
+`B3-B1`(LLM only 대비 전체 pipeline 효과)을 우선한다.
 
 - B2 - B1: Evidence Packet과 데이터 구조화의 기여
 - B3 - B2: validation, orchestration, reuse, fallback, trace의 기여
@@ -386,17 +389,17 @@ stale recovery, running row, snapshot/side-effect 차단, trace 완전성을 담
 
 | Scenario | B1 | B2 | B3 | 보고 축 |
 |---|---:|---:|---:|---|
-| 정상/경계/모순/근거 부족 반복 품질 평가 | 적용 | 적용 | 적용 | 품질·일관성·효율 |
-| timeout / 429 / transient 5xx | 선택적 provider 기준선 | 선택적 provider 기준선 | 주 평가 대상 | 장애 복구 |
-| malformed output | schema 결과만 관측 | schema 결과만 관측 | validation/fallback containment | 장애 복구 |
-| 동일 summary_key 동시 요청 | N/A | N/A | 적용 | 중복 run 차단 |
-| stale running | N/A | N/A | 적용 | recovery |
-| DB trace 저장 실패 | N/A | N/A | 적용 | trace failure |
-| snapshot mismatch | read-only 계약 확인 | read-only 계약 확인 | 적용 | side-effect 차단 |
-| fallback 상태 조치 요청 | N/A | N/A | 적용 | read-only/side-effect 차단 |
+| GS-001~008 반복 품질 평가 | 적용 | 적용 | 적용 | 품질·일관성 |
+| provider timeout | 선택적 기준선 | 선택적 기준선 | retry/fallback | 장애 복구 |
+| malformed output | schema 결과 관측 | schema 결과 관측 | validation/fallback containment | 장애 복구 |
+| snapshot mismatch | read-only 계약 확인 | read-only 계약 확인 | side-effect 차단 | 안전 경계 |
+| 429 / transient 5xx | 미실행 | 미실행 | 기존 contract test 또는 후속 | 후속 |
+| 동일 summary_key 동시 요청 | N/A | N/A | 기존 contract test | 중복 run 차단 |
+| stale running / DB trace 저장 실패 | N/A | N/A | 기존 contract test 또는 후속 | 후속 |
 
-장애 주입은 B3를 중심으로 별도 수행한다. Direct LLM이나 B2에 reuse/stale recovery가 없는 것은 실패가
-아니라 `not_applicable`이다. LLM 품질 비교 점수와 장애 복구/격리 점수는 합산하지 않는다.
+실제 장애 주입은 malformed output, provider timeout, snapshot mismatch 3종만 수행한다. Direct LLM이나
+B2에 reuse가 없는 것은 실패가 아니라 `not_applicable`이다. 나머지는 기존 contract test 증거를
+재사용하거나 후속으로 둔다. LLM 품질 점수와 장애 복구/격리 점수는 합산하지 않는다.
 
 ### 실행 결과 비교표 형식
 
@@ -405,9 +408,10 @@ stale recovery, running row, snapshot/side-effect 차단, trace 완전성을 담
 | Grounded claim rate | TBD | TBD | TBD | TBD | TBD | TBD | planned |
 | Schema validation pass rate | TBD | TBD | TBD | TBD | TBD | TBD | planned |
 | Core judgment agreement | TBD | TBD | TBD | TBD | TBD | TBD | planned |
-| Latency p95 | TBD | TBD | TBD | TBD | TBD | TBD | planned |
-| Invalid output containment | N/A | N/A | TBD | N/A | TBD | TBD | planned |
-| Workflow trace completeness | N/A | N/A | TBD | N/A | TBD | TBD | planned |
+| Core judgment agreement | TBD | TBD | TBD | TBD | TBD | TBD | planned |
+| Fallback / retry | N/A | N/A | TBD | N/A | TBD | TBD | planned |
+| Summary reuse / trace completeness | N/A | N/A | TBD | N/A | TBD | TBD | planned |
+| Estimated cost / valid output | TBD | TBD | TBD | TBD | TBD | TBD | planned or not_measured |
 
 ### 발표용 결론 문구
 
