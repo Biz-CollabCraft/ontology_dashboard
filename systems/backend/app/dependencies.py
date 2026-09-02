@@ -18,6 +18,7 @@ from argon2 import PasswordHasher
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from app.common.rate_limit import RateLimiter
+from app.common.company_context import load_company_context
 from app.common.runtime_settings import app_environment, project_root, trust_proxy_headers, trusted_proxy_networks
 from app.dashboard import DashboardService
 from app.dashboard.dashboard_schema import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
@@ -47,6 +48,7 @@ from app.diagnosis.contracts import load_fixture
 from app.governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
 from app.infra.db.dashboard_repository import DashboardRepository
+from app.infra.db.company_context_repository import CompanyContextRepository
 from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from app.infra.db.dataset_repository import DatasetRepository
 from app.infra.db.diagnosis_runtime_repository import PredictiveMaintenanceRuntimeRepository
@@ -176,6 +178,24 @@ def build_manufacturing_service(
         )
     )
     provider = configured_provider()
+    company_context_repository = CompanyContextRepository(target)
+    try:
+        if is_postgresql(target):
+            company_scope = PostgreSQLProjectContextResolver(target).resolve(MANUFACTURING_WORKSPACE)
+            company_organization_id = company_scope.organization_id
+        else:
+            company_organization_id = "org-ontology-demo"
+        company_context_repository.seed_records(
+            organization_id=company_organization_id,
+            project_id="manufacturing-demo-project",
+            workspace_id=MANUFACTURING_WORKSPACE,
+            context=load_company_context(),
+        )
+    except Exception:
+        # Context persistence is an enrichment path. Core Operations must remain
+        # available while an older DB is being migrated or a read-only Team DB
+        # connection is intentionally used.
+        pass
     equipment_service = EquipmentService(
         FixtureEquipmentRepository(_operations_fixture_masters(root))
     )
@@ -191,6 +211,7 @@ def build_manufacturing_service(
         agent_review_context_registry=default_agent_review_context_registry(),
         domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
         maintenance_lineage_query=maintenance_lineage_query,
+        company_context_query=company_context_repository,
         workspace_id=MANUFACTURING_WORKSPACE,
     )
 

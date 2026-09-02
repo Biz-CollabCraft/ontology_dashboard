@@ -131,17 +131,17 @@
   --od-density-row: var(--fd-table-row-h);
 }
 
-:root[data-text-size="small"] { --od-font-scale: .94; }
-:root[data-text-size="default"] { --od-font-scale: 1.04; }
+:root[data-text-size="small"] { --od-font-scale: .88; }
+:root[data-text-size="default"] { --od-font-scale: 1; }
 :root[data-text-size="large"] { --od-font-scale: 1.16; }
-:root[data-text-size="extra-large"] { --od-font-scale: 1.28; }
+:root[data-text-size="extra-large"] { --od-font-scale: 1.34; }
 
 :root[data-density="compact"] {
-  --od-control-height: 28px;
-  --od-toolbar-height: 34px;
-  --od-topbar-height: 38px;
-  --od-board-header-height: 32px;
-  --od-table-row-height: 30px;
+  --od-control-height: 25px;
+  --od-toolbar-height: 30px;
+  --od-topbar-height: 34px;
+  --od-board-header-height: 28px;
+  --od-table-row-height: 26px;
 }
 :root[data-density="standard"] {
   --od-control-height: 32px;
@@ -151,11 +151,11 @@
   --od-table-row-height: 36px;
 }
 :root[data-density="comfortable"] {
-  --od-control-height: 38px;
-  --od-toolbar-height: 46px;
-  --od-topbar-height: 46px;
-  --od-board-header-height: 44px;
-  --od-table-row-height: 42px;
+  --od-control-height: 44px;
+  --od-toolbar-height: 52px;
+  --od-topbar-height: 52px;
+  --od-board-header-height: 50px;
+  --od-table-row-height: 48px;
 }
 
 :root[data-theme="dark"] {

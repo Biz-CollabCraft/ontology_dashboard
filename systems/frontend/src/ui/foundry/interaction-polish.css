@@ -101,6 +101,7 @@ button, input, select, textarea { line-height: var(--od-leading-control); }
 .od-display-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
 .od-display-options.three-up { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .od-display-options.two-up { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.od-display-theme-options button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 .od-display-presets { display: grid; gap: 4px; }
 .od-display-presets button {
   display: flex;

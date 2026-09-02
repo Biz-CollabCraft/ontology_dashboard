@@ -23,6 +23,12 @@ export interface ContextAssistantDrawerProps {
   loading?: boolean;
   submitting?: boolean;
   error?: string | null;
+  actions?: Array<{
+    id: string;
+    label: string;
+    detail?: string;
+    onClick: () => void;
+  }>;
 }
 
 export function ContextAssistantDrawer({
@@ -36,6 +42,7 @@ export function ContextAssistantDrawer({
   loading = false,
   submitting = false,
   error = null,
+  actions = [],
 }: ContextAssistantDrawerProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -146,6 +153,7 @@ export function ContextAssistantDrawer({
           </div>
         ) : null}
         {error ? <p className="rw-context-assistant__error">{error}</p> : null}
+        {selected && actions.length ? <div className="rw-context-assistant__actions" aria-label={english ? "Connected workspace actions" : "연결된 화면으로 이동"}>{actions.map((action) => <button type="button" key={action.id} onClick={action.onClick}><span><strong>{action.label}</strong>{action.detail ? <small>{action.detail}</small> : null}</span><ChevronRight size={13} /></button>)}</div> : null}
       </section>
 
       {suggestedPrompts.length ? (

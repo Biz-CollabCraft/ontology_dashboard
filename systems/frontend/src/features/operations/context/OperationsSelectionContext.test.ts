@@ -96,7 +96,7 @@ describe("Operations URL selection contract", () => {
     });
     const params = new URLSearchParams(query);
     expect(params.get("view")).toBe("reports");
-    expect(params.get("surface")).toBe("report-draft");
+    expect(params.get("surface")).toBeNull();
     expect(params.get("dashboard")).toBe("workflow");
     expect(params.get("report")).toBe("inspection-request");
     expect(params.get("asset_id")).toBe("CNC S01");
@@ -112,5 +112,17 @@ describe("Operations URL selection contract", () => {
     });
     expect(selection.surface).toBe("maintenance-approval");
     expect(selection.view).toBe("operations");
+  });
+
+  it("accepts the semantic surface from the route path when the query omits it", () => {
+    const selection = parseOperationsSelection({
+      projectId: "project-a",
+      search: "?view=objects",
+      defaultRole: "process_manager",
+      defaultSurface: "factory-status",
+      pathSurface: "production-impact",
+    });
+    expect(selection.surface).toBe("production-impact");
+    expect(selection.view).toBe("objects");
   });
 });

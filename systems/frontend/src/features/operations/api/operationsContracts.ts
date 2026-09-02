@@ -304,6 +304,10 @@ export interface OperationsOperationContext {
 export interface OperationsCompanyContext {
   schema_version: string;
   context_kind: string;
+  context_storage?: {
+    mode: "team_db_overlay" | "reference_bootstrap";
+    persisted_record_count: number;
+  };
   project_id: string;
   workspace_id: string;
   company: {

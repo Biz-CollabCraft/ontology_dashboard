@@ -120,7 +120,7 @@ test("role-aware entry keeps manager, engineer, and executive experiences distin
   }
 
   await signIn(...ACCOUNTS.manager);
-  await expect(page).toHaveURL(/surface=factory-status/);
+  await expect(page).toHaveURL(/\/operations\/factory-status/);
   await expect(page).toHaveURL(/view=overview/);
   await expect(page.getByText("공장 설비 상태맵", { exact: true })).toBeVisible();
   await expect(page.locator(".operations-factory-asset-node")).toHaveCount(100);
@@ -132,13 +132,13 @@ test("role-aware entry keeps manager, engineer, and executive experiences distin
   await expect(managerNav.nth(3)).toContainText("생산 영향");
   await expect(managerNav.nth(4)).toContainText("보고 초안");
   await managerNav.nth(3).click();
-  await expect(page).toHaveURL(/surface=production-impact/);
+  await expect(page).toHaveURL(/\/operations\/production-impact/);
   await expect(page).toHaveURL(/view=objects/);
   await expect(page.getByText("생산 · 재무 영향", { exact: true })).toBeVisible();
 
   await switchAccount();
   await signIn(...ACCOUNTS.executive);
-  await expect(page).toHaveURL(/surface=executive-brief/);
+  await expect(page).toHaveURL(/\/operations\/executive-brief/);
   await expect(page).toHaveURL(/view=reports/);
   await expect(page.getByTestId("role-composed-executive")).toBeVisible();
   const executiveNav = page.locator(".rw-preview-left nav button");
@@ -150,12 +150,12 @@ test("role-aware entry keeps manager, engineer, and executive experiences distin
   await expect(executiveNav.nth(4)).toContainText("설비 상태 근거");
   await expect(page.getByText("경영 KPI 기준", { exact: true })).toBeVisible();
   await executiveNav.nth(4).click();
-  await expect(page).toHaveURL(/surface=factory-status/);
+  await expect(page).toHaveURL(/\/operations\/factory-status/);
   await expect(page.getByText("공장 설비 상태맵", { exact: true })).toBeVisible();
 
   await switchAccount();
   await signIn(...ACCOUNTS.engineer);
-  await expect(page).toHaveURL(/surface=factory-status/);
+  await expect(page).toHaveURL(/\/operations\/factory-status/);
   await expect(page).toHaveURL(/view=overview/);
   const engineerNav = page.locator(".rw-preview-left nav button");
   await expect(engineerNav).toHaveCount(5);
@@ -166,7 +166,7 @@ test("role-aware entry keeps manager, engineer, and executive experiences distin
   await expect(engineerNav.nth(4)).toContainText("현장 메모");
   await expect(page.getByText("공장 설비 상태맵", { exact: true })).toBeVisible();
   await engineerNav.nth(1).click();
-  await expect(page).toHaveURL(/surface=monitoring/);
+  await expect(page).toHaveURL(/\/operations\/monitoring/);
   await expect(page.getByText("실시간 피쳐 그래프", { exact: true })).toBeVisible();
   await expect(page).not.toHaveURL(/view=objects/);
 

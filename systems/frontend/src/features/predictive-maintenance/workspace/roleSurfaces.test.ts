@@ -4,13 +4,13 @@ import { defaultReliabilitySurface, reliabilitySurfaces } from "./roleSurfaces";
 describe("semantic reliability surfaces", () => {
   it("promotes the visual factory status surface for operational roles and keeps it lower for executives", () => {
     expect(reliabilitySurfaces("engineering").map((item) => item.id)).toEqual([
-      "factory-status", "monitoring", "assets", "inspection", "field-notes",
+      "factory-status", "monitoring", "assets", "sensor-features", "inspection", "maintenance-history", "field-notes",
     ]);
     expect(reliabilitySurfaces("operations").map((item) => item.id)).toEqual([
-      "factory-status", "pending-decisions", "operations-status", "production-impact", "report-draft",
+      "factory-status", "operations-status", "pending-decisions", "decision-case", "production-impact", "maintenance-approval", "backlog", "report-draft",
     ]);
     expect(reliabilitySurfaces("executive").map((item) => item.id)).toEqual([
-      "executive-brief", "decision-bottleneck", "operational-risk", "maintenance-effect", "factory-status",
+      "executive-brief", "decision-bottleneck", "operational-risk", "executive-kpi", "executive-reports", "maintenance-effect", "roadmap", "factory-status",
     ]);
     expect(reliabilitySurfaces("maintenance").map((item) => item.id)).toEqual([
       "my-work", "work-targets", "field-status", "work-history",

@@ -45,12 +45,7 @@ import {
 import { resolveReliabilityRoleExperience } from "./workspace/roleExperience";
 import { reliabilitySurfaces, resolveReliabilitySurface } from "./workspace/roleSurfaces";
 
-const RELIABILITY_THEME_STORAGE_KEY = "ontology-dashboard:reliability-theme";
 const RELIABILITY_LOCALE_STORAGE_KEY = "ontology-dashboard:reliability-locale";
-
-function initialReliabilityTheme(): "dark" | "light" {
-  return "light";
-}
 
 function initialReliabilityLocale(): "ko-KR" | "en-US" {
   const saved = window.localStorage.getItem(RELIABILITY_LOCALE_STORAGE_KEY);
@@ -198,7 +193,6 @@ export function ReliabilityWorkspaceLoadingPlaceholder() {
   const english = locale === "en-US";
 
   useEffect(() => {
-    document.documentElement.dataset.theme = initialReliabilityTheme();
     document.documentElement.lang = locale;
   }, [locale]);
 
@@ -286,7 +280,7 @@ export function ReliabilityWorkspacePreview({
   children: ReactNode;
 }) {
   const { setLocale } = useI18n();
-  const { preferences, setPreset, setShowTechnicalMetadata } = useDisplayPreferences();
+  const { preferences, setPreset, setShowTechnicalMetadata, setTheme } = useDisplayPreferences();
   const [locale, setReliabilityLocaleState] = useState<"ko-KR" | "en-US">(initialReliabilityLocale);
   const english = locale === "en-US";
   const experience = useMemo(() => resolveReliabilityRoleExperience(user), [user]);
@@ -297,7 +291,7 @@ export function ReliabilityWorkspacePreview({
   const eyebrow = english ? activePageCopy.eyebrow.en : activePageCopy.eyebrow.ko;
   const title = english ? activePageCopy.title.en : activePageCopy.title.ko;
   const detailCopy = english ? activePageCopy.detail.en : activePageCopy.detail.ko;
-  const [leftOpen, setLeftOpen] = useState(true);
+  const [leftOpen, setLeftOpen] = useState(() => window.innerWidth > 860);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [messages, setMessages] = useState<ReliabilityAssistantMessage[]>([]);
@@ -306,11 +300,6 @@ export function ReliabilityWorkspacePreview({
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantQueryLoading, setAssistantQueryLoading] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = "light";
-    window.localStorage.setItem(RELIABILITY_THEME_STORAGE_KEY, "light");
-  }, []);
 
   useEffect(() => {
     if (experience.kind !== "engineering" && preferences.showTechnicalMetadata) {
@@ -460,6 +449,32 @@ export function ReliabilityWorkspacePreview({
     retrievalProvider: agentPacket?.sop_retrieval.provider ?? null,
     retrievalCount: agentPacket?.sop_retrieval.returned_count ?? null,
   };
+  const assistantActions = experience.kind === "engineering"
+    ? [
+      { id: "evidence", label: english ? "Open asset evidence" : "설비 근거 열기", detail: english ? "Sensors · factors · history" : "센서 · 기여도 · 이력", onClick: () => onNavigate("assets", "objects") },
+      { id: "sensor", label: english ? "Inspect sensor features" : "센서 피쳐 보기", detail: english ? "Trend and anomaly window" : "추세와 이상 구간", onClick: () => onNavigate("sensor-features", "objects") },
+      { id: "inspection", label: english ? "Open inspection case" : "점검 Case 열기", detail: english ? "Targets · workflow" : "점검 대상 · workflow", onClick: () => onNavigate("inspection", "operations") },
+      { id: "history", label: english ? "Review maintenance history" : "정비 이력 보기", detail: english ? "Past work · before/after" : "과거 조치 · before/after", onClick: () => onNavigate("maintenance-history", "objects") },
+    ]
+    : experience.kind === "operations"
+      ? [
+        { id: "case", label: "Decision Case", detail: english ? "Evidence → action → outcome" : "근거 → 판단 → 조치 → 결과", onClick: () => onNavigate("decision-case", "operations") },
+        { id: "impact", label: english ? "Open production impact" : "생산 영향 보기", detail: english ? "Units · cost · product" : "수량 · 비용 · 제품", onClick: () => onNavigate("production-impact", "objects") },
+        { id: "approval", label: english ? "Open maintenance approval" : "정비 승인 보기", detail: english ? "Inspection · material · action" : "점검 · 자재 · 실행", onClick: () => onNavigate("maintenance-approval", "operations") },
+        { id: "report", label: english ? "Open report artifact" : "보고 산출물 열기", detail: english ? "Current case snapshot" : "현재 Case snapshot", onClick: () => onNavigate("report-draft", "reports") },
+      ]
+      : experience.kind === "executive"
+        ? [
+          { id: "risk", label: english ? "Open operational risk" : "운영 리스크 보기", detail: english ? "Plant · line · exposure" : "공장 · 라인 · 노출", onClick: () => onNavigate("operational-risk", "overview") },
+          { id: "kpi", label: english ? "Open operating KPI" : "운영 KPI 보기", detail: english ? "Lead time · backlog" : "Lead time · backlog", onClick: () => onNavigate("executive-kpi", "reports") },
+          { id: "effect", label: english ? "Review maintenance effect" : "정비 효과 보기", detail: english ? "Before / after" : "Before / after", onClick: () => onNavigate("maintenance-effect", "objects") },
+          { id: "factory", label: english ? "Inspect factory evidence" : "설비 상태 근거 보기", detail: english ? "Zone · cell · alerts" : "구역 · 셀 · 알림", onClick: () => onNavigate("factory-status", "overview") },
+        ]
+        : [
+          { id: "work", label: english ? "Open my work" : "내 작업 열기", detail: english ? "Approved work · progress" : "승인 작업 · 진행 상태", onClick: () => onNavigate("my-work", "operations") },
+          { id: "target", label: english ? "Open work target" : "작업 대상 보기", detail: english ? "Location · evidence · material" : "위치 · 근거 · 자재", onClick: () => onNavigate("work-targets", "objects") },
+          { id: "history", label: english ? "Open work history" : "작업 이력 보기", detail: english ? "Completion · outcome" : "완료 · 결과", onClick: () => onNavigate("work-history", "reports") },
+        ];
   const focusCopy = operationalFocusCopy({
     selectedEvent,
     detail,
@@ -571,7 +586,8 @@ export function ReliabilityWorkspacePreview({
             {settingsOpen && leftOpen ? <div className="rw-preview-settings-panel">
               <header><strong>{english ? "Workspace settings" : "사용자 환경"}</strong><small>{user.display_name}</small></header>
               <div className="rw-preview-settings-group"><span>{english ? "Language" : "언어"}</span><div className="rw-preview-segmented two"><button type="button" className={!english ? "is-active" : ""} onClick={() => setReliabilityLocale("ko-KR")}>한국어</button><button type="button" className={english ? "is-active" : ""} onClick={() => setReliabilityLocale("en-US")}>English</button></div></div>
-              <div className="rw-preview-settings-group"><span>{english ? "Display density" : "화면 밀도"}</span><div className="rw-preview-segmented three">{(["compact", "standard", "accessible"] as const).map((value) => <button type="button" key={value} className={preset === value ? "is-active" : ""} onClick={() => setPreset(value)}>{value === "compact" ? (english ? "Compact" : "조밀") : value === "standard" ? (english ? "Standard" : "기본") : (english ? "Accessible" : "확대")}</button>)}</div></div>
+              <div className="rw-preview-settings-group"><span>{english ? "Theme" : "화면 테마"}</span><div className="rw-preview-segmented three">{(["light", "dark", "system"] as const).map((value) => <button type="button" key={value} className={preferences.theme === value ? "is-active" : ""} onClick={() => setTheme(value)}>{value === "light" ? (english ? "Light" : "라이트") : value === "dark" ? (english ? "Dark" : "다크") : (english ? "System" : "시스템")}</button>)}</div></div>
+              <div className="rw-preview-settings-group"><span>{english ? "Display preset" : "화면 프리셋"}</span><div className="rw-preview-segmented three">{(["compact", "standard", "accessible"] as const).map((value) => <button type="button" key={value} className={preset === value ? "is-active" : ""} onClick={() => setPreset(value)}>{value === "compact" ? (english ? "Report" : "보고/프린트") : value === "standard" ? (english ? "Desktop" : "데스크톱") : (english ? "Presentation" : "발표/프로젝터")}</button>)}</div></div>
               {experience.kind === "engineering" ? <button type="button" className="rw-preview-settings-action" onClick={() => setShowTechnicalMetadata(!preferences.showTechnicalMetadata)}><span>{english ? "Technical metadata" : "기술 메타데이터"}</span><strong>{preferences.showTechnicalMetadata ? (english ? "Shown" : "표시") : (english ? "Hidden" : "숨김")}</strong></button> : null}
               <button type="button" className="rw-preview-settings-action" onClick={onRefresh} disabled={refreshing}><span><RefreshCw size={12} />{english ? "Refresh data" : "최신 데이터 다시 확인"}</span></button>
               <button type="button" className="rw-preview-settings-action" onClick={() => { setLeftOpen(false); setAssistantOpen(false); setSettingsOpen(false); }}><span><Focus size={12} />{english ? "Focus mode" : "집중 모드"}</span></button>
@@ -636,6 +652,7 @@ export function ReliabilityWorkspacePreview({
         submitting={assistantQueryLoading}
         error={assistantError}
         locale={locale}
+        actions={assistantActions}
       />
 
       <footer className="rw-preview-bottom">

@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { operationsProjectPath, navigate } from "../../../routing";
+import { matchOperationsProjectPath, operationsSurfacePath, navigate } from "../../../routing";
 import type { OperationsDashboardMode, OperationsReportTab, OperationsRoleLens, OperationsSelection, OperationsView } from "../api/operationsContracts";
 
 const SESSION_PREFIX = "ontology-dashboard:operations-selection:";
@@ -51,6 +51,7 @@ export function parseOperationsSelection(input: {
   defaultRole: OperationsRoleLens;
   defaultView?: OperationsView;
   defaultSurface?: string | null;
+  pathSurface?: string | null;
   defaultReportTab?: OperationsReportTab;
   sessionValue?: string | null;
 }): OperationsSelection {
@@ -77,7 +78,9 @@ export function parseOperationsSelection(input: {
   return {
     projectId: input.projectId,
     view: queryHasView ? validView(queryView) : sessionView ?? defaultView,
-    surface: queryHasSurface ? optionalValue(params.get("surface")) : optionalValue(session.surface ?? input.defaultSurface ?? null),
+    surface: queryHasSurface
+      ? optionalValue(params.get("surface"))
+      : optionalValue(input.pathSurface ?? session.surface ?? input.defaultSurface ?? null),
     dashboard: queryHasDashboard
       ? validDashboard(params.get("dashboard"))
       : validDashboard(typeof session.dashboard === "string" ? session.dashboard : null),
@@ -100,7 +103,6 @@ export function parseOperationsSelection(input: {
 export function selectionSearch(selection: OperationsSelection): string {
   const params = new URLSearchParams();
   params.set("view", selection.view);
-  if (selection.surface) params.set("surface", selection.surface);
   params.set("dashboard", selection.dashboard);
   if (selection.view === "reports") params.set("report", selection.reportTab);
   params.set("role", selection.role);
@@ -117,6 +119,7 @@ export function OperationsSelectionProvider({
   defaultSurface = null,
   defaultReportTab = "status-map",
   storageScope = "anonymous",
+  navigationBasePath = null,
   children,
 }: {
   projectId: string;
@@ -125,18 +128,20 @@ export function OperationsSelectionProvider({
   defaultSurface?: string | null;
   defaultReportTab?: OperationsReportTab;
   storageScope?: string;
+  navigationBasePath?: string | null;
   children: ReactNode;
 }) {
   const storageKey = `${SESSION_PREFIX}${storageScope}:${projectId}`;
   const readSelection = useCallback(() => parseOperationsSelection({
     projectId,
     search: window.location.search,
+    pathSurface: navigationBasePath ? null : matchOperationsProjectPath(window.location.pathname)?.surfaceId ?? null,
     defaultRole,
     defaultView,
     defaultSurface,
     defaultReportTab,
     sessionValue: window.sessionStorage.getItem(storageKey),
-  }), [defaultReportTab, defaultRole, defaultSurface, defaultView, projectId, storageKey]);
+  }), [defaultReportTab, defaultRole, defaultSurface, defaultView, navigationBasePath, projectId, storageKey]);
   const [selection, setSelection] = useState<OperationsSelection>(readSelection);
 
   useEffect(() => {
@@ -157,11 +162,13 @@ export function OperationsSelectionProvider({
     const next: OperationsSelection = { ...current, ...patch, projectId };
     window.sessionStorage.setItem(storageKey, JSON.stringify(next));
     const params = new URLSearchParams(selectionSearch(next));
+    if (navigationBasePath && next.surface) params.set("surface", next.surface);
     const currentParams = new URLSearchParams(window.location.search);
     const workspaceShell = currentParams.get("workspace_shell");
     if (workspaceShell) params.set("workspace_shell", workspaceShell);
-    navigate(`${operationsProjectPath(projectId)}?${params.toString()}`, { replace: options?.replace });
-  }, [projectId, readSelection, storageKey]);
+    const targetPath = navigationBasePath ?? operationsSurfacePath(projectId, next.surface);
+    navigate(`${targetPath}?${params.toString()}`, { replace: options?.replace });
+  }, [navigationBasePath, projectId, readSelection, storageKey]);
 
   const value = useMemo(() => ({ selection, updateSelection }), [selection, updateSelection]);
   return <OperationsSelectionContext.Provider value={value}>{children}</OperationsSelectionContext.Provider>;

@@ -103,9 +103,17 @@ export function operationsProjectPath(projectId: string) {
   return `/app/projects/${encodeURIComponent(projectId)}/operations`;
 }
 
-export function matchOperationsProjectPath(pathname: string): { projectId: string } | null {
-  const match = pathname.match(/^\/app\/projects\/([^/]+)\/(?:operations|operations)$/);
-  return match ? { projectId: decodeURIComponent(match[1]) } : null;
+export function operationsSurfacePath(projectId: string, surfaceId?: string | null) {
+  const base = operationsProjectPath(projectId);
+  return surfaceId ? `${base}/${encodeURIComponent(surfaceId)}` : base;
+}
+
+export function matchOperationsProjectPath(pathname: string): { projectId: string; surfaceId: string | null } | null {
+  const match = pathname.match(/^\/app\/projects\/([^/]+)\/operations(?:\/([^/]+))?$/);
+  return match ? {
+    projectId: decodeURIComponent(match[1]),
+    surfaceId: match[2] ? decodeURIComponent(match[2]) : null,
+  } : null;
 }
 
 function isBlueprintComparisonEmbedPath(pathname: string, search: string): boolean {

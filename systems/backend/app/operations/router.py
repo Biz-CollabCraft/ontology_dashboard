@@ -39,7 +39,6 @@ from app.ontology.projection import inspection_object_id, risk_event_object_id
 from app.ontology.ontology_service import OntologyService
 from .service import EventNotFound, ManufacturingPredictiveMaintenanceService
 from .sop_retrieval import retrieve_inspection_sops
-from app.common.company_context import public_company_context, retrieve_company_documents
 
 router = APIRouter(prefix="/api", tags=["manufacturing-domain-pack"])
 AGENT_REVIEW_SUMMARY_MATERIALIZE_RATE = RateLimitRule(limit=12, window_seconds=60)
@@ -251,6 +250,7 @@ def _packet_dataset_version(packet: dict[str, Any]) -> str | None:
 def _packet_evidence(
     packet: dict[str, Any],
     *,
+    service: ManufacturingPredictiveMaintenanceService,
     project_id: str,
     workspace_id: str,
     question: str = "",
@@ -329,7 +329,13 @@ def _packet_evidence(
     remaining = max(0, top_k - len(evidence))
     if remaining:
         for index, item in enumerate(
-            retrieve_company_documents(question, asset_id=asset_id, top_k=remaining),
+            service.company_context_documents(
+                question,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                asset_id=asset_id,
+                top_k=remaining,
+            ),
             start=1,
         ):
             evidence.append({
@@ -1034,6 +1040,7 @@ def get_company_context(
     project_id: str,
     workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
     principal: Principal = Depends(require_permission("events.read")),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
     if not principal.is_admin and project_id not in principal.project_scopes:
         raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 회사 문맥입니다.")
@@ -1044,7 +1051,7 @@ def get_company_context(
     return {
         "project_id": project_id,
         "workspace_id": workspace_id,
-        **public_company_context(),
+        **service.company_context(project_id=project_id, workspace_id=workspace_id),
     }
 
 
@@ -1475,6 +1482,7 @@ def run_agent_query(
             packet_source = "runtime-product-result"
     evidence = _packet_evidence(
         packet,
+        service=service,
         project_id=request.project_id,
         workspace_id=request.workspace_id,
         question=request.question,

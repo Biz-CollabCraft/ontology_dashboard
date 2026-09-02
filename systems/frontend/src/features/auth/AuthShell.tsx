@@ -1,6 +1,49 @@
 import { navigate } from "../../routing";
-import { Activity, ArrowRight, ClipboardCheck, FileText, LockKeyhole, MapPinned, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Activity, ArrowLeft, ArrowRight, BarChart3, ClipboardCheck, FileText, Gauge, LockKeyhole, MapPinned, ShieldCheck, Wrench } from "lucide-react";
 import { DisplayMenu } from "../../ui/foundry/DisplayMenu";
+
+const PRODUCT_STORIES = [
+  {
+    eyebrow: "LIVE FACTORY STATUS",
+    title: "이상 설비를 위치와 알림으로 먼저 찾습니다.",
+    detail: "구역·셀 단위 설비 상태와 새 알림 수를 한 화면에서 보고, 클릭 한 번으로 해당 Event와 센서 근거까지 내려갑니다.",
+    visual: "factory" as const,
+  },
+  {
+    eyebrow: "ONE CASE · ROLE COMPOSED",
+    title: "같은 사건을 역할마다 필요한 깊이로 봅니다.",
+    detail: "엔지니어는 센서와 점검 근거, 운영 관리자는 생산 영향과 승인, 경영진은 KPI와 의사결정 병목을 같은 Case에서 확인합니다.",
+    visual: "roles" as const,
+  },
+  {
+    eyebrow: "TRACEABLE DECISION",
+    title: "Event에서 Outcome까지 판단 근거가 끊기지 않습니다.",
+    detail: "Evidence → Decision → Action → Maintenance → Outcome을 하나의 lineage로 연결해 누가 왜 무엇을 판단했는지 추적할 수 있습니다.",
+    visual: "lineage" as const,
+  },
+  {
+    eyebrow: "GROUNDED REPORTING",
+    title: "보고서는 별도 문서가 아니라 업무 흐름의 산출물입니다.",
+    detail: "현재 Case의 검증된 근거와 조치 결과를 바탕으로 역할별 보고 언어를 만들고, snapshot 기준을 유지한 채 경영 보고로 전환합니다.",
+    visual: "report" as const,
+  },
+] as const;
+
+function ProductStoryVisual({ kind }: { kind: (typeof PRODUCT_STORIES)[number]["visual"] }) {
+  if (kind === "factory") return <div className="auth-story-factory" aria-hidden="true">
+    {[0, 1, 2, 3].map((zone) => <section key={zone}><header><strong>{zone + 1}구역</strong><b>{zone === 1 ? "3" : zone === 3 ? "1" : ""}</b></header><div>{[0, 1, 2, 3, 4].map((cell) => <span key={cell} className={zone === 1 && cell === 2 ? "critical" : zone === 3 && cell === 1 ? "warning" : "normal"}>{cell === 2 && zone === 1 ? "!" : ""}</span>)}</div></section>)}
+  </div>;
+  if (kind === "roles") return <div className="auth-story-roles" aria-hidden="true">
+    <article><MapPinned size={17} /><strong>Engineer</strong><span>Sensor · Evidence</span></article>
+    <article><ClipboardCheck size={17} /><strong>Operations</strong><span>Impact · Decision</span></article>
+    <article><BarChart3 size={17} /><strong>Executive</strong><span>KPI · Bottleneck</span></article>
+  </div>;
+  if (kind === "lineage") return <div className="auth-story-lineage" aria-hidden="true">
+    {["Event", "Evidence", "Decision", "Action", "Outcome"].map((item, index) => <span key={item}><i>{index + 1}</i><strong>{item}</strong></span>)}
+  </div>;
+  return <div className="auth-story-report" aria-hidden="true"><FileText size={30} /><div><strong>Executive Brief</strong><span>Risk 72% · 4 Decision Cases</span><span>Production exposure · Maintenance outcome</span></div><em>AS-OF</em></div>;
+}
 
 export function AuthShell({
   eyebrow,
@@ -13,6 +56,17 @@ export function AuthShell({
   description: string;
   children: React.ReactNode;
 }) {
+  const [storyIndex, setStoryIndex] = useState(0);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => setStoryIndex((current) => (current + 1) % PRODUCT_STORIES.length), 6500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const story = PRODUCT_STORIES[storyIndex];
+  const moveStory = (direction: -1 | 1) => setStoryIndex((current) => (current + direction + PRODUCT_STORIES.length) % PRODUCT_STORIES.length);
+
   return (
     <main className="auth-page">
       <header className="auth-platform-bar">
@@ -21,25 +75,24 @@ export function AuthShell({
       </header>
       <div className="auth-control-plane">
         <aside className="auth-resource-context">
-          <header><span><Activity size={20} /></span><div><small>RELIABILITY OPERATIONS</small><strong>기술 근거를 운영 판단으로</strong><small>설비 이상 발견 → 판단 → 보고</small></div></header>
-          <section className="auth-problem-statement">
-            <span className="section-label">BUSINESS PROBLEM</span>
-            <h1>설비 이상 발견 뒤<br />판단과 보고까지의 시간차를 줄입니다.</h1>
-            <p>현장의 기술 근거가 운영 판단과 경영 보고로 넘어가는 과정에서 생기는 맥락 손실을 하나의 Event · Evidence · Decision lineage로 연결합니다.</p>
+          <header><span><Activity size={20} /></span><div><small>HANBIT TECH · RELIABILITY OPERATIONS</small><strong>설비 리스크를 운영 의사결정으로 연결</strong><small>Live status → Decision Case → Outcome</small></div></header>
+          <section className="auth-product-story" aria-roledescription="carousel" aria-label="제품 주요 기능">
+            <div className="auth-story-copy" key={story.eyebrow}>
+              <span className="section-label">{story.eyebrow}</span>
+              <h1>{story.title}</h1>
+              <p>{story.detail}</p>
+            </div>
+            <ProductStoryVisual kind={story.visual} />
+            <footer className="auth-story-controls">
+              <div>{PRODUCT_STORIES.map((item, index) => <button type="button" key={item.eyebrow} className={index === storyIndex ? "is-active" : ""} onClick={() => setStoryIndex(index)} aria-label={`${index + 1}번째 제품 소개`} aria-current={index === storyIndex ? "true" : undefined} />)}</div>
+              <span><button type="button" onClick={() => moveStory(-1)} aria-label="이전"><ArrowLeft size={14} /></button><button type="button" onClick={() => moveStory(1)} aria-label="다음"><ArrowRight size={14} /></button></span>
+            </footer>
           </section>
-          <section className="auth-decision-flow">
-            <span className="section-label">ONE EVENT, THREE OPERATING LEVELS</span>
-            <div><b>01</b><MapPinned size={17} /><span><strong>Monitoring</strong><small>실시간 상태맵 · 센서 근거</small></span><em>LIVE</em></div>
-            <ArrowRight className="auth-flow-arrow" size={15} />
-            <div><b>02</b><ClipboardCheck size={17} /><span><strong>Decision Case</strong><small>생산 영향 · 승인 · 다음 행동</small></span><em>SNAPSHOT</em></div>
-            <ArrowRight className="auth-flow-arrow" size={15} />
-            <div><b>03</b><FileText size={17} /><span><strong>Executive Brief</strong><small>KPI · 병목 · 경영 보고</small></span><em>AS-OF</em></div>
+          <section className="auth-value-strip">
+            <span><Gauge size={15} /><strong>Live</strong><small>실시간 설비 상태</small></span>
+            <span><ShieldCheck size={15} /><strong>Traceable</strong><small>근거 기반 판단</small></span>
+            <span><Wrench size={15} /><strong>Closed loop</strong><small>정비 결과 확인</small></span>
           </section>
-          <section className="auth-role-story">
-            <span className="section-label">ROLE-AWARE EXPERIENCE</span>
-            <div><span><strong>엔지니어</strong><small>왜 이상한가?</small></span><span><strong>운영 관리자</strong><small>무엇을 판단할까?</small></span><span><strong>경영진</strong><small>무엇을 보고받을까?</small></span></div>
-          </section>
-          <footer><span>DEMO PRINCIPLE</span><strong>Monitoring은 live · 보고서는 as-of</strong><small>새 관측이 와도 기존 Executive Brief는 자동으로 덮어쓰지 않습니다.</small></footer>
         </aside>
         <section className="auth-panel">
           <div className="auth-card">

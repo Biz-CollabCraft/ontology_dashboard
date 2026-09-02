@@ -10,11 +10,14 @@ import {
   FileClock,
   FileText,
   Gauge,
+  GitBranch,
   History,
   ListChecks,
   PackageSearch,
   RadioTower,
   ShieldAlert,
+  TimerReset,
+  TrendingDown,
   Wrench,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -88,6 +91,39 @@ function dateTime(value: string | null | undefined) {
   if (!value) return "—";
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function minutesBetween(start: string | null | undefined, end: string | null | undefined): number | null {
+  if (!start || !end) return null;
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return null;
+  return Math.round((endMs - startMs) / 60_000);
+}
+
+function duration(value: number | null | undefined) {
+  if (typeof value !== "number") return "근거 없음";
+  if (value < 60) return `${value}분`;
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+  return minutes ? `${hours}시간 ${minutes}분` : `${hours}시간`;
+}
+
+function average(values: Array<number | null | undefined>): number | null {
+  const numeric = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (!numeric.length) return null;
+  return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
+}
+
+function maintenanceCompletedAt(detail: OperationsEventDetailModel | null): string | null {
+  const eventTimes = detail?.closedLoop?.maintenanceEvents
+    .map((item) => item.completedAt)
+    .filter((value): value is string => Boolean(value)) ?? [];
+  const actionTimes = detail?.closedLoop?.maintenanceActions
+    .filter((item) => item.status === "completed")
+    .map((item) => item.completedAt)
+    .filter((value): value is string => Boolean(value)) ?? [];
+  return [...eventTimes, ...actionTimes].sort().at(-1) ?? null;
 }
 
 function selectedAsset(model: OperationsBootstrapModel, selectedEvent: OperationsEvent | null): OperationsAsset | null {
@@ -187,6 +223,47 @@ function BusinessKpisBlock({ context }: { context: OperationsCompanyContext | nu
   </Block>;
 }
 
+function OperationalKpisBlock({
+  model,
+  detail,
+  companyContext,
+}: {
+  model: OperationsBootstrapModel;
+  detail: OperationsEventDetailModel | null;
+  companyContext: OperationsCompanyContext | null;
+}) {
+  const firstDecision = detail?.activity
+    .filter((item) => item.kind === "decision")
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))[0] ?? null;
+  const workOrder = detail?.closedLoop?.workOrders
+    .filter((item) => item.createdAt)
+    .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)))[0] ?? null;
+  const maintenanceAction = detail?.closedLoop?.maintenanceActions
+    .filter((item) => item.startedAt)
+    .sort((left, right) => String(left.startedAt).localeCompare(String(right.startedAt)))[0] ?? null;
+  const value = exposure({ detail, companyContext });
+  const decisionLeadTime = minutesBetween(detail?.event.observedAt, firstDecision?.createdAt);
+  const reportLeadTime = minutesBetween(detail?.event.observedAt, detail?.report.generatedAt);
+  const inspectionLeadTime = minutesBetween(workOrder?.createdAt, workOrder?.updatedAt);
+  const maintenanceLeadTime = minutesBetween(workOrder?.updatedAt, maintenanceAction?.startedAt);
+  const repeatedMaintenance = detail?.event.assetId
+    ? companyContext?.maintenance_records.filter((item) => item.asset_id === detail.event.assetId).length ?? 0
+    : 0;
+  const metrics = [
+    ["Decision Lead Time", duration(decisionLeadTime)],
+    ["Report Lead Time", duration(reportLeadTime)],
+    ["점검 처리 시간", duration(inspectionLeadTime)],
+    ["승인→정비 착수", duration(maintenanceLeadTime)],
+    ["판단 Backlog", `${model.metrics.pendingDecisions.toLocaleString("ko-KR")}건`],
+    ["생산 손실 노출", value.lostUnits !== null ? `${value.lostUnits.toLocaleString("ko-KR")}개` : "근거 없음"],
+    ["공헌이익 노출", compactMoney(value.contributionExposure)],
+    ["동일 설비 과거 정비", `${repeatedMaintenance.toLocaleString("ko-KR")}건`],
+  ];
+  return <Block title="운영 의사결정 KPI" eyebrow="CASE OPERATING KPI" icon={<TimerReset size={15} />} className="span-12">
+    <div className="rw-operational-kpis">{metrics.map(([label, valueLabel]) => <article key={label}><span>{label}</span><strong>{valueLabel}</strong></article>)}</div>
+  </Block>;
+}
+
 function RiskPortfolioBlock({ model, onSelectEvent }: { model: OperationsBootstrapModel; onSelectEvent: (event: OperationsEvent) => void }) {
   const ranked = [...model.events].sort((a, b) => (b.failureProbability ?? -1) - (a.failureProbability ?? -1)).slice(0, 6);
   return <Block title="운영 리스크 포트폴리오" eyebrow="RISK PORTFOLIO" icon={<ChartNoAxesCombined size={15} />} className="span-6">
@@ -235,6 +312,61 @@ function WorkflowLifecycleBlock({ detail }: { detail: OperationsEventDetailModel
   </Block>;
 }
 
+function CaseLineageBlock({ props }: { props: RoleComposedWorkspaceProps }) {
+  const event = props.selectedEvent;
+  const detail = props.detail;
+  const firstDecision = detail?.activity
+    .filter((item) => item.kind === "decision")
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))[0] ?? null;
+  const latestWork = detail?.closedLoop?.workOrders
+    .slice()
+    .sort((left, right) => String(right.updatedAt ?? right.createdAt ?? "").localeCompare(String(left.updatedAt ?? left.createdAt ?? "")))[0] ?? null;
+  const completedAt = maintenanceCompletedAt(detail);
+  const steps = [
+    {
+      id: "event",
+      label: "Event",
+      state: event ? "done" : "pending",
+      headline: event ? `${event.assetName} · ${probability(event.failureProbability)}` : "이벤트 선택 필요",
+      detail: event ? `${event.status} · ${dateTime(event.observedAt)}` : "공장 상태맵에서 설비를 선택하세요.",
+    },
+    {
+      id: "evidence",
+      label: "Evidence",
+      state: detail?.topFactors.length ? "done" : "pending",
+      headline: detail?.topFactors.length ? `${detail.topFactors.length}개 모델 근거` : "근거 조회 중",
+      detail: detail?.inspectionTargets[0]?.componentLabel
+        ? `점검 대상 ${detail.inspectionTargets[0].componentLabel}`
+        : "센서·모델·SOP 근거 연결",
+    },
+    {
+      id: "decision",
+      label: "Decision",
+      state: firstDecision ? "done" : event ? "active" : "pending",
+      headline: firstDecision?.title ?? event?.recommendedDecision.replaceAll("_", " ") ?? "판단 대기",
+      detail: firstDecision ? `${firstDecision.actor} · ${dateTime(firstDecision.createdAt)}` : "운영 판단과 Owner가 기록됩니다.",
+    },
+    {
+      id: "action",
+      label: "Action",
+      state: latestWork ? (latestWork.status === "completed" ? "done" : "active") : "pending",
+      headline: latestWork ? `${latestWork.workType} · ${latestWork.status}` : detail?.closedLoop?.primaryAction?.label ?? "작업 미생성",
+      detail: latestWork ? `${latestWork.workOrderId} · ${latestWork.actorDisplayName ?? latestWork.assignedTo ?? "담당 미정"}` : "승인된 점검·정비 작업이 연결됩니다.",
+    },
+    {
+      id: "outcome",
+      label: "Outcome",
+      state: completedAt || detail?.closedLoop?.runtimeStatus === "predicted" ? "done" : "pending",
+      headline: completedAt ? `정비 완료 · ${dateTime(completedAt)}` : detail?.closedLoop?.runtimeStatus?.replaceAll("_", " ") ?? "결과 대기",
+      detail: detail?.report.snapshotId ? `Report snapshot ${detail.report.snapshotId}` : "정비 후 관측과 보고 snapshot이 연결됩니다.",
+    },
+  ];
+  return <Block title="Event → Outcome lineage" eyebrow="CASE LINEAGE" icon={<GitBranch size={15} />} className="span-12">
+    <div className="rw-case-lineage">{steps.map((step) => <article key={step.id} className={`is-${step.state}`}><i>{step.label}</i><strong>{step.headline}</strong><small>{step.detail}</small></article>)}</div>
+    {event ? <div className="rw-case-lineage-actions"><button type="button" onClick={() => props.onOpenAsset(event.assetId, event.eventId)}>설비 근거 열기</button><button type="button" onClick={() => props.onOpenReport(event.eventId, event.assetId, "executive-brief")}>보고 산출물 보기</button></div> : null}
+  </Block>;
+}
+
 function WorkflowActionsBlock({ props }: { props: RoleComposedWorkspaceProps }) {
   const asset = selectedAsset(props.model, props.selectedEvent);
   if (!props.selectedEvent || !asset) return <Block title="업무 실행" eyebrow="ACTION" icon={<Wrench size={15} />} className="span-12"><Empty text="작업할 이벤트를 선택하세요." /></Block>;
@@ -278,6 +410,35 @@ function MaintenanceHistoryBlock({ detail, companyContext, assetId }: { detail: 
   const runtime = detail?.equipmentHistory ?? [];
   return <Block title="정비 · 설비 이력" eyebrow="MAINTENANCE HISTORY" icon={<History size={15} />} className="span-6">
     {records.length || runtime.length ? <div className="rw-composed-timeline">{records.slice(0, 4).map((item) => <article key={item.id}><time>{dateTime(item.occurred_at)}</time><strong>{item.component}</strong><p>{item.symptom}</p><small>{item.action} · 결과: {item.result}</small></article>)}{runtime.slice(0, 4).map((item, index) => <article key={`${item.occurredAt}-${index}`}><time>{dateTime(item.occurredAt)}</time><strong>{item.kind}</strong><p>{item.description}</p><small>{item.source}</small></article>)}</div> : <Empty text="연결된 과거 정비 기록이 없습니다." />}
+  </Block>;
+}
+
+function MaintenanceEffectBlock({ detail, companyContext, assetId }: { detail: OperationsEventDetailModel | null; companyContext: OperationsCompanyContext | null; assetId: string | null | undefined }) {
+  const completedAt = maintenanceCompletedAt(detail);
+  const boundary = completedAt ? new Date(completedAt).getTime() : null;
+  const riskPoints = [...(detail?.riskSeries ?? [])].sort((left, right) => left.observedAt.localeCompare(right.observedAt));
+  const beforeRisk = boundary === null ? [] : riskPoints.filter((item) => new Date(item.observedAt).getTime() <= boundary).slice(-6);
+  const afterRisk = boundary === null ? [] : riskPoints.filter((item) => new Date(item.observedAt).getTime() > boundary).slice(0, 6);
+  const beforeAverage = average(beforeRisk.map((item) => item.failureProbability));
+  const afterAverage = average(afterRisk.map((item) => item.failureProbability));
+  const riskDelta = beforeAverage !== null && afterAverage !== null ? afterAverage - beforeAverage : null;
+  const beforeAlerts = beforeRisk.filter((item) => item.status && item.status !== "normal").length;
+  const afterAlerts = afterRisk.filter((item) => item.status && item.status !== "normal").length;
+  const sensorEffects = (detail?.sensors ?? []).map((sensor) => {
+    const points = sensor.historyPoints ?? [];
+    if (boundary === null) return null;
+    const before = average(points.filter((item) => new Date(item.observedAt).getTime() <= boundary).slice(-6).map((item) => item.value));
+    const after = average(points.filter((item) => new Date(item.observedAt).getTime() > boundary).slice(0, 6).map((item) => item.value));
+    if (before === null || after === null) return null;
+    return { id: sensor.id, label: sensor.label, unit: sensor.unit, before, after, delta: after - before };
+  }).filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, 3);
+  const historical = assetId ? companyContext?.maintenance_records.filter((item) => item.asset_id === assetId).at(-1) ?? null : null;
+  return <Block title="정비 효과 Before / After" eyebrow="MAINTENANCE OUTCOME" icon={<TrendingDown size={15} />} className="span-12">
+    {completedAt ? <div className="rw-maintenance-effect">
+      <header><div><span>정비 완료 기준</span><strong>{dateTime(completedAt)}</strong></div><b className={riskDelta !== null && riskDelta < 0 ? "is-improved" : ""}>{riskDelta === null ? "후속 관측 수집 중" : `위험도 ${riskDelta > 0 ? "+" : ""}${Math.round(riskDelta * 100)}%p`}</b></header>
+      <div className="rw-maintenance-effect-grid"><article><span>정비 전 위험</span><strong>{probability(beforeAverage)}</strong><small>{beforeRisk.length} observations</small></article><article><span>정비 후 위험</span><strong>{probability(afterAverage)}</strong><small>{afterRisk.length} observations</small></article><article><span>알림 빈도</span><strong>{beforeRisk.length && afterRisk.length ? `${beforeAlerts} → ${afterAlerts}` : "관측 대기"}</strong><small>비정상 risk points</small></article></div>
+      {sensorEffects.length ? <div className="rw-maintenance-sensor-effect">{sensorEffects.map((item) => <article key={item.id}><span>{item.label}</span><strong>{item.before.toLocaleString("ko-KR", { maximumFractionDigits: 1 })} → {item.after.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}{item.unit ? ` ${item.unit}` : ""}</strong><small>{item.delta > 0 ? "+" : ""}{item.delta.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}</small></article>)}</div> : <p>센서 before/after window가 충분해지면 핵심 feature의 정규화 여부를 함께 표시합니다.</p>}
+    </div> : historical ? <div className="rw-maintenance-history-fallback"><strong>최근 기록된 정비 결과</strong><p>{historical.action}</p><span>{historical.result}</span><small>{dateTime(historical.occurred_at)} · runtime 정비 후 관측이 생기면 before/after로 전환됩니다.</small></div> : <Empty text="정비 완료 및 정비 후 관측 데이터가 연결되면 before/after 효과를 표시합니다." />}
   </Block>;
 }
 
@@ -342,6 +503,7 @@ function ReportSummaryBlock({
   return <Block title="역할별 보고 요약" eyebrow="GROUNDED REPORT" icon={<FileText size={15} />} className="span-12">
     {roleSummary && headline ? <div className="rw-composed-report">
       <div className="rw-report-controls"><label><span>보고 유형</span><select value={reportType} onChange={(event) => setReportType(event.target.value)}><option value="inspection-summary">현장 점검 요약</option><option value="operations-decision">운영 판단 보고</option><option value="executive-brief">경영진 Executive Brief</option><option value="maintenance-effect">정비 효과 before-after</option><option value="weekly-risk">주간 리스크 요약</option></select></label><span>{brief?.summary?.mode === "llm" || detail?.report.mode === "llm" ? "LLM grounded" : "grounded fallback"}</span></div>
+      {detail?.report ? <div className="rw-report-artifact-meta"><span>CASE ARTIFACT</span><strong>rev {detail.report.revision}</strong><small>snapshot {detail.report.snapshotId ?? "pending"}</small><small>as-of {dateTime(detail.report.asOf)}</small><small>generated {dateTime(detail.report.generatedAt)}</small></div> : null}
       <div><strong>{headline}</strong><p>{roleSummary}</p></div>
       {detail?.report ? <div className="rw-composed-report-sections">{detail.report.sections.slice(0, 4).map((section) => <article key={section.id}><span>{section.title}</span><p>{section.body}</p></article>)}</div> : null}
       <details className="rw-report-evidence"><summary>근거 데이터 확인 · {new Set(evidenceRefs).size} refs</summary><ul>{[...new Set(evidenceRefs)].slice(0, 12).map((ref) => <li key={ref}><code>{ref}</code></li>)}</ul></details>
@@ -353,7 +515,7 @@ function ReportSummaryBlock({
 function ContextEvidenceBlock({ context, assetId }: { context: OperationsCompanyContext | null; assetId: string | null | undefined }) {
   const decisions = context?.decisions.filter((item) => !item.related_asset_ids.length || (assetId ? item.related_asset_ids.includes(assetId) : false)).slice(0, 3) ?? [];
   return <Block title="조직 · 회의 · 의사결정 문맥" eyebrow="ONTOLOGY CONTEXT" icon={<Building2 size={15} />} className="span-12">
-    {context ? <div className="rw-composed-context"><div><strong>{context.company.name}</strong><p>{context.company.operating_principle}</p><small>{context.company.industry} · {context.company.headquarters}</small></div><div className="rw-composed-context-grid">{context.organization_units.slice(0, 5).map((unit) => <article key={unit.id}><span>{unit.name}</span><strong>{unit.leader}</strong><small>{unit.responsibilities.slice(0, 2).join(" · ")}</small></article>)}</div>{context.meeting_minutes.slice(0, 2).map((meeting) => <article className="rw-composed-meeting" key={meeting.id}><span>{dateTime(meeting.occurred_at)}</span><strong>{meeting.title}</strong><p>{meeting.summary}</p></article>)}{decisions.map((decision) => <article className="rw-composed-decision" key={decision.id}><strong>{decision.title}</strong><p>{decision.decision}</p><small>{decision.source_ref}</small></article>)}</div> : <Empty text="회사 및 조직 문맥을 불러오는 중입니다." />}
+    {context ? <div className="rw-composed-context"><div><div className="rw-context-source-row"><strong>{context.company.name}</strong><span className={context.context_storage?.mode === "team_db_overlay" ? "is-db" : ""}>{context.context_storage?.mode === "team_db_overlay" ? `Team DB · ${context.context_storage.persisted_record_count} records` : "Reference bootstrap"}</span></div><p>{context.company.operating_principle}</p><small>{context.company.industry} · {context.company.headquarters}</small></div><div className="rw-composed-context-grid">{context.organization_units.slice(0, 5).map((unit) => <article key={unit.id}><span>{unit.name}</span><strong>{unit.leader}</strong><small>{unit.responsibilities.slice(0, 2).join(" · ")}</small></article>)}</div>{context.meeting_minutes.slice(0, 2).map((meeting) => <article className="rw-composed-meeting" key={meeting.id}><span>{dateTime(meeting.occurred_at)}</span><strong>{meeting.title}</strong><p>{meeting.summary}</p></article>)}{decisions.map((decision) => <article className="rw-composed-decision" key={decision.id}><strong>{decision.title}</strong><p>{decision.decision}</p><small>{decision.source_ref}</small></article>)}</div> : <Empty text="회사 및 조직 문맥을 불러오는 중입니다." />}
   </Block>;
 }
 
@@ -375,6 +537,7 @@ function renderBlock(id: ReliabilityBlockId, props: RoleComposedWorkspaceProps) 
     case "risk-metrics": return <RiskMetricsBlock key={id} model={props.model} detail={props.detail} />;
     case "factory-map": return <FactoryMapBlock key={id} model={props.model} selectedEvent={props.selectedEvent} onSelectEvent={props.onSelectEvent} />;
     case "business-kpis": return <BusinessKpisBlock key={id} context={props.companyContext} />;
+    case "operational-kpis": return <OperationalKpisBlock key={id} model={props.model} detail={props.detail} companyContext={props.companyContext} />;
     case "risk-portfolio": return <RiskPortfolioBlock key={id} model={props.model} onSelectEvent={props.onSelectEvent} />;
     case "line-risk": return <LineRiskBlock key={id} model={props.model} />;
     case "risk-queue": return <RiskQueueBlock key={id} model={props.model} onSelectEvent={props.onSelectEvent} />;
@@ -382,12 +545,14 @@ function renderBlock(id: ReliabilityBlockId, props: RoleComposedWorkspaceProps) 
     case "production-exposure": return <ProductionExposureBlock key={id} detail={props.detail} companyContext={props.companyContext} />;
     case "decision-queue": return <DecisionQueueBlock key={id} model={props.model} selectedEvent={props.selectedEvent} onSelectEvent={props.onSelectEvent} />;
     case "workflow-lifecycle": return <WorkflowLifecycleBlock key={id} detail={props.detail} />;
+    case "case-lineage": return <CaseLineageBlock key={id} props={props} />;
     case "workflow-actions": return <WorkflowActionsBlock key={id} props={props} />;
     case "sensor-signals": return <SensorSignalsBlock key={id} detail={props.detail} />;
     case "feature-trend": return <FeatureTrendBlock key={id} detail={props.detail} />;
     case "evidence-factors": return <EvidenceFactorsBlock key={id} detail={props.detail} />;
     case "inspection-targets": return <InspectionTargetsBlock key={id} detail={props.detail} />;
     case "maintenance-history": return <MaintenanceHistoryBlock key={id} detail={props.detail} companyContext={props.companyContext} assetId={assetId} />;
+    case "maintenance-effect": return <MaintenanceEffectBlock key={id} detail={props.detail} companyContext={props.companyContext} assetId={assetId} />;
     case "material-context": return <MaterialContextBlock key={id} companyContext={props.companyContext} assetId={assetId} />;
     case "decision-history": return <DecisionHistoryBlock key={id} detail={props.detail} context={props.companyContext} assetId={assetId} />;
     case "report-summary": return <ReportSummaryBlock key={id} detail={props.detail} event={props.selectedEvent} model={props.model} experienceKind={props.experienceKind} canMaterializeAgentSummary={props.canMaterializeAgentSummary} onOpenReport={props.onOpenReport} />;
@@ -398,11 +563,19 @@ function renderBlock(id: ReliabilityBlockId, props: RoleComposedWorkspaceProps) 
 
 export function RoleComposedWorkspace(props: RoleComposedWorkspaceProps) {
   const materials = relevantMaterials(props.companyContext, props.selectedEvent?.assetId);
+  const exposureValue = exposure({ detail: props.detail, companyContext: props.companyContext });
+  const hasMaintenanceOutcome = Boolean(
+    props.detail?.closedLoop?.maintenanceEvents.length
+    || props.detail?.closedLoop?.maintenanceActions.some((item) => item.status === "completed"),
+  );
   const blocks = resolveReliabilityComposition(props.experienceKind, props.view, {
     hasCriticalRisk: props.model.metrics.critical > 0,
     hasDataQualityHold: props.model.metrics.dataQualityHold > 0 || Boolean(props.detail?.dataQualityWarnings.length),
     hasOpenWorkflow: Boolean(props.detail?.closedLoop?.workOrders.length || props.detail?.closedLoop?.maintenanceActions.length),
     hasMaterialConstraint: materials.some((item) => item.on_hand_quantity <= item.reorder_point),
+    hasDecisionBacklog: props.model.metrics.pendingDecisions >= 3,
+    hasHighProductionExposure: typeof exposureValue.revenueExposure === "number" && exposureValue.revenueExposure >= 10_000_000,
+    hasMaintenanceOutcome,
   }, props.surfaceId);
 
   return <div

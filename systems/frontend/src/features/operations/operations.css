@@ -2023,6 +2023,7 @@
   .operations-overview-hero .operations-button { width: 100%; }
   .operations-overview-topline,
   .operations-overview-series-grid { grid-template-columns: 1fr; }
+  .operations-factory-cell-grid { grid-template-columns: repeat(2,minmax(118px,1fr)); }
   .operations-detail-drawer { width: calc(100vw - 18px); padding: 12px; }
   .operations-detail-drawer .operations-assignment-popover { width: calc(100vw - 18px); padding: 12px; }
   .operations-work-queue-board { overflow: hidden; }
@@ -2099,6 +2100,9 @@
   .operations-refresh-cadence { white-space: normal; }
   .operations-kpi-grid { grid-template-columns: 1fr 1fr; gap: 7px; }
   .operations-kpi-grid.operations-overview-kpis { grid-template-columns: 1fr 1fr; }
+  .operations-factory-cell-grid { grid-template-columns: 1fr; }
+  .operations-factory-line-row { padding: 8px; }
+  .operations-factory-cell-slots .operations-factory-asset-node { min-height: 42px; aspect-ratio: auto; }
   .operations-kpi { min-height: 88px; padding: 10px; }
   .operations-kpi strong { font-size: 25px; }
   .operations-work-card dl,

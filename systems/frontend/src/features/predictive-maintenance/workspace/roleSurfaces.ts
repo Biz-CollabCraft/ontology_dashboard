@@ -117,12 +117,41 @@ const FACTORY_STATUS_SURFACE: Record<Exclude<ReliabilityExperienceKind, "mainten
   },
 };
 
+const ROLE_DETAIL_SURFACES: Partial<Record<ReliabilityExperienceKind, ReliabilitySurface[]>> = {
+  executive: [
+    { id: "executive-kpi", view: "reports", label: copy("운영 KPI", "Operating KPI"), detail: copy("Lead time · 노출액 · Backlog", "Lead time · exposure · backlog"), page: page("운영 KPI", "판단 속도와 운영 노출을 함께 확인", "Decision Lead Time, Report Lead Time, backlog와 생산·재무 노출을 같은 Case 기준으로 봅니다.", "OPERATING KPI", "Decision speed and operating exposure", "Review decision lead time, reporting lead time, backlog, and production exposure from the same cases.") },
+    { id: "executive-reports", view: "reports", label: copy("보고 산출물", "Report artifacts"), detail: copy("Snapshot · revision · 근거", "Snapshot · revision · evidence"), page: page("보고 산출물", "Case에서 생성된 경영 보고", "별도 문서가 아니라 Event와 Decision lineage에서 생성된 snapshot 보고 산출물을 확인합니다.", "REPORT ARTIFACTS", "Executive reports produced from cases", "Review snapshot reports produced from Event and Decision lineage rather than detached documents.") },
+    { id: "roadmap", view: "objects", label: copy("개선 과제", "Improvement roadmap"), detail: copy("재발 · 병목 · 자재", "Recurrence · bottleneck · material"), page: page("개선 과제", "반복되는 운영 병목과 개선 후보", "재발 설비, 긴 조달 리드타임, 반복 의사결정 지연을 연결해 개선 과제를 찾습니다.", "IMPROVEMENT ROADMAP", "Recurring operational constraints", "Connect recurrent asset risk, long material lead times, and decision delays into improvement candidates.") },
+  ],
+  operations: [
+    { id: "decision-case", view: "operations", label: copy("Decision Case", "Decision Case"), detail: copy("근거 · 판단 · Action · Outcome", "Evidence · decision · action · outcome"), page: page("Decision Case", "하나의 사건을 끝까지 추적", "Event에서 Evidence, 운영 판단, 작업, 정비 결과와 보고 산출물까지 하나의 lineage로 확인합니다.", "DECISION CASE", "Trace one event through outcome", "Trace Event, Evidence, decision, work, maintenance outcome, and report artifacts in one lineage.") },
+    { id: "maintenance-approval", view: "operations", label: copy("정비 승인", "Maintenance approval"), detail: copy("점검 결과 · 자재 · 승인", "Inspection · material · approval"), page: page("정비 승인", "정비 실행 전 운영 조건 확인", "점검 결과와 자재 제약, 생산 영향을 함께 확인한 뒤 권한이 있는 사용자가 정비 단계를 진행합니다.", "MAINTENANCE APPROVAL", "Validate conditions before maintenance", "Review inspection results, material constraints, and production impact before authorized maintenance actions.") },
+    { id: "backlog", view: "operations", label: copy("Backlog", "Backlog"), detail: copy("대기 · SLA · Owner", "Queue · SLA · owner"), page: page("운영 Backlog", "지연 중인 판단과 작업", "판단과 작업이 어느 단계에서 오래 머무는지 Owner와 함께 확인합니다.", "OPERATIONS BACKLOG", "Delayed decisions and work", "See where decisions and work remain delayed and who currently owns the next step.") },
+  ],
+  engineering: [
+    { id: "sensor-features", view: "objects", label: copy("센서 피쳐", "Sensor features"), detail: copy("추세 · 기여도 · 이상 구간", "Trend · contribution · anomaly"), page: page("센서 피쳐", "이상 신호를 시계열로 분석", "선택 설비의 실제 관측 추세와 모델 기여 근거를 함께 비교합니다.", "SENSOR FEATURES", "Analyze abnormal signals over time", "Compare live observation trends and model contribution evidence for the selected asset.") },
+    { id: "maintenance-history", view: "objects", label: copy("정비 이력", "Maintenance history"), detail: copy("과거 조치 · Before/After", "Past work · before/after"), page: page("정비 이력", "과거 조치와 현재 이상을 연결", "같은 설비의 과거 정비와 현재 위험, 정비 전후 관측을 연결해 재발 여부를 확인합니다.", "MAINTENANCE HISTORY", "Connect past work to current risk", "Connect maintenance records, current risk, and before/after observations to review recurrence.") },
+  ],
+};
+
 export function reliabilitySurfaces(kind: ReliabilityExperienceKind, backupMode = false): ReliabilitySurface[] {
   const baseline = RELIABILITY_SURFACES[kind];
   if (backupMode || kind === "maintenance") return baseline;
   const factoryStatus = FACTORY_STATUS_SURFACE[kind];
-  if (kind === "executive") return [...baseline, factoryStatus];
-  return [factoryStatus, ...baseline];
+  const extras = ROLE_DETAIL_SURFACES[kind] ?? [];
+  if (kind === "executive") {
+    const [brief, bottleneck, operationalRisk, maintenanceEffect] = baseline;
+    const [kpi, reports, roadmap] = extras;
+    return [brief, bottleneck, operationalRisk, kpi, reports, maintenanceEffect, roadmap, factoryStatus].filter(Boolean);
+  }
+  if (kind === "operations") {
+    const [pending, status, production, report] = baseline;
+    const [decisionCase, maintenanceApproval, backlog] = extras;
+    return [factoryStatus, status, pending, decisionCase, production, maintenanceApproval, backlog, report].filter(Boolean);
+  }
+  const [monitoring, assets, inspection, fieldNotes] = baseline;
+  const [sensorFeatures, maintenanceHistory] = extras;
+  return [factoryStatus, monitoring, assets, sensorFeatures, inspection, maintenanceHistory, fieldNotes].filter(Boolean);
 }
 
 export function defaultReliabilitySurface(kind: ReliabilityExperienceKind, backupMode = false): ReliabilitySurface {

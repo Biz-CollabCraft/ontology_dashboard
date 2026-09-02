@@ -70,6 +70,7 @@ export function OperationsApplication({ projectId, backupMode = false }: { proje
       defaultSurface={defaultSurface?.id ?? null}
       defaultReportTab={defaultReportTab}
       storageScope={`${user?.user_id ?? "anonymous"}${backupMode ? ":backup-v1" : ""}`}
+      navigationBasePath={backupMode ? "/backup" : null}
     >
       <OperationsApplicationController projectId={projectId} backupMode={backupMode} />
     </OperationsSelectionProvider>
@@ -117,7 +118,6 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
 
   useEffect(() => {
     document.documentElement.lang = "ko-KR";
-    document.documentElement.dataset.theme = "light";
   }, []);
 
   useEffect(() => {

@@ -231,6 +231,7 @@ export interface ServerDisplayPreferences {
   version: 3;
   textSize: "small" | "default" | "large" | "extra-large";
   density: "compact" | "standard" | "comfortable";
+  theme: "light" | "dark" | "system";
   showTechnicalMetadata: boolean;
   updated_at?: string;
 }

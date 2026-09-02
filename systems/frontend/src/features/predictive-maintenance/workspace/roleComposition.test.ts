@@ -4,16 +4,16 @@ import { baseReliabilityComposition, resolveReliabilityComposition } from "./rol
 describe("role composed reliability workspace", () => {
   it("uses materially different first-screen blocks by role", () => {
     expect(baseReliabilityComposition("executive", "reports")).toEqual([
-      "risk-metrics", "factory-map", "report-summary", "business-kpis", "production-exposure", "decision-queue", "risk-portfolio", "context-evidence",
+      "risk-metrics", "operational-kpis", "report-summary", "production-exposure", "decision-queue", "case-lineage", "business-kpis", "risk-portfolio", "context-evidence",
     ]);
     expect(baseReliabilityComposition("operations", "operations").slice(0, 4)).toEqual([
-      "risk-metrics", "factory-map", "decision-queue", "production-exposure",
+      "risk-metrics", "operational-kpis", "decision-queue", "production-exposure",
     ]);
     expect(baseReliabilityComposition("engineering", "overview").slice(0, 4)).toEqual([
       "risk-metrics", "factory-map", "risk-queue", "feature-trend",
     ]);
     expect(baseReliabilityComposition("maintenance", "operations").slice(0, 3)).toEqual([
-      "risk-metrics", "factory-map", "workflow-lifecycle",
+      "risk-metrics", "case-lineage", "workflow-lifecycle",
     ]);
   });
 
@@ -23,10 +23,37 @@ describe("role composed reliability workspace", () => {
       hasDataQualityHold: true,
       hasOpenWorkflow: false,
       hasMaterialConstraint: true,
+      hasDecisionBacklog: false,
+      hasHighProductionExposure: true,
+      hasMaintenanceOutcome: false,
     });
     expect(result[0]).toBe("data-quality");
     expect(result[1]).toBe("production-exposure");
     expect(result).toContain("material-context");
     expect(new Set(result).size).toBe(result.length);
+  });
+
+  it("promotes role-specific runtime signals without allowing arbitrary UI mutation", () => {
+    const engineering = resolveReliabilityComposition("engineering", "overview", {
+      hasCriticalRisk: true,
+      hasDataQualityHold: false,
+      hasOpenWorkflow: false,
+      hasMaterialConstraint: false,
+      hasDecisionBacklog: false,
+      hasHighProductionExposure: false,
+      hasMaintenanceOutcome: false,
+    });
+    expect(engineering.slice(0, 2)).toEqual(["feature-trend", "evidence-factors"]);
+
+    const operations = resolveReliabilityComposition("operations", "operations", {
+      hasCriticalRisk: false,
+      hasDataQualityHold: false,
+      hasOpenWorkflow: false,
+      hasMaterialConstraint: false,
+      hasDecisionBacklog: true,
+      hasHighProductionExposure: false,
+      hasMaintenanceOutcome: false,
+    });
+    expect(operations[0]).toBe("decision-queue");
   });
 });

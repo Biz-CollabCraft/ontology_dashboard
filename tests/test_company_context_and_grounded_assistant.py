@@ -9,6 +9,8 @@ from app.common.company_context import (
 )
 from app.ontology.projection import ManufacturingOntologyAdapter
 from app.operations.agent_answer_provider import GroundedAgentAnswerProvider
+from app.infra.db.company_context_repository import CompanyContextRepository
+from app.infra.db.migrations import migrate
 
 
 class _EmptyActivityRepository:
@@ -52,6 +54,33 @@ def test_company_context_has_operational_business_and_history_records():
     assert context["meeting_minutes"]
     assert context["decisions"]
     assert "disclaimer" not in public_company_context()
+
+
+def test_company_context_can_be_promoted_to_project_scoped_db_records(tmp_path):
+    database_path = tmp_path / "company-context.db"
+    migrate(str(database_path))
+    repository = CompanyContextRepository(database_path)
+    inserted = repository.seed_records(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        context=load_company_context(),
+    )
+
+    records = repository.list_records(
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+    )
+    assert inserted > 0
+    assert records
+    assert {record["record_type"] for record in records} >= {
+        "materials",
+        "maintenance_records",
+        "business_metrics",
+        "meeting_minutes",
+        "decisions",
+    }
+    assert any(record["payload"].get("name") == "한빛테크" for record in records) is False
 
 
 def test_company_rag_prefers_asset_history_and_material_context():

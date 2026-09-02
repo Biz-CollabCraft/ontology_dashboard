@@ -23,8 +23,8 @@ def load_company_context() -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def public_company_context() -> dict[str, Any]:
-    payload = load_company_context()
+def public_company_context(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = payload or load_company_context()
     return {
         key: payload[key]
         for key in (
@@ -72,8 +72,8 @@ def _record_document(record: dict[str, Any], *, kind: str, title: str) -> dict[s
     }
 
 
-def company_documents() -> list[dict[str, Any]]:
-    context = load_company_context()
+def company_documents(context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    context = context or load_company_context()
     documents = [dict(item) for item in context.get("documents") or []]
     documents.extend(
         _record_document(item, kind="maintenance_history", title=f"과거 정비 {item.get('asset_id', '')} {item.get('component', '')}")
@@ -111,6 +111,7 @@ def retrieve_company_documents(
     *,
     asset_id: str | None = None,
     top_k: int = 4,
+    context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Small deterministic RAG retriever for company and operational records.
 
@@ -120,7 +121,7 @@ def retrieve_company_documents(
 
     query_tokens = _tokens(query)
     ranked: list[tuple[int, str, dict[str, Any]]] = []
-    for document in company_documents():
+    for document in company_documents(context):
         related_assets = {str(item) for item in document.get("related_asset_ids") or []}
         text = " ".join(
             [

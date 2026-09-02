@@ -10,7 +10,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from app.common.company_context import retrieve_company_documents
+from app.common.company_context import load_company_context, public_company_context, retrieve_company_documents
 from app.diagnosis.contracts import derive_features, load_fixture
 from app.diagnosis.domain import (
     build_evidence_package,
@@ -48,6 +48,7 @@ from .contracts import (
 from app.planner.contracts import IntentRouter, deterministic_answer
 from .ports import (
     AuditRepositoryPort,
+    CompanyContextQueryPort,
     LayoutPlannerPort,
     MaintenanceLineageQueryPort,
     ReportAgentPort,
@@ -78,6 +79,7 @@ class ManufacturingPredictiveMaintenanceService:
         agent_review_context_registry: AgentReviewContextRegistry | None = None,
         domain_review_context_adapter: DomainReviewContextAdapter | None = None,
         maintenance_lineage_query: MaintenanceLineageQueryPort | None = None,
+        company_context_query: CompanyContextQueryPort | None = None,
         workspace_id: str = "manufacturing-demo",
     ) -> None:
         self.root = Path(root)
@@ -108,12 +110,74 @@ class ManufacturingPredictiveMaintenanceService:
         self.agent_answer_provider = agent_answer_provider
         self.agent_review_context_registry = agent_review_context_registry
         self.maintenance_lineage_query = maintenance_lineage_query
+        self.company_context_query = company_context_query
         self.workspace_id = workspace_id
         self.domain_review_context_adapter = (
             domain_review_context_adapter
             or ManufacturingFixtureReviewContextAdapter(self.root)
         )
         self.intent_router = IntentRouter()
+
+    def company_context(self, *, project_id: str, workspace_id: str) -> dict[str, Any]:
+        """Return stable company masters with DB-backed operational records overlaid by id.
+
+        Static reference data remains the bootstrap for stable masters. Once a record
+        exists in persistence, the DB copy is authoritative for that project/workspace.
+        """
+        base = public_company_context(load_company_context())
+        if self.company_context_query is None:
+            return base
+        try:
+            records = self.company_context_query.list_records(project_id=project_id, workspace_id=workspace_id)
+        except Exception:
+            return base
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for record in records:
+            record_type = str(record.get("record_type") or "")
+            payload = record.get("payload")
+            if not record_type or not isinstance(payload, dict):
+                continue
+            payload = {
+                **payload,
+                "context_source": "team_db",
+                "source_updated_at": record.get("source_updated_at"),
+            }
+            grouped.setdefault(record_type, []).append(payload)
+        for record_type, persisted in grouped.items():
+            existing = [dict(item) for item in base.get(record_type) or [] if isinstance(item, dict)]
+            persisted_by_id = {
+                str(item.get("id") or item.get("variant") or item.get("name")): item
+                for item in persisted
+            }
+            merged = []
+            seen: set[str] = set()
+            for item in existing:
+                key = str(item.get("id") or item.get("variant") or item.get("name"))
+                merged.append(persisted_by_id.get(key, item))
+                seen.add(key)
+            merged.extend(item for key, item in persisted_by_id.items() if key not in seen)
+            base[record_type] = merged
+        base["context_storage"] = {
+            "mode": "team_db_overlay" if records else "reference_bootstrap",
+            "persisted_record_count": len(records),
+        }
+        return base
+
+    def company_context_documents(
+        self,
+        query: str,
+        *,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str | None = None,
+        top_k: int = 4,
+    ) -> list[dict[str, Any]]:
+        return retrieve_company_documents(
+            query,
+            asset_id=asset_id,
+            top_k=top_k,
+            context=self.company_context(project_id=project_id, workspace_id=workspace_id),
+        )
 
     def _closed_loop_context_for_fixture(
         self,
@@ -735,15 +799,22 @@ class ManufacturingPredictiveMaintenanceService:
         )
         return report, trace
 
-    @staticmethod
-    def _attach_report_context(evidence: dict[str, Any], fixture: dict[str, Any], role: str) -> None:
+    def _attach_report_context(self, evidence: dict[str, Any], fixture: dict[str, Any], role: str) -> None:
         equipment_id = str((fixture.get("equipment") or {}).get("equipment_id") or "")
+        project_id = self._fixture_project_id(fixture)
+        workspace_id = str(fixture.get("workspace_id") or self.workspace_id)
         goal = (
             "생산 영향 매출 공헌이익 자재 재고 운영 의사결정 회의 정비 이력"
             if role == "manager"
             else "설비 센서 점검 정비 이력 원인 근거 자재 작업 기록"
         )
-        documents = retrieve_company_documents(goal, asset_id=equipment_id or None, top_k=8)
+        documents = self.company_context_documents(
+            goal,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=equipment_id or None,
+            top_k=8,
+        )
         evidence["company_context_documents"] = [
             {
                 "evidence_field_id": f"company_context.{item['id']}",

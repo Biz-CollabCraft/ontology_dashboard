@@ -1,4 +1,4 @@
-import { RotateCcw, SlidersHorizontal } from "lucide-react";
+import { Laptop, Moon, RotateCcw, SlidersHorizontal, Sun } from "lucide-react";
 import {
   DISPLAY_DENSITY_OPTIONS,
   DISPLAY_PRESET_OPTIONS,
@@ -9,7 +9,7 @@ import {
 import { useI18n } from "../i18n/I18nProvider";
 
 export function DisplayMenu({ className = "" }: { className?: string }) {
-  const { preferences, setDensity, setPreset, setShowTechnicalMetadata, setTextSize, reset } = useDisplayPreferences();
+  const { preferences, setDensity, setPreset, setShowTechnicalMetadata, setTextSize, setTheme, reset } = useDisplayPreferences();
   const { locale, setLocale, t } = useI18n();
   const preset = displayPreset(preferences);
   const presetLabel = (value: (typeof DISPLAY_PRESET_OPTIONS)[number]["value"]) => value === "compact"
@@ -40,6 +40,14 @@ export function DisplayMenu({ className = "" }: { className?: string }) {
           <div><span className="section-label">DISPLAY</span><strong>{t("display.subtitle")}</strong></div>
           <button type="button" className="od-display-reset" onClick={reset}><RotateCcw size={12} /> {t("display.reset")}</button>
         </header>
+        <fieldset>
+          <legend>{t("display.theme")}</legend>
+          <div className="od-display-options three-up od-display-theme-options">
+            <button type="button" aria-pressed={preferences.theme === "light"} className={preferences.theme === "light" ? "active" : ""} onClick={() => setTheme("light")}><Sun size={12} />{t("display.theme.light")}</button>
+            <button type="button" aria-pressed={preferences.theme === "dark"} className={preferences.theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}><Moon size={12} />{t("display.theme.dark")}</button>
+            <button type="button" aria-pressed={preferences.theme === "system"} className={preferences.theme === "system" ? "active" : ""} onClick={() => setTheme("system")}><Laptop size={12} />{t("display.theme.system")}</button>
+          </div>
+        </fieldset>
         <fieldset>
           <legend>{t("display.preset")}</legend>
           <div className="od-display-presets">
