@@ -30,6 +30,7 @@ from app.dependencies import (
     get_pipeline_job_service,
     get_impact_analysis_service,
     get_managed_asset_service,
+    get_model_operation_service,
     rate_limit_subject,
     require_csrf,
     require_permission,
@@ -54,7 +55,7 @@ from app.diagnosis.runtime_router import (
     router as predictive_maintenance_runtime_router,
 )
 from app.mvp.service import EventNotFound
-from app.system_operations import build_impact_analysis_router, build_managed_asset_router, build_mapping_draft_router, build_pipeline_job_router, build_system_operation_internal_router, build_system_operation_router
+from app.system_operations import build_impact_analysis_router, build_managed_asset_router, build_mapping_draft_router, build_model_operation_router, build_pipeline_job_router, build_system_operation_internal_router, build_system_operation_router
 from app.system_operations.system_operation_exception import SystemOperationError
 
 
@@ -229,6 +230,11 @@ managed_asset_router = build_managed_asset_router(
     require_permission=require_permission,
     require_csrf=require_csrf,
 )
+model_operation_router = build_model_operation_router(
+    get_service=get_model_operation_service,
+    require_permission=require_permission,
+    require_csrf=require_csrf,
+)
 
 for router in (
     health_router,
@@ -251,6 +257,7 @@ for router in (
     pipeline_job_router,
     impact_analysis_router,
     managed_asset_router,
+    model_operation_router,
 ):
     app.include_router(router)
 

@@ -488,6 +488,7 @@ PR #9의 대규모 실행 코드는 이 PR에서 이동하지 않는다. 이후 
 
 - 시스템 운영 Control Plane은 Generator 운영 자산, Pipeline Job, Generator·Backend 로그 및 시스템 상태를 감독한다.
 - Static Mapping 신규 버전은 Backend가 Draft와 revision을 관리하고 Generator가 공식 계약 검증과 불변 파일 발행을 소유한다. Mapping 발행은 활성화 및 Extraction rebuild와 분리한다.
+- Model Training은 자동 최신 발행 포인터 `latest.json`을 소유한다. 시스템 운영 선택은 별도 `selected.json`으로 기록하며, Runtime Prediction의 실행 정본은 Generator가 검증하고 원자적으로 갱신하는 `active-model-set.json`이다. Backend Control Plane은 해당 파일을 직접 쓰거나 모델을 로드하지 않는다.
 - 일반 사용자·조직·역할 관리 기능은 책임 범위에 포함하지 않는다.
 - 운영 자산 Lifecycle, 시스템 관리자 화면, 단계별 구현 계획의 상세 기준은 [`docs/system-operations-control-plane.md`](./system-operations-control-plane.md)를 따른다.
 - 본 기능은 목표 아키텍처(Target Architecture)이며, 아직 구현되지 않은 기능은 `Current`로 표현하지 않는다.

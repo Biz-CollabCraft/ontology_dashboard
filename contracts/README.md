@@ -37,6 +37,7 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 - `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`), `scripts/`, `tests/` 참조 전환 완료
 - Schema 내용 및 `$id` 식별자 무변경 보존
 - System Operations 관리 계약 Draft·검증·Diff·발행 경계는 `system-managed-asset-*.schema.json`, `examples/system-managed-assets/`, `test-vectors/system-managed-asset-v1/`에서 관리
+- System Operations 모델 선택·Active Model Set 활성화·Rollback 경계는 `system-model-*.schema.json`, `system-active-model-set-*.schema.json`, `examples/system-model-operations/`, `test-vectors/system-model-operations-v1/`에서 관리
 
 ## Generator 파이프라인 계약 현황 및 후속 Target 계약 후보
 

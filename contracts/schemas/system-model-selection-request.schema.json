@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-model-selection-request.schema.json",
+  "title": "System Model Selection Request",
+  "type": "object",
+  "required": ["model_version", "model_artifact_manifest_sha256", "reason"],
+  "properties": {
+    "model_version": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9._-]+$"},
+    "model_artifact_manifest_sha256": {"type": "string", "pattern": "^(?!0{64}$)[a-f0-9]{64}$"},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 1000}
+  },
+  "additionalProperties": false
+}

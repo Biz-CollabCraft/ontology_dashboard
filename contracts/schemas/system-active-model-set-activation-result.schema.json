@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-active-model-set-activation-result.schema.json",
+  "title": "System Active Model Set Activation Result",
+  "type": "object",
+  "required": ["revision_id", "status", "payload_sha256", "payload", "created_at"],
+  "properties": {
+    "revision_id": {"type": "string", "format": "uuid"},
+    "status": {"enum": ["active", "failed"]},
+    "payload_sha256": {"type": "string", "pattern": "^(?!0{64}$)[a-f0-9]{64}$"},
+    "payload": {"$ref": "generator-active-model-set.schema.json"},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

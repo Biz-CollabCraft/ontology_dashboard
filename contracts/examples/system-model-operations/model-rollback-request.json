@@ -1,0 +1,1 @@
+{"model_set_id":"pdm-production","model_set_version":"2026.09.01-rollback","models":[{"model_id":"pdm-lightgbm","model_version":"1.1.0","required":true}],"reason":"이전 검증 구성으로 복구"}

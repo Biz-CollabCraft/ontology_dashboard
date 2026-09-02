@@ -1,0 +1,1 @@
+{"schema_version":"model-selection-v1","model_id":"pdm-lightgbm","model_version":"1.2.0","model_artifact_manifest_sha256":"1111111111111111111111111111111111111111111111111111111111111111","selected_at":"2026-09-02T00:00:00Z","selected_by":"system-operator:operator-1","reason":"검증된 운영 모델 선택","selection_id":"550e8400-e29b-41d4-a716-446655440000","idempotent":false}

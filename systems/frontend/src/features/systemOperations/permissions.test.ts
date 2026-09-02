@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canCancelSystemJob, canCreateImpactAnalysis, canCreateManagedContract, canCreateSystemAssetVersion, canCreateSystemJob, canExecuteSystemRebuild, canPublishManagedContract, canPublishSystemAsset, canReadSystemJobs, canReadSystemOperationalAssets, canValidateManagedContract, canValidateSystemAsset } from "./permissions";
+import { canActivateSystemModels, canCancelSystemJob, canCreateImpactAnalysis, canCreateManagedContract, canCreateSystemAssetVersion, canCreateSystemJob, canExecuteSystemRebuild, canPublishManagedContract, canPublishSystemAsset, canReadSystemJobs, canReadSystemModels, canReadSystemOperationalAssets, canRollbackSystemModels, canSelectSystemModels, canValidateManagedContract, canValidateSystemAsset } from "./permissions";
 
 describe("system operations permissions", () => {
   it("allows only the dedicated operational asset permission", () => {
@@ -22,6 +22,14 @@ describe("system operations permissions", () => {
     expect(canCreateImpactAnalysis(["system.impact.create"])).toBe(true);
     expect(canExecuteSystemRebuild(["system.impact.create"])).toBe(false);
     expect(canExecuteSystemRebuild(["system.rebuild.execute"])).toBe(true);
+  });
+  it("keeps model selection and rollback behind dedicated permissions", () => {
+    const permissions = ["system.models.read", "system.models.select", "system.models.activate", "system.models.rollback"];
+    expect(canReadSystemModels(permissions)).toBe(true);
+    expect(canSelectSystemModels(permissions)).toBe(true);
+    expect(canActivateSystemModels(permissions)).toBe(true);
+    expect(canRollbackSystemModels(permissions)).toBe(true);
+    expect(canActivateSystemModels(["admin.users.manage"])).toBe(false);
   });
   it("separates managed contract editing, validation, and publication", () => {
     expect(canCreateManagedContract(["system.contracts.create_version"])).toBe(true);

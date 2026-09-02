@@ -1,0 +1,1 @@
+{"model_set_id":"pdm-production","model_set_version":"2026.09.02","models":[{"model_id":"pdm-lightgbm","model_version":null,"required":true}],"reason":"검증된 선택 모델을 운영에 반영"}

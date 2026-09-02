@@ -132,6 +132,7 @@ Queue, retry, RunState, Checkpoint와 외부 Prediction Result Batch까지 변�
 |---|---|---|---|
 | POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target (후속 고도화) |
 | GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target (후속 고도화) |
+| GET/POST | `/internal/model-operations/*` | 운영 모델 선택, Active Model Set 검증·활성화·Rollback (service-token 전용) | Current |
 
 ### 2.3 파이프라인 흐름
 

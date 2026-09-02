@@ -119,6 +119,7 @@ Feature/History/Label 버전을 알 수 없는 상태는 `null`로 표현하고 
 | POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Current — 구현 완료 |
 | POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
 | GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target — 미병합 |
+| GET/POST | `/internal/model-operations/*` | 시스템 운영자용 모델 선택 및 Active Model Set 제어. Backend Control Plane만 호출 | Current |
 
 ---
 

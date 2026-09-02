@@ -8,5 +8,7 @@ from .impact_analysis_router import build_impact_analysis_router
 from .impact_analysis_service import ImpactAnalysisService
 from .managed_asset_router import build_managed_asset_router
 from .managed_asset_service import ManagedAssetService
+from .model_operation_router import build_model_operation_router
+from .model_operation_service import ModelOperationService
 
-__all__ = ["SystemOperationService", "MappingDraftService", "PipelineJobService", "ImpactAnalysisService", "ManagedAssetService", "build_system_operation_internal_router", "build_system_operation_router", "build_mapping_draft_router", "build_pipeline_job_router", "build_impact_analysis_router", "build_managed_asset_router"]
+__all__ = ["SystemOperationService", "MappingDraftService", "PipelineJobService", "ImpactAnalysisService", "ManagedAssetService", "ModelOperationService", "build_system_operation_internal_router", "build_system_operation_router", "build_mapping_draft_router", "build_pipeline_job_router", "build_impact_analysis_router", "build_managed_asset_router", "build_model_operation_router"]

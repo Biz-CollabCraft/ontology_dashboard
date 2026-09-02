@@ -28,5 +28,6 @@
 - `inspection-location-reference.schema.json`: Field Inspection Reference 소유의 component별 현장 위치·점검 방법 참고 계약. WorkOrder, MaintenanceAction, MaintenanceEvent, 승인 상태를 만들거나 바꾸지 않는다.
 - `agent-review-packet.schema.json`: Agent가 소비할 read-only 검토 패킷 계약. SOP 조회 query/result metadata, 점검·교체 검토 근거, Closed-loop 경계를 함께 제공하지만 WorkOrder, MaintenanceAction, Replay 상태를 변경하지 않는다.
 - `agent-review-summary.schema.json`: Agent Review Packet만 입력으로 사용한 LLM 또는 deterministic fallback 요약 출력 계약. source ref와 권한 경계를 검증하며 WorkOrder, MaintenanceAction, MaintenanceEvent, Replay, 자동 승인 필드를 허용하지 않는다.
+- `system-model-selection-*.schema.json`, `system-active-model-set-*.schema.json`, `system-model-rollback-*.schema.json`: 시스템 운영자의 Model Artifact 선택과 Active Model Set 검증·활성화·Rollback 계약. Training 자동 포인터 `latest.json`과 운영 선택 `selected.json`, Runtime 실행 정본 `active-model-set.json`의 역할을 분리한다.
 
 스키마를 변경할 때는 fixture, Pydantic model, backend tests, Gold evaluator와 TypeScript type을 함께 변경해야 한다. LLM 출력은 스키마와 grounding 검사를 모두 통과하지 못하면 폐기하고 deterministic fallback을 사용한다.

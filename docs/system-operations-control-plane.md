@@ -6,7 +6,7 @@
 
 | 항목 | 상태 | 설명 |
 |---|---|---|
-| **문서 상태** | **Current + Target Architecture** | Phase 1~7 현행 구현과 후속 운영 기능의 목표 설계 기준 |
+| **문서 상태** | **Current + Target Architecture** | Phase 1~8 현행 구현과 후속 운영 기능의 목표 설계 기준 |
 | **기준 브랜치/커밋** | `main` (`94ba34d7c3ca5f4f99c445bb32d2783487b52502`) | 최신 `origin/main` 기준선 |
 | **역할 경계** | 제안 확정 대상 | 시스템 관리자 책임과 비운영(사용자 관리 등) 책임 엄격 분리 |
 | **Backend API** | SQLite Current / PostgreSQL Target | `systems/backend/app/system_operations/` 읽기·동기화 API 구현 |
@@ -16,7 +16,7 @@
 | **Pipeline Job Control** | Current (SQLite) | Mapping Replay와 선택적 downstream rebuild의 단계별 실행·추적 |
 | **Generator·Backend 로그 통합** | 미구현 (Target) | E2E Timeline 통합 추적 설계 |
 | **Model Artifact 자동 `latest.json`** | **현재 구현됨 (Current)** | Generator Training 성공 시 `latest.json` 자동 갱신 |
-| **운영 선택 `selected.json`** | 미구현 (Target) | 시스템 관리자 명시적 선택 포인터 (Phase 8 검토 대상) |
+| **운영 선택 `selected.json`** | **Current (Phase 8)** | 시스템 관리자 명시적 선택 포인터. 실제 Runtime 적용은 Active Model Set 활성화와 분리 |
 
 ```text
 Baseline commit: 94ba34d7c3ca5f4f99c445bb32d2783487b52502
@@ -460,15 +460,17 @@ systems/frontend/src/features/systemOperations/
 - **소유권**: `systems/generator` 학습 파이프라인이 생성 및 갱신을 전담.
 - **불변식**: 시스템 관리자나 외부 API가 `latest.json`을 직접 임의 수정하지 않는다.
 
-### 13.2 운영 선택 목표 정책: `selected.json` (Target / Proposed)
+### 13.2 운영 선택 정책: `selected.json` (Current)
 - **정의**: 시스템 관리자가 모델 성능 평가 및 검증을 거친 후 명시적으로 선택한 특정 운영 모델 버전 포인터.
 - **소비 우선순위 (Resolution Rule)**:
   ```text
-  1. 유효하고 검증된 selected.json 포인터가 존재하면 → selected 모델 사용
-  2. selected.json이 없거나 비활성 상태이면 → latest.json 모델 사용 (기본값)
+  1. Active Model Set 후보 구성 시 유효한 selected.json이 존재하면 → selected 모델 사용
+  2. selected.json이 없으면 → 검증된 latest.json 모델 사용
+  3. 구성·검증된 결과를 active-model-set.json으로 원자적 활성화
   ```
 - **불변식**:
-  - `selected.json` 도입은 Phase 8 후속 과제이며 현재 구현으로 단정하지 않는다.
+  - Runtime Prediction은 실행 시작 시 `active-model-set.json` snapshot만 고정해 사용한다.
+  - `selected.json` 변경만으로 진행 중이거나 다음 Runtime 실행의 모델이 바뀌지 않는다.
   - 선택 및 롤백 작업 시 대상 Model Artifact의 Checksum 재검증과 감사 기록이 필수적으로 수반된다.
 
 ---
@@ -498,7 +500,7 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **Phase 5** | Rebuild/Replay Job | **Current (SQLite)** — Mapping checksum별 Replay checkpoint, Extraction 재처리, 영속 Job worker 및 성공 후 원자적 활성화 | Phase 4 |
 | **Phase 6** | 하위 영향 분석 | **Current (SQLite)** — Mapping Rebuild 결과 snapshot, 실행 가능/차단 작업 분리, 선택적 Preprocessing → Feature → Training Job 및 `publish_only` 학습 | Phase 5 |
 | **Phase 7** | 계약/설정 확장 | **Current (SQLite)** — Preprocessing Plan, Feature/Label Schema, History Requirement, Training Config Draft·검증·Diff·불변 발행 및 영향 분석 | Phase 6 |
-| **Phase 8** | 모델 운영 선택 | Model Artifact 및 Active Model Set 감독, `selected.json` 포인터 및 롤백 제어 | Phase 7 |
+| **Phase 8** | 모델 운영 선택 | **Current (SQLite)** — Model Artifact 감독, 모델별 `selected.json`, Active Model Set 검증·활성화·revision Rollback | Phase 7 |
 | **Phase 9** | 감사 & 로그 고도화 | 운영 감사 로그(Audit Trail) 정밀 추적, 오류 복구 가이드, 안전한 로그 Export | Phase 8 |
 | **Phase 10** | E2E 통합 전환 | Sensor Source부터 Dashboard Alert까지 E2E Timeline 완성 및 정식 운영 전환 | Phase 9 |
 
@@ -516,7 +518,7 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **Mapping 버전 편집** | Current | 버전 기반 초안 생성, 검증, 불변 발행 | Phase 4 |
 | **Mapping Rebuild** | Current (SQLite Job Registry) | PostgreSQL adapter 및 고급 승인·취소 정책 확장 | Phase 5 |
 | **하위 영향 분석** | Current (명시적 snapshot 및 단계 목록) | 대규모 관계 그래프와 자동 입력 해석 확장 | Phase 6 |
-| **Model 운영 선택** | `latest.json` 자동 갱신만 지원 | `selected.json` 명시적 선택 및 롤백 | Phase 8 |
+| **Model 운영 선택** | `latest.json`, `selected.json`, `active-model-set.json` 역할 분리 및 Rollback 구현 | 만료·Archive·고급 승인 정책 | Phase 8 이후 |
 | **통합 운영 감사** | 개별 로그 기록 | 자산·Job·조작 전수 감사(Audit Trail) | Phase 9 |
 
 ---
@@ -555,7 +557,7 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **고위험 작업(Rebuild, Rollback) 승인 절차(2-man rule)** | Decision Required | Product Owner | Phase 5 | ADR-TBD-06 |
 | **Pipeline Job 취소 가능 시점 및 롤백 정책** | Decision Required | Generator Team | Phase 5 | ADR-TBD-07 |
 | **Mapping 변경 시 과거 Replay 데이터 전체 Rebuild 범위** | Decision Required | Data Team | Phase 5 | ADR-TBD-08 |
-| **`selected.json` 도입 여부 및 우선순위 정책 확정** | Decision Required | ML Team | Phase 8 | ADR-TBD-09 |
+| **`selected.json` 우선순위 정책** | Implemented — Active Model Set 후보 구성 시 selected 우선, 없으면 latest | ML Team | Phase 8 | 본 문서 §13 |
 | **운영 선택 모델의 만료(Expiration) 정책** | Decision Required | ML Team | Phase 8 | ADR-TBD-10 |
 | **과거 Model Artifact의 보관(Archive) 및 영구 삭제 주기** | Decision Required | Infra Team | Phase 8 | ADR-TBD-11 |
 | **Control Plane을 통한 원본 파일 다운로드 허용 범위** | Decision Required | Security Team | Phase 9 | ADR-TBD-12 |

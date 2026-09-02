@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-model-rollback-request.schema.json",
+  "title": "System Model Rollback Request",
+  "allOf": [{"$ref": "system-active-model-set-activation-request.schema.json"}],
+  "type": "object"
+}

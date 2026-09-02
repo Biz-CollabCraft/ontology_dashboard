@@ -1,7 +1,7 @@
 from app.identity.identity_schema import ROLE_PERMISSIONS
 
 
-def test_system_operator_has_only_operational_asset_read_permission():
+def test_system_operator_has_only_system_operations_permissions():
     assert ROLE_PERMISSIONS["system_operator"] == {
         "system.assets.read",
         "system.assets.create_version",
@@ -18,6 +18,10 @@ def test_system_operator_has_only_operational_asset_read_permission():
         "system.contracts.create_version",
         "system.contracts.validate",
         "system.contracts.publish",
+        "system.models.read",
+        "system.models.select",
+        "system.models.activate",
+        "system.models.rollback",
     }
 
 
@@ -38,4 +42,8 @@ def test_tenant_admin_does_not_inherit_system_operations_permission():
         "system.contracts.create_version",
         "system.contracts.validate",
         "system.contracts.publish",
+        "system.models.read",
+        "system.models.select",
+        "system.models.activate",
+        "system.models.rollback",
     } & ROLE_PERMISSIONS["tenant_admin"]

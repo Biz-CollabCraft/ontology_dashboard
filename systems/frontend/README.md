@@ -21,6 +21,7 @@ src/features/dashboard/          persistent shell, tabs, context, canvas, inspec
 src/features/roles/              Executive·Audit·Field·FDE·Model 전용 board renderer와 contracts
 src/features/planner/            자연어 Object query·Board 추천·grounded narrative·Dashboard draft UI
 src/features/admin/              tenant administrator control plane와 workflow approvals
+src/features/systemOperations/   시스템 운영 자산, 계약, Job, 모델 선택 및 Active Model Set 제어
 src/features/ontology/types.ts   Object·Link·Action TypeScript contracts
 src/components.tsx               registered governed UI block renderer
 src/api.ts                        credentials + CSRF aware API client
@@ -33,6 +34,7 @@ src/api.ts                        credentials + CSRF aware API client
 - `/pending`
 - protected `/app`
 - tenant-admin-only `/admin`
+- system-operator-only `/system/operations/*`
 
 ## 현재 기능
 

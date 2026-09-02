@@ -811,6 +811,8 @@ class ContractVectorVerifier:
                 self._verify_system_impact_analysis_vector(vname, vdir, result)
             elif vname.startswith("system-managed-asset"):
                 self._verify_system_managed_asset_vector(vname, vdir, result)
+            elif vname.startswith("system-model-operations"):
+                self._verify_system_model_operations_vector(vname, vdir, result)
 
 
             else:
@@ -823,6 +825,26 @@ class ContractVectorVerifier:
 
             if len(result.errors) == error_count_before:
                 result.verified_vectors.append(vname)
+
+    def _verify_system_model_operations_vector(
+        self, vector_name: str, vector_dir: Path, result: VerificationResult,
+    ) -> None:
+        pairs = (
+            ("request.json", "system-model-selection-request.schema.json"),
+            ("expected.json", "system-model-selection-result.schema.json"),
+        )
+        registry = self._build_schema_registry()
+        for filename, schema_name in pairs:
+            try:
+                payload = json.loads((vector_dir / filename).read_text(encoding="utf-8"))
+                schema = json.loads((self.schemas_dir / schema_name).read_text(encoding="utf-8"))
+                if registry is not None:
+                    validator = jsonschema.Draft202012Validator(schema, registry=registry, format_checker=jsonschema.FormatChecker())
+                else:
+                    validator = jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker())
+                validator.validate(payload)
+            except Exception as exc:
+                result.errors.append(VerificationError(context=f"{vector_name}/{filename}", message=f"System model operation vector validation failed: {exc}"))
 
     def _verify_operational_asset_inventory_vector(
         self,

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-model-selection-result.schema.json",
+  "title": "System Model Selection Result",
+  "type": "object",
+  "required": ["schema_version", "model_id", "model_version", "model_artifact_manifest_sha256", "selected_at", "selected_by", "reason", "selection_id", "idempotent"],
+  "properties": {
+    "schema_version": {"const": "model-selection-v1"},
+    "model_id": {"type": "string", "minLength": 1},
+    "model_version": {"type": "string", "minLength": 1},
+    "model_artifact_manifest_sha256": {"type": "string", "pattern": "^(?!0{64}$)[a-f0-9]{64}$"},
+    "selected_at": {"type": "string", "format": "date-time"},
+    "selected_by": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "selection_id": {"type": "string", "format": "uuid"},
+    "idempotent": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}
