@@ -413,6 +413,14 @@ B2에 reuse가 없는 것은 실패가 아니라 `not_applicable`이다. 나머�
 | Summary reuse / trace completeness | N/A | N/A | TBD | N/A | TBD | TBD | planned |
 | Estimated cost / valid output | TBD | TBD | TBD | TBD | TBD | TBD | planned or not_measured |
 
+### 최소 실행 Harness 구현 상태
+
+- `scripts/evaluate_agent_workflow_baseline.py`: B1/B2/B3 72-run 실행, 순서 shuffle, 비용·품질·운영 지표 집계
+- `tests/eval/test_agent_workflow_baseline_simulation.py`: 72-row, arm 분리, reuse/trace, 비용 결측, 장애 3종 검증
+- 장애 주입: malformed output, provider timeout, snapshot mismatch
+- mock smoke는 `fixture_verified`이며 live provider 품질 측정으로 주장하지 않는다.
+- live 실행은 `--mode live`에서 configured provider를 사용하고 결과를 별도 파일로 저장한다.
+
 ### 발표용 결론 문구
 
 평가 전에는 다음처럼 말한다.
