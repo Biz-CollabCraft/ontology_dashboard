@@ -111,6 +111,9 @@ export function MvpOperationsPage({
   const SelectedDecisionIcon = selectedDecisionOption.Icon;
   const isInspectionRequestDecision = decision === "request_inspection" || decision === "review_shutdown";
   const canSubmitDecision = canDecide && (!isInspectionRequestDecision || Boolean(detail?.snapshotBasis));
+  const snapshotBasisFailed = Boolean(
+    detail?.warnings.some((warning) => warning.startsWith("설비 상세 조회 지연:")),
+  );
   const decisionActionLabel = isInspectionRequestDecision ? "작업요청 생성" : `${DECISION_LABEL[decision]} 기록`;
   const recommendedOption = selectedEvent
     ? DECISION_OPTIONS.find((option) => option.decision === selectedEvent.recommendedDecision) ?? DECISION_OPTIONS[0]
@@ -118,7 +121,7 @@ export function MvpOperationsPage({
   const gapCount = detail?.evidenceGaps.length ?? 0;
   const evidenceStatus = detailLoading
     ? "근거 확인 중"
-    : detailError
+    : detailError || snapshotBasisFailed
       ? "근거 확인 실패"
       : detail
         ? "근거 연결됨"
@@ -200,7 +203,11 @@ export function MvpOperationsPage({
                   <div>
                     <span>다음 처리</span>
                     <strong>{recommendedOption.title}</strong>
-                    <p>{gapCount > 0 ? `${gapCount}개 제한을 확인한 뒤 기록하세요.` : "실제 작업요청 생성/승인은 아직 연결되지 않았고, 현재는 후보 판단 기록만 남깁니다."}</p>
+                    <p>{snapshotBasisFailed
+                      ? "현재 선택한 예측의 정본 근거를 불러오지 못했습니다. 상세 조회를 다시 시도하세요."
+                      : gapCount > 0
+                        ? `${gapCount}개 제한을 확인한 뒤 기록하세요.`
+                        : "현재 예측의 정본 근거를 확인한 뒤 점검 작업요청을 생성합니다."}</p>
                   </div>
                   <div>
                     {canDecide ? (

@@ -611,6 +611,45 @@ class PredictiveMaintenanceRuntimeRepository:
             ).fetchall()
         return total, [dict(row) for row in rows]
 
+    def result_history_rows(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        dataset_version_id: str,
+        asset_id: str,
+        start: datetime,
+        end: datetime,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return governed runtime Product Results for one AssetDetail chart."""
+
+        with self._connection(organization_id, project_id) as connection:
+            rows = connection.execute(
+                """
+                SELECT artifact_id,prediction_id,observed_at,
+                       failure_probability,status_grade,source_sha256
+                FROM pm_result_artifacts
+                WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                  AND dataset_version_id=%s AND asset_id=%s
+                  AND observed_at >= %s AND observed_at <= %s
+                ORDER BY observed_at,created_at,artifact_id
+                LIMIT %s
+                """,
+                (
+                    organization_id,
+                    project_id,
+                    workspace_id,
+                    dataset_version_id,
+                    asset_id,
+                    start,
+                    end,
+                    limit,
+                ),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     @staticmethod
     def _observation_filters(
         *,

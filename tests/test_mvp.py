@@ -28,6 +28,7 @@ from app.dependencies import (
     build_manufacturing_service,
     get_identity_service,
     get_maintenance_loop_service,
+    get_runtime_asset_detail_service,
     get_service,
 )
 from app.infra.db.maintenance_repository import MaintenanceRepository
@@ -455,6 +456,58 @@ def test_planner_rejects_unregistered_data_field(service: FactorySignalService) 
     )
     with pytest.raises(ValueError):
         planner.validate(layout, evidence)
+
+
+def test_live_asset_detail_route_uses_selected_event_scope(client: TestClient) -> None:
+    class RecordingAssetDetailService:
+        def __init__(self) -> None:
+            self.query: dict[str, object] | None = None
+
+        def latest_detail_view(self, **query: object) -> dict[str, object]:
+            self.query = query
+            return {"event_id": query["event_id"], "asset_id": query["asset_id"]}
+
+    runtime_detail = RecordingAssetDetailService()
+    app.dependency_overrides[get_runtime_asset_detail_service] = lambda: runtime_detail
+    try:
+        response = client.get(
+            "/api/objects/CNC-LIVE-01/detail-view",
+            params={
+                "project_id": "manufacturing-demo-project",
+                "workspace_id": "manufacturing-demo",
+                "dataset_version_id": "dsv-live",
+                "event_id": "RESULT#GEN-live-01",
+                "history_window": "7d",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_runtime_asset_detail_service, None)
+
+    assert response.status_code == 200
+    assert runtime_detail.query == {
+        "organization_id": "org-ontology-demo",
+        "project_id": "manufacturing-demo-project",
+        "workspace_id": "manufacturing-demo",
+        "asset_id": "CNC-LIVE-01",
+        "dataset_version_id": "dsv-live",
+        "event_id": "RESULT#GEN-live-01",
+        "history_window": "7d",
+    }
+
+
+def test_asset_detail_route_rejects_out_of_scope_workspace(client: TestClient) -> None:
+    response = client.get(
+        "/api/objects/CNC-LIVE-01/detail-view",
+        params={
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "other-workspace",
+            "dataset_version_id": "dsv-live",
+            "event_id": "RESULT#GEN-live-01",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "workspace_scope_denied"
 
 
 def test_api_contract_and_state_changes(client: TestClient, service: FactorySignalService) -> None:

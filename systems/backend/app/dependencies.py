@@ -76,6 +76,7 @@ from app.infra.maintenance_cost_basis_provider import JsonMaintenanceCostBasisPr
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.maintenance.live_service import LivePredictiveMaintenanceService
 from app.maintenance.service import MaintenanceLoopService
+from app.mvp.asset_detail_view_model import AssetDetailViewModelService
 from app.ontology import OntologyService
 from app.planner import LayoutPlanner, OntologyDashboardPlannerService
 from app.project import ProjectService
@@ -446,6 +447,20 @@ def get_predictive_maintenance_runtime_service() -> PredictiveMaintenanceRuntime
             detail="Predictive-maintenance live runtime requires PostgreSQL",
         )
     return PredictiveMaintenanceRuntimeService(PredictiveMaintenanceRuntimeRepository(target))
+
+
+@lru_cache(maxsize=1)
+def get_runtime_asset_detail_service() -> AssetDetailViewModelService | None:
+    """Return the authoritative PostgreSQL AssetDetail read boundary when available."""
+
+    target = database_target()
+    if not is_postgresql(target):
+        return None
+    from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
+
+    return AssetDetailViewModelService(
+        PostgreSQLAssetDetailReadAdapter(PredictiveMaintenanceRuntimeRepository(target))
+    )
 
 
 class _RuntimeThenDemoEvidenceProjection:

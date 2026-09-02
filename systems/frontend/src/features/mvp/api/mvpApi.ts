@@ -71,12 +71,16 @@ async function getEventActivity(eventId: string): Promise<unknown> {
 
 async function getAssetDetailViewModel(
   projectId: string,
+  workspaceId: string,
   assetId: string,
+  eventId: string,
   datasetVersionId: string,
   historyWindow: MvpSensorWindowId,
 ): Promise<AssetDetailViewModel> {
   const params = new URLSearchParams({
     project_id: projectId,
+    workspace_id: workspaceId,
+    event_id: eventId,
     dataset_version_id: datasetVersionId,
     history_window: historyWindow,
   });
@@ -255,7 +259,9 @@ export async function loadMvpEventDetail(input: {
   const activityPromise = getEventActivity(input.event.eventId);
   const assetDetailPromise = getAssetDetailViewModel(
     input.projectId,
+    input.workspaceId,
     input.event.assetId,
+    input.event.eventId,
     input.datasetVersionId,
     input.historyWindow,
   );
@@ -276,7 +282,7 @@ export async function loadMvpEventDetail(input: {
   const report = legacyReport.report ?? predictiveDetail?.report ?? null;
   const activity = activityState.status === "fulfilled" ? activityState.value : null;
   const warnings = [
-    legacyReport.warning,
+    legacyReport.warning && !predictiveDetail?.report ? legacyReport.warning : null,
     evidenceState.status === "rejected" && !predictiveDetail?.evidence
       ? `상세 근거 조회 지연: ${warningMessage(evidenceState.reason, "사용 불가")}`
       : null,

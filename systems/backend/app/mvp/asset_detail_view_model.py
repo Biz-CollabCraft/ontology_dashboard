@@ -41,6 +41,8 @@ class AssetDetailReadPort(Protocol):
         project_id: str,
         workspace_id: str,
         asset_id: str,
+        dataset_version_id: str | None,
+        event_id: str | None,
     ) -> dict[str, Any] | None: ...
 
     def latest_result_artifact(
@@ -51,6 +53,7 @@ class AssetDetailReadPort(Protocol):
         workspace_id: str,
         asset_id: str,
         dataset_version_id: str | None,
+        event_id: str | None,
     ) -> dict[str, Any] | None: ...
 
     def feature_series(
@@ -97,6 +100,7 @@ class AssetDetailReadPort(Protocol):
         workspace_id: str,
         asset_id: str,
         dataset_version_id: str | None,
+        event_id: str | None,
     ) -> dict[str, Any] | None: ...
 
 
@@ -109,6 +113,7 @@ class AssetDetailRequest:
     start: datetime
     end: datetime
     dataset_version_id: str | None = None
+    event_id: str | None = None
     grain: str = "raw"
     history_window: str = DEFAULT_HISTORY_WINDOW
 
@@ -118,23 +123,74 @@ class AssetDetailViewModelService:
         self.read_port = read_port
 
     def detail_view(self, request: AssetDetailRequest) -> dict[str, Any]:
-        asset = self.read_port.asset_summary(
-            organization_id=request.organization_id,
-            project_id=request.project_id,
-            workspace_id=request.workspace_id,
-            asset_id=request.asset_id,
-        )
         artifact = self.read_port.latest_result_artifact(
             organization_id=request.organization_id,
             project_id=request.project_id,
             workspace_id=request.workspace_id,
             asset_id=request.asset_id,
             dataset_version_id=request.dataset_version_id,
+            event_id=request.event_id,
         )
         if artifact is None:
             raise KeyError(f"result artifact not found for asset_id={request.asset_id}")
         if str(artifact.get("asset_id")) != request.asset_id:
             raise ValueError("result artifact asset_id does not match request asset_id")
+        return self._detail_view(request, artifact)
+
+    def latest_detail_view(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        dataset_version_id: str,
+        event_id: str,
+        history_window: str = DEFAULT_HISTORY_WINDOW,
+    ) -> dict[str, Any]:
+        """Anchor a live detail read to the exact selected Product Result."""
+
+        normalized_window = _normalize_history_window(history_window)
+        artifact = self.read_port.latest_result_artifact(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            dataset_version_id=dataset_version_id,
+            event_id=event_id,
+        )
+        if artifact is None:
+            raise KeyError(f"result artifact not found for event_id={event_id}")
+        if str(artifact.get("asset_id")) != asset_id:
+            raise ValueError("result artifact asset_id does not match request asset_id")
+        end = _timestamp_instant(str(artifact["observed_at"]))
+        request = AssetDetailRequest(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            start=end - timedelta(hours=HISTORY_WINDOW_HOURS[normalized_window]),
+            end=end,
+            dataset_version_id=dataset_version_id,
+            event_id=event_id,
+            grain="1h" if normalized_window == "30d" else "raw",
+            history_window=normalized_window,
+        )
+        return self._detail_view(request, artifact)
+
+    def _detail_view(
+        self,
+        request: AssetDetailRequest,
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        asset = self.read_port.asset_summary(
+            organization_id=request.organization_id,
+            project_id=request.project_id,
+            workspace_id=request.workspace_id,
+            asset_id=request.asset_id,
+            dataset_version_id=request.dataset_version_id,
+            event_id=request.event_id,
+        )
         feature_series = self.read_port.feature_series(
             organization_id=request.organization_id,
             project_id=request.project_id,
@@ -168,6 +224,7 @@ class AssetDetailViewModelService:
             workspace_id=request.workspace_id,
             asset_id=request.asset_id,
             dataset_version_id=request.dataset_version_id,
+            event_id=request.event_id,
         )
         return compose_asset_detail_view_model(
             asset=asset or {
@@ -181,6 +238,7 @@ class AssetDetailViewModelService:
             equipment_history=history,
             data_status=data_status,
             history_window=request.history_window,
+            event_id=request.event_id,
         )
 
 

@@ -107,6 +107,7 @@ def _request() -> AssetDetailRequest:
         start=datetime(2026, 7, 31, 18, tzinfo=timezone.utc),
         end=datetime(2026, 8, 1, 0, tzinfo=timezone.utc),
         dataset_version_id="canonical-ai4i-physics-v3.1",
+        event_id="RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
         grain="1h",
     )
 
@@ -119,8 +120,8 @@ def test_service_reads_only_contracted_sources_and_returns_schema_valid_view_mod
 
     assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
     assert [name for name, _ in port.calls] == [
-        "asset_summary",
         "latest_result_artifact",
+        "asset_summary",
         "feature_series",
         "runtime_prediction_history",
         "equipment_history",
@@ -128,10 +129,38 @@ def test_service_reads_only_contracted_sources_and_returns_schema_valid_view_mod
     ]
     feature_call = dict(port.calls)["feature_series"]
     risk_call = dict(port.calls)["runtime_prediction_history"]
+    artifact_call = dict(port.calls)["latest_result_artifact"]
+    asset_call = dict(port.calls)["asset_summary"]
+    status_call = dict(port.calls)["data_status"]
+    assert artifact_call["event_id"] == _request().event_id
+    assert asset_call["event_id"] == _request().event_id
+    assert status_call["event_id"] == _request().event_id
     assert feature_call["dataset_version_id"] == "canonical-ai4i-physics-v3.1"
     assert feature_call["grain"] == "1h"
     assert risk_call["start"] == _request().start
     assert risk_call["end"] == _request().end
+
+
+def test_latest_detail_view_anchors_history_and_snapshot_to_selected_event() -> None:
+    port = FakeAssetDetailReadPort()
+    service = AssetDetailViewModelService(port)
+
+    payload = service.latest_detail_view(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        asset_id="CMP-S03-L03-01",
+        dataset_version_id="canonical-ai4i-physics-v3.1",
+        event_id="RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
+        history_window="24h",
+    )
+
+    feature_call = dict(port.calls)["feature_series"]
+    assert feature_call["end"] == datetime(2026, 7, 31, 15, tzinfo=timezone.utc)
+    assert feature_call["start"] == datetime(2026, 7, 30, 15, tzinfo=timezone.utc)
+    assert payload["snapshot_basis"]["event_id"] == (
+        "RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00"
+    )
 
 
 def test_service_rejects_mismatched_result_artifact_asset() -> None:

@@ -1200,7 +1200,7 @@ export async function getEvents(): Promise<EventSummary[]> {
 }
 
 export function getEvidence(eventId: string): Promise<Evidence> {
-  return request<Evidence>(`/api/events/${eventId}/evidence`);
+  return request<Evidence>(`/api/events/${encodeURIComponent(eventId)}/evidence`);
 }
 
 export async function getReport(
@@ -1209,7 +1209,7 @@ export async function getReport(
   useLlm = true,
   locale: "ko-KR" | "en-US" = "ko-KR",
 ): Promise<Report> {
-  const payload = await request<{ report: Report }>(`/api/events/${eventId}/report`, {
+  const payload = await request<{ report: Report }>(`/api/events/${encodeURIComponent(eventId)}/report`, {
     method: "POST",
     body: JSON.stringify({ role, locale, use_llm: useLlm }),
   });
@@ -1223,7 +1223,7 @@ export async function getLayout(
   useLlm = true,
   locale: "ko-KR" | "en-US" = "ko-KR",
 ): Promise<Layout> {
-  const payload = await request<{ layout: Layout }>(`/api/events/${eventId}/layout`, {
+  const payload = await request<{ layout: Layout }>(`/api/events/${encodeURIComponent(eventId)}/layout`, {
     method: "POST",
     body: JSON.stringify({ role, locale, intent, use_llm: useLlm }),
   });
@@ -1231,14 +1231,14 @@ export async function getLayout(
 }
 
 export function recordDecision(eventId: string, actor: string, decision: string, note: string) {
-  return request(`/api/events/${eventId}/decision`, {
+  return request(`/api/events/${encodeURIComponent(eventId)}/decision`, {
     method: "POST",
     body: JSON.stringify({ actor, decision, note }),
   });
 }
 
 export function addNote(eventId: string, actor: string, body: string) {
-  return request(`/api/events/${eventId}/notes`, {
+  return request(`/api/events/${encodeURIComponent(eventId)}/notes`, {
     method: "POST",
     body: JSON.stringify({ actor, body }),
   });
@@ -1433,7 +1433,7 @@ export function followUp(
   question: string,
   locale: "ko-KR" | "en-US" = "ko-KR",
 ): Promise<FollowUp> {
-  return request<FollowUp>(`/api/events/${eventId}/follow-up`, {
+  return request<FollowUp>(`/api/events/${encodeURIComponent(eventId)}/follow-up`, {
     method: "POST",
     body: JSON.stringify({ role, locale, question }),
   });
