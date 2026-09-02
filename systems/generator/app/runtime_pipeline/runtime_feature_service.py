@@ -36,6 +36,10 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ArtifactReference,
     RuntimeFeatureRowMetadata,
 )
+from systems.generator.app.runtime_pipeline.cnc_temporal_features import (
+    SUPPORTED_KIND as CNC_TEMPORAL_KIND,
+    derive_cnc_temporal_feature_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -285,7 +289,15 @@ class RuntimeFeatureService:
             df_sorted = df_sorted.sort_values(by=[id_col], kind="stable").reset_index(drop=True)
 
         # 2. Per-equipment History Requirement evaluation
+        engineering = feature_schema_dict.get("feature_engineering") or {}
         min_rows = int(history_requirement_dict.get("minimum_history_rows", 1))
+        if engineering.get("kind") == CNC_TEMPORAL_KIND:
+            prior_required = int(
+                (engineering.get("runtime_context") or {}).get(
+                    "recent_history_rows_required", 35
+                )
+            )
+            min_rows = max(min_rows, prior_required + 1)
         grouped_counts = df_sorted.groupby(id_col).size().to_dict()
         asset_history_status: dict[str, dict[str, Any]] = {}
         ready_count = 0
@@ -316,6 +328,61 @@ class RuntimeFeatureService:
                 details=[{"missing_columns": missing_req}],
                 retryable=False,
             )
+
+        if engineering.get("kind") == CNC_TEMPORAL_KIND:
+            if not time_col:
+                raise PipelineTimestampInvalidError(
+                    "CNC temporal Runtime Feature에는 observed_at/timestamp 컬럼이 필수입니다.",
+                    retryable=False,
+                )
+            try:
+                features_matrix, feature_cols, temporal_metadata = (
+                    derive_cnc_temporal_feature_rows(
+                        df_sorted,
+                        feature_schema=feature_schema_dict,
+                        id_column=id_col,
+                        time_column=time_col,
+                    )
+                )
+            except Exception as exc:
+                raise PipelineRuntimeFeatureFailedError(
+                    f"CNC temporal Runtime Feature 계산 실패: {exc}",
+                    details=[{
+                        "model_id": model_id,
+                        "model_version": model_version,
+                        "feature_schema_version": feature_schema_dict.get("schema_version")
+                        or feature_schema_dict.get("feature_schema_version"),
+                    }],
+                    retryable=False,
+                ) from exc
+
+            row_metadata = [
+                RuntimeFeatureRowMetadata(
+                    row_index=index,
+                    asset_id=asset_id,
+                    observed_at=observed_at,
+                )
+                for index, (asset_id, observed_at) in enumerate(temporal_metadata)
+            ]
+            feat_hash = hashlib.sha256(features_matrix.tobytes()).hexdigest()[:16]
+            bundle = RuntimeFeatureBundle(
+                features=features_matrix,
+                feature_columns=feature_cols,
+                row_metadata=row_metadata,
+                runtime_feature_version=f"runtime-feat-{feat_hash}",
+                feature_schema_version=str(
+                    feature_schema_dict.get("schema_version")
+                    or feature_schema_dict.get("feature_schema_version")
+                    or "unknown"
+                ),
+                dataset_id=dataset_id,
+                dataset_version=dataset_version,
+                asset_history_status=asset_history_status,
+            )
+            artifact_ref = self._persist_feature_artifact(
+                bundle, model_id=model_id, run_id=run_id
+            )
+            return bundle, artifact_ref
 
         # 3. Parse feature schema
         try:
@@ -480,21 +547,74 @@ class RuntimeFeatureService:
         else:
             df_sorted = df_sorted.sort_values(by=[id_col], kind="stable")
 
-        schema_spec = self.schema_provider.parse_schema_dict(feature_schema_dict)
-        feature_cols = [item.feature_name for item in schema_spec.features]
-
-        row_metadata: list[RuntimeFeatureRowMetadata] = []
-        for idx in range(len(df_sorted)):
-            row = df_sorted.iloc[idx]
-            asset_val = str(row.get(id_col))
-            ts_val = str(row.get(time_col)) if time_col else ""
-            row_metadata.append(
+        engineering = feature_schema_dict.get("feature_engineering") or {}
+        if engineering.get("kind") == CNC_TEMPORAL_KIND:
+            if not time_col:
+                raise PipelineTimestampInvalidError(
+                    "CNC temporal Runtime Feature에는 observed_at/timestamp 컬럼이 필수입니다.",
+                    retryable=False,
+                )
+            _, feature_cols, temporal_metadata = derive_cnc_temporal_feature_rows(
+                df_sorted,
+                feature_schema=feature_schema_dict,
+                id_column=id_col,
+                time_column=time_col,
+            )
+            if features_matrix.shape[0] != len(temporal_metadata):
+                raise PipelineFeatureMetadataAlignmentError(
+                    "CNC temporal Feature 행렬과 최신 설비 메타데이터 행 수가 일치하지 않습니다.",
+                    details=[{
+                        "matrix_rows": int(features_matrix.shape[0]),
+                        "metadata_rows": len(temporal_metadata),
+                    }],
+                    retryable=False,
+                )
+            row_metadata = [
                 RuntimeFeatureRowMetadata(
-                    row_index=idx,
-                    asset_id=asset_val,
-                    observed_at=ts_val,
+                    row_index=index,
+                    asset_id=asset_id,
+                    observed_at=observed_at,
+                )
+                for index, (asset_id, observed_at) in enumerate(temporal_metadata)
+            ]
+            prior_required = int(
+                (engineering.get("runtime_context") or {}).get(
+                    "recent_history_rows_required", 35
                 )
             )
+            min_rows = prior_required + 1
+            counts = df_sorted.groupby(id_col).size().to_dict()
+            asset_history_status = {
+                str(asset_id): {
+                    "ready": bool(count >= min_rows),
+                    "count": int(count),
+                    "minimum_history_rows": min_rows,
+                }
+                for asset_id, count in counts.items()
+            }
+            schema_version = str(
+                feature_schema_dict.get("schema_version")
+                or feature_schema_dict.get("feature_schema_version")
+                or "unknown"
+            )
+        else:
+            schema_spec = self.schema_provider.parse_schema_dict(feature_schema_dict)
+            feature_cols = [item.feature_name for item in schema_spec.features]
+
+            row_metadata = []
+            for idx in range(len(df_sorted)):
+                row = df_sorted.iloc[idx]
+                asset_val = str(row.get(id_col))
+                ts_val = str(row.get(time_col)) if time_col else ""
+                row_metadata.append(
+                    RuntimeFeatureRowMetadata(
+                        row_index=idx,
+                        asset_id=asset_val,
+                        observed_at=ts_val,
+                    )
+                )
+            asset_history_status = {}
+            schema_version = schema_spec.schema_version
 
         feat_hash = hashlib.sha256(features_matrix.tobytes()).hexdigest()[:16]
         runtime_feature_version = f"runtime-feat-{feat_hash}"
@@ -504,8 +624,8 @@ class RuntimeFeatureService:
             feature_columns=feature_cols,
             row_metadata=row_metadata,
             runtime_feature_version=runtime_feature_version,
-            feature_schema_version=schema_spec.schema_version,
+            feature_schema_version=schema_version,
             dataset_id=dataset_id,
             dataset_version=dataset_version,
-            asset_history_status={},
+            asset_history_status=asset_history_status,
         )

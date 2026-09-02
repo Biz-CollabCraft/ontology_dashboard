@@ -313,6 +313,11 @@ class PipelineQueue:
                                 f"동일한 입력(source_identity: {source_identity[:8]}...)이 이미 처리 완료되었습니다.",
                                 details=[{"job_id": existing["job_id"], "status": ex_status, "source_identity": source_identity}],
                             )
+                        elif ex_status == "failed":
+                            raise PipelineDuplicateInputError(
+                                "동일한 입력이 failed 상태입니다. 자동 재등록하지 않고 명시적 retry를 사용해야 합니다.",
+                                details=[{"job_id": existing["job_id"], "status": ex_status, "source_identity": source_identity}],
+                            )
                         elif ex_status == "dead_letter":
                             raise PipelineDuplicateInputError(
                                 f"동일한 입력(source_identity: {source_identity[:8]}...)이 dead_letter 상태입니다. 자동 재등록되지 않습니다.",

@@ -97,6 +97,23 @@ class OperationsManualRecommendationCreateRequest(StrictCommand):
         "TOOL_REPLACEMENT"
     )
     basis: tuple[str, ...] = Field(min_length=1)
+    cost_analysis_id: str | None = Field(default=None, min_length=1, max_length=240)
+    cost_option_id: str | None = Field(default=None, min_length=1, max_length=240)
+    action_candidate_id: str | None = Field(default=None, min_length=1, max_length=240)
+
+    @model_validator(mode="after")
+    def require_coherent_cost_reference(
+        self,
+    ) -> "OperationsManualRecommendationCreateRequest":
+        if (self.cost_analysis_id is None) != (self.action_candidate_id is None):
+            raise ValueError(
+                "cost analysis reference requires cost_analysis_id and action_candidate_id"
+            )
+        if self.cost_option_id is not None and self.cost_analysis_id is None:
+            raise ValueError(
+                "cost option reference requires cost analysis and action candidate"
+            )
+        return self
 
 
 class MaintenanceCostAnalysisCreateRequest(StrictCommand):

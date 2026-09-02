@@ -62,6 +62,7 @@ import type {
   PredictiveMaintenanceObservationResponse,
   PredictiveMaintenanceReleaseOverview,
   PredictiveMaintenanceRuntimeContext,
+  GovernedProductResultSummary,
   ProductResultPage,
   ReplaySessionSnapshot,
 } from "./features/predictive-maintenance/types";
@@ -410,6 +411,103 @@ export type MaintenanceActionCode =
   | "TOOL_REPLACEMENT"
   | "COOLING_SYSTEM_RESTORE";
 
+export type InspectionOutcome =
+  | "no_action_required"
+  | "maintenance_recommended"
+  | "data_check_required";
+
+export type InspectionChecklistStatus = "pass" | "fail" | "not_checked";
+
+export interface InspectionCompletionPayload extends Record<string, unknown> {
+  outcome: InspectionOutcome;
+  checklist: Array<{
+    item_id: string;
+    status: InspectionChecklistStatus;
+    note: string;
+  }>;
+  measurements: Array<{
+    name: string;
+    value: number;
+    unit: string;
+  }>;
+  findings: string[];
+  note: string;
+}
+
+export interface InspectionCompletionFacts {
+  outcome: InspectionOutcome;
+  toolWearStatus: InspectionChecklistStatus;
+  toolWearMin: number | null;
+  coolingPathStatus: InspectionChecklistStatus;
+  coolantTemperatureC: number | null;
+  inHouseStatus: "pass" | "fail" | "";
+  sparePartAvailableStatus: "pass" | "fail" | "";
+  vendorDispatchRequiredStatus: "pass" | "fail" | "";
+  componentReplacementRequiredStatus: "pass" | "fail" | "";
+  findings: string;
+  note: string;
+}
+
+export function buildInspectionCompletionPayload(
+  facts: InspectionCompletionFacts,
+): InspectionCompletionPayload {
+  const checklist: InspectionCompletionPayload["checklist"] = [
+    {
+      item_id: "tool-wear",
+      status: facts.toolWearStatus,
+      note: "현장 공구 마모 점검 결과",
+    },
+    {
+      item_id: "cooling-path",
+      status: facts.coolingPathStatus,
+      note: "현장 냉각 경로 점검 결과",
+    },
+  ];
+  const appendCostBasis = (
+    itemId: string,
+    status: "pass" | "fail" | "",
+    note: string,
+  ) => {
+    if (status) checklist.push({ item_id: itemId, status, note });
+  };
+  appendCostBasis("cost-basis-in-house", facts.inHouseStatus, "사내 정비 수행 가능 여부");
+  appendCostBasis(
+    "cost-basis-spare-part-available",
+    facts.sparePartAvailableStatus,
+    "교체용 인서트 확보 여부",
+  );
+  appendCostBasis(
+    "cost-basis-vendor-dispatch-required",
+    facts.vendorDispatchRequiredStatus,
+    "외부 업체 출동 필요 여부",
+  );
+  appendCostBasis(
+    "cost-basis-component-replacement-required",
+    facts.componentReplacementRequiredStatus,
+    "냉각 계통 부품 교체 필요 여부",
+  );
+
+  const measurements: InspectionCompletionPayload["measurements"] = [];
+  if (facts.toolWearMin !== null) {
+    measurements.push({ name: "tool_wear_min", value: facts.toolWearMin, unit: "min" });
+  }
+  if (facts.coolantTemperatureC !== null) {
+    measurements.push({
+      name: "coolant_temperature_c",
+      value: facts.coolantTemperatureC,
+      unit: "C",
+    });
+  }
+
+  return {
+    outcome: facts.outcome,
+    checklist,
+    measurements,
+    findings: [facts.findings.trim()],
+    note: facts.note.trim(),
+  };
+}
+
 export interface MaintenanceActionCandidateReadModel {
   action_candidate_id: string;
   inspection_result_id: string;
@@ -487,6 +585,11 @@ export interface MaintenanceCostAnalysisReadModel {
 
 export interface MaintenanceEventLineageReadModel {
   event_id: string;
+  decisions?: Array<{
+    decision_id: string;
+    recommendation_id: string;
+    disposition: "accept" | "reject" | "defer";
+  }>;
   work_orders: Array<{
     work_order_id: string;
     work_type: "inspection" | "maintenance";
@@ -504,6 +607,21 @@ export interface MaintenanceEventLineageReadModel {
     source_action_candidate_id?: string | null;
     action_code?: string | null;
   }>;
+  maintenance_actions?: Array<{
+    maintenance_action_id: string;
+    work_order_id: string;
+    status: string;
+    action_code: MaintenanceActionCode;
+    simulation_session_id: string;
+    restart_at?: string | null;
+  }>;
+  maintenance_events?: Array<{
+    maintenance_event_id: string;
+    maintenance_action_id: string;
+    completed_at: string;
+    restart_at?: string | null;
+  }>;
+  activities?: Array<Record<string, unknown>>;
 }
 
 export interface MaintenanceCostAnalysisRequest {
@@ -657,6 +775,23 @@ export function getPredictiveMaintenanceLatestResults(
   if (datasetVersionId) params.set("dataset_version_id", datasetVersionId);
   return request<ProductResultPage>(
     `${predictiveMaintenanceBase(projectId, workspaceId)}/results/latest?${params.toString()}`,
+    { signal },
+  );
+}
+
+export function getPostMaintenanceProductResults(
+  projectId: string,
+  workspaceId: string,
+  assetId: string,
+  maintenanceEventId: string,
+  signal?: AbortSignal,
+): Promise<GovernedProductResultSummary | null> {
+  const params = new URLSearchParams({
+    asset_id: assetId,
+    maintenance_event_id: maintenanceEventId,
+  });
+  return request<GovernedProductResultSummary | null>(
+    `${predictiveMaintenanceBase(projectId, workspaceId)}/results/post-maintenance?${params.toString()}`,
     { signal },
   );
 }
@@ -1126,6 +1261,169 @@ export function requestInspectionWorkOrder(input: {
         snapshot_basis: input.snapshotBasis,
       }),
     },
+  );
+}
+
+function maintenanceCommand(
+  path: string,
+  body: Record<string, unknown>,
+  idempotencyKey: string,
+): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(path, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(body),
+  });
+}
+
+export function approveInspectionWorkOrder(input: {
+  projectId: string;
+  workspaceId: string;
+  workOrderId: string;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
+    {},
+    input.idempotencyKey,
+  );
+}
+
+export function startInspectionWorkOrder(input: {
+  projectId: string;
+  workspaceId: string;
+  workOrderId: string;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/start`,
+    {},
+    input.idempotencyKey,
+  );
+}
+
+export function completeInspectionWorkOrder(input: {
+  projectId: string;
+  workspaceId: string;
+  workOrderId: string;
+  facts: InspectionCompletionFacts;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/complete`,
+    buildInspectionCompletionPayload(input.facts),
+    input.idempotencyKey,
+  );
+}
+
+export function createOperationsManualRecommendation(input: {
+  projectId: string;
+  workspaceId: string;
+  inspectionResultId: string;
+  actionCode: MaintenanceActionCode;
+  costAnalysisId: string;
+  actionCandidateId: string;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-results/${encodeURIComponent(input.inspectionResultId)}/recommendations`,
+    buildOperationsManualRecommendationPayload(
+      input.inspectionResultId,
+      input.actionCode,
+      input.costAnalysisId,
+      input.actionCandidateId,
+    ),
+    input.idempotencyKey,
+  );
+}
+
+export function buildOperationsManualRecommendationPayload(
+  inspectionResultId: string,
+  actionCode: MaintenanceActionCode,
+  costAnalysisId: string,
+  actionCandidateId: string,
+) {
+  return {
+    action_code: actionCode,
+    basis: [`inspection_result:${inspectionResultId}`],
+    cost_analysis_id: costAnalysisId,
+    action_candidate_id: actionCandidateId,
+  };
+}
+
+export function decideOperationsManualRecommendation(input: {
+  projectId: string;
+  workspaceId: string;
+  recommendationId: string;
+  disposition: "accept" | "reject" | "defer";
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/recommendations/${encodeURIComponent(input.recommendationId)}/decisions`,
+    { disposition: input.disposition, note: "사용자 명시적 판단" },
+    input.idempotencyKey,
+  );
+}
+
+export async function approveMaintenanceWorkOrder(input: {
+  projectId: string;
+  workspaceId: string;
+  workOrderId: string;
+  datasetVersionId: string;
+  idempotencyKey: string;
+}) {
+  const replay = await startPredictiveMaintenanceReplay(input.projectId, input.workspaceId, {
+    dataset_version_id: input.datasetVersionId,
+    speed_minutes_per_second: 60,
+  });
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
+    { simulation_session_id: replay.cursor.session_id },
+    input.idempotencyKey,
+  );
+}
+
+export function startMaintenanceAction(input: {
+  projectId: string;
+  workspaceId: string;
+  maintenanceActionId: string;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-actions/${encodeURIComponent(input.maintenanceActionId)}/start`,
+    {},
+    input.idempotencyKey,
+  );
+}
+
+export function completeMaintenanceAction(input: {
+  projectId: string;
+  workspaceId: string;
+  maintenanceActionId: string;
+  actionCode: MaintenanceActionCode;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-actions/${encodeURIComponent(input.maintenanceActionId)}/complete`,
+    {
+      outcome: input.actionCode === "COOLING_SYSTEM_RESTORE"
+        ? "냉각 계통을 복구하고 정상 상태를 확인했습니다."
+        : "공구 인서트 1개를 교체하고 정상 체결을 확인했습니다.",
+    },
+    input.idempotencyKey,
+  );
+}
+
+export function requestMaintenanceReplay(input: {
+  projectId: string;
+  workspaceId: string;
+  maintenanceEventId: string;
+  idempotencyKey: string;
+}) {
+  return maintenanceCommand(
+    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-events/${encodeURIComponent(input.maintenanceEventId)}/replay`,
+    { restart_at: new Date().toISOString() },
+    input.idempotencyKey,
   );
 }
 

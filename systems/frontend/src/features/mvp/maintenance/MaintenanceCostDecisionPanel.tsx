@@ -37,17 +37,31 @@ export function latestEligibleInspection(
   lineage: MaintenanceEventLineageReadModel | null,
 ): MaintenanceInspectionResultReadModel | null {
   if (!lineage) return null;
-  const completedWorkOrders = new Set(
-    lineage.work_orders
-      .filter((item) => item.work_type === "inspection" && item.status === "completed")
-      .map((item) => item.work_order_id),
-  );
-  return [...lineage.inspection_results]
-    .filter((item) => (
-      item.outcome === "maintenance_recommended"
-      && completedWorkOrders.has(item.work_order_id)
-    ))
+  const latestInspectionWorkOrder = lineage.work_orders
+    .filter((item) => item.work_type === "inspection")
+    .at(-1);
+  if (!latestInspectionWorkOrder || latestInspectionWorkOrder.status !== "completed") {
+    return null;
+  }
+  const latestResult = [...lineage.inspection_results]
+    .filter((item) => item.work_order_id === latestInspectionWorkOrder.work_order_id)
     .sort((left, right) => right.recorded_at.localeCompare(left.recorded_at))[0] ?? null;
+  return latestResult?.outcome === "maintenance_recommended" ? latestResult : null;
+}
+
+export function isCostAnalysisStageOpen(
+  lineage: MaintenanceEventLineageReadModel | null,
+  inspection: MaintenanceInspectionResultReadModel | null,
+): boolean {
+  if (!lineage || !inspection) return false;
+  const recommendationCreated = lineage.recommendations.some((item) => (
+    item.source_inspection_reference === inspection.inspection_result_id
+    || item.source_inspection_work_order_id === inspection.work_order_id
+  ));
+  const maintenanceStarted = lineage.work_orders.some((item) => item.work_type === "maintenance")
+    || Boolean(lineage.maintenance_actions?.length)
+    || Boolean(lineage.maintenance_events?.length);
+  return !recommendationCreated && !maintenanceStarted;
 }
 
 export function latestCostAnalysisForInspection(
@@ -75,7 +89,10 @@ export function costOptionsForDisplay(
   if (actionCode === "COOLING_SYSTEM_RESTORE") {
     return analysis.options.filter((option) => option.execution_timing === "immediate");
   }
-  return analysis.options;
+  if (actionCode === "TOOL_REPLACEMENT") {
+    return analysis.options.filter((option) => option.execution_timing !== "reinspect_after");
+  }
+  return [];
 }
 
 export function buildCostRequest(
@@ -105,12 +122,14 @@ export function MaintenanceCostDecisionPanel({
   eventId,
   guidance,
   onChanged,
+  onEligibilityChanged,
 }: {
   projectId: string;
   workspaceId: string;
   eventId: string;
   guidance: MvpInspectionGuidance | null;
   onChanged?: () => void;
+  onEligibilityChanged?: (eligible: boolean) => void;
 }) {
   const [lineage, setLineage] = useState<MaintenanceEventLineageReadModel | null>(null);
   const [actionCandidates, setActionCandidates] = useState<MaintenanceActionCandidateReadModel[]>([]);
@@ -133,7 +152,9 @@ export function MaintenanceCostDecisionPanel({
       );
       setLineage(nextLineage);
       const nextInspection = latestEligibleInspection(nextLineage);
-      if (nextInspection) {
+      const nextStageOpen = isCostAnalysisStageOpen(nextLineage, nextInspection);
+      onEligibilityChanged?.(nextStageOpen);
+      if (nextInspection && nextStageOpen) {
         const candidates = await getMaintenanceActionCandidates(
           projectId,
           workspaceId,
@@ -154,6 +175,7 @@ export function MaintenanceCostDecisionPanel({
       }
     } catch (caught) {
       if (signal?.aborted) return;
+      onEligibilityChanged?.(false);
       setError(caught instanceof Error ? caught.message : "비용 분석 이력을 불러오지 못했습니다.");
     } finally {
       if (!signal?.aborted) setLoading(false);
@@ -172,6 +194,10 @@ export function MaintenanceCostDecisionPanel({
   }, [guidance?.sopId, guidance?.version]);
 
   const inspection = useMemo(() => latestEligibleInspection(lineage), [lineage]);
+  const stageOpen = useMemo(
+    () => isCostAnalysisStageOpen(lineage, inspection),
+    [inspection, lineage],
+  );
   const analyses = useMemo(() => [...(lineage?.cost_analyses ?? [])]
     .sort((left, right) => right.calculated_at.localeCompare(left.calculated_at)), [lineage]);
   const current = useMemo(
@@ -213,13 +239,13 @@ export function MaintenanceCostDecisionPanel({
     }
   };
 
-  const blocker = !inspection
-    ? "완료된 점검 결과에서 정비 필요가 확인된 뒤 사용할 수 있습니다."
-    : actionCandidates.length === 0
+  const blocker = actionCandidates.length === 0
       ? "점검 결과에서 실행 가능한 정비 Action 후보가 확인되지 않았습니다."
     : !sopId.trim() || !sopVersion.trim()
       ? "점검에 참고한 SOP 기준정보가 필요합니다."
     : null;
+  if (loading || !inspection || !stageOpen) return null;
+
   return (
     <section className="mvp-maintenance-cost-panel" aria-label="정비 비용 분석">
       <header>
@@ -234,7 +260,6 @@ export function MaintenanceCostDecisionPanel({
           ? "현재 데이터로 근거를 확인할 수 있는 즉시 냉각 복구 비용만 제공합니다. 버튼을 누르기 전에는 계산하지 않습니다."
           : "점검 결과에서 확인된 정비 Action 후보의 비용만 비교합니다. 버튼을 누르기 전에는 분석하지 않습니다."}
       </p>
-      {loading ? <small>점검·비용 lineage를 불러오는 중입니다.</small> : null}
       {blocker ? <small className="mvp-cost-warning">{blocker}</small> : null}
       {error ? <small className="mvp-cost-error">{error}</small> : null}
 

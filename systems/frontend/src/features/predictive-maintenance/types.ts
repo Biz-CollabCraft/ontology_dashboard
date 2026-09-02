@@ -175,6 +175,12 @@ export interface GovernedProductResultSummary {
       producer_id: string | null;
       model_id: string | null;
       source_reference: string | null;
+      simulation_session_id?: string | null;
+      overlay_branch_id?: string | null;
+      history_segment_id?: string | null;
+      maintenance_action_id?: string | null;
+      maintenance_event_id?: string | null;
+      state_version?: number | null;
     } | null;
     evidence_payload_reference: Record<string, unknown> | null;
     sensor_window_rows: number;
@@ -210,6 +216,12 @@ export interface GovernedProductResultSummary {
     model_version: string;
     schema_version: string;
     prediction_task: "binary_failure_within_horizon";
+    simulation_session_id?: string | null;
+    overlay_branch_id?: string | null;
+    history_segment_id?: string | null;
+    maintenance_action_id?: string | null;
+    maintenance_event_id?: string | null;
+    state_version?: number | null;
   };
 }
 

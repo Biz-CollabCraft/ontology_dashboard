@@ -19,6 +19,8 @@ export function MvpOverviewPage({
   detailError,
   sensorWindow,
   canMaterializeAgentSummary,
+  canManageWorkflow,
+  canExecuteFieldWorkflow,
   onOpenAsset,
   onPreviewAsset,
   onOpenEvent,
@@ -35,6 +37,8 @@ export function MvpOverviewPage({
   detailError: string | null;
   sensorWindow: MvpSensorWindowId;
   canMaterializeAgentSummary: boolean;
+  canManageWorkflow: boolean;
+  canExecuteFieldWorkflow: boolean;
   onOpenAsset: (assetId: string, eventId: string | null) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
   onOpenEvent: (eventId: string, assetId: string) => void;
@@ -62,6 +66,8 @@ export function MvpOverviewPage({
           detailError={detailError}
           sensorWindow={sensorWindow}
           canMaterializeAgentSummary={canMaterializeAgentSummary}
+          canManageWorkflow={canManageWorkflow}
+          canExecuteFieldWorkflow={canExecuteFieldWorkflow}
           onSensorWindowChange={onSensorWindowChange}
           onPreviewAsset={onPreviewAsset}
           onRefresh={onRefresh}

@@ -71,9 +71,9 @@ class PredictionService:
 
     def resolve_model_id(self, base_or_id: str) -> str:
         clean = base_or_id.strip()
-        if clean.startswith("pdm-"):
-            return clean
-        return f"pdm-{clean}"
+        if clean in {"lightgbm", "xgboost", "random_forest"}:
+            return f"pdm-{clean}"
+        return clean
 
     def load_active_artifact(
         self,

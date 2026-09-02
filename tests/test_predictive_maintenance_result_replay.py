@@ -204,6 +204,17 @@ def test_compatibility_payload_is_not_validated_as_a_producer_artifact() -> None
     ) is False
 
 
+def test_cutover_payload_is_not_validated_as_runtime_producer_artifact() -> None:
+    payload = {
+        "evidence_payload": {"sensor_evidence": {}},
+        "provenance": {"source_type": "cutover_carry_forward"},
+    }
+
+    assert PredictiveMaintenanceRuntimeService._stored_producer_artifact(
+        {"prediction_result_payload": payload}
+    ) is None
+
+
 def _append_csv(path: Path, row: dict[str, object]) -> None:
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)

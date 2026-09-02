@@ -617,6 +617,12 @@ class ProductResultBatchLineageSummary(StrictModel):
     producer_id: str | None = None
     model_id: str | None = None
     source_reference: str | None = None
+    simulation_session_id: str | None = None
+    overlay_branch_id: str | None = None
+    history_segment_id: str | None = None
+    maintenance_action_id: str | None = None
+    maintenance_event_id: str | None = None
+    state_version: int | None = Field(default=None, ge=1)
 
 
 class ProductResultEvidenceSummary(StrictModel):
@@ -644,6 +650,12 @@ class ProductResultProvenance(StrictModel):
     prediction_task: Literal["binary_failure_within_horizon"]
     source_type: str
     canonical_source_mutated: Literal[False] = False
+    simulation_session_id: str | None = None
+    overlay_branch_id: str | None = None
+    history_segment_id: str | None = None
+    maintenance_action_id: str | None = None
+    maintenance_event_id: str | None = None
+    state_version: int | None = Field(default=None, ge=1)
 
 
 class GovernedProductResult(StrictModel):
