@@ -68,6 +68,7 @@ source-ref subset, bounded retry와 trajectory다.
 | Evidence 중심 read-only Agent 구조 | Verified | Pass | ContextProvider, domain_sections, packet/summary tests |
 | Synthetic production planning context | Verified | Pass | operation-context schema, fixture, ViewModel consumer |
 | Packet section tool routing | Verified | Pass | eval-only pipeline과 trajectory tests |
+| Fixed identity/context envelope contract | Verified | Pass | immutable schema, freshness/scope/version validator와 contract tests; runtime 미연결 |
 | 실제 DB runtime domain tool | Not Proven | Unknown | executor seam만 존재 |
 | Production Order/WIP/Alternative Capacity 확장 | Not Proven | Unknown | 통합 source/port 계약 없음 |
 | Maintenance/part/technician readiness 확장 | Not Proven | Unknown | 일부 fixture/backlog만 존재 |
@@ -105,7 +106,7 @@ Identity와 scope는 요청 시작 시 인증·application layer에서 확정한
 
 ```json
 {
-  "tenant_id": "TENANT-001",
+  "organization_id": "ORG-001",
   "project_id": "PROJECT-001",
   "workspace_id": "WORKSPACE-001",
   "asset_id": "CNC-02",
@@ -127,7 +128,7 @@ Identity와 scope는 요청 시작 시 인증·application layer에서 확정한
 {
   "owner_domain": "inventory",
   "scope": {
-    "tenant_id": "TENANT-001",
+    "organization_id": "ORG-001",
     "project_id": "PROJECT-001",
     "workspace_id": "WORKSPACE-001",
     "asset_id": "CNC-02"
@@ -987,6 +988,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U1. Shared Request and Context Metadata
 
+- **Status:** contract-only 구현 완료. Runtime domain port와 Agent workflow 연결은 U2/U6에서 수행한다.
 - fixed identity request contract 구현
 - domain result envelope와 status enum 구현
 - source version/freshness/as-of validator 구현
