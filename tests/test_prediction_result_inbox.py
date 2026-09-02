@@ -13,7 +13,12 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator, FormatChecker
 
-from app.dependencies import current_principal, get_identity_service, require_csrf
+from app.dependencies import (
+    current_principal,
+    get_identity_service,
+    get_optional_system_e2e_service,
+    require_csrf,
+)
 from app.diagnosis.runtime_router import internal_router, router
 from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
 from app.diagnosis.materialization import (
@@ -191,6 +196,29 @@ class FakeInboxRepository:
                     }
                 )
         return {"item_receipts": receipts}
+
+    def result_artifact_row(self, **kwargs: Any) -> dict[str, Any] | None:
+        artifact_id = kwargs["artifact_id"]
+        promotion = next(
+            (
+                item
+                for item in self.promotions
+                if item["artifact"]["artifact_id"] == artifact_id
+            ),
+            None,
+        )
+        if promotion is None:
+            return None
+        artifact = promotion["artifact"]
+        return {
+            "artifact_id": artifact["artifact_id"],
+            "prediction_result_id": promotion["prediction_result_id"],
+            "asset_id": artifact["asset_id"],
+            "observed_at": artifact["observed_at"],
+            "status_grade": artifact["status_grade"],
+            "evidence_id": f"artifact:{artifact['artifact_id']}",
+            "report_id": None,
+        }
 
 
 def principal() -> Principal:
@@ -734,6 +762,14 @@ def test_internal_prediction_inbox_promotes_accepted_batch(monkeypatch) -> None:
 
     app.dependency_overrides[get_predictive_maintenance_runtime_service] = lambda: service
 
+    recorded: list[dict[str, Any]] = []
+
+    class RecordingE2EService:
+        def record_prediction_receipt(self, **kwargs: Any) -> None:
+            recorded.append(kwargs)
+
+    app.dependency_overrides[get_optional_system_e2e_service] = RecordingE2EService
+
     with TestClient(app) as client:
         response = client.post(
             "/internal/prediction-results?project_id=manufacturing-demo-project"
@@ -749,6 +785,39 @@ def test_internal_prediction_inbox_promotes_accepted_batch(monkeypatch) -> None:
     assert body["product_result_created"] is True
     assert body["promoted_results"] == 1
     assert body["artifact_ids"]
+    assert len(recorded) == 1
+    assert recorded[0]["organization_id"] == "org-ontology-demo"
+    assert recorded[0]["project_id"] == "manufacturing-demo-project"
+    assert recorded[0]["workspace_id"] == "manufacturing-demo"
+    assert recorded[0]["product_results"][0]["artifact_id"] in body["artifact_ids"]
+
+
+def test_internal_prediction_inbox_observability_failure_is_non_blocking(monkeypatch) -> None:
+    monkeypatch.setenv("PREDICTION_RESULT_INGEST_TOKEN", "receiver-secret")
+    service = make_service(FakeInboxRepository())
+    app = FastAPI()
+    app.include_router(internal_router)
+    app.dependency_overrides[get_identity_service] = lambda: FakeIdentity()
+    from app.diagnosis.runtime_router import get_predictive_maintenance_runtime_service
+
+    app.dependency_overrides[get_predictive_maintenance_runtime_service] = lambda: service
+
+    class FailingE2EService:
+        def record_prediction_receipt(self, **kwargs: Any) -> None:
+            raise RuntimeError("observability storage unavailable")
+
+    app.dependency_overrides[get_optional_system_e2e_service] = FailingE2EService
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/internal/prediction-results?project_id=manufacturing-demo-project"
+            "&workspace_id=manufacturing-demo",
+            json=load_payload(),
+            headers={"Authorization": "Bearer receiver-secret"},
+        )
+
+    assert response.status_code == 202, response.text
+    assert response.json()["promotion_status"] == "promoted"
 
 
 def test_internal_prediction_inbox_duplicate_retries_unfinished_promotion(monkeypatch) -> None:

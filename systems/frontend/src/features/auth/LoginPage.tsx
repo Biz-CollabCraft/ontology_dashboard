@@ -6,6 +6,12 @@ import { AuthShell } from "./AuthShell";
 
 const DEMO_ACCOUNTS = [
   {
+    label: "시스템 관리자",
+    description: "Generator 운영 자산 · Pipeline · 시스템 로그",
+    email: "operator@ontology.local",
+    password: "Operator!2026",
+  },
+  {
     label: "관리자·임원",
     description: "Overview · Operations · Executive Report",
     email: "manager@ontology.local",
@@ -117,7 +123,7 @@ export function LoginPage() {
               </button>
             ))}
           </div>
-          <small>최종 MVP에서 사용하는 두 역할만 빠르게 선택할 수 있습니다.</small>
+          <small>최종 MVP에서 사용하는 주요 역할을 빠르게 선택할 수 있습니다.</small>
         </details>
       ) : null}
 

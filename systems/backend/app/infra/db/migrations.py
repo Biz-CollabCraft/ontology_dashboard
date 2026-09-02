@@ -77,6 +77,39 @@ MIGRATION_ROOT = Path(
     )
 ).expanduser()
 
+# System Operations migrations were renumbered after new canonical main
+# migrations occupied their original prefixes. Development databases may have
+# applied the old names before that rebase. Each alias represents byte-for-byte
+# equivalent DDL; record the canonical name without executing the same DDL twice.
+MIGRATION_VERSION_ALIASES: dict[str, dict[str, str]] = {
+    "sqlite": {
+        "0042_operational_asset_registry": "0041_operational_asset_registry",
+        "0043_system_mapping_drafts": "0042_system_mapping_drafts",
+        "0044_system_pipeline_jobs": "0043_system_pipeline_jobs",
+        "0045_system_impact_analysis": "0044_system_impact_analysis",
+        "0046_system_pipeline_job_downstream": "0045_system_pipeline_job_downstream",
+        "0047_system_managed_asset_drafts": "0046_system_managed_asset_drafts",
+        "0048_system_impact_generic_source": "0047_system_impact_generic_source",
+        "0049_system_model_operations": "0048_system_model_operations",
+        "0050_system_audit_and_logs": "0049_system_audit_and_logs",
+        "0051_system_e2e_timeline": "0050_system_e2e_timeline",
+        "0052_system_e2e_scope": "0051_system_e2e_scope",
+    },
+    "postgresql": {
+        "0044_operational_asset_registry": "0043_operational_asset_registry",
+        "0045_system_mapping_drafts": "0044_system_mapping_drafts",
+        "0046_system_pipeline_jobs": "0045_system_pipeline_jobs",
+        "0047_system_impact_analysis": "0046_system_impact_analysis",
+        "0048_system_pipeline_job_downstream": "0047_system_pipeline_job_downstream",
+        "0049_system_managed_asset_drafts": "0048_system_managed_asset_drafts",
+        "0050_system_impact_generic_source": "0049_system_impact_generic_source",
+        "0051_system_model_operations": "0050_system_model_operations",
+        "0052_system_audit_and_logs": "0051_system_audit_and_logs",
+        "0053_system_e2e_timeline": "0052_system_e2e_timeline",
+        "0054_system_e2e_scope": "0053_system_e2e_scope",
+    },
+}
+
 
 def _migration_files(dialect: str) -> list[Path]:
     directory = MIGRATION_ROOT / dialect
@@ -109,6 +142,14 @@ def _migrate_sqlite(path: Path) -> list[str]:
         for file_path in _migration_files("sqlite"):
             version = file_path.stem
             if version in existing:
+                continue
+            legacy_version = MIGRATION_VERSION_ALIASES["sqlite"].get(version)
+            if legacy_version in existing:
+                connection.execute(
+                    "INSERT INTO schema_migrations (version,applied_at) VALUES (?,?)",
+                    (version, datetime.now(timezone.utc).isoformat()),
+                )
+                existing.add(version)
                 continue
             if version == "0019_tenant_transaction_convergence":
                 # Pilot databases may already contain the action table because
@@ -220,6 +261,14 @@ def _migrate_postgresql(database_url: str) -> list[str]:
             for file_path in _migration_files("postgresql"):
                 version = file_path.stem
                 if version in existing:
+                    continue
+                legacy_version = MIGRATION_VERSION_ALIASES["postgresql"].get(version)
+                if legacy_version in existing:
+                    cursor.execute(
+                        "INSERT INTO schema_migrations (version) VALUES (%s)",
+                        (version,),
+                    )
+                    existing.add(version)
                     continue
                 cursor.execute(file_path.read_text(encoding="utf-8"))
                 cursor.execute(

@@ -605,6 +605,39 @@ class PredictiveMaintenanceRuntimeService:
             item_receipts=final_receipts,
         )
 
+    def product_result_summaries(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        artifact_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        """Expose the minimum canonical Product Result fields for E2E projection."""
+
+        summaries: list[dict[str, Any]] = []
+        for artifact_id in artifact_ids:
+            row = self.repository.result_artifact_row(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                artifact_id=artifact_id,
+            )
+            if row is None:
+                continue
+            summaries.append(
+                {
+                    "artifact_id": row.get("artifact_id"),
+                    "prediction_result_id": row.get("prediction_result_id"),
+                    "asset_id": row.get("asset_id"),
+                    "observed_at": row.get("observed_at"),
+                    "status_grade": row.get("status_grade"),
+                    "evidence_id": row.get("evidence_id"),
+                    "report_id": row.get("report_id"),
+                }
+            )
+        return summaries
+
     @staticmethod
     def _supports_dashboard_evidence_detail(
         source_contract: str,

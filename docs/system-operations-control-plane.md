@@ -14,9 +14,14 @@
 | **운영 자산 Registry** | SQLite Current / PostgreSQL Target | 파일 기반 자산 탐색·Registry 동기화·drift 추적 구현 |
 | **Mapping 편집·발행** | Current | Backend Draft revision·Diff·검증과 Generator 불변 발행 구현 및 회귀 검증 완료 |
 | **Pipeline Job Control** | Current (SQLite) | Mapping Replay와 선택적 downstream rebuild의 단계별 실행·추적 |
-| **Generator·Backend 로그 통합** | **Current (Phase 9, SQLite)** | 구조화 운영 로그·감사 기록 조회와 제한된 JSONL Export. 완전한 E2E Timeline은 Phase 10 |
+| **Generator·Backend 로그 통합** | **Current (Phase 9~10)** | 구조화 운영 로그·감사 기록과 Prediction Inbox 이후 E2E Timeline을 분리해 보존 |
 | **Model Artifact 자동 `latest.json`** | **현재 구현됨 (Current)** | Generator Training 성공 시 `latest.json` 자동 갱신 |
 | **운영 선택 `selected.json`** | **Current (Phase 8)** | 시스템 관리자 명시적 선택 포인터. 실제 Runtime 적용은 Active Model Set 활성화와 분리 |
+
+System Operations UI는 별도 관리자 제품 화면이 아니다. `system_operator`가 로그인하면
+기존 예지보전 App Shell과 사이드바를 유지하고, 사이드바의 **시스템 관리자** 항목에서
+운영 자산·계약·모델·Rebuild·영향 분석·감사·로그·E2E 화면을 내부 탭으로 전환한다.
+`/system/operations/*` 경로는 직접 링크 호환 경계로만 유지한다.
 
 ```text
 Baseline commit: 94ba34d7c3ca5f4f99c445bb32d2783487b52502
@@ -497,6 +502,11 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 
 ## 15. 단계별 구현 계획 (Phased Roadmap)
 
+> Migration transition note: System Operations migration 번호는 최신 `main`의 마지막
+> 번호 이후로 재정렬되었다. 이 브랜치의 재정렬 전 migration을 적용한 로컬 개발 DB는
+> 공식 배포 대상이 아니며 재사용하지 않고 재생성한다. 운영 DB에는 재정렬 전 migration을
+> 적용하지 않는다.
+
 | Phase | 단계명 | 핵심 산출물 및 구현 범위 | 선행 의존성 |
 |---|---|---|---|
 | **Phase 1** | 접근 경계 & 골격 | **Current** — `system_operator` 및 `system.assets.read` 독립 접근 경계 | - |
@@ -508,7 +518,7 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **Phase 7** | 계약/설정 확장 | **Current (SQLite)** — Preprocessing Plan, Feature/Label Schema, History Requirement, Training Config Draft·검증·Diff·불변 발행 및 영향 분석 | Phase 6 |
 | **Phase 8** | 모델 운영 선택 | **Current (SQLite)** — Model Artifact 감독, 모델별 `selected.json`, Active Model Set 검증·활성화·revision Rollback | Phase 7 |
 | **Phase 9** | 감사 & 로그 고도화 | **Current (SQLite)** — append-only Audit Trail, 구조화 운영 로그 조회, 오류 복구 가이드, 최대 10,000건 JSONL Export | Phase 8 |
-| **Phase 10** | E2E 통합 전환 | **Partial Current (SQLite)** — E2E Run/Timeline·이상 알림 저장 계약, 조회 API 및 System Operations UI. Diagnosis PostgreSQL 수신 후처리 연결은 adapter 구현 후 전환 | Phase 9 |
+| **Phase 10** | E2E 통합 전환 | **Current** — SQLite/PostgreSQL E2E 저장, Prediction Inbox 비차단 후처리, scope 기반 Alert API, System Operations Timeline 및 Dashboard polling 알림 | Phase 9 |
 
 ---
 
@@ -526,7 +536,7 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **하위 영향 분석** | Current (명시적 snapshot 및 단계 목록) | 대규모 관계 그래프와 자동 입력 해석 확장 | Phase 6 |
 | **Model 운영 선택** | `latest.json`, `selected.json`, `active-model-set.json` 역할 분리 및 Rollback 구현 | 만료·Archive·고급 승인 정책 | Phase 8 이후 |
 | **통합 운영 감사** | Phase 4~8 주요 변경 작업의 append-only 기록과 JSONL Export 구현 | Phase 10에서 E2E Timeline 상관관계 완성 | Phase 9 |
-| **E2E 실행·이상 알림** | SQLite Registry/API/UI 골격 구현. Backend 판정 결과만 Alert로 승격하는 서비스 경계 정의 | PostgreSQL Diagnosis 수신 성공 후 비차단 Timeline 기록, Dashboard 실시간 표시 | Phase 10 |
+| **E2E 실행·이상 알림** | Backend 판정 결과만 Alert로 승격하며 Inbox 후처리·scope API·운영 Timeline·Dashboard polling 표시 구현 | Transactional Outbox 기반 Timeline 재처리와 push 알림 고도화 | Phase 10 |
 
 ---
 

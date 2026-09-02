@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { navigate, usePathname } from "../../routing";
+import { useSystemOperationsNavigate, useSystemOperationsPathname } from "./SystemOperationsNavigation";
 import { createMappingDraft, getMappingDraft, getMappingDraftDiff, listMappingDrafts, publishMappingDraft, updateMappingDraft, validateMappingDraft } from "./mappingDraftApi";
 import type { MappingDraft, MappingDraftDiff, MappingFieldDefinition } from "./types";
 import { useAuth } from "../auth/AuthContext";
@@ -8,6 +8,7 @@ import { canCreateSystemAssetVersion, canPublishSystemAsset, canValidateSystemAs
 const EMPTY_FIELD: MappingFieldDefinition = { source_field: "", target_field: "", source_type: "float", target_type: "float", required: true, transform: "to_float" };
 
 function DraftEditor({ id }: { id: string }) {
+  const navigate = useSystemOperationsNavigate();
   const { user } = useAuth();
   const permissions = user?.permissions ?? [];
   const [draft, setDraft] = useState<MappingDraft | null>(null);
@@ -33,12 +34,14 @@ function DraftEditor({ id }: { id: string }) {
 }
 
 export function MappingDraftsPage() {
+  const navigate = useSystemOperationsNavigate();
+  const pathname = useSystemOperationsPathname();
   const { user } = useAuth();
   const canCreate = canCreateSystemAssetVersion(user?.permissions);
-  const pathname = usePathname(); const match = pathname.match(/^\/system\/operations\/mappings\/drafts\/([^/]+)$/);
+  const match = pathname.match(/^\/system\/operations\/mappings\/drafts\/([^/]+)$/);
   const [drafts,setDrafts] = useState<MappingDraft[]>([]); const [mappingId,setMappingId]=useState(""); const [target,setTarget]=useState(""); const [base,setBase]=useState(""); const [message,setMessage]=useState("");
   useEffect(() => { if (!match) void listMappingDrafts().then(value => setDrafts(value.items)); }, [Boolean(match)]);
   if (match) return <DraftEditor id={decodeURIComponent(match[1])} />;
   const create = async () => { try { const value=await createMappingDraft({mapping_id:mappingId,target_version:target,base_version:base||null}); navigate(`/system/operations/mappings/drafts/${value.draft_id}`); } catch(reason) { setMessage(reason instanceof Error?reason.message:"Draft 생성 실패"); } };
-  return <main className="ops-page"><button className="ops-back" onClick={() => navigate("/system/operations/assets")}>← 운영 자산</button><header><p className="ops-eyebrow">STATIC MAPPING MANAGEMENT</p><h1>Mapping Draft</h1><p>기존 발행본을 변경하지 않고 신규 버전을 작성합니다.</p></header>{canCreate && <section className="ops-panel"><h2>새 버전</h2><div className="ops-form-grid"><label>Mapping ID<input value={mappingId} onChange={e=>setMappingId(e.target.value)} /></label><label>Target version<input value={target} onChange={e=>setTarget(e.target.value)} /></label><label>Base version (선택)<input value={base} onChange={e=>setBase(e.target.value)} /></label></div><button onClick={() => void create()}>Draft 생성</button>{message&&<p>{message}</p>}</section>}<section className="ops-panel"><h2>Draft 목록</h2>{drafts.map(d=><button className="ops-draft-row" key={d.draft_id} onClick={()=>navigate(`/system/operations/mappings/drafts/${d.draft_id}`)}><strong>{d.mapping_id} · {d.target_version}</strong><span>revision {d.revision} · {d.status}</span></button>)}</section></main>;
+  return <main className="ops-page"><header><p className="ops-eyebrow">STATIC MAPPING MANAGEMENT</p><h1>Mapping Draft</h1><p>기존 발행본을 변경하지 않고 신규 버전을 작성합니다.</p></header>{canCreate && <section className="ops-panel"><h2>새 버전</h2><div className="ops-form-grid"><label>Mapping ID<input value={mappingId} onChange={e=>setMappingId(e.target.value)} /></label><label>Target version<input value={target} onChange={e=>setTarget(e.target.value)} /></label><label>Base version (선택)<input value={base} onChange={e=>setBase(e.target.value)} /></label></div><button onClick={() => void create()}>Draft 생성</button>{message&&<p>{message}</p>}</section>}<section className="ops-panel"><h2>Draft 목록</h2>{drafts.map(d=><button className="ops-draft-row" key={d.draft_id} onClick={()=>navigate(`/system/operations/mappings/drafts/${d.draft_id}`)}><strong>{d.mapping_id} · {d.target_version}</strong><span>revision {d.revision} · {d.status}</span></button>)}</section></main>;
 }

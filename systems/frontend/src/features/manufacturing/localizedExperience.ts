@@ -17,6 +17,7 @@ const ROLE_KEYS: Record<AppRole, {
   maintenance_technician: { label: "role.maintenance_technician", description: "role.maintenance_technician.description", focus: ["role.maintenance_technician.focus1", "role.maintenance_technician.focus2", "role.maintenance_technician.focus3"] },
   quality_auditor: { label: "role.quality_auditor", description: "role.quality_auditor.description", focus: ["role.quality_auditor.focus1", "role.quality_auditor.focus2", "role.quality_auditor.focus3"] },
   ml_validator: { label: "role.ml_validator", description: "role.ml_validator.description", focus: ["role.ml_validator.focus1", "role.ml_validator.focus2", "role.ml_validator.focus3"] },
+  system_operator: { label: "role.system_operator", description: "role.system_operator.description", focus: ["role.system_operator.focus1", "role.system_operator.focus2", "role.system_operator.focus3"] },
   fde: { label: "role.fde", description: "role.fde.description", focus: ["role.fde.focus1", "role.fde.focus2", "role.fde.focus3"] },
 };
 

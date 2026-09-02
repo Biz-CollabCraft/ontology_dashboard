@@ -231,3 +231,20 @@ def test_session_revocation_is_visible_across_identity_service_instances(tmp_pat
     with pytest.raises(AuthError) as revoked:
         second.principal_for_token(token)
     assert revoked.value.code == "authentication_required"
+
+
+def test_system_operator_demo_login_opens_embedded_operations_area(tmp_path: Path) -> None:
+    service = build_identity_service(
+        tmp_path / "system-operator-login.db",
+        app_env="test",
+        seed_demo=True,
+    )
+    principal, _, _, _ = service.login(
+        LoginRequest(email="operator@ontology.local", password="Operator!2026")
+    )
+    assert principal.roles == ["system_operator"]
+    assert principal.default_path == (
+        "/app/projects/manufacturing-demo-project/mvp?view=system"
+    )
+    assert "system.assets.read" in principal.permissions
+    assert "events.read" not in principal.permissions

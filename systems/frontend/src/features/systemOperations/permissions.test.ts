@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canActivateSystemModels, canCancelSystemJob, canCreateImpactAnalysis, canCreateManagedContract, canCreateSystemAssetVersion, canCreateSystemJob, canExecuteSystemRebuild, canExportSystemLogs, canPublishManagedContract, canPublishSystemAsset, canReadRecoveryGuides, canReadSystemAudit, canReadSystemJobs, canReadSystemLogs, canReadSystemModels, canReadSystemOperationalAssets, canRollbackSystemModels, canSelectSystemModels, canValidateManagedContract, canValidateSystemAsset } from "./permissions";
+import { canActivateSystemModels, canCancelSystemJob, canCreateImpactAnalysis, canCreateManagedContract, canCreateSystemAssetVersion, canCreateSystemJob, canExecuteSystemRebuild, canExportSystemLogs, canPublishManagedContract, canPublishSystemAsset, canReadRecoveryGuides, canReadSystemAudit, canReadSystemE2E, canReadSystemJobs, canReadSystemLogs, canReadSystemModels, canReadSystemOperationalAssets, canRollbackSystemModels, canSelectSystemModels, canValidateManagedContract, canValidateSystemAsset, hasAnySystemOperationsPermission } from "./permissions";
 
 describe("system operations permissions", () => {
   it("allows only the dedicated operational asset permission", () => {
@@ -46,5 +46,11 @@ describe("system operations permissions", () => {
     expect(canExportSystemLogs(permissions)).toBe(true);
     expect(canReadRecoveryGuides(permissions)).toBe(true);
     expect(canReadSystemAudit(["admin.audit.read"])).toBe(false);
+  });
+  it("allows the control-plane shell without granting unrelated asset access", () => {
+    expect(hasAnySystemOperationsPermission(["system.e2e.read"])).toBe(true);
+    expect(canReadSystemE2E(["system.e2e.read"])).toBe(true);
+    expect(canReadSystemOperationalAssets(["system.e2e.read"])).toBe(false);
+    expect(hasAnySystemOperationsPermission(["admin.users.manage"])).toBe(false);
   });
 });

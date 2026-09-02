@@ -82,6 +82,16 @@ export const ROLE_LANDING: Record<AppRole, RoleLanding> = {
     defaultWorkspaceView: "dashboard",
     reportMode: "editor",
   },
+  system_operator: {
+    label: "시스템 운영자",
+    eyebrow: "SYSTEM OPERATIONS",
+    description: "Generator 운영 자산, 실행 상태, 감사 로그와 복구 작업을 관리합니다.",
+    legacyRole: "manager",
+    defaultIntent: "overview",
+    focus: ["운영 자산", "파이프라인 상태", "감사·복구"],
+    defaultWorkspaceView: "dashboard",
+    reportMode: "reader",
+  },
   fde: {
     label: "Forward Deployed Engineer",
     eyebrow: "FDE WORKBENCH PREVIEW",

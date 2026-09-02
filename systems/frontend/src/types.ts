@@ -7,6 +7,7 @@ export type AppRole =
   | "maintenance_technician"
   | "quality_auditor"
   | "ml_validator"
+  | "system_operator"
   | "fde";
 export type UserStatus = "pending_approval" | "active" | "disabled";
 

@@ -124,6 +124,7 @@ export function FoundryAppShell({ projectId, workspaceId, activeRoute, title, ch
     maintenance_technician: t("role.maintenance_technician"),
     quality_auditor: t("role.quality_auditor"),
     ml_validator: t("role.ml_validator"),
+    system_operator: t("role.system_operator"),
     fde: t("role.fde"),
   };
   const roleLabel = activeRole ? roleLabels[activeRole] : user.is_admin ? roleLabels.tenant_admin : "Project member";

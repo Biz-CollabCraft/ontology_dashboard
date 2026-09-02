@@ -237,7 +237,7 @@ Generator는 Report나 Evidence를 생성하지 않으며, Backend의 수신 및
 
 > **Current vs Target 책임 구분**:
 > - **Current (현재 PR 구현 범위)**: Generator가 활성 Model Artifact별 점수(`score`)를 계산하여 설비별 K-V Dictionary(`model_results: dict[str, ModelPredictionResult]`) 구조의 `Prediction Result Batch`를 생성하고 Outbox에 저장한 뒤 `GENERATOR_PREDICTION_RESULT_URL`로 멱등 송신한다.
-> - **Target (후속 Backend 구현 범위)**: Backend가 `POST /internal/prediction-results` 엔드포인트를 제공하여 배치를 수신·저장하고, Threshold Policy 적용, 최종 이상 판정, Diagnosis, Product Result Artifact, Evidence, Report 생성, Dashboard 알림 및 재학습/후속 조치를 수행한다.
+> - **Current (Backend 소비 경계)**: Backend가 `POST /internal/prediction-results`에서 배치를 멱등 수신·저장하고 Threshold Policy를 적용하여 Product Result Artifact/Evidence로 승격한다. 승격 성공 후 E2E Timeline과 비정상 Alert를 비차단 후처리로 기록하며, Project/Workspace 범위 Dashboard API는 이 Backend 판정 결과만 제공한다. Report 및 후속 조치는 기존 Backend 도메인 흐름에서 Product Result/Evidence를 입력으로 수행한다.
 
 ### 5.1 Backend Canonical Root 및 목표 디렉터리 구조
 

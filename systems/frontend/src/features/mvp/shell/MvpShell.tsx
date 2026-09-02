@@ -20,7 +20,7 @@ const VIEW_LABELS: Record<MvpView, { label: string; description: string }> = {
   objects: { label: "Assets", description: "설비 상태와 근거" },
   operations: { label: "작업요청", description: "처리할 작업" },
   reports: { label: "Reports", description: "보고서 출력" },
-  system: { label: "시스템 관리자", description: "AI 요약 처리 로그" },
+  system: { label: "시스템 관리자", description: "운영 자산과 시스템 상태" },
 };
 
 const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: typeof LayoutDashboard }> = [
@@ -28,7 +28,7 @@ const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: 
   { id: "objects", label: "Assets", description: "설비 상태와 근거", icon: Boxes },
   { id: "operations", label: "작업요청", description: "처리할 작업", icon: ClipboardCheck },
   { id: "reports", label: "Reports", description: "보고서 출력", icon: FileText },
-  { id: "system", label: "시스템 관리자", description: "AI 요약 처리 로그", icon: TerminalSquare },
+  { id: "system", label: "시스템 관리자", description: "운영 자산과 시스템 상태", icon: TerminalSquare },
 ];
 
 const ROLE_LABELS: Record<MvpRoleLens, { label: string; description: string; icon: typeof LayoutDashboard }> = {
@@ -44,7 +44,7 @@ const ROLE_SCREENS: Array<{ id: MvpRoleLens; label: string; description: string;
 const WORKFLOW_SYSTEM_ITEM = {
   id: "system" as const,
   label: "시스템 관리자",
-  description: "AI 요약 처리 로그",
+  description: "운영 자산과 시스템 상태",
   icon: TerminalSquare,
 };
 
@@ -65,6 +65,7 @@ export function MvpShell({
   refreshing,
   refreshIntervalSeconds,
   onLogout,
+  systemOperationsOnly = false,
   children,
 }: {
   context: MvpContextModel;
@@ -77,17 +78,18 @@ export function MvpShell({
   refreshing: boolean;
   refreshIntervalSeconds: number;
   onLogout: () => void | Promise<void>;
+  systemOperationsOnly?: boolean;
   children: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const workflowMode = dashboard === "workflow";
-  const navItems = mvpNavigationItems(dashboard);
+  const navItems = systemOperationsOnly ? [WORKFLOW_SYSTEM_ITEM] : mvpNavigationItems(dashboard);
   const roleMeta = ROLE_LABELS[role];
   const active = workflowMode && activeView === "overview" ? roleMeta : VIEW_LABELS[activeView];
   const headingDetail = workflowMode && activeView === "overview"
     ? "하나의 업무판에서 상황, 설비 근거, 작업요청을 역할별로 바로 이어갑니다."
     : activeView === "system"
-    ? "자동 감시 생성, 운영자 요청, 대체 요약, 검증 상태를 한 화면에서 조회하는 시스템 관리자 로그입니다."
+    ? "Generator 운영 자산, 계약, 모델, 재구축, 감사 로그와 E2E 상태를 현재 업무 화면 안에서 관리합니다."
     : activeView === "reports"
     ? "map-report UI prototype의 보고서 화면과 선택 Event 브리핑을 하나의 사이드탭에서 전환합니다."
     : activeView !== "overview"

@@ -230,6 +230,7 @@ export function DashboardShell({
     maintenance_technician: t("role.maintenance_technician"),
     quality_auditor: t("role.quality_auditor"),
     ml_validator: t("role.ml_validator"),
+    system_operator: t("role.system_operator"),
     fde: t("role.fde"),
   };
   const localizedNavItems = NAV_ITEMS.map((item) => ({

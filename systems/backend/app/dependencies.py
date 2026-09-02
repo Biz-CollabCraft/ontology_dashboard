@@ -541,9 +541,16 @@ def get_system_audit_service() -> SystemAuditService:
 def get_system_e2e_service() -> SystemE2EService:
     target = database_target()
     ensure_database_migrations()
-    if is_postgresql(target):
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="System E2E PostgreSQL adapter is not configured.")
     return SystemE2EService(SystemE2ERepository(target))
+
+
+def get_optional_system_e2e_service() -> SystemE2EService | None:
+    """Keep observability failure from blocking the canonical Prediction Inbox."""
+
+    try:
+        return get_system_e2e_service()
+    except Exception:
+        return None
 
 
 @lru_cache(maxsize=1)

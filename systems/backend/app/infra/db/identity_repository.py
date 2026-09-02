@@ -464,6 +464,15 @@ class IdentityRepository:
                         )
                 else:
                     user_id = str(existing["id"])
+                connection.execute(
+                    """
+                    INSERT INTO password_credentials(user_id,password_hash,changed_at)
+                    VALUES (?,?,?)
+                    ON CONFLICT(user_id)
+                    DO UPDATE SET password_hash=excluded.password_hash,changed_at=excluded.changed_at
+                    """,
+                    (user_id, self.password_hasher.hash(account["password"]), now),
+                )
                 for role_code in account["roles"]:
                     connection.execute(
                         "INSERT OR IGNORE INTO user_roles (user_id,role_code) VALUES (?,?)",
@@ -1036,7 +1045,7 @@ class IdentityRepository:
             is_admin="tenant_admin" in active_project_roles,
             default_path=(
                 "/admin" if "tenant_admin" in active_project_roles
-                else "/system/operations/assets" if "system_operator" in active_project_roles
+                else "/app/projects/manufacturing-demo-project/mvp?view=system" if "system_operator" in active_project_roles
                 else "/app"
             ),
             landing_key=primary_role,

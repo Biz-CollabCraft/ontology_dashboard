@@ -129,6 +129,12 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
 
 DEMO_ACCOUNTS: tuple[dict[str, Any], ...] = (
     {
+        "email": "operator@ontology.local",
+        "password": "Operator!2026",
+        "display_name": "시스템 관리자",
+        "roles": ["system_operator"],
+    },
+    {
         "email": "admin@ontology.local",
         "password": "OntologyAdmin!2026",
         "display_name": "Ontology 관리자",

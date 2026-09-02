@@ -59,6 +59,8 @@ src/api.ts                        credentials + CSRF aware API client
 - FDE customer workspace·ontology registry·deployment·diagnostic Workbench
 - 데이터 사이언티스트 threshold cost·slice·drift·Gold regression·release 요청
 - 관리자 Template·Model Workflow Approvals
+- System Operations E2E Timeline 조회와 Backend 판정 기반 Dashboard 이상 알림 polling
+- 시스템 운영자는 별도 관리자 앱이 아니라 기존 MVP 사이드바의 `시스템 관리자` 영역에서 운영 자산·계약·모델·로그를 관리
 - FDE Planner Assistant의 registry·Catalog·Evidence whitelist preview
 - PDF·CSV·JSON export format selector와 browser artifact download
 - Planner draft의 non-persisted Canvas 적용과 별도 승인 요청 경계

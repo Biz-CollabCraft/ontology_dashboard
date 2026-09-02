@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { navigate, usePathname } from "../../routing";
+import { useSystemOperationsNavigate, useSystemOperationsPathname } from "./SystemOperationsNavigation";
 import { useAuth } from "../auth/AuthContext";
 import { cancelPipelineJob, createRebuildJob, getPipelineJob, listPipelineJobs } from "./pipelineJobApi";
 import { canCancelSystemJob, canCreateSystemJob } from "./permissions";
@@ -8,6 +8,7 @@ import type { SystemPipelineJob } from "./types";
 const shaPattern = /^[a-f0-9]{64}$/;
 
 function JobDetail({ jobId }: { jobId: string }) {
+  const navigate = useSystemOperationsNavigate();
   const { user } = useAuth();
   const [job, setJob] = useState<SystemPipelineJob | null>(null);
   const [message, setMessage] = useState("");
@@ -25,8 +26,9 @@ function JobDetail({ jobId }: { jobId: string }) {
 }
 
 export function PipelineJobsPage() {
+  const navigate = useSystemOperationsNavigate();
+  const pathname = useSystemOperationsPathname();
   const { user } = useAuth();
-  const pathname = usePathname();
   const match = pathname.match(/^\/system\/operations\/jobs\/([^/]+)$/);
   const [jobs, setJobs] = useState<SystemPipelineJob[]>([]);
   const [mappingId, setMappingId] = useState(""); const [version, setVersion] = useState("");
@@ -42,8 +44,8 @@ export function PipelineJobsPage() {
       navigate(`/system/operations/jobs/${encodeURIComponent(job.job_id)}`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Job 생성 실패"); }
   };
-  return <main className="ops-page"><button className="ops-back" onClick={() => navigate("/system/operations/assets")}>← 운영 자산</button><header><p className="ops-eyebrow">SYSTEM OPERATIONS</p><h1>Rebuild / Replay Job</h1><p>발행된 Mapping으로 원본 gen_data를 재처리합니다. 기존 Dataset은 변경하지 않습니다.</p></header>
-    {canCreateSystemJob(user?.permissions) && <section className="ops-panel"><h2>새 Replay</h2><div className="ops-form-grid"><label>Mapping ID<input value={mappingId} onChange={e=>setMappingId(e.target.value)} /></label><label>Mapping version<input value={version} onChange={e=>setVersion(e.target.value)} /></label><label>Mapping SHA-256<input value={checksum} onChange={e=>setChecksum(e.target.value.trim())} /></label><label>Source URI<input value={sourceUri} onChange={e=>setSourceUri(e.target.value)} /></label><label>실행 사유<input value={reason} onChange={e=>setReason(e.target.value)} /></label><label><input type="checkbox" checked={activate} onChange={e=>setActivate(e.target.checked)} /> 성공 후 활성화</label></div><button onClick={() => void create()}>Rebuild Job 생성</button>{message && <p>{message}</p>}</section>}
-    <section className="ops-panel"><h2>Job 목록</h2>{jobs.map(job=><button className="ops-draft-row" key={job.job_id} onClick={()=>navigate(`/system/operations/jobs/${job.job_id}`)}><strong>{job.mapping_id} · {job.mapping_version}</strong><span>{job.status} · {job.source_uri}</span></button>)}</section>
+  return <main className="ops-page"><header><p className="ops-eyebrow">SYSTEM OPERATIONS</p><h1>Rebuild / Replay Job</h1><p>발행된 Mapping으로 원본 gen_data를 재처리합니다. 기존 Dataset은 변경하지 않습니다.</p></header>
+    {canCreateSystemJob(user?.permissions) && <section className="ops-panel"><h2>새 Replay</h2><div className="ops-form-grid"><label>Mapping ID<input placeholder="예: mapping-milling-v1" value={mappingId} onChange={e=>setMappingId(e.target.value)} /></label><label>Mapping version<input placeholder="예: 1.0.0" value={version} onChange={e=>setVersion(e.target.value)} /></label><label>Mapping SHA-256<input placeholder="64자리 SHA-256" value={checksum} onChange={e=>setChecksum(e.target.value.trim())} /></label><label>Source URI<input placeholder="예: gen_data/canonical/..." value={sourceUri} onChange={e=>setSourceUri(e.target.value)} /></label><label>실행 사유<input placeholder="재처리 사유 입력" value={reason} onChange={e=>setReason(e.target.value)} /></label><label className="ops-checkbox-field"><input type="checkbox" checked={activate} onChange={e=>setActivate(e.target.checked)} /><span>성공 후 자동 활성화</span></label></div><button onClick={() => void create()}>Rebuild Job 생성</button>{message && <p>{message}</p>}</section>}
+    <section className="ops-panel"><h2>Job 목록</h2>{jobs.length === 0 ? <div className="ops-table-empty">실행된 Job이 없습니다.</div> : jobs.map(job=><button className="ops-draft-row" key={job.job_id} onClick={()=>navigate(`/system/operations/jobs/${job.job_id}`)}><strong>{job.mapping_id} · {job.mapping_version}</strong><span>{job.status} · {job.source_uri}</span></button>)}</section>
   </main>;
 }

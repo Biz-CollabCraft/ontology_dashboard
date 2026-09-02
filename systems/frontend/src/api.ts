@@ -779,6 +779,29 @@ export function getPredictiveMaintenanceLatestResults(
   );
 }
 
+export type PredictiveMaintenanceAlert = {
+  alert_id: string;
+  event_id: string;
+  asset_id: string;
+  observed_at: string;
+  severity: "attention" | "warning" | "critical";
+  status: "open" | "acknowledged" | "closed";
+  headline: string;
+  product_result_id: string;
+};
+
+export function getPredictiveMaintenanceAlerts(
+  projectId: string,
+  workspaceId: string,
+  limit = 20,
+  signal?: AbortSignal,
+): Promise<{ items: PredictiveMaintenanceAlert[]; count: number }> {
+  return request(
+    `${predictiveMaintenanceBase(projectId, workspaceId)}/alerts?limit=${limit}`,
+    { signal },
+  );
+}
+
 export function getPostMaintenanceProductResults(
   projectId: string,
   workspaceId: string,

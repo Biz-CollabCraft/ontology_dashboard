@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from app.identity import IdentityService
-from app.infra.db.migrations import migrate
+from app.infra.db.migrations import MIGRATION_VERSION_ALIASES, migrate
 from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
 from app.infra.db.project_repository import SQLiteProjectContextResolver
@@ -143,6 +143,30 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
         }
     assert "restart_at" in maintenance_action_columns
     assert "restart_at" not in maintenance_event_columns
+
+
+def test_renumbered_system_operations_migrations_reconcile_without_reapplying_ddl(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "renumbered-migration.db"
+    migrate(str(database))
+    aliases = MIGRATION_VERSION_ALIASES["sqlite"]
+    with sqlite3.connect(database) as connection:
+        for canonical, legacy in aliases.items():
+            connection.execute(
+                "UPDATE schema_migrations SET version=? WHERE version=?",
+                (legacy, canonical),
+            )
+
+    assert migrate(str(database)) == []
+    with sqlite3.connect(database) as connection:
+        versions = {
+            row[0]
+            for row in connection.execute(
+                "SELECT version FROM schema_migrations"
+            ).fetchall()
+        }
+    assert set(aliases) <= versions
 
 
 def test_operations_manual_migration_preserves_existing_recommendation_lineage(

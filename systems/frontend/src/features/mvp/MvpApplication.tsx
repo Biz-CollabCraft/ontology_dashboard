@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { navigate } from "../../routing";
+import { getPredictiveMaintenanceAlerts, type PredictiveMaintenanceAlert } from "../../api";
 import type {
   MvpAsset,
   MvpBootstrapModel,
@@ -25,10 +26,10 @@ import { MvpOperationsPage } from "./operations/MvpOperationsPage";
 import { MvpOverviewPage } from "./overview/MvpOverviewPage";
 import { MvpReportsPage } from "./report/MvpReportsPage";
 import { MvpShell } from "./shell/MvpShell";
-import { MvpSystemAdminPage } from "./system/MvpSystemAdminPage";
+import { SystemOperationsApp } from "../systemOperations";
+import { hasAnySystemOperationsPermission } from "../systemOperations/permissions";
 import {
   canMaterializeAgentReviewSummary,
-  canReadMvpSystemLogs,
 } from "./permissions";
 import "./mvp.css";
 
@@ -42,6 +43,9 @@ function defaultRoleLens(roles: string[]): MvpRoleLens {
 
 export function MvpApplication({ projectId }: { projectId: string }) {
   const { user } = useAuth();
+  if (user?.roles.includes("system_operator")) {
+    return <SystemOperatorApplication projectId={projectId} />;
+  }
   const role = defaultRoleLens(user?.active_project_roles.length ? user.active_project_roles : user?.roles ?? []);
   return (
     <MvpSelectionProvider projectId={projectId} defaultRole={role}>
@@ -50,6 +54,48 @@ export function MvpApplication({ projectId }: { projectId: string }) {
   );
 }
 export default MvpApplication;
+
+function SystemOperatorApplication({ projectId }: { projectId: string }) {
+  const { logout } = useAuth();
+  const signOut = useCallback(async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  }, [logout]);
+  const context = useMemo(() => ({
+    projectId,
+    projectName: "System Operations",
+    workspaceId: "system-operations",
+    workspaceName: "Generator · Backend",
+    datasetVersionId: "operational-assets",
+    datasetLabel: "Operational control plane",
+    sourceVersion: null,
+    modelVersion: null,
+    schemaVersion: null,
+    sourceMode: "canonical-runtime" as const,
+    sourceStatus: "운영 계약과 실행 상태 연결",
+    refreshedAt: new Date().toISOString(),
+    observedAt: null,
+    stale: false,
+    warnings: [],
+  }), [projectId]);
+  return (
+    <MvpShell
+      context={context}
+      activeView="system"
+      dashboard="workflow"
+      role="process_manager"
+      onNavigate={() => undefined}
+      onRoleChange={() => undefined}
+      onRefresh={() => undefined}
+      refreshing={false}
+      refreshIntervalSeconds={MVP_REFRESH_INTERVAL_SECONDS}
+      onLogout={signOut}
+      systemOperationsOnly
+    >
+      <SystemOperationsApp embedded />
+    </MvpShell>
+  );
+}
 
 function MvpApplicationController({ projectId }: { projectId: string }) {
   const { user, logout } = useAuth();
@@ -63,6 +109,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailVersion, setDetailVersion] = useState(0);
   const [sensorWindow, setSensorWindow] = useState<MvpSensorWindowId>("24h");
+  const [alerts, setAlerts] = useState<PredictiveMaintenanceAlert[]>([]);
 
   const refresh = useCallback(() => setRefreshVersion((value) => value + 1), []);
   const retryDetail = useCallback(() => setDetailVersion((value) => value + 1), []);
@@ -108,6 +155,17 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, [projectId, refreshVersion, selection.workspaceId]);
+
+  useEffect(() => {
+    const workspaceId = model?.context.workspaceId ?? selection.workspaceId;
+    if (!workspaceId) { setAlerts([]); return; }
+    const controller = new AbortController();
+    setAlerts([]);
+    getPredictiveMaintenanceAlerts(projectId, workspaceId, 20, controller.signal)
+      .then((payload) => setAlerts(payload.items.filter((item) => item.status === "open")))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [model?.context.workspaceId, projectId, refreshVersion, selection.workspaceId]);
 
   const selectedEvent = useMemo(
     () => model?.events.find((item) => item.eventId === selection.eventId) ?? null,
@@ -240,7 +298,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   const canNote = Boolean(user?.permissions.includes("events.note"));
   const canExecuteFieldWorkflow = Boolean(user?.permissions.includes("field.tasks.update"));
   const canMaterializeAgentSummary = canMaterializeAgentReviewSummary(user?.permissions);
-  const canReadSystemLogs = canReadMvpSystemLogs(user?.permissions);
+  const canReadSystemOperations = hasAnySystemOperationsPermission(user?.permissions);
   const selectedAssetId = selection.assetId;
 
   let content;
@@ -251,9 +309,9 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   } else if (selection.view === "reports") {
     content = <MvpReportsPage activeTab={selection.reportTab} model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectTab={selectReportTab} onSelectEvent={selectEvent} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
   } else if (selection.view === "system") {
-    content = canReadSystemLogs
-      ? <MvpSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />
-      : <MvpState kind="error" title="시스템 관리자 권한 필요" detail="AI 요약 처리 로그는 관리자 감사 권한이 있는 사용자만 조회할 수 있습니다." />;
+    content = canReadSystemOperations
+      ? <SystemOperationsApp embedded />
+      : <MvpState kind="error" title="시스템 관리자 권한 필요" detail="Generator 운영 자산과 시스템 처리 상태는 시스템 운영 권한이 있는 사용자만 조회할 수 있습니다." />;
   } else {
     content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
@@ -272,6 +330,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       onLogout={signOut}
     >
       {error ? <div className="mvp-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}
+      {alerts.length > 0 ? <div className="mvp-inline-warning" role="alert"><strong>이상 알림 {alerts.length}건</strong><span>{alerts[0].headline} · {alerts[0].severity}</span></div> : null}
       {content}
     </MvpShell>
   );

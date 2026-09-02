@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 import os
 from datetime import datetime
 from typing import Any, Literal
@@ -17,6 +18,8 @@ from app.dependencies import (
     client_ip,
     get_identity_service,
     get_predictive_maintenance_runtime_service,
+    get_optional_system_e2e_service,
+    get_system_e2e_service,
     require_csrf,
     require_permission,
 )
@@ -34,6 +37,7 @@ router = APIRouter(
     tags=["predictive-maintenance-runtime"],
 )
 internal_router = APIRouter(prefix="/internal", tags=["prediction-result-inbox"])
+logger = logging.getLogger(__name__)
 PREDICTION_RESULT_INGEST_TOKEN_ENV = "PREDICTION_RESULT_INGEST_TOKEN"
 PREDICTION_RESULT_INGEST_ORG_ENV = "PREDICTION_RESULT_INGEST_ORGANIZATION_ID"
 
@@ -381,6 +385,30 @@ def post_maintenance_product_result(
         maintenance_event_id=maintenance_event_id,
     )
     return None if result is None else result.model_dump(mode="json")
+
+
+@router.get("/alerts")
+def predictive_maintenance_alerts(
+    project_id: str,
+    workspace_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    principal: Principal = Depends(require_permission("events.read")),
+    identity: IdentityService = Depends(get_identity_service),
+):
+    """Return Backend-decided alerts; clients never apply raw-score thresholds."""
+
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    return get_system_e2e_service().list_alerts(
+        organization_id=principal.organization_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        limit=limit,
+    )
 
 
 @router.get("/snapshots/{prediction_id}")
@@ -757,6 +785,7 @@ async def replay_events(
 
 @internal_router.post("/prediction-results")
 def receive_internal_prediction_results(
+    request: Request,
     payload: dict[str, Any] = Body(...),
     project_id: str = Query(max_length=160),
     workspace_id: str = Query(max_length=160),
@@ -765,6 +794,7 @@ def receive_internal_prediction_results(
     service: PredictiveMaintenanceRuntimeService = Depends(
         get_predictive_maintenance_runtime_service
     ),
+    e2e_service=Depends(get_optional_system_e2e_service),
 ):
     identity.require_permission(principal, "predictions.ingest")
     require_scope(
@@ -802,4 +832,29 @@ def receive_internal_prediction_results(
                 "artifact_ids": promotion.artifact_ids,
             }
         )
+        try:
+            if e2e_service is None:
+                raise RuntimeError("System E2E repository is unavailable")
+            summaries = service.product_result_summaries(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                artifact_ids=receipt.artifact_ids,
+            )
+            e2e_service.record_prediction_receipt(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                payload=payload,
+                receipt=receipt,
+                product_results=summaries,
+                request_id=getattr(request.state, "request_id", receipt.batch_id),
+            )
+        except Exception as exc:
+            logger.exception(
+                "SYSTEM_E2E_TIMELINE_WRITE_FAILED batch_id=%s request_id=%s error_type=%s",
+                receipt.batch_id,
+                getattr(request.state, "request_id", None),
+                type(exc).__name__,
+            )
     return _prediction_inbox_response(receipt)

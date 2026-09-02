@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { navigate, usePathname } from "../../routing";
+import { useSystemOperationsNavigate, useSystemOperationsPathname } from "./SystemOperationsNavigation";
 import { useAuth } from "../auth/AuthContext";
 import { createManagedContractDraft, diffManagedContractDraft, getManagedContractDraft, listManagedContractDrafts, publishManagedContractDraft, updateManagedContractDraft, validateManagedContractDraft } from "./managedContractApi";
 import { canCreateManagedContract, canPublishManagedContract, canValidateManagedContract } from "./permissions";
@@ -17,6 +17,7 @@ function StructuredFields({ draft, payload, setPayload }: { draft: ManagedContra
 }
 
 function DraftDetail({ id }: { id: string }) {
+  const navigate = useSystemOperationsNavigate();
   const { user } = useAuth(); const [draft, setDraft] = useState<ManagedContractDraft | null>(null);
   const [payload, setPayload] = useState<Record<string, unknown>>({}); const [jsonText, setJsonText] = useState("");
   const [diff, setDiff] = useState<ManagedContractDiff | null>(null); const [message, setMessage] = useState("");
@@ -37,14 +38,36 @@ function DraftDetail({ id }: { id: string }) {
 }
 
 export function ManagedContractsPage() {
-  const { user } = useAuth(); const pathname = usePathname(); const match = pathname.match(/^\/system\/operations\/contracts\/drafts\/([^/]+)$/);
+  const navigate = useSystemOperationsNavigate();
+  const pathname = useSystemOperationsPathname();
+  const { user } = useAuth(); const match = pathname.match(/^\/system\/operations\/contracts\/drafts\/([^/]+)$/);
   const [items, setItems] = useState<ManagedContractDraft[]>([]); const [assetType, setAssetType] = useState<ManagedContractAssetType>("preprocessing_plan");
   const [assetId, setAssetId] = useState(""); const [target, setTarget] = useState(""); const [base, setBase] = useState(""); const [message, setMessage] = useState("");
   useEffect(() => { if (!match) void listManagedContractDrafts().then(value => setItems(value.items)); }, [Boolean(match)]);
   if (match) return <DraftDetail id={decodeURIComponent(match[1])} />;
   const create = async () => { try { const value = await createManagedContractDraft({ asset_type: assetType, asset_id: assetId, target_version: target, base_version: base || null }); navigate(`/system/operations/contracts/drafts/${value.draft_id}`); } catch (error) { setMessage(error instanceof Error ? error.message : "Draft 생성 실패"); } };
-  return <main className="ops-page"><button className="ops-back" onClick={() => navigate("/system/operations/assets")}>← 운영 자산</button><header><p className="ops-eyebrow">SYSTEM OPERATIONS</p><h1>계약·설정 자산</h1><p>기존 발행본을 수정하지 않고 신규 버전 Draft로 관리합니다.</p></header>
-    {canCreateManagedContract(user?.permissions) && <section className="ops-panel"><h2>새 버전 Draft</h2><div className="ops-form-grid"><label>자산 유형<select value={assetType} onChange={event => setAssetType(event.target.value as ManagedContractAssetType)}>{TYPES.map(value => <option key={value}>{value}</option>)}</select></label><label>Asset ID<input value={assetId} onChange={event => setAssetId(event.target.value)} /></label><label>Target version<input value={target} onChange={event => setTarget(event.target.value)} /></label><label>Base version (선택)<input value={base} onChange={event => setBase(event.target.value)} /></label></div><button onClick={() => void create()}>Draft 생성</button>{message && <p>{message}</p>}</section>}
-    <section className="ops-panel"><h2>Draft 목록</h2>{items.map(item => <button className="ops-draft-row" key={item.draft_id} onClick={() => navigate(`/system/operations/contracts/drafts/${item.draft_id}`)}><strong>{item.asset_type} · {item.asset_id} · {item.target_version}</strong><span>revision {item.revision} · {item.status} · {item.validation_status}</span></button>)}</section>
+  return <main className="ops-page"><header><p className="ops-eyebrow">SYSTEM OPERATIONS</p><h1>계약·설정 자산</h1><p>기존 발행본을 수정하지 않고 신규 버전 Draft로 관리합니다.</p></header>
+    {canCreateManagedContract(user?.permissions) && <section className="ops-panel">
+      <div className="ops-panel-header-row">
+        <h2>새 버전 Draft</h2>
+        <label className="ops-header-field">
+          <span>자산 유형</span>
+          <select value={assetType} onChange={event => setAssetType(event.target.value as ManagedContractAssetType)}>
+            {TYPES.map(value => <option key={value}>{value}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="ops-form-grid">
+        <label>Asset ID<input placeholder="예: pdm-preprocess" value={assetId} onChange={event => setAssetId(event.target.value)} /></label>
+        <label>Target version<input placeholder="예: 1.1.0" value={target} onChange={event => setTarget(event.target.value)} /></label>
+        <label>Base version (선택)<input placeholder="예: 1.0.0" value={base} onChange={event => setBase(event.target.value)} /></label>
+      </div>
+      <button onClick={() => void create()}>Draft 생성</button>
+      {message && <p>{message}</p>}
+    </section>}
+    <section className="ops-panel">
+      <h2>Draft 목록</h2>
+      {items.length === 0 ? <div className="ops-table-empty">작성된 Draft가 없습니다.</div> : items.map(item => <button className="ops-draft-row" key={item.draft_id} onClick={() => navigate(`/system/operations/contracts/drafts/${item.draft_id}`)}><strong>{item.asset_type} · {item.asset_id} · {item.target_version}</strong><span>revision {item.revision} · {item.status} · {item.validation_status}</span></button>)}
+    </section>
   </main>;
 }
