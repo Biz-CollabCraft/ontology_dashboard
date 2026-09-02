@@ -117,6 +117,32 @@
 :root[data-density="comfortable"] .rw-preview-content { padding-inline: 38px; }
 :root[data-density="comfortable"] .rw-preview-operational-focus { padding-inline: 38px; }
 
+:root[data-density="standard"] .rw-preview-brand small,
+:root[data-density="standard"] .rw-preview-user small,
+:root[data-density="standard"] .rw-preview-left-heading span,
+:root[data-density="standard"] .rw-preview-left nav small,
+:root[data-density="standard"] .rw-preview-scope span,
+:root[data-density="standard"] .rw-preview-scope small,
+:root[data-density="standard"] .rw-preview-settings-trigger,
+:root[data-density="standard"] .rw-preview-collapse { font-size: 9px; }
+:root[data-density="standard"] .rw-preview-left nav button>span,
+:root[data-density="standard"] .rw-preview-page-heading>span { font-size: 9px; }
+:root[data-density="standard"] .rw-preview-left nav strong,
+:root[data-density="standard"] .rw-preview-user strong { font-size: 10px; }
+:root[data-density="standard"] .rw-preview-brand small { display:block; color:var(--rw-muted); line-height:1.2; }
+:root[data-density="standard"] .rw-preview-brand>div { display:grid; gap:1px; }
+
+:root[data-density="comfortable"] .rw-preview-brand small,
+:root[data-density="comfortable"] .rw-preview-user small,
+:root[data-density="comfortable"] .rw-preview-left-heading span,
+:root[data-density="comfortable"] .rw-preview-left nav small,
+:root[data-density="comfortable"] .rw-preview-scope span,
+:root[data-density="comfortable"] .rw-preview-scope small { font-size: 11px; }
+:root[data-density="comfortable"] .rw-preview-left nav button>span,
+:root[data-density="comfortable"] .rw-preview-page-heading>span,
+:root[data-density="comfortable"] .rw-preview-settings-trigger,
+:root[data-density="comfortable"] .rw-preview-collapse { font-size: 11px; }
+
 .rw-command-palette-layer{position:fixed;inset:0;z-index:140;display:grid;place-items:start center;padding-top:min(15vh,132px);background:rgba(4,8,12,.42);backdrop-filter:blur(4px)}
 .rw-command-palette{width:min(680px,calc(100vw - 28px));max-height:min(70vh,680px);display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden;border:1px solid var(--rw-line-strong);border-radius:14px;color:var(--rw-text);background:color-mix(in srgb,var(--rw-panel) 97%,transparent);box-shadow:0 28px 90px rgba(0,0,0,.38)}
 .rw-command-palette>header{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid var(--rw-line)}

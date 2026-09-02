@@ -1234,18 +1234,14 @@ function reviewPriorityLabel(summary: LineImpactSummary, detail: OperationsEvent
 function FactoryMonitoringMapPanel({
   factoryCells,
   selectedAsset,
-  factorySlotPreview,
   postMaintenancePredictions,
   planningBasis,
-  onPreviewSlot,
   onPreviewAssetSlot,
 }: {
   factoryCells: FactoryCellLayout[];
   selectedAsset: OperationsAsset | null;
-  factorySlotPreview: FactorySlotPreview | null;
   postMaintenancePredictions: Record<string, PostMaintenancePredictionSummary>;
   planningBasis: { value: string; fallback: boolean };
-  onPreviewSlot: (slot: FactoryCellSlot, cell: FactoryCellLayout) => void;
   onPreviewAssetSlot: (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => void;
 }) {
   return (
@@ -1292,25 +1288,27 @@ function FactoryMonitoringMapPanel({
                           {cell.slots.map((slot) => {
                             const asset = slot.asset;
                             const currentPrediction = asset ? postMaintenancePredictions[asset.assetId] : null;
-                            const selected = asset
-                              ? selectedAsset?.assetId === asset.assetId
-                              : factorySlotPreview?.slot.id === slot.id;
+                            const selected = asset ? selectedAsset?.assetId === asset.assetId : false;
                             const tone = asset ? mapTone(currentPrediction?.statusGrade ?? asset.status) : "slot";
                             const title = asset
                               ? `${displayFactorySlotName(slot, cell)} · ${operationsMonitorStatusLabel(currentPrediction?.statusGrade ?? asset.status)} · ${formatProbability(currentPrediction?.failureProbability ?? asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}`
                               : `${cell.label} · ${slot.label} · 설비 미연결`;
-                            return (
+                            return asset ? (
                               <button
                                 key={slot.id}
                                 type="button"
                                 className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""}`}
                                 aria-pressed={selected}
-                                onClick={() => asset ? onPreviewAssetSlot(asset, slot, cell) : onPreviewSlot(slot, cell)}
+                                onClick={() => onPreviewAssetSlot(asset, slot, cell)}
                                 title={title}
                               >
-                                <span>{asset ? displayAssetShortName(asset) : slot.kind === "compressor" ? "공기압축기" : slot.label.replace("CNC ", "")}</span>
-                                {asset && tone !== "normal" ? <b className="operations-asset-alert-badge" aria-label={`${operationsMonitorStatusLabel(asset.status)} 알림`}>{tone === "critical" ? "!" : "1"}</b> : null}
+                                <span>{displayAssetShortName(asset)}</span>
+                                {tone !== "normal" ? <b className="operations-asset-alert-badge" aria-label={`${operationsMonitorStatusLabel(asset.status)} 알림`}>{tone === "critical" ? "!" : "1"}</b> : null}
                               </button>
+                            ) : (
+                              <div key={slot.id} className={`operations-factory-asset-node ${tone} ${slot.kind}`} title={title} aria-label={title}>
+                                <span>{slot.kind === "compressor" ? "공기압축기" : slot.label.replace("CNC ", "")}</span>
+                              </div>
                             );
                           })}
                         </div>
@@ -1495,12 +1493,6 @@ export function OperationsWorkflowOverviewPage({
     setDetailDrawerTab("status");
   };
 
-  const previewFactorySlot = (slot: FactoryCellSlot, cell: FactoryCellLayout) => {
-    setFactorySlotPreview({ slot, cell });
-    setDetailDrawerOpen(true);
-    setDetailDrawerTab("status");
-  };
-
   const previewFactoryAssetSlot = (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => {
     setFactorySlotPreview({ slot, cell });
     onPreviewAsset(asset.assetId, asset.eventId);
@@ -1555,10 +1547,8 @@ export function OperationsWorkflowOverviewPage({
       <FactoryMonitoringMapPanel
         factoryCells={factoryCells}
         selectedAsset={selectedAsset}
-        factorySlotPreview={factorySlotPreview}
         postMaintenancePredictions={postMaintenancePredictions}
         planningBasis={planningBasis}
-        onPreviewSlot={previewFactorySlot}
         onPreviewAssetSlot={previewFactoryAssetSlot}
       />
 

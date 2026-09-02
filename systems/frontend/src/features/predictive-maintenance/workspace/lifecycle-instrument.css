@@ -468,6 +468,27 @@
   opacity: 0.68;
 }
 
+:root[data-density="standard"] .lifecycle-instrument-title span,
+:root[data-density="standard"] .lifecycle-known-steps > header span,
+:root[data-density="standard"] .lifecycle-activity-history > header span,
+:root[data-density="standard"] .lifecycle-stage span,
+:root[data-density="standard"] .lifecycle-stage small,
+:root[data-density="standard"] .activity-timeline-meta { font-size: 9px; }
+:root[data-density="standard"] .lifecycle-stage strong,
+:root[data-density="standard"] .activity-timeline-content p { font-size: 10px; }
+:root[data-density="standard"] .activity-timeline-status { font-size: 8px; }
+
+:root[data-density="comfortable"] .lifecycle-instrument-title span,
+:root[data-density="comfortable"] .lifecycle-known-steps > header span,
+:root[data-density="comfortable"] .lifecycle-activity-history > header span,
+:root[data-density="comfortable"] .lifecycle-stage span,
+:root[data-density="comfortable"] .lifecycle-stage small,
+:root[data-density="comfortable"] .activity-timeline-meta { font-size: 11px; }
+:root[data-density="comfortable"] .lifecycle-instrument-title strong,
+:root[data-density="comfortable"] .lifecycle-stage strong,
+:root[data-density="comfortable"] .activity-timeline-content p { font-size: 13px; }
+:root[data-density="comfortable"] .activity-timeline-status { font-size: 10px; }
+
 @media (max-width: 860px) {
   .lifecycle-instrument-bar {
     grid-template-columns: 1fr auto;

@@ -503,6 +503,8 @@
 .operations-factory-asset-node.normal { color: #76d6a7; border-color: rgba(69,184,128,.5); background: rgba(69,184,128,.12); }
 .operations-factory-asset-node.hold { color: #c9aff5; border-color: rgba(154,119,232,.54); background: rgba(154,119,232,.14); }
 .operations-factory-asset-node.slot { color: rgba(181,196,214,.52); border-color: rgba(181,196,214,.16); background: rgba(255,255,255,.012); }
+.operations-factory-asset-node.slot { cursor: default; }
+.operations-factory-asset-node.slot:hover { transform: none; }
 .operations-factory-asset-node.is-selected,
 .operations-factory-asset-node[aria-pressed="true"] { outline: 2px solid #75a9ec; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(76,144,240,.16); }
 .operations-factory-asset-node span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 44px; color: currentColor; font-size: 10px; font-weight: 900; }
