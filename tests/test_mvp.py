@@ -404,6 +404,10 @@ def test_agent_review_summary_provider_constrains_payload_to_summary_schema(
     assert "agent_review_packet" not in captured["payload"]
     assert "baseline_summary" not in captured["payload"]
     assert "summary_context" in captured["payload"]
+    assert "context_selection" in captured["payload"]
+    assert captured["payload"]["context_selection"]["terminal_status"] in {"completed", "partial"}
+    assert captured["payload"]["context_selection"]["mutation_allowed"] is False
+    assert "maintenance_history.lookup" in captured["payload"]["context_selection"]["called_tools"]
     assert "closed_loop_boundary" not in captured["payload"]["summary_context"]
     assert captured["payload"]["allowed_output_fields"] == [
         "title",
@@ -417,6 +421,48 @@ def test_agent_review_summary_provider_constrains_payload_to_summary_schema(
         "summary",
         "role_summaries",
     }
+
+
+def test_agent_review_summary_provider_routes_context_by_situation(
+    service: FactorySignalService,
+) -> None:
+    captured: list[dict] = []
+
+    class CapturingLLMProvider:
+        name = "capturing-context-router"
+
+        def generate_json(self, system_prompt: str, payload: dict, **kwargs) -> dict:
+            del system_prompt, kwargs
+            captured.append(payload)
+            return {
+                "title": payload["baseline_editable_fields"]["title"],
+                "summary": payload["baseline_editable_fields"]["summary"],
+                "role_summaries": [
+                    {"role": item["role"], "quote": item["quote"]}
+                    for item in payload["baseline_editable_fields"]["role_summaries"]
+                ],
+            }
+
+    provider = AgentReviewSummaryProvider(CapturingLLMProvider())
+    warning_packet = service.agent_review_packet("CNC-S04-L04-01")
+    critical_packet = service.agent_review_packet("CNC-S04-L02-03")
+
+    provider.generate(warning_packet)
+    provider.generate(critical_packet)
+
+    warning, critical = captured
+    assert "maintenance_history.lookup" in warning["context_selection"]["called_tools"]
+    assert "operation_context.lookup" not in warning["context_selection"]["called_tools"]
+    assert warning["summary_context"]["operation_context"] == {}
+    assert "operation_context.lookup" in critical["context_selection"]["called_tools"]
+    assert critical["summary_context"]["operation_context"]
+    assert critical["summary_context"]["maintenance_history"]["provider"] == (
+        "closed_loop_maintenance_history_adapter"
+    )
+    assert all(
+        call["status"] in {"succeeded", "gap"}
+        for call in critical["context_selection"]["tool_calls"]
+    )
 
 
 def test_agent_review_summary_provider_uses_compact_prompt_payload(
@@ -1608,6 +1654,32 @@ def test_inspection_request_decision_and_activity_reach_detail_and_agent_packet(
     )
     assert "요청됨 상태" in process_quote
     assert set(summary["source_refs"]).issubset(set(packet["source_refs"]))
+
+    captured: dict = {}
+
+    class CapturingHistoryLLMProvider:
+        name = "capturing-history-context"
+
+        def generate_json(self, system_prompt: str, payload: dict, **kwargs) -> dict:
+            del system_prompt, kwargs
+            captured.update(payload)
+            return {
+                "title": payload["baseline_editable_fields"]["title"],
+                "summary": payload["baseline_editable_fields"]["summary"],
+                "role_summaries": [
+                    {"role": item["role"], "quote": item["quote"]}
+                    for item in payload["baseline_editable_fields"]["role_summaries"]
+                ],
+            }
+
+    AgentReviewSummaryProvider(CapturingHistoryLLMProvider()).generate(packet)
+    assert "maintenance_history.lookup" in captured["context_selection"]["called_tools"]
+    assert captured["summary_context"]["maintenance_history"]["work_orders"][0][
+        "record_id"
+    ] == work_order.json()["work_order_id"]
+    assert captured["summary_context"]["maintenance_history"]["activities"][0][
+        "activity_type"
+    ] == "work_order.requested"
 
 
 def test_agent_review_summary_absorbs_adapter_context_into_role_quotes(

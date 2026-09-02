@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.mvp.agent_context_tool_pipeline import run_read_only_tool_pipeline
 from app.mvp.agent_review_summary import (
     compose_deterministic_agent_review_summary,
 )
@@ -53,7 +54,7 @@ class AgentReviewSummaryProvider:
         baseline_summary = compose_deterministic_agent_review_summary(packet)
         payload = self.provider.generate_json(
             AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT,
-            build_agent_review_summary_prompt_payload(
+            build_tool_selected_agent_review_summary_prompt_payload(
                 packet=packet,
                 baseline_summary=baseline_summary,
             ),
@@ -93,6 +94,134 @@ def _merge_llm_editable_fields(
         for item in baseline_summary.get("role_summaries") or []
     ]
     return summary
+
+
+def build_tool_selected_agent_review_summary_prompt_payload(
+    *,
+    packet: dict[str, Any],
+    baseline_summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the LLM context from the bounded read-only tool trajectory."""
+
+    trajectory = run_read_only_tool_pipeline(packet)
+    if trajectory.get("terminal_status") == "failed":
+        raise RuntimeError("agent_context_tool_pipeline_failed")
+
+    outputs = {
+        str(call.get("tool_name")): call.get("output") or {}
+        for call in trajectory.get("tool_calls") or []
+        if call.get("status") == "succeeded"
+    }
+    data_quality = outputs.get("data_quality.lookup") or {}
+    model_evidence = outputs.get("model_evidence.lookup") or {}
+    inspection = outputs.get("inspection_location.lookup") or {}
+    sop = outputs.get("sop_guidance.lookup") or {}
+    ontology = outputs.get("ontology_neighbors.lookup") or {}
+    spare_parts = outputs.get("spare_part.lookup") or {}
+    similar_events = outputs.get("similar_event.lookup") or {}
+
+    summary_context = {
+        "packet_schema_version": str(packet.get("schema_version") or ""),
+        "asset_id": str(packet.get("asset_id") or ""),
+        "asset_label": str(packet.get("asset_label") or packet.get("asset_id") or ""),
+        "generated_at": str(packet.get("generated_at") or ""),
+        "source_refs": [str(ref) for ref in packet.get("source_refs") or [] if str(ref)],
+        "risk_summary": _pick(
+            packet.get("risk_summary") or {},
+            "status_grade",
+            "failure_probability",
+            "review_priority",
+            "top_factor_count",
+        ),
+        "review_draft": _pick(
+            data_quality.get("review_draft") or packet.get("review_draft") or {},
+            "summary",
+            "history_summary",
+            "boundary_note",
+        ),
+        "inspection_targets": [
+            _pick(
+                target,
+                "component_id",
+                "component_label",
+                "location_label",
+                "basis_refs",
+                "source_ref",
+                "location_source_ref",
+            )
+            for target in inspection.get("inspection_targets") or []
+            if isinstance(target, dict)
+        ],
+        "sop_guidance": [
+            _pick(
+                guidance,
+                "component_id",
+                "component_label",
+                "procedure_title",
+                "check_items",
+                "source_ref",
+                "location_source_ref",
+            )
+            for guidance in sop.get("sop_guidance") or []
+            if isinstance(guidance, dict)
+        ],
+        "evidence_gaps": [
+            _pick(gap, "field", "reason", "owner_domain")
+            for gap in data_quality.get("evidence_gaps") or packet.get("evidence_gaps") or []
+            if isinstance(gap, dict)
+        ],
+        "limitations": [
+            str(item)
+            for item in data_quality.get("limitations") or packet.get("limitations") or []
+        ],
+        "operation_context": _pick(
+            outputs.get("operation_context.lookup") or {},
+            "production_impact",
+            "estimated_downtime_minutes",
+            "estimated_lost_units",
+            "limitations",
+        ),
+        "maintenance_history": _compact_maintenance_history(
+            outputs.get("maintenance_history.lookup") or {}
+        ),
+        "model_factors": [
+            _pick(factor, "rank", "feature", "display_name", "direction", "source_ref")
+            for factor in model_evidence.get("top_factors") or []
+            if isinstance(factor, dict)
+        ],
+        "ontology_context": _compact_ontology_context(ontology),
+        "spare_part_context": spare_parts,
+        "similar_event_context": similar_events,
+    }
+    return {
+        "summary_context": summary_context,
+        "context_selection": {
+            "pipeline_version": trajectory.get("pipeline_version"),
+            "engine": trajectory.get("engine"),
+            "called_tools": list(trajectory.get("called_tools") or []),
+            "terminal_status": trajectory.get("terminal_status"),
+            "mutation_allowed": trajectory.get("mutation_allowed"),
+            "tool_calls": [
+                {
+                    "tool_name": call.get("tool_name"),
+                    "status": call.get("status"),
+                    "attempt_count": call.get("attempt_count"),
+                    "source_refs": call.get("source_refs") or [],
+                }
+                for call in trajectory.get("tool_calls") or []
+            ],
+        },
+        "baseline_editable_fields": {
+            "title": baseline_summary.get("title"),
+            "summary": baseline_summary.get("summary"),
+            "role_summaries": [
+                _pick(item, "role", "label", "quote", "source_refs")
+                for item in baseline_summary.get("role_summaries") or []
+                if isinstance(item, dict)
+            ],
+        },
+        "allowed_output_fields": ["title", "summary", "role_summaries"],
+    }
 
 
 def build_agent_review_summary_prompt_payload(
@@ -220,8 +349,21 @@ def _compact_maintenance_history(history: dict[str, Any]) -> dict[str, Any]:
         "open_work_order_exists": history.get("open_work_order_exists"),
         "similar_events_30d": history.get("similar_events_30d"),
         "work_orders": [
-            _pick(item, "status", "requested_at", "approved_at", "completed_at")
+            _pick(
+                item,
+                "record_id",
+                "status",
+                "requested_at",
+                "approved_at",
+                "completed_at",
+                "source_ref",
+            )
             for item in history.get("work_orders") or []
+            if isinstance(item, dict)
+        ],
+        "activities": [
+            _pick(item, "record_id", "activity_type", "occurred_at", "source_ref")
+            for item in history.get("activities") or []
             if isinstance(item, dict)
         ],
         "similar_events": [
