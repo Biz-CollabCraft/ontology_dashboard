@@ -38,6 +38,8 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 - Schema 내용 및 `$id` 식별자 무변경 보존
 - System Operations 관리 계약 Draft·검증·Diff·발행 경계는 `system-managed-asset-*.schema.json`, `examples/system-managed-assets/`, `test-vectors/system-managed-asset-v1/`에서 관리
 - System Operations 모델 선택·Active Model Set 활성화·Rollback 경계는 `system-model-*.schema.json`, `system-active-model-set-*.schema.json`, `examples/system-model-operations/`, `test-vectors/system-model-operations-v1/`에서 관리
+- System Operations 감사·구조화 로그·제한된 JSONL Export 경계는 `system-audit-*.schema.json`, `system-operational-log*.schema.json`, `system-log-export-*.schema.json`, `examples/system-audit/`, `test-vectors/system-audit-v1/`에서 관리
+- E2E 실행 추적과 Backend 판정 기반 이상 알림 경계는 `system-e2e-*.schema.json`, `dashboard-anomaly-alert.schema.json`에서 관리
 
 ## Generator 파이프라인 계약 현황 및 후속 Target 계약 후보
 

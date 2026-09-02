@@ -1,0 +1,12 @@
+import { useEffect, useState } from "react";
+import { navigate } from "../../routing";
+import { getE2ETimeline, listAnomalyAlerts, listE2ERuns, type AnomalyAlert, type E2EEvent, type E2ERun } from "./e2eApi";
+export function SystemE2EPage() {
+  const [runs, setRuns] = useState<E2ERun[]>([]); const [events, setEvents] = useState<E2EEvent[]>([]); const [alerts, setAlerts] = useState<AnomalyAlert[]>([]); const [selected, setSelected] = useState(""); const [error, setError] = useState("");
+  useEffect(() => { Promise.all([listE2ERuns(), listAnomalyAlerts()]).then(([r, a]) => { setRuns(r.items); setAlerts(a.items); }).catch(e => setError(e.message)); }, []);
+  const select = (runId: string) => { setSelected(runId); getE2ETimeline(runId).then(r => setEvents(r.events)).catch(e => setError(e.message)); };
+  return <main className="ops-page"><button className="ops-back" onClick={() => navigate("/system/operations/assets")}>← 운영 자산</button><header><p className="ops-eyebrow">SYSTEM OPERATIONS</p><h1>E2E 실행과 이상 알림</h1><p>Generator 전달부터 Backend Product Result 승격까지의 상관관계와 운영 알림을 조회합니다.</p></header>{error && <div className="ops-state ops-state--error">{error}</div>}
+    <section className="ops-panel"><h2>이상 알림</h2><div className="ops-table-wrap"><table><thead><tr><th>관측 시각</th><th>설비</th><th>심각도</th><th>알림</th><th>Product Result</th></tr></thead><tbody>{alerts.map(a => <tr key={a.alert_id}><td>{new Date(a.observed_at).toLocaleString()}</td><td>{a.asset_id}</td><td>{a.severity}</td><td>{a.headline}</td><td><code>{a.product_result_id}</code></td></tr>)}</tbody></table></div></section>
+    <section className="ops-panel"><h2>실행 이력</h2><div className="ops-table-wrap"><table><thead><tr><th>시작</th><th>Run</th><th>상태</th><th>Batch</th></tr></thead><tbody>{runs.map(r => <tr className="ops-row" key={r.run_id} onClick={() => select(r.run_id)}><td>{new Date(r.started_at).toLocaleString()}</td><td>{r.run_id}</td><td>{r.status}</td><td>{r.batch_id ?? "—"}</td></tr>)}</tbody></table></div></section>
+    {selected && <section className="ops-panel"><h2>{selected} Timeline</h2><ol>{events.map(e => <li key={e.timeline_event_id}><strong>{e.stage}</strong> · {e.status} · {e.service}/{e.domain}</li>)}</ol></section>}</main>;
+}

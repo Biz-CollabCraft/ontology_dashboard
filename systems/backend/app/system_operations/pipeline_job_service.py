@@ -7,11 +7,12 @@ from .system_operation_exception import SystemOperationError
 
 
 class PipelineJobService:
-    def __init__(self, repository, generator, impact_repository=None, downstream_generator=None) -> None:
+    def __init__(self, repository, generator, impact_repository=None, downstream_generator=None, audit=None) -> None:
         self.repository = repository
         self.generator = generator
         self.impact_repository = impact_repository
         self.downstream_generator = downstream_generator
+        self.audit = audit
 
     def create(self, body, actor: str, request_id: str) -> tuple[dict, bool]:
         existing = self.repository.get_by_idempotency_key(body.idempotency_key)
@@ -27,13 +28,16 @@ class PipelineJobService:
         if published.get("mapping_sha256") != body.mapping_sha256:
             raise SystemOperationError(422, "SYSTEM_MAPPING_INTEGRITY_ERROR", "발행 Mapping checksum이 Job 요청과 일치하지 않습니다.")
         now = datetime.now(timezone.utc).isoformat()
-        return self.repository.create_or_get({
+        result = self.repository.create_or_get({
             "job_id": str(uuid.uuid4()), "job_type": body.job_type, "request_id": request_id,
             "idempotency_key": body.idempotency_key, "run_id": str(uuid.uuid4()),
             "mapping_id": body.mapping_id, "mapping_version": body.mapping_version,
             "mapping_sha256": body.mapping_sha256, "source_uri": body.source_uri,
             "activate_on_success": body.activate_on_success, "created_by": actor, "created_at": now,
         })
+        job = result[0] if isinstance(result, tuple) else result
+        if self.audit: self.audit.safe_record(actor_id=actor, action="pipeline_job.create", resource_type="pipeline_job", resource_id=job["job_id"], resource_version=None, outcome="succeeded", request_id=request_id, job_id=job["job_id"], metadata={"job_type": body.job_type})
+        return result
 
     def get(self, job_id: str) -> dict:
         job = self.repository.get(job_id)
@@ -90,7 +94,9 @@ class PipelineJobService:
         before = self.get(job_id)
         if before["status"] not in {"queued", "running", "checkpointed"}:
             raise SystemOperationError(409, "SYSTEM_JOB_NOT_CANCELLABLE", "현재 상태에서는 Job을 취소할 수 없습니다.")
-        return self.repository.request_cancel(job_id)
+        result = self.repository.request_cancel(job_id)
+        if self.audit: self.audit.safe_record(actor_id=before.get("created_by", "system"), actor_type="system", action="pipeline_job.cancel", resource_type="pipeline_job", resource_id=job_id, resource_version=None, outcome="succeeded", request_id=before.get("request_id") or "pipeline-job", job_id=job_id, metadata={})
+        return result
 
     def execute(self, job_id: str, worker_id: str = "backend-worker") -> dict:
         claimed = self.repository.claim(job_id, worker_id)

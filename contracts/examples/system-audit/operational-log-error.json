@@ -1,0 +1,1 @@
+{"log_id":"log-001","occurred_at":"2026-09-02T00:02:00Z","service":"backend","domain":"control_plane","severity":"ERROR","message":"Audit persistence failed.","error_code":"SYSTEM_AUDIT_WRITE_FAILED","request_id":"request-2","run_id":null,"job_id":null,"event_id":null,"asset_id":null,"model_id":null,"metadata":{}}

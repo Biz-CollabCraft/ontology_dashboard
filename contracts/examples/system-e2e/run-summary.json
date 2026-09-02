@@ -1,0 +1,1 @@
+{"run_id":"run-demo-001","status":"succeeded","source_uri":"data_preprocessed/protocol/demo.jsonl","source_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","batch_id":"batch-demo-001","asset_ids":["CNC-001"],"started_at":"2026-09-02T00:00:00Z","completed_at":"2026-09-02T00:00:05Z","error_code":null,"retryable":false}

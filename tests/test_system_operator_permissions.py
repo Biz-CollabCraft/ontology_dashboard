@@ -22,6 +22,11 @@ def test_system_operator_has_only_system_operations_permissions():
         "system.models.select",
         "system.models.activate",
         "system.models.rollback",
+        "system.audit.read",
+        "system.logs.read",
+        "system.logs.export",
+        "system.recovery_guides.read",
+        "system.e2e.read",
     }
 
 
@@ -46,4 +51,9 @@ def test_tenant_admin_does_not_inherit_system_operations_permission():
         "system.models.select",
         "system.models.activate",
         "system.models.rollback",
+        "system.audit.read",
+        "system.logs.read",
+        "system.logs.export",
+        "system.recovery_guides.read",
+        "system.e2e.read",
     } & ROLE_PERMISSIONS["tenant_admin"]

@@ -6,7 +6,10 @@ from .system_operation_exception import SystemOperationError
 def _sha(value): return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()).hexdigest()
 
 class ImpactAnalysisService:
-    def __init__(self, repository, jobs): self.repository=repository; self.jobs=jobs
+    def __init__(self, repository, jobs, audit=None): self.repository=repository; self.jobs=jobs; self.audit=audit
+    def _record(self, item, actor):
+        if self.audit: self.audit.safe_record(actor_id=actor, action="impact_analysis.create", resource_type="impact_analysis", resource_id=item["analysis_id"], resource_version=None, outcome="succeeded", request_id="impact-analysis", metadata={"snapshot_sha256": item["snapshot_sha256"]})
+        return item
     def get(self,analysis_id):
         value=self.repository.get(analysis_id)
         if value is None: raise SystemOperationError(404,"SYSTEM_IMPACT_ANALYSIS_NOT_FOUND","영향 분석을 찾을 수 없습니다.")
@@ -39,7 +42,7 @@ class ImpactAnalysisService:
         source={"mapping_id":body.mapping_id,"mapping_version":body.mapping_version,"mapping_sha256":body.mapping_sha256,"rebuild_job_id":body.rebuild_job_id}
         canonical={"source":source,"nodes":nodes,"edges":edges,"actions":actions}
         now=datetime.now(timezone.utc).isoformat()
-        return self.repository.create({"analysis_id":str(uuid.uuid4()),"status":"completed","mapping_id":body.mapping_id,"mapping_version":body.mapping_version,"mapping_sha256":body.mapping_sha256,"rebuild_job_id":body.rebuild_job_id,"include_stages":body.include_stages,"source":source,"nodes":nodes,"edges":edges,"actions":actions,"snapshot_sha256":_sha(canonical),"created_by":actor,"created_at":now,"source_asset_type":"static_mapping","source_asset_id":body.mapping_id,"source_version":body.mapping_version,"source_sha256":body.mapping_sha256,"source_job_id":body.rebuild_job_id})
+        return self._record(self.repository.create({"analysis_id":str(uuid.uuid4()),"status":"completed","mapping_id":body.mapping_id,"mapping_version":body.mapping_version,"mapping_sha256":body.mapping_sha256,"rebuild_job_id":body.rebuild_job_id,"include_stages":body.include_stages,"source":source,"nodes":nodes,"edges":edges,"actions":actions,"snapshot_sha256":_sha(canonical),"created_by":actor,"created_at":now,"source_asset_type":"static_mapping","source_asset_id":body.mapping_id,"source_version":body.mapping_version,"source_sha256":body.mapping_sha256,"source_job_id":body.rebuild_job_id}), actor)
 
     def _create_managed_asset_analysis(self, body, actor):
         source = {
@@ -90,7 +93,7 @@ class ImpactAnalysisService:
         # Legacy NOT NULL columns mirror the generic identity until the storage
         # compatibility columns can become the sole source in a later migration.
         legacy_job = body.source_job_id or f"managed-asset:{body.source_asset_type}"
-        return self.repository.create({
+        return self._record(self.repository.create({
             "analysis_id": str(uuid.uuid4()), "status": "completed",
             "mapping_id": body.source_asset_id, "mapping_version": body.source_version,
             "mapping_sha256": body.source_sha256, "rebuild_job_id": legacy_job,
@@ -100,4 +103,4 @@ class ImpactAnalysisService:
             "source_asset_type": body.source_asset_type,
             "source_asset_id": body.source_asset_id, "source_version": body.source_version,
             "source_sha256": body.source_sha256, "source_job_id": body.source_job_id,
-        })
+        }), actor)

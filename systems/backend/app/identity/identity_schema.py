@@ -88,6 +88,11 @@ PERMISSION_DEFINITIONS: dict[str, str] = {
     "system.models.select": "검증된 Model Artifact 운영 버전 선택",
     "system.models.activate": "검증된 Active Model Set 활성화",
     "system.models.rollback": "이전 Active Model Set revision 복구",
+    "system.audit.read": "시스템 운영 감사 기록 조회",
+    "system.logs.read": "시스템 운영 로그 조회",
+    "system.logs.export": "필터링된 시스템 운영 기록 JSONL Export",
+    "system.recovery_guides.read": "운영 오류 복구 가이드 조회",
+    "system.e2e.read": "E2E 실행 타임라인과 이상 알림 조회",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -100,6 +105,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "system.contracts.validate", "system.contracts.publish",
         "system.models.read", "system.models.select", "system.models.activate",
         "system.models.rollback",
+        "system.audit.read", "system.logs.read", "system.logs.export", "system.recovery_guides.read", "system.e2e.read",
     },
     "system_operator": {
         "system.assets.read", "system.assets.create_version", "system.assets.validate",
@@ -110,6 +116,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "system.contracts.validate", "system.contracts.publish",
         "system.models.read", "system.models.select", "system.models.activate",
         "system.models.rollback",
+        "system.audit.read", "system.logs.read", "system.logs.export", "system.recovery_guides.read", "system.e2e.read",
     },
     "executive_viewer": {"app.access", "events.read", "ontology.registry.read", "ontology.objects.read", "dashboards.read", "dashboards.personalize", "dashboards.share", "executive.overview.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "process_manager": {"app.access", "events.read", "events.decision", "agent.review.materialize", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "datasets.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},

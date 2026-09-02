@@ -75,6 +75,8 @@ from app.infra.generator_downstream import GeneratorDownstreamClient
 from app.infra.generator_managed_assets import GeneratorManagedAssetClient
 from app.infra.db.managed_asset_draft_repository import ManagedAssetDraftRepository
 from app.infra.db.model_operation_repository import ModelOperationRepository
+from app.infra.db.system_audit_repository import SystemAuditRepository
+from app.infra.db.system_e2e_repository import SystemE2ERepository
 from app.infra.generator_model_operations import GeneratorModelOperationClient
 from app.system_operations import SystemOperationService
 from app.system_operations.mapping_draft_service import MappingDraftService
@@ -82,6 +84,8 @@ from app.system_operations.pipeline_job_service import PipelineJobService
 from app.system_operations.impact_analysis_service import ImpactAnalysisService
 from app.system_operations.managed_asset_service import ManagedAssetService
 from app.system_operations.model_operation_service import ModelOperationService
+from app.system_operations.audit_service import SystemAuditService
+from app.system_operations.e2e_service import SystemE2EService
 from app.infra.db.project_repository import (
     ProjectRepository as SQLiteProjectRepository,
     SQLiteProjectContextResolver,
@@ -471,6 +475,7 @@ def get_mapping_draft_service() -> MappingDraftService:
         MappingDraftRepository(target),
         GeneratorMappingManagementClient(),
         get_system_operation_service(),
+        get_system_audit_service(),
     )
 
 
@@ -488,6 +493,7 @@ def get_pipeline_job_service() -> PipelineJobService:
         GeneratorRebuildClient(),
         ImpactAnalysisRepository(target),
         GeneratorDownstreamClient(),
+        get_system_audit_service(),
     )
 
 
@@ -496,7 +502,7 @@ def get_impact_analysis_service() -> ImpactAnalysisService:
     target=database_target(); ensure_database_migrations()
     if is_postgresql(target):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail="System Impact Analysis PostgreSQL adapter is not configured.")
-    return ImpactAnalysisService(ImpactAnalysisRepository(target),get_pipeline_job_service())
+    return ImpactAnalysisService(ImpactAnalysisRepository(target),get_pipeline_job_service(),get_system_audit_service())
 
 
 @lru_cache(maxsize=1)
@@ -509,6 +515,7 @@ def get_managed_asset_service() -> ManagedAssetService:
         ManagedAssetDraftRepository(target),
         GeneratorManagedAssetClient(),
         get_system_operation_service(),
+        get_system_audit_service(),
     )
 
 
@@ -518,7 +525,25 @@ def get_model_operation_service() -> ModelOperationService:
     ensure_database_migrations()
     if is_postgresql(target):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="System Model Operation PostgreSQL adapter is not configured.")
-    return ModelOperationService(ModelOperationRepository(target), GeneratorModelOperationClient())
+    return ModelOperationService(ModelOperationRepository(target), GeneratorModelOperationClient(), get_system_audit_service())
+
+
+@lru_cache(maxsize=1)
+def get_system_audit_service() -> SystemAuditService:
+    target = database_target()
+    ensure_database_migrations()
+    if is_postgresql(target):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="System Audit PostgreSQL adapter is not configured.")
+    return SystemAuditService(SystemAuditRepository(target), ROOT / "data_preprocessed" / "system-operations" / "exports")
+
+
+@lru_cache(maxsize=1)
+def get_system_e2e_service() -> SystemE2EService:
+    target = database_target()
+    ensure_database_migrations()
+    if is_postgresql(target):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="System E2E PostgreSQL adapter is not configured.")
+    return SystemE2EService(SystemE2ERepository(target))
 
 
 @lru_cache(maxsize=1)

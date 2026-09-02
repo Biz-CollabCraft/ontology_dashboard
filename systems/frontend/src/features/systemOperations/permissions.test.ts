@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canActivateSystemModels, canCancelSystemJob, canCreateImpactAnalysis, canCreateManagedContract, canCreateSystemAssetVersion, canCreateSystemJob, canExecuteSystemRebuild, canPublishManagedContract, canPublishSystemAsset, canReadSystemJobs, canReadSystemModels, canReadSystemOperationalAssets, canRollbackSystemModels, canSelectSystemModels, canValidateManagedContract, canValidateSystemAsset } from "./permissions";
+import { canActivateSystemModels, canCancelSystemJob, canCreateImpactAnalysis, canCreateManagedContract, canCreateSystemAssetVersion, canCreateSystemJob, canExecuteSystemRebuild, canExportSystemLogs, canPublishManagedContract, canPublishSystemAsset, canReadRecoveryGuides, canReadSystemAudit, canReadSystemJobs, canReadSystemLogs, canReadSystemModels, canReadSystemOperationalAssets, canRollbackSystemModels, canSelectSystemModels, canValidateManagedContract, canValidateSystemAsset } from "./permissions";
 
 describe("system operations permissions", () => {
   it("allows only the dedicated operational asset permission", () => {
@@ -37,5 +37,14 @@ describe("system operations permissions", () => {
     expect(canValidateManagedContract(["system.contracts.validate"])).toBe(true);
     expect(canPublishManagedContract(["system.contracts.validate"])).toBe(false);
     expect(canPublishManagedContract(["system.contracts.publish"])).toBe(true);
+  });
+  it("keeps system audit and log export separate from tenant administration", () => {
+    const permissions = ["system.audit.read", "system.logs.read", "system.logs.export", "system.recovery_guides.read"];
+    expect(canReadSystemAudit(permissions)).toBe(true);
+    expect(canReadSystemLogs(permissions)).toBe(true);
+    expect(canExportSystemLogs(["system.logs.read"])).toBe(false);
+    expect(canExportSystemLogs(permissions)).toBe(true);
+    expect(canReadRecoveryGuides(permissions)).toBe(true);
+    expect(canReadSystemAudit(["admin.audit.read"])).toBe(false);
   });
 });

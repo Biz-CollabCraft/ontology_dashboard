@@ -31,6 +31,8 @@ from app.dependencies import (
     get_impact_analysis_service,
     get_managed_asset_service,
     get_model_operation_service,
+    get_system_audit_service,
+    get_system_e2e_service,
     rate_limit_subject,
     require_csrf,
     require_permission,
@@ -55,7 +57,7 @@ from app.diagnosis.runtime_router import (
     router as predictive_maintenance_runtime_router,
 )
 from app.mvp.service import EventNotFound
-from app.system_operations import build_impact_analysis_router, build_managed_asset_router, build_mapping_draft_router, build_model_operation_router, build_pipeline_job_router, build_system_operation_internal_router, build_system_operation_router
+from app.system_operations import build_audit_router, build_e2e_router, build_impact_analysis_router, build_managed_asset_router, build_mapping_draft_router, build_model_operation_router, build_pipeline_job_router, build_system_operation_internal_router, build_system_operation_router
 from app.system_operations.system_operation_exception import SystemOperationError
 
 
@@ -137,7 +139,17 @@ async def event_not_found_handler(_: Request, exc: EventNotFound) -> JSONRespons
 
 
 @app.exception_handler(SystemOperationError)
-async def system_operation_error_handler(_: Request, exc: SystemOperationError) -> JSONResponse:
+async def system_operation_error_handler(request: Request, exc: SystemOperationError) -> JSONResponse:
+    if request.url.path.startswith("/api/system/"):
+        try:
+            get_system_audit_service().record_log(
+                service="backend", domain="control_plane", severity="ERROR",
+                message="System Operations request failed.", error_code=exc.code,
+                request_id=getattr(request.state, "request_id", None),
+                metadata={"method": request.method, "path": request.url.path, "status_code": exc.status_code},
+            )
+        except Exception:
+            pass
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": {"code": exc.code, "message": exc.message}},
@@ -235,6 +247,12 @@ model_operation_router = build_model_operation_router(
     require_permission=require_permission,
     require_csrf=require_csrf,
 )
+audit_router = build_audit_router(
+    get_service=get_system_audit_service,
+    require_permission=require_permission,
+    require_csrf=require_csrf,
+)
+e2e_router = build_e2e_router(get_service=get_system_e2e_service, require_permission=require_permission)
 
 for router in (
     health_router,
@@ -258,6 +276,8 @@ for router in (
     impact_analysis_router,
     managed_asset_router,
     model_operation_router,
+    audit_router,
+    e2e_router,
 ):
     app.include_router(router)
 

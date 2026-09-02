@@ -18,10 +18,11 @@ def canonical_sha(payload: dict[str, Any]) -> str:
 
 
 class ManagedAssetService:
-    def __init__(self, repository, generator=None, registry_service=None) -> None:
+    def __init__(self, repository, generator=None, registry_service=None, audit=None) -> None:
         self.repository = repository
         self.generator = generator
         self.registry_service = registry_service
+        self.audit = audit
 
     def get(self, draft_id: str) -> dict[str, Any]:
         draft = self.repository.get(draft_id)
@@ -57,7 +58,9 @@ class ManagedAssetService:
             "updated_by": actor, "created_at": now, "updated_at": now,
         }
         try:
-            return self.repository.create(item)
+            result = self.repository.create(item)
+            if self.audit: self.audit.safe_record(actor_id=actor, action="contract_draft.create", resource_type=body.asset_type, resource_id=body.asset_id, resource_version=body.target_version, outcome="succeeded", request_id="contract-draft", metadata={"draft_id": item["draft_id"]})
+            return result
         except sqlite3.IntegrityError as exc:
             raise SystemOperationError(409, "SYSTEM_CONTRACT_VERSION_EXISTS", "동일 자산 target version의 Draft가 이미 존재합니다.") from exc
 
@@ -71,6 +74,7 @@ class ManagedAssetService:
             if current["status"] == "published":
                 raise SystemOperationError(409, "SYSTEM_CONTRACT_DRAFT_IMMUTABLE", "발행된 Draft는 수정할 수 없습니다.")
             raise SystemOperationError(409, "SYSTEM_CONTRACT_DRAFT_REVISION_CONFLICT", "Draft revision이 변경되었습니다.")
+        if self.audit: self.audit.safe_record(actor_id=actor, action="contract_draft.update", resource_type=current["asset_type"], resource_id=current["asset_id"], resource_version=current["target_version"], outcome="succeeded", request_id="contract-draft", metadata={"draft_id": draft_id})
         return saved
 
     def validate(self, draft_id: str, actor: str) -> dict[str, Any]:
@@ -80,6 +84,7 @@ class ManagedAssetService:
         saved = self.repository.record_validation(draft_id, current["revision"], checksum, errors, warnings, actor)
         if saved is None:
             raise SystemOperationError(409, "SYSTEM_CONTRACT_DRAFT_REVISION_CONFLICT", "검증 중 Draft가 변경되었습니다.")
+        if self.audit: self.audit.safe_record(actor_id=actor, action="contract.validate", resource_type=current["asset_type"], resource_id=current["asset_id"], resource_version=current["target_version"], outcome="succeeded" if not errors else "failed", request_id="contract-draft", error_code=None if not errors else "SYSTEM_CONTRACT_VALIDATION_FAILED", metadata={"draft_id": draft_id})
         return {"draft_id": draft_id, "validation_status": "valid" if not errors else "invalid", "validated_revision": current["revision"], "payload_sha256": checksum, "errors": errors, "warnings": warnings}
 
     def diff(self, draft_id: str) -> dict[str, Any]:
@@ -125,4 +130,5 @@ class ManagedAssetService:
                 self.registry_service.refresh()
             except Exception:
                 reconciled = False
+        if self.audit: self.audit.safe_record(actor_id=actor, action="contract.publish", resource_type=current["asset_type"], resource_id=current["asset_id"], resource_version=current["target_version"], outcome="succeeded", request_id="contract-draft", after_ref={"sha256": result["sha256"]}, metadata={"draft_id": draft_id})
         return {"draft": published, "publish": result, "registry_reconciled": reconciled, "impact_analysis_available": True}

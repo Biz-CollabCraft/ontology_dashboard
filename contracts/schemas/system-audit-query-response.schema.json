@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"system-audit-query-response-v1","type":"object","required":["items","count"],"properties":{"items":{"type":"array","items":{"$ref":"system-audit-event.schema.json"}},"count":{"type":"integer","minimum":0}}}

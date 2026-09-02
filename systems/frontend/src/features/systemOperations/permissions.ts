@@ -14,6 +14,11 @@ export const SYSTEM_MODELS_READ_PERMISSION = "system.models.read";
 export const SYSTEM_MODELS_SELECT_PERMISSION = "system.models.select";
 export const SYSTEM_MODELS_ACTIVATE_PERMISSION = "system.models.activate";
 export const SYSTEM_MODELS_ROLLBACK_PERMISSION = "system.models.rollback";
+export const SYSTEM_AUDIT_READ_PERMISSION = "system.audit.read";
+export const SYSTEM_LOGS_READ_PERMISSION = "system.logs.read";
+export const SYSTEM_LOGS_EXPORT_PERMISSION = "system.logs.export";
+export const SYSTEM_RECOVERY_GUIDES_READ_PERMISSION = "system.recovery_guides.read";
+export const SYSTEM_E2E_READ_PERMISSION = "system.e2e.read";
 
 export function canReadSystemOperationalAssets(permissions: readonly string[] | null | undefined) {
   return Boolean(permissions?.includes(SYSTEM_ASSETS_READ_PERMISSION));
@@ -58,3 +63,8 @@ export function canReadSystemModels(permissions: readonly string[] | null | unde
 export function canSelectSystemModels(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_MODELS_SELECT_PERMISSION)); }
 export function canActivateSystemModels(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_MODELS_ACTIVATE_PERMISSION)); }
 export function canRollbackSystemModels(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_MODELS_ROLLBACK_PERMISSION)); }
+export function canReadSystemAudit(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_AUDIT_READ_PERMISSION)); }
+export function canReadSystemLogs(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_LOGS_READ_PERMISSION)); }
+export function canExportSystemLogs(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_LOGS_EXPORT_PERMISSION)); }
+export function canReadRecoveryGuides(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_RECOVERY_GUIDES_READ_PERMISSION)); }
+export function canReadSystemE2E(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_E2E_READ_PERMISSION)); }

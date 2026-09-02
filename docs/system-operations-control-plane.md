@@ -6,7 +6,7 @@
 
 | 항목 | 상태 | 설명 |
 |---|---|---|
-| **문서 상태** | **Current + Target Architecture** | Phase 1~8 현행 구현과 후속 운영 기능의 목표 설계 기준 |
+| **문서 상태** | **Current + Target Architecture** | Phase 1~9 현행 구현과 후속 운영 기능의 목표 설계 기준 |
 | **기준 브랜치/커밋** | `main` (`94ba34d7c3ca5f4f99c445bb32d2783487b52502`) | 최신 `origin/main` 기준선 |
 | **역할 경계** | 제안 확정 대상 | 시스템 관리자 책임과 비운영(사용자 관리 등) 책임 엄격 분리 |
 | **Backend API** | SQLite Current / PostgreSQL Target | `systems/backend/app/system_operations/` 읽기·동기화 API 구현 |
@@ -14,7 +14,7 @@
 | **운영 자산 Registry** | SQLite Current / PostgreSQL Target | 파일 기반 자산 탐색·Registry 동기화·drift 추적 구현 |
 | **Mapping 편집·발행** | Current | Backend Draft revision·Diff·검증과 Generator 불변 발행 구현 및 회귀 검증 완료 |
 | **Pipeline Job Control** | Current (SQLite) | Mapping Replay와 선택적 downstream rebuild의 단계별 실행·추적 |
-| **Generator·Backend 로그 통합** | 미구현 (Target) | E2E Timeline 통합 추적 설계 |
+| **Generator·Backend 로그 통합** | **Current (Phase 9, SQLite)** | 구조화 운영 로그·감사 기록 조회와 제한된 JSONL Export. 완전한 E2E Timeline은 Phase 10 |
 | **Model Artifact 자동 `latest.json`** | **현재 구현됨 (Current)** | Generator Training 성공 시 `latest.json` 자동 갱신 |
 | **운영 선택 `selected.json`** | **Current (Phase 8)** | 시스템 관리자 명시적 선택 포인터. 실제 Runtime 적용은 Active Model Set 활성화와 분리 |
 
@@ -401,6 +401,10 @@ systems/backend/app/system_operations/
 | Current | `POST` | `/api/system/contracts/drafts/{draft_id}/publish` | 검증된 revision의 Generator 불변 발행 |
 | Current | `GET`, `POST` | `/api/system/impact-analyses` | Mapping 및 관리 계약 자산 downstream 영향 snapshot 조회·생성 |
 | Current | `POST` | `/api/system/impact-analyses/{analysis_id}/execute` | 실행 가능한 선택 단계만 downstream Job으로 실행 |
+| Current | `GET` | `/api/system/audit`, `/api/system/audit/{audit_id}` | append-only 시스템 운영 감사 기록 조회 |
+| Current | `GET` | `/api/system/logs` | 서비스·도메인·심각도·상관관계 기반 운영 로그 조회 |
+| Current | `POST`, `GET` | `/api/system/log-exports`, `/api/system/log-exports/{export_id}` | 최대 10,000건의 마스킹된 JSONL Export 생성·조회 |
+| Current | `GET` | `/api/system/recovery-guides/{error_code}` | 자동 실행 없는 오류 코드별 안전 복구 안내 |
 | Target | `GET` | `/api/system/access` | 현재 세션의 시스템 관리자 권한 확인 |
 | Target | `GET` | `/api/system/overview` | 시스템 전체 운영 지표 요약 |
 | Target | `GET` | `/api/system/health` | Generator 및 Backend 세부 서비스 헬스체크 |
@@ -443,6 +447,8 @@ systems/frontend/src/features/systemOperations/
 - Current: `/system/operations/impact` — Mapping 및 관리 계약 자산 영향 분석·선택 실행
 - Current: `/system/operations/jobs` — Mapping Rebuild/Replay Job 생성·조회
 - Current: `/system/operations/jobs/:jobId` — 진행 상태·checkpoint·결과·오류 및 취소 요청
+- Current: `/system/operations/audit` — 운영 자산·Job·모델 조작 감사 기록 및 제한된 Export
+- Current: `/system/operations/logs` — 구조화 운영 로그 조회 및 오류 상관관계 확인
 - Target: `/system/operations` — 시스템 종합 개요
 - Target: `/system/operations/jobs` — Pipeline Job 실행 상태
 - Target: `/system/operations/logs` — 통합 시스템 로그
@@ -501,8 +507,8 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **Phase 6** | 하위 영향 분석 | **Current (SQLite)** — Mapping Rebuild 결과 snapshot, 실행 가능/차단 작업 분리, 선택적 Preprocessing → Feature → Training Job 및 `publish_only` 학습 | Phase 5 |
 | **Phase 7** | 계약/설정 확장 | **Current (SQLite)** — Preprocessing Plan, Feature/Label Schema, History Requirement, Training Config Draft·검증·Diff·불변 발행 및 영향 분석 | Phase 6 |
 | **Phase 8** | 모델 운영 선택 | **Current (SQLite)** — Model Artifact 감독, 모델별 `selected.json`, Active Model Set 검증·활성화·revision Rollback | Phase 7 |
-| **Phase 9** | 감사 & 로그 고도화 | 운영 감사 로그(Audit Trail) 정밀 추적, 오류 복구 가이드, 안전한 로그 Export | Phase 8 |
-| **Phase 10** | E2E 통합 전환 | Sensor Source부터 Dashboard Alert까지 E2E Timeline 완성 및 정식 운영 전환 | Phase 9 |
+| **Phase 9** | 감사 & 로그 고도화 | **Current (SQLite)** — append-only Audit Trail, 구조화 운영 로그 조회, 오류 복구 가이드, 최대 10,000건 JSONL Export | Phase 8 |
+| **Phase 10** | E2E 통합 전환 | **Partial Current (SQLite)** — E2E Run/Timeline·이상 알림 저장 계약, 조회 API 및 System Operations UI. Diagnosis PostgreSQL 수신 후처리 연결은 adapter 구현 후 전환 | Phase 9 |
 
 ---
 
@@ -519,7 +525,8 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **Mapping Rebuild** | Current (SQLite Job Registry) | PostgreSQL adapter 및 고급 승인·취소 정책 확장 | Phase 5 |
 | **하위 영향 분석** | Current (명시적 snapshot 및 단계 목록) | 대규모 관계 그래프와 자동 입력 해석 확장 | Phase 6 |
 | **Model 운영 선택** | `latest.json`, `selected.json`, `active-model-set.json` 역할 분리 및 Rollback 구현 | 만료·Archive·고급 승인 정책 | Phase 8 이후 |
-| **통합 운영 감사** | 개별 로그 기록 | 자산·Job·조작 전수 감사(Audit Trail) | Phase 9 |
+| **통합 운영 감사** | Phase 4~8 주요 변경 작업의 append-only 기록과 JSONL Export 구현 | Phase 10에서 E2E Timeline 상관관계 완성 | Phase 9 |
+| **E2E 실행·이상 알림** | SQLite Registry/API/UI 골격 구현. Backend 판정 결과만 Alert로 승격하는 서비스 경계 정의 | PostgreSQL Diagnosis 수신 성공 후 비차단 Timeline 기록, Dashboard 실시간 표시 | Phase 10 |
 
 ---
 

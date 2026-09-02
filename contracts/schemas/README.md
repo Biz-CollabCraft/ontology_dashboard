@@ -9,6 +9,11 @@
 - `ontology-core.schema.json`: domain-neutral Object, Link, Action invocation·execution result, traversal, Evidence reference
 - `dashboard-platform.schema.json`: resolved Dashboard, tab, board, preference save, dependency graph와 share payload
 - `role-workspaces.schema.json`: Executive·Audit·Field·FDE·Model workspace와 approval request 응답
+- `system-audit-event.schema.json`: append-only 시스템 운영 행위 감사 기록
+- `system-operational-log.schema.json`: 서비스·도메인·상관관계 기반 구조화 운영 로그
+- `system-log-export-request.schema.json`, `system-log-export-result.schema.json`: 제한된 JSONL Export 계약
+- `system-e2e-run-summary.schema.json`, `system-e2e-timeline-event.schema.json`, `system-e2e-timeline.schema.json`: Generator 전달과 Backend 승격의 상관관계 조회 계약
+- `dashboard-anomaly-alert.schema.json`: Backend 판정 결과에서 생성되는 Dashboard 이상 알림 계약
 - `ontology-planner.schema.json`: typed Object query, Board recommendation, Dashboard draft와 grounded narrative 응답
 - `export.schema.json`: organization/project/workspace 범위의 export request, snapshot과 checkpoint 계약
 - `dataset-manifest.schema.json`: Project별 dataset source, checksum, schema alias와 quality rule 계약
