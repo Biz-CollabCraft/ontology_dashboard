@@ -1035,6 +1035,11 @@
 .operations-guided-action strong { font-size: 18px; letter-spacing: 0; }
 .operations-guided-action p { margin: 0; color: var(--operations-muted); font-size: 10px; line-height: 1.45; }
 .operations-guided-action > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.operations-decision-routing { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; margin-top: 8px; }
+.operations-decision-routing > div { min-width: 0; display: grid; gap: 3px; padding: 9px 10px; border: 1px solid rgba(181,196,214,.10); border-radius: 6px; background: rgba(255,255,255,.02); }
+.operations-decision-routing span { color: var(--operations-dim); font-size: 8px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.operations-decision-routing strong { overflow: hidden; color: var(--operations-text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.operations-decision-routing small { color: var(--operations-muted); font-size: 8px; }
 .operations-decision-flow { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; margin: 13px 0 0; padding: 0; list-style: none; }
 .operations-decision-flow li { min-width: 0; display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 8px; align-items: center; padding: 9px; border: 1px solid rgba(181,196,214,.1); border-radius: 6px; background: rgba(255,255,255,.018); }
 .operations-decision-flow li > span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #d7e7fb; background: rgba(76,144,240,.2); font-size: 10px; font-weight: 800; }
@@ -1966,6 +1971,7 @@
   .operations-operations-layout { grid-template-columns: 270px minmax(0,1fr); }
   .operations-guided-action { grid-template-columns: 1fr; }
   .operations-guided-action > div:last-child { justify-content: flex-start; }
+  .operations-decision-routing { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .operations-decision-flow { grid-template-columns: 1fr; }
   .operations-operation-evidence-grid,
   .operations-operation-bottom-grid { grid-template-columns: 1fr; }
@@ -2045,6 +2051,7 @@
   .operations-operation-queue-panel { position: static; }
   .operations-operation-queue { max-height: 300px; }
   .operations-operation-hero dl { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .operations-decision-routing { grid-template-columns: 1fr; }
   .operations-decision-option-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .operations-decision-flow { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .operations-panel-header { align-items: flex-start; }

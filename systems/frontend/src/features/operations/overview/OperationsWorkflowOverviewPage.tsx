@@ -2116,7 +2116,9 @@ function AssetPreviewPanel({
     setReportOutputOpen(false);
     window.setTimeout(() => window.print(), 100);
   };
-  const agentSummaryKey = asset ? `${asset.assetId}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}` : "";
+  const agentSummaryKey = asset
+    ? `${asset.assetId}:${candidate?.event.eventId ?? ""}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}`
+    : "";
   const loadAgentSummary = async (materialize = false) => {
     if (!asset) return;
     if (materialize) setAgentSummaryMaterializing(true);
@@ -2133,7 +2135,9 @@ function AssetPreviewPanel({
     try {
       const request = {
         assetId: asset.assetId,
+        projectId,
         datasetVersionId: candidate?.event.datasetVersionId ?? null,
+        eventId,
         historyWindow: sensorWindow,
       };
       const summaryResponse = materialize

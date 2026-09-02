@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from app.operations.contracts import AgentQueryRequest
 from app.operations.router import (
     _answer_from_packet,
+    _merge_runtime_detail_supplemental,
     _runtime_demo_operation_context,
     _runtime_sop_context,
     _summary_text,
@@ -98,6 +99,41 @@ def test_agent_query_contract_accepts_role_audience():
         workspace_id="manufacturing-demo",
         question="이 이슈를 경영진 관점에서 요약해줘",
         audience="executive",
+        event_id="RESULT#CNC-S01-L04-03#1",
     )
 
     assert request.audience == "executive"
+    assert request.event_id == "RESULT#CNC-S01-L04-03#1"
+
+
+def test_canonical_live_detail_keeps_evidence_and_adds_presentation_context():
+    canonical = {
+        "snapshot_basis": {"artifact_id": "RESULT#1"},
+        "features": [{"feature": "rotation_raw"}],
+        "inspection_targets": [],
+        "review_priority": None,
+        "evidence": {
+            "artifact_id": "RESULT#1",
+            "gaps": [
+                {"field": "operation_context.production_impact", "reason": "missing"},
+                {"field": "review_priority", "reason": "missing"},
+                {"field": "equipment_history", "reason": "missing"},
+            ],
+        },
+    }
+    supplemental = {
+        "operation_context": {"source_type": "synthetic_capacity_model"},
+        "inspection_targets": [{"target_id": "inspection-target:1"}],
+        "review_priority": {"level": "high"},
+    }
+
+    merged = _merge_runtime_detail_supplemental(canonical, supplemental)
+
+    assert merged["snapshot_basis"] == canonical["snapshot_basis"]
+    assert merged["features"] == canonical["features"]
+    assert merged["operation_context"]["source_type"] == "synthetic_capacity_model"
+    assert merged["inspection_targets"] == supplemental["inspection_targets"]
+    assert merged["review_priority"] == supplemental["review_priority"]
+    assert merged["evidence"]["gaps"] == [
+        {"field": "equipment_history", "reason": "missing"}
+    ]

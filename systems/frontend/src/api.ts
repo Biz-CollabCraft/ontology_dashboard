@@ -926,6 +926,7 @@ export function getOperationsAgentReviewPacket(input: {
   assetId: string;
   projectId?: string;
   datasetVersionId?: string | null;
+  eventId?: string | null;
   historyWindow?: string;
 }): Promise<OperationsAgentReviewPacket> {
   const params = new URLSearchParams({
@@ -933,6 +934,7 @@ export function getOperationsAgentReviewPacket(input: {
     history_window: input.historyWindow ?? "24h",
   });
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewPacket>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-packet?${params.toString()}`,
   );
@@ -942,6 +944,7 @@ export function getOperationsAgentReviewSummary(input: {
   assetId: string;
   projectId?: string;
   datasetVersionId?: string | null;
+  eventId?: string | null;
   historyWindow?: string;
 }): Promise<OperationsAgentReviewSummaryResponse> {
   const params = new URLSearchParams({
@@ -949,6 +952,7 @@ export function getOperationsAgentReviewSummary(input: {
     history_window: input.historyWindow ?? "24h",
   });
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
   );
@@ -958,6 +962,7 @@ export function createOperationsAgentReviewSummary(input: {
   assetId: string;
   projectId?: string;
   datasetVersionId?: string | null;
+  eventId?: string | null;
   historyWindow?: string;
   trigger?: "manual_materialization" | "ui_manual_regeneration";
 }): Promise<OperationsAgentReviewSummaryResponse> {
@@ -967,6 +972,7 @@ export function createOperationsAgentReviewSummary(input: {
     trigger: input.trigger ?? "ui_manual_regeneration",
   });
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
     { method: "POST" },

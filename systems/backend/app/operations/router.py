@@ -480,6 +480,7 @@ def _runtime_agent_review_packet(
     project_id: str,
     workspace_id: str,
     dataset_version_id: str | None,
+    selected_event_id: str | None = None,
     principal: Principal,
     runtime_service: PredictiveMaintenanceRuntimeService,
 ) -> dict[str, Any]:
@@ -496,6 +497,8 @@ def _runtime_agent_review_packet(
 
     result = page.items[0]
     event_id = _runtime_event_id(result)
+    if selected_event_id and event_id != selected_event_id:
+        raise EventNotFound(selected_event_id)
     observed_at = result.observed_at.isoformat()
     model_version = result.provenance.model_version
     dataset_id = page.context.dataset_id
@@ -703,6 +706,7 @@ def _runtime_asset_detail_view_model(
     project_id: str,
     workspace_id: str,
     dataset_version_id: str | None,
+    selected_event_id: str | None = None,
     history_window: str,
     principal: Principal,
     runtime_service: PredictiveMaintenanceRuntimeService,
@@ -719,6 +723,8 @@ def _runtime_asset_detail_view_model(
         raise EventNotFound(asset_id)
     result = page.items[0]
     event_id = _runtime_event_id(result)
+    if selected_event_id and event_id != selected_event_id:
+        raise EventNotFound(selected_event_id)
     observed_at = result.observed_at.isoformat()
     artifact = result.producer_artifact
     if artifact is None:
@@ -866,6 +872,30 @@ def _runtime_asset_detail_view_model(
     )
 
 
+def _merge_runtime_detail_supplemental(
+    canonical: dict[str, Any],
+    supplemental: dict[str, Any],
+) -> dict[str, Any]:
+    """Add presentation context without replacing canonical evidence facts."""
+
+    merged = dict(canonical)
+    merged["operation_context"] = supplemental.get("operation_context")
+    if not merged.get("inspection_targets") and supplemental.get("inspection_targets"):
+        merged["inspection_targets"] = supplemental["inspection_targets"]
+    if not merged.get("review_priority") and supplemental.get("review_priority"):
+        merged["review_priority"] = supplemental["review_priority"]
+    evidence = dict(merged.get("evidence") or {})
+    gaps = [
+        gap
+        for gap in evidence.get("gaps") or []
+        if not str((gap or {}).get("field") or "").startswith("operation_context")
+        and str((gap or {}).get("field") or "") != "review_priority"
+    ]
+    evidence["gaps"] = gaps
+    merged["evidence"] = evidence
+    return merged
+
+
 def _dynamic_summary_from_packet(
     *,
     service: ManufacturingPredictiveMaintenanceService,
@@ -985,7 +1015,7 @@ def get_asset_detail_view(
         raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
     if dataset_version_id and event_id and runtime_detail is not None:
         try:
-            return runtime_detail.latest_detail_view(
+            canonical = runtime_detail.latest_detail_view(
                 organization_id=principal.organization_id,
                 project_id=project_id,
                 workspace_id=workspace_id,
@@ -994,6 +1024,20 @@ def get_asset_detail_view(
                 event_id=event_id,
                 history_window=history_window,
             )
+            try:
+                supplemental = _runtime_asset_detail_view_model(
+                    asset_id=asset_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    dataset_version_id=dataset_version_id,
+                    selected_event_id=event_id,
+                    history_window=history_window,
+                    principal=principal,
+                    runtime_service=get_predictive_maintenance_runtime_service(),
+                )
+                return _merge_runtime_detail_supplemental(canonical, supplemental)
+            except Exception:
+                return canonical
         except KeyError as exc:
             raise EventNotFound(event_id) from exc
     try:
@@ -1009,6 +1053,7 @@ def get_asset_detail_view(
             project_id=project_id,
             workspace_id=workspace_id,
             dataset_version_id=dataset_version_id,
+            selected_event_id=event_id,
             history_window=history_window,
             principal=principal,
             runtime_service=get_predictive_maintenance_runtime_service(),
@@ -1020,6 +1065,7 @@ def get_agent_review_packet(
     asset_id: str,
     project_id: str = Query(default="manufacturing-demo-project"),
     dataset_version_id: str | None = Query(default=None, max_length=160),
+    event_id: str | None = Query(default=None, max_length=240),
     history_window: Literal["24h", "7d", "30d"] = Query(default="24h"),
     principal: Principal = Depends(require_permission("events.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
@@ -1028,6 +1074,19 @@ def get_agent_review_packet(
         raise AuthError(403, "project_scope_denied", "허용된 Object 범위를 벗어난 Agent Review Packet입니다.")
     if principal.active_project_id != project_id:
         raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
+    if event_id:
+        try:
+            return _runtime_agent_review_packet(
+                asset_id=asset_id,
+                project_id=project_id,
+                workspace_id=MANUFACTURING_WORKSPACE,
+                dataset_version_id=dataset_version_id,
+                selected_event_id=event_id,
+                principal=principal,
+                runtime_service=get_predictive_maintenance_runtime_service(),
+            )
+        except EventNotFound:
+            pass
     try:
         return service.agent_review_packet(
             asset_id,
@@ -1064,11 +1123,51 @@ def get_agent_review_summary(
     asset_id: str,
     project_id: str = Query(default="manufacturing-demo-project"),
     dataset_version_id: str | None = Query(default=None, max_length=160),
+    event_id: str | None = Query(default=None, max_length=240),
     history_window: Literal["24h", "7d", "30d"] = Query(default="24h"),
     principal: Principal = Depends(require_permission("events.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
     _authorize_agent_review_summary(principal=principal, project_id=project_id)
+    if event_id:
+        try:
+            _runtime_agent_review_packet(
+                asset_id=asset_id,
+                project_id=project_id,
+                workspace_id=MANUFACTURING_WORKSPACE,
+                dataset_version_id=dataset_version_id,
+                selected_event_id=event_id,
+                principal=principal,
+                runtime_service=get_predictive_maintenance_runtime_service(),
+            )
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "summary": None,
+                    "trace": {
+                        "provider": "runtime-product-result",
+                        "fallback": False,
+                        "reason": "runtime_packet_not_materialized_yet",
+                        "validation_errors": [],
+                        "materialization": {
+                            "summary_id": None,
+                            "summary_key": f"runtime:{event_id}",
+                            "workflow_run_id": None,
+                            "status": "pending",
+                            "reused": False,
+                            "source_sha256": "runtime-packet",
+                            "context_sha256": None,
+                            "prompt_version": "agent-review-summary-prompt-v1.0",
+                            "model_version": "runtime-product-result",
+                            "generated_at": None,
+                            "created_at": None,
+                            "updated_at": None,
+                        },
+                    },
+                },
+            )
+        except EventNotFound:
+            pass
     try:
         summary, trace = service.cached_agent_review_summary(
             asset_id,
@@ -1119,6 +1218,7 @@ def create_agent_review_summary(
     asset_id: str,
     project_id: str = Query(default="manufacturing-demo-project"),
     dataset_version_id: str | None = Query(default=None, max_length=160),
+    event_id: str | None = Query(default=None, max_length=240),
     history_window: Literal["24h", "7d", "30d"] = Query(default="24h"),
     trigger: Literal["manual_materialization", "ui_manual_regeneration"] = Query(
         default="manual_materialization"
@@ -1135,11 +1235,27 @@ def create_agent_review_summary(
             principal.user_id,
             project_id,
             asset_id,
+            event_id or "no-event",
             history_window,
             trigger,
         ),
         rule=AGENT_REVIEW_SUMMARY_MATERIALIZE_RATE,
     )
+    if event_id:
+        try:
+            packet = _runtime_agent_review_packet(
+                asset_id=asset_id,
+                project_id=project_id,
+                workspace_id=MANUFACTURING_WORKSPACE,
+                dataset_version_id=dataset_version_id,
+                selected_event_id=event_id,
+                principal=principal,
+                runtime_service=get_predictive_maintenance_runtime_service(),
+            )
+            summary, trace = _dynamic_summary_from_packet(service=service, packet=packet)
+            return {"summary": summary, "trace": trace}
+        except EventNotFound:
+            pass
     try:
         summary, trace = service.agent_review_summary(
             asset_id,
@@ -1245,23 +1361,41 @@ def run_agent_query(
             "created_at": now,
         }]}
 
-    try:
-        packet = service.agent_review_packet(
-            request.object_id,
-            request.project_id,
-            history_window="24h",
-        )
-        packet_source = "fixture-agent-review"
-    except EventNotFound:
-        packet = _runtime_agent_review_packet(
-            asset_id=request.object_id,
-            project_id=request.project_id,
-            workspace_id=request.workspace_id,
-            dataset_version_id=None,
-            principal=principal,
-            runtime_service=get_predictive_maintenance_runtime_service(),
-        )
-        packet_source = "runtime-product-result"
+    packet = None
+    packet_source = "fixture-agent-review"
+    if request.event_id:
+        try:
+            packet = _runtime_agent_review_packet(
+                asset_id=request.object_id,
+                project_id=request.project_id,
+                workspace_id=request.workspace_id,
+                dataset_version_id=None,
+                selected_event_id=request.event_id,
+                principal=principal,
+                runtime_service=get_predictive_maintenance_runtime_service(),
+            )
+            packet_source = "runtime-product-result"
+        except EventNotFound:
+            packet = None
+    if packet is None:
+        try:
+            packet = service.agent_review_packet(
+                request.object_id,
+                request.project_id,
+                history_window="24h",
+            )
+            packet_source = "fixture-agent-review"
+        except EventNotFound:
+            packet = _runtime_agent_review_packet(
+                asset_id=request.object_id,
+                project_id=request.project_id,
+                workspace_id=request.workspace_id,
+                dataset_version_id=None,
+                selected_event_id=request.event_id,
+                principal=principal,
+                runtime_service=get_predictive_maintenance_runtime_service(),
+            )
+            packet_source = "runtime-product-result"
     evidence = _packet_evidence(
         packet,
         project_id=request.project_id,

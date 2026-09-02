@@ -333,6 +333,7 @@ export function ReliabilityWorkspacePreview({
       assetId,
       projectId: context.projectId,
       datasetVersionId: context.datasetVersionId,
+      eventId: selectedEvent?.eventId ?? null,
       historyWindow: "24h" as const,
     };
 
@@ -479,6 +480,7 @@ export function ReliabilityWorkspacePreview({
         audience: experience.kind,
         object_type: "equipment",
         object_id: selectedEvent?.assetId ?? undefined,
+        event_id: selectedEvent?.eventId ?? undefined,
         top_k: 8,
       });
       const evidenceStores = [...new Set(run.state.evidence.map((item) => item.store))];

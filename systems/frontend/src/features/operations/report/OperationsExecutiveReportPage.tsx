@@ -64,6 +64,27 @@ interface ExecutiveBriefSnapshot {
   agentSummary: OperationsAgentReviewSummaryResponse["summary"];
 }
 
+export function executiveBriefIsStale(input: {
+  snapshotEventId: string;
+  snapshotAssetId: string;
+  snapshotContextObservedAt: string | null;
+  selectedEventId: string | null;
+  selectedAssetId: string | null;
+  currentContextObservedAt: string | null;
+}): boolean {
+  const newerEventForSameAsset = Boolean(
+    input.selectedEventId
+    && input.selectedAssetId === input.snapshotAssetId
+    && input.selectedEventId !== input.snapshotEventId,
+  );
+  const newerMonitoringObservation = Boolean(
+    input.currentContextObservedAt
+    && input.snapshotContextObservedAt
+    && input.currentContextObservedAt > input.snapshotContextObservedAt,
+  );
+  return newerEventForSameAsset || newerMonitoringObservation;
+}
+
 function snapshotStorageKey(userScope: string, projectId: string): string {
   return `ontology-dashboard:executive-brief:${userScope}:${projectId}`;
 }
@@ -168,6 +189,7 @@ export function OperationsExecutiveReportPage({
       assetId: selectedEvent.assetId,
       projectId: model.context.projectId,
       datasetVersionId: model.context.datasetVersionId,
+      eventId: selectedEvent.eventId,
     };
     getOperationsAgentReviewSummary(request)
       .then((payload) => {
@@ -199,14 +221,14 @@ export function OperationsExecutiveReportPage({
     persistSnapshot(storageKey, next);
   }, [agentSummary?.summary, selectedEvent, snapshot, storageKey]);
 
-  const snapshotStale = Boolean(snapshot && (
-    (selectedEvent && selectedEvent.assetId === snapshot.event.assetId && selectedEvent.eventId !== snapshot.event.eventId)
-    || (
-      model.context.observedAt
-      && snapshot.contextObservedAt
-      && model.context.observedAt > snapshot.contextObservedAt
-    )
-  ));
+  const snapshotStale = Boolean(snapshot && executiveBriefIsStale({
+    snapshotEventId: snapshot.event.eventId,
+    snapshotAssetId: snapshot.event.assetId,
+    snapshotContextObservedAt: snapshot.contextObservedAt,
+    selectedEventId: selectedEvent?.eventId ?? null,
+    selectedAssetId: selectedEvent?.assetId ?? null,
+    currentContextObservedAt: model.context.observedAt,
+  }));
 
   async function regenerateSnapshot() {
     if (!selectedEvent || !detail || detail.event.eventId !== selectedEvent.eventId) {
@@ -221,6 +243,7 @@ export function OperationsExecutiveReportPage({
           assetId: selectedEvent.assetId,
           projectId: model.context.projectId,
           datasetVersionId: model.context.datasetVersionId,
+          eventId: selectedEvent.eventId,
           trigger: "ui_manual_regeneration",
         });
         setAgentSummary(payload);
