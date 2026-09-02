@@ -64,4 +64,3 @@ def test_family_artifact_requires_asset_type_at_runtime_boundary() -> None:
             observations,
             artifact_for("cnc"),
         )
-
