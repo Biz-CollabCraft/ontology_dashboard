@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from app.mvp.operational_domain_schema import (
     MaintenanceReadinessContext,
     ProductionDecisionContext,
+    QualityDeliveryContext,
 )
 from app.mvp.operational_context_contract import (
     FreshnessMetadata,
@@ -549,6 +550,160 @@ def _maintenance_readiness(
         "assignment_state": "candidate_only",
         "execution_state": "not_started",
     }
+
+
+@dataclass(frozen=True)
+class FixtureQualityDeliveryContextReadPort:
+    context: dict[str, Any]
+    source_ref: str
+    freshness_policy_version: str = "quality-delivery-fixture-v1"
+    max_age_seconds: int = 172_800
+    owner_domain: str = "quality_delivery"
+
+    def lookup(
+        self,
+        *,
+        identity: OperationalRequestIdentity,
+        retrieved_at: datetime,
+    ) -> OperationalContextEnvelope:
+        scope = self.context.get("scope") or {}
+        if (
+            str(scope.get("organization_id") or ""),
+            str(scope.get("project_id") or ""),
+            str(scope.get("workspace_id") or ""),
+        ) != (
+            identity.organization_id,
+            identity.project_id,
+            identity.workspace_id,
+        ):
+            raise ValueError("quality delivery configured scope mismatch")
+
+        parsed = QualityDeliveryContext.model_validate(
+            {
+                "source_classification": self.context.get(
+                    "source_classification"
+                ),
+                "asset_id": self.context.get("asset_id"),
+                "quality_lots": self.context.get("quality_lots") or [],
+                "delivery_commitments": self.context.get(
+                    "delivery_commitments"
+                )
+                or [],
+                "limitations": self.context.get("limitations") or [],
+            }
+        )
+        if parsed.asset_id != identity.asset_id:
+            return OperationalContextEnvelope(
+                owner_domain=self.owner_domain,
+                scope=OperationalScope(
+                    organization_id=identity.organization_id,
+                    project_id=identity.project_id,
+                    workspace_id=identity.workspace_id,
+                    asset_id=identity.asset_id,
+                ),
+                status=OperationalContextStatus.UNAVAILABLE,
+                retrieved_at=retrieved_at,
+                as_of=identity.decision_as_of,
+                freshness=FreshnessMetadata(
+                    policy_version=self.freshness_policy_version,
+                    max_age_seconds=self.max_age_seconds,
+                    state=FreshnessState.UNKNOWN,
+                ),
+                source_refs=(self.source_ref,),
+                limitations=(
+                    "No quality/delivery context exists for the requested asset.",
+                ),
+            )
+
+        temporal = self.context.get("temporal_scope") or {}
+        generated_at = _parse_required_datetime(
+            temporal.get("generated_at"), "temporal_scope.generated_at"
+        )
+        valid_from = _parse_required_datetime(
+            temporal.get("valid_from"), "temporal_scope.valid_from"
+        )
+        valid_to = _parse_required_datetime(
+            temporal.get("valid_to"), "temporal_scope.valid_to"
+        )
+        freshness_state = classify_freshness(
+            source_updated_at=generated_at,
+            retrieved_at=retrieved_at,
+            max_age_seconds=self.max_age_seconds,
+        )
+        in_window = valid_from <= identity.decision_as_of < valid_to
+        available = in_window and freshness_state is FreshnessState.FRESH
+        status = (
+            OperationalContextStatus.AVAILABLE
+            if available
+            else OperationalContextStatus.STALE
+        )
+        limitations = parsed.limitations
+        data: dict[str, Any] = {}
+        if available:
+            held_lots = [
+                lot
+                for lot in parsed.quality_lots
+                if lot.release_required or lot.quality_state == "hold"
+            ]
+            data = {
+                "source_classification": parsed.source_classification,
+                "asset_id": parsed.asset_id,
+                "quality_lots": [
+                    item.model_dump(mode="json")
+                    for item in parsed.quality_lots
+                ],
+                "delivery_commitments": [
+                    item.model_dump(mode="json")
+                    for item in parsed.delivery_commitments
+                ],
+                "quality_gate": {
+                    "state": "blocked" if held_lots else "clear",
+                    "held_lot_ids": [item.lot_id for item in held_lots],
+                    "blocked_quantity": sum(
+                        item.quantity for item in held_lots
+                    ),
+                },
+            }
+        elif not in_window:
+            limitations = (
+                *limitations,
+                "Requested decision_as_of is outside the quality/delivery window.",
+            )
+        else:
+            limitations = (
+                *limitations,
+                "Quality/delivery context exceeded its freshness policy.",
+            )
+
+        snapshot_id = str(temporal.get("snapshot_id") or "")
+        if not snapshot_id:
+            raise ValueError("quality delivery context requires snapshot_id")
+        return OperationalContextEnvelope(
+            owner_domain=self.owner_domain,
+            scope=OperationalScope(
+                organization_id=identity.organization_id,
+                project_id=identity.project_id,
+                workspace_id=identity.workspace_id,
+                asset_id=identity.asset_id,
+            ),
+            status=status,
+            source_version=snapshot_id,
+            source_updated_at=generated_at,
+            retrieved_at=retrieved_at,
+            as_of=identity.decision_as_of,
+            freshness=FreshnessMetadata(
+                policy_version=self.freshness_policy_version,
+                max_age_seconds=self.max_age_seconds,
+                state=(
+                    FreshnessState.FRESH
+                    if available
+                    else FreshnessState.STALE
+                ),
+            ),
+            source_refs=(self.source_ref,),
+            data=data,
+            limitations=limitations,
+        )
 
 
 def _parse_required_datetime(value: Any, field_name: str) -> datetime:

@@ -241,6 +241,52 @@ class MaintenanceReadinessContext(FrozenModel):
         return self
 
 
+class QualityLotRecord(FrozenModel):
+    lot_id: str = Field(min_length=1, max_length=240)
+    wip_id: str = Field(min_length=1, max_length=240)
+    order_id: str = Field(min_length=1, max_length=240)
+    quantity: int = Field(ge=0)
+    quality_state: str = Field(min_length=1, max_length=80)
+    release_required: bool
+    relationship_state: RelationshipState
+    source_refs: tuple[str, ...] = Field(min_length=1)
+
+
+class DeliveryCommitment(FrozenModel):
+    delivery_id: str = Field(min_length=1, max_length=240)
+    order_id: str = Field(min_length=1, max_length=240)
+    committed_quantity: int = Field(ge=0)
+    due_at: datetime
+    priority: int = Field(ge=0)
+    relationship_state: RelationshipState
+    source_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_due_at(self) -> DeliveryCommitment:
+        _require_aware(self.due_at, "due_at")
+        return self
+
+
+class QualityDeliveryContext(FrozenModel):
+    source_classification: str = Field(min_length=1, max_length=120)
+    asset_id: str = Field(min_length=1, max_length=240)
+    quality_lots: tuple[QualityLotRecord, ...]
+    delivery_commitments: tuple[DeliveryCommitment, ...]
+    limitations: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_quality_delivery_relationships(
+        self,
+    ) -> QualityDeliveryContext:
+        order_ids = {lot.order_id for lot in self.quality_lots}
+        for delivery in self.delivery_commitments:
+            if delivery.order_id not in order_ids:
+                raise ValueError(
+                    f"delivery {delivery.delivery_id} references unknown order"
+                )
+        return self
+
+
 def _require_aware(value: datetime, field_name: str) -> None:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{field_name} must be timezone-aware")

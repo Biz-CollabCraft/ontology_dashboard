@@ -1016,6 +1016,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U4. Quality and Delivery Context
 
+- **Status:** Partially Verified. synthetic QualityLot/DeliveryCommitment source와 versioned read port, lot→WIP→order→delivery 관계 및 quality hold blocker를 구현했다. 실제 QMS/ERP source와 consumer 연결은 미구현이다.
 - Quality/Lot read port
 - Customer/Delivery relationship read port
 - quality hold와 missing relationship에서 impact 계산 차단

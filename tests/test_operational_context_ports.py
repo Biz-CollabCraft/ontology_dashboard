@@ -13,10 +13,20 @@ from app.mvp.operational_context_ports import (
     FixtureMaintenanceReadinessContextReadPort,
     FixtureProductionContextReadPort,
     FixtureProductionDecisionContextReadPort,
+    FixtureQualityDeliveryContextReadPort,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
+QUALITY_FIXTURE = json.loads(
+    (
+        ROOT
+        / "data"
+        / "fixtures"
+        / "operation_context"
+        / "quality-delivery-context-v1.json"
+    ).read_text(encoding="utf-8")
+)
 MAINTENANCE_FIXTURE = json.loads(
     (
         ROOT
@@ -282,6 +292,67 @@ def test_maintenance_readiness_for_other_asset_is_unavailable() -> None:
     assert result.status is OperationalContextStatus.UNAVAILABLE
     assert result.data == {}
     assert result.source_version is None
+
+
+def quality_port() -> FixtureQualityDeliveryContextReadPort:
+    return FixtureQualityDeliveryContextReadPort(
+        context=QUALITY_FIXTURE,
+        source_ref=(
+            "data/fixtures/operation_context/"
+            "quality-delivery-context-v1.json"
+        ),
+    )
+
+
+def test_quality_delivery_links_lot_wip_order_and_delivery() -> None:
+    requested = identity(
+        as_of=datetime(2026, 9, 2, 1, tzinfo=timezone.utc)
+    )
+    result = quality_port().lookup(
+        identity=requested,
+        retrieved_at=datetime(2026, 9, 2, 2, tzinfo=timezone.utc),
+    )
+
+    assert result.status is OperationalContextStatus.AVAILABLE
+    lots = result.data["quality_lots"]
+    assert {item["lot_id"] for item in lots} == {
+        "DEMO-LOT-014",
+        "DEMO-LOT-015",
+    }
+    assert {item["wip_id"] for item in lots} == {"DEMO-WIP-001"}
+    assert result.data["delivery_commitments"][0]["order_id"] == "DEMO-PO-001"
+
+
+def test_quality_hold_is_an_explicit_calculation_blocker() -> None:
+    result = quality_port().lookup(
+        identity=identity(
+            as_of=datetime(2026, 9, 2, 1, tzinfo=timezone.utc)
+        ),
+        retrieved_at=datetime(2026, 9, 2, 2, tzinfo=timezone.utc),
+    )
+
+    assert result.data["quality_gate"] == {
+        "state": "blocked",
+        "held_lot_ids": ["DEMO-LOT-015"],
+        "blocked_quantity": 80,
+    }
+
+
+def test_quality_delivery_rejects_unknown_order_relationship() -> None:
+    broken = json.loads(json.dumps(QUALITY_FIXTURE))
+    broken["delivery_commitments"][0]["order_id"] = "UNKNOWN"
+    adapter = FixtureQualityDeliveryContextReadPort(
+        context=broken,
+        source_ref="broken",
+    )
+
+    with pytest.raises(ValueError, match="references unknown order"):
+        adapter.lookup(
+            identity=identity(
+                as_of=datetime(2026, 9, 2, 1, tzinfo=timezone.utc)
+            ),
+            retrieved_at=datetime(2026, 9, 2, 2, tzinfo=timezone.utc),
+        )
 
 
 def test_configured_scope_mismatch_fails_closed() -> None:
