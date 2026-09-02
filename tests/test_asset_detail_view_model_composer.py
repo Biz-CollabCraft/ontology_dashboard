@@ -195,7 +195,7 @@ def test_service_requires_product_result_artifact() -> None:
 def test_composer_builds_view_model_without_generator_raw_file_dependency() -> None:
     operation_context = {
         "context_id": "production-planning-context-v1",
-        "source_type": "synthetic_capacity_model",
+        "source_type": "capacity_model",
         "temporal_scope": {
             "snapshot_id": "OPS-SNAPSHOT-2026-08-01-A-B",
             "timezone": "Asia/Seoul",
@@ -336,7 +336,7 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
         payload["inspection_targets"][0]["unavailable_reason"]
         == "field_inspection_location_reference_unavailable"
     )
-    assert payload["operation_context"]["source_type"] == "synthetic_capacity_model"
+    assert payload["operation_context"]["source_type"] == "capacity_model"
     assert payload["operation_context"]["event_impact"]["estimated_lost_units"] == 25
     assert payload["risk_series"][0]["source_ref"].startswith("diagnosis-runtime-history://")
     assert "features[].history.points" not in {gap["field"] for gap in payload["evidence"]["gaps"]}

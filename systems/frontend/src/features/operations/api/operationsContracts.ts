@@ -244,7 +244,7 @@ export interface OperationsAssetDetailStatus {
 }
 
 export type OperationsProductionImpact = "none" | "low" | "medium" | "high" | null;
-export type OperationsOperationSourceType = "synthetic_capacity_model";
+export type OperationsOperationSourceType = "capacity_model";
 export type OperationsScreenPriority = "none" | "monitor" | "shift_inspection" | "plan_at_risk" | "data_check_required";
 export type OperationsImpactStatus = "not_applicable" | "estimated" | "withheld_data_quality_hold";
 
@@ -299,6 +299,90 @@ export interface OperationsOperationContext {
   capacityModel?: OperationsCapacityModel;
   eventImpact?: OperationsEventImpact | null;
   limitations?: string[];
+}
+
+export interface OperationsCompanyContext {
+  schema_version: string;
+  context_kind: string;
+  project_id: string;
+  workspace_id: string;
+  company: {
+    id: string;
+    name: string;
+    english_name: string;
+    industry: string;
+    headquarters: string;
+    fiscal_year: number;
+    currency: string;
+    operating_principle: string;
+  };
+  organization_units: Array<{
+    id: string;
+    name: string;
+    parent_id: string | null;
+    leader: string;
+    responsibilities: string[];
+    persona_roles: string[];
+  }>;
+  plants: Array<Record<string, unknown>>;
+  products: Array<{
+    id: string;
+    variant: string;
+    name: string;
+    unit_sales_price_krw: number;
+    unit_material_cost_krw: number;
+    unit_contribution_margin_krw: number;
+    daily_plan_units: number;
+  }>;
+  materials: Array<{
+    id: string;
+    name: string;
+    category: string;
+    unit_cost_krw: number;
+    on_hand_quantity: number;
+    reorder_point: number;
+    lead_time_days: number;
+    related_asset_ids: string[];
+  }>;
+  business_metrics: Array<{
+    id: string;
+    name: string;
+    period: string;
+    value: number;
+    unit: string;
+    source_label: string;
+  }>;
+  maintenance_records: Array<{
+    id: string;
+    asset_id: string;
+    occurred_at: string;
+    work_type: string;
+    component: string;
+    symptom: string;
+    action: string;
+    result: string;
+    downtime_minutes: number;
+    material_ids: string[];
+    source_ref: string;
+  }>;
+  meeting_minutes: Array<{
+    id: string;
+    title: string;
+    occurred_at: string;
+    attendees: string[];
+    summary: string;
+    decision_ids: string[];
+    source_ref: string;
+  }>;
+  decisions: Array<{
+    id: string;
+    title: string;
+    decided_at: string;
+    owner_org_unit_id: string;
+    decision: string;
+    related_asset_ids: string[];
+    source_ref: string;
+  }>;
 }
 
 export type OperationsClosedLoopWorkType = "inspection" | "maintenance";
@@ -1004,6 +1088,7 @@ export interface AssetDetailViewModel {
 
 export interface OperationsSelection {
   view: OperationsView;
+  surface: string | null;
   dashboard: OperationsDashboardMode;
   reportTab: OperationsReportTab;
   projectId: string;

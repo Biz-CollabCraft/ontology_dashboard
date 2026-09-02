@@ -631,7 +631,7 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert detail_payload["risk"]["status_grade"] == "warning"
     assert detail_payload["features"]
     assert detail_payload["features"][0]["history"]["points"]
-    assert detail_payload["operation_context"]["source_type"] == "synthetic_capacity_model"
+    assert detail_payload["operation_context"]["source_type"] == "capacity_model"
     assert detail_payload["operation_context"]["production_plan"]["planned_units"] == 16200
     assert detail_payload["operation_context"]["event_impact"]["event_id"] == "EVT-GS-002"
     assert detail_payload["operation_context"]["event_impact"]["estimated_lost_units"] == 25

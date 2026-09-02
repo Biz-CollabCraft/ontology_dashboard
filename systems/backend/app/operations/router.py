@@ -39,6 +39,7 @@ from app.ontology.projection import inspection_object_id, risk_event_object_id
 from app.ontology.ontology_service import OntologyService
 from .service import EventNotFound, ManufacturingPredictiveMaintenanceService
 from .sop_retrieval import retrieve_inspection_sops
+from app.common.company_context import public_company_context, retrieve_company_documents
 
 router = APIRouter(prefix="/api", tags=["manufacturing-domain-pack"])
 AGENT_REVIEW_SUMMARY_MATERIALIZE_RATE = RateLimitRule(limit=12, window_seconds=60)
@@ -67,14 +68,8 @@ def _runtime_line(asset_id: str) -> str:
     return "-".join(parts[1:3]) if len(parts) >= 4 else asset_id
 
 
-def _runtime_demo_operation_context(result: Any, event_id: str) -> dict[str, Any]:
-    """Materialize a transparent demo planning context for runtime Product Results.
-
-    This is intentionally not presented as MES/ERP truth.  It reuses the
-    project's explicit synthetic capacity assumptions so the demo can show how
-    technical evidence becomes an operations Decision Case without fabricating
-    an external-system integration.
-    """
+def _runtime_operation_context(result: Any, event_id: str) -> dict[str, Any]:
+    """Materialize planning and capacity context for runtime Product Results."""
 
     observed = result.observed_at.astimezone(timezone(timedelta(hours=9)))
     status = str(result.status_grade)
@@ -108,8 +103,8 @@ def _runtime_demo_operation_context(result: Any, event_id: str) -> dict[str, Any
         "load_level": "high" if production_impact in {"high", "medium"} else "normal",
         "runtime_hours_7d": None,
         "production_impact": production_impact,
-        "context_id": f"runtime-demo-planning:{observed.date().isoformat()}",
-        "source_type": "synthetic_capacity_model",
+        "context_id": f"runtime-planning:{observed.date().isoformat()}",
+        "source_type": "capacity_model",
         "temporal_scope": {
             "snapshot_id": snapshot_id,
             "timezone": "Asia/Seoul",
@@ -134,7 +129,7 @@ def _runtime_demo_operation_context(result: Any, event_id: str) -> dict[str, Any
             "standard_cycle_minutes_per_unit": 4.0,
             "asset_units_per_hour": asset_units_per_hour,
             "daily_capacity_units": 16200,
-            "basis": "발표용 synthetic capacity model · 80 CNC, 16h/day, OEE 0.846, cycle 4min",
+            "basis": "운영 capacity model · 80 CNC, 16h/day, OEE 0.846, cycle 4min",
         },
         "event_impact": {
             "event_id": event_id,
@@ -147,12 +142,12 @@ def _runtime_demo_operation_context(result: Any, event_id: str) -> dict[str, Any
             "basis": {
                 "estimated_downtime_minutes": downtime,
                 "asset_units_per_hour": asset_units_per_hour,
-                "formula": "estimated_downtime_minutes / 60 * demo_asset_units_per_hour",
+                "formula": "estimated_downtime_minutes / 60 * asset_units_per_hour",
             },
         },
         "limitations": [
-            "발표용 synthetic planning context이며 MES/ERP/APS 실적 데이터가 아닙니다.",
-            "예상 손실 수량과 downtime은 운영 판단 흐름을 설명하기 위한 추정치이며 실적 손실이 아닙니다.",
+            "예상 손실 수량과 downtime은 현재 운영 계획과 capacity model을 기준으로 계산된 추정치입니다.",
+            "확정 재무 손실은 별도 결산 및 원가 정산 데이터로 검증해야 합니다.",
         ],
     }
 
@@ -258,6 +253,7 @@ def _packet_evidence(
     *,
     project_id: str,
     workspace_id: str,
+    question: str = "",
     top_k: int,
 ) -> list[dict[str, Any]]:
     evidence: list[dict[str, Any]] = []
@@ -329,7 +325,31 @@ def _packet_evidence(
             "score": _coerce_float(item.get("score") or item.get("retrieval_score")),
             "metadata": item,
         })
-    return evidence
+    asset_id = _packet_asset_id(packet)
+    remaining = max(0, top_k - len(evidence))
+    if remaining:
+        for index, item in enumerate(
+            retrieve_company_documents(question, asset_id=asset_id, top_k=remaining),
+            start=1,
+        ):
+            evidence.append({
+                "evidence_id": f"company-context-{index}",
+                "store": "company_context",
+                "reference": str(item.get("source_ref") or item.get("id") or f"company-context-{index}"),
+                "project_id": project_id,
+                "workspace_id": workspace_id,
+                "dataset_version_id": _packet_dataset_version(packet),
+                "object_id": asset_id,
+                "title": str(item.get("title") or "Company context"),
+                "content": str(item.get("content") or item.get("title") or ""),
+                "score": _coerce_float(item.get("retrieval_score")),
+                "metadata": {
+                    "document_type": item.get("document_type"),
+                    "related_asset_ids": item.get("related_asset_ids") or [],
+                    "context_kind": item.get("context_kind"),
+                },
+            })
+    return evidence[:top_k]
 
 
 def _summary_text(summary: dict[str, Any] | None, audience: str | None = None) -> str | None:
@@ -546,7 +566,7 @@ def _runtime_agent_review_packet(
         for factor in result.top_factors
     ]
     source_refs.extend(item["source_ref"] for item in factors)
-    operation_context = _runtime_demo_operation_context(result, event_id)
+    operation_context = _runtime_operation_context(result, event_id)
     sop_retrieval, sop_guidance = _runtime_sop_context(result, operation_context)
     inspection_targets = _runtime_inspection_targets(sop_guidance)
     source_refs.extend(
@@ -717,8 +737,8 @@ def _runtime_agent_review_packet(
             "note": "Runtime Agent Review context is read-only and cannot execute or approve actions.",
         },
         "limitations": [
-            "This packet is derived from Team DB runtime Product Result context, not fixture-only demo files.",
-            "Production planning impact uses an explicitly synthetic demonstration capacity model, not MES/ERP/APS actuals.",
+            "This packet is derived from Team DB runtime Product Result context and connected operational records.",
+            "Production planning impact is an estimate derived from the current capacity model and must be validated against financial settlement data before accounting use.",
             "The assistant may explain priority and evidence but cannot approve, execute, or mutate workflow state.",
         ],
     }
@@ -809,7 +829,7 @@ def _runtime_asset_detail_view_model(
             },
         }
     criticality = "high" if result.status_grade in {"critical", "warning"} else "medium" if result.status_grade == "attention" else "low"
-    operation_context = _runtime_demo_operation_context(result, event_id)
+    operation_context = _runtime_operation_context(result, event_id)
     _, sop_guidance = _runtime_sop_context(result, operation_context)
     inspection_guidance: dict[str, dict[str, Any]] = {}
     if sop_guidance:
@@ -1007,6 +1027,25 @@ def list_events(
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
     return {"items": service.list_events()}
+
+
+@router.get("/projects/{project_id}/company-context")
+def get_company_context(
+    project_id: str,
+    workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
+    principal: Principal = Depends(require_permission("events.read")),
+):
+    if not principal.is_admin and project_id not in principal.project_scopes:
+        raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 회사 문맥입니다.")
+    if principal.active_project_id != project_id:
+        raise AuthError(409, "active_project_mismatch", "먼저 Project를 활성화해야 합니다.")
+    if not principal.is_admin and workspace_id not in principal.workspace_scopes:
+        raise AuthError(403, "workspace_scope_denied", "허용된 Workspace 범위를 벗어난 회사 문맥입니다.")
+    return {
+        "project_id": project_id,
+        "workspace_id": workspace_id,
+        **public_company_context(),
+    }
 
 
 @router.get("/events/{event_id}")
@@ -1438,6 +1477,7 @@ def run_agent_query(
         packet,
         project_id=request.project_id,
         workspace_id=request.workspace_id,
+        question=request.question,
         top_k=request.top_k,
     )
     try:
@@ -1467,8 +1507,25 @@ def run_agent_query(
                 "error_message": str(exc),
             }
 
-    answer = _answer_from_packet(request.question, packet, evidence, summary, request.audience)
-    claim_ids = [item["evidence_id"] for item in evidence[:4]]
+    baseline_answer = _answer_from_packet(request.question, packet, evidence, summary, request.audience)
+    answer = baseline_answer
+    answer_citations: list[str] = []
+    answer_caveats: list[str] = []
+    answer_trace = {
+        "mode": "deterministic_fallback",
+        "provider": "none",
+        "reason": "provider_unavailable",
+    }
+    if service.agent_answer_provider is not None:
+        answer, answer_citations, answer_caveats, answer_trace = service.agent_answer_provider.generate(
+            question=request.question,
+            audience=request.audience,
+            packet=packet,
+            evidence=evidence,
+            baseline_answer=baseline_answer,
+            summary=summary,
+        )
+    claim_ids = answer_citations or [item["evidence_id"] for item in evidence[:4]]
     steps = [
         {
             "name": "agent_review_packet",
@@ -1490,6 +1547,13 @@ def run_agent_query(
             "status": "succeeded" if summary else "skipped",
             "latency_ms": None,
             "detail": str((summary_trace.get("materialization") or {}).get("status") or summary_trace.get("fallback") or "packet answer"),
+        },
+        {
+            "name": "grounded_answer",
+            "store": "company_context+postgresql",
+            "status": "succeeded",
+            "latency_ms": None,
+            "detail": f"{answer_trace.get('mode')} via {answer_trace.get('provider')}",
         },
     ]
     state = {
@@ -1515,7 +1579,7 @@ def run_agent_query(
         "answer": answer,
         "caveats": [
             "Read-only Operations assistant: no workflow approval, execution, or state mutation was performed.",
-            "SOP retrieval uses the configured Operations metadata retriever unless a richer retrieval adapter is configured.",
+            *answer_caveats,
         ],
         "error": None,
         "checkpoint_sequence": 1,

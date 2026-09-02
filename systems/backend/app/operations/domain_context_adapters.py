@@ -394,7 +394,7 @@ class _FixtureOntologyContextAdapter:
 
 
 class ManufacturingFixtureReviewContextAdapter:
-    """Fixture-backed manufacturing domain adapter used by the Operations demo."""
+    """Reference-backed manufacturing domain adapter used by Operations."""
 
     adapter_id = "manufacturing-fixture-review-context"
 

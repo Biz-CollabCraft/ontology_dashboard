@@ -9,7 +9,7 @@ from app.operations.router import (
     _packet_evidence,
     _runtime_agent_review_packet,
     _runtime_asset_detail_view_model,
-    _runtime_demo_operation_context,
+    _runtime_operation_context,
     _runtime_sop_context,
     _summary_text,
 )
@@ -81,22 +81,22 @@ class _RuntimeService:
         return {"items": []}
 
 
-def test_runtime_demo_operation_context_is_explicit_and_actionable():
+def test_runtime_operation_context_is_explicit_and_actionable():
     result = _runtime_result()
-    context = _runtime_demo_operation_context(result, "RESULT#CNC-S01-L04-03#1")
+    context = _runtime_operation_context(result, "RESULT#CNC-S01-L04-03#1")
 
-    assert context["source_type"] == "synthetic_capacity_model"
+    assert context["source_type"] == "capacity_model"
     assert context["production_plan"]["planned_units"] == 16200
     assert context["capacity_model"]["daily_capacity_units"] == 16200
     assert context["event_impact"]["line"] == "S01-L04"
     assert context["event_impact"]["estimated_lost_units"] > 0
     assert context["event_impact"]["basis"]["estimated_downtime_minutes"] == 120
-    assert any("MES/ERP/APS" in item for item in context["limitations"])
+    assert any("결산" in item for item in context["limitations"])
 
 
 def test_runtime_sop_retrieval_returns_grounded_source_for_cnc_result():
     result = _runtime_result()
-    context = _runtime_demo_operation_context(result, "RESULT#CNC-S01-L04-03#1")
+    context = _runtime_operation_context(result, "RESULT#CNC-S01-L04-03#1")
 
     retrieval, guidance = _runtime_sop_context(result, context)
 
@@ -106,6 +106,24 @@ def test_runtime_sop_retrieval_returns_grounded_source_for_cnc_result():
     assert guidance
     assert guidance[0]["sop_id"] == "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
     assert guidance[0]["source_ref"].endswith("#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001")
+    assert "factor_keys" in guidance[0]["matched_fields"]
+
+
+def test_runtime_sop_retrieval_normalizes_temporal_model_features_to_sensor_keys():
+    result = _runtime_result()
+    result.top_factors = [
+        SimpleNamespace(feature="rotational_speed_rpm_6h_mean"),
+        SimpleNamespace(feature="rotational_speed_rpm_6h_abs_mean"),
+        SimpleNamespace(feature="rotational_speed_rpm_current"),
+    ]
+    context = _runtime_operation_context(result, "RESULT#CNC-S01-L04-03#temporal")
+
+    retrieval, guidance = _runtime_sop_context(result, context)
+
+    assert retrieval["query"]["factor_keys"] == ["rotational_speed_rpm"]
+    assert retrieval["returned_count"] >= 1
+    assert guidance
+    assert guidance[0]["sop_id"] == "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
     assert "factor_keys" in guidance[0]["matched_fields"]
 
 
@@ -220,7 +238,7 @@ def test_canonical_live_detail_keeps_evidence_and_adds_presentation_context():
         },
     }
     supplemental = {
-        "operation_context": {"source_type": "synthetic_capacity_model"},
+        "operation_context": {"source_type": "capacity_model"},
         "inspection_targets": [{"target_id": "inspection-target:1"}],
         "review_priority": {"level": "high"},
     }
@@ -229,7 +247,7 @@ def test_canonical_live_detail_keeps_evidence_and_adds_presentation_context():
 
     assert merged["snapshot_basis"] == canonical["snapshot_basis"]
     assert merged["features"] == canonical["features"]
-    assert merged["operation_context"]["source_type"] == "synthetic_capacity_model"
+    assert merged["operation_context"]["source_type"] == "capacity_model"
     assert merged["inspection_targets"] == supplemental["inspection_targets"]
     assert merged["review_priority"] == supplemental["review_priority"]
     assert merged["evidence"]["gaps"] == [

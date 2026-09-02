@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Protocol
 
+from app.common.company_context import load_company_context
+
 from .ontology_domain import LinkRecord, ObjectRecord
 
 PREDICTIVE_MAINTENANCE_PROJECTION_ID = "manufacturing-predictive-maintenance"
@@ -263,13 +265,224 @@ class ManufacturingOntologyAdapter:
                     links=links,
                 )
 
+        self._append_company_context(objects=objects, links=links, seen_equipment=seen_equipment)
+
         return OntologyProjectionInput(
             workspace_id=self.workspace_id,
             source_system="manufacturing-predictive-maintenance",
-            source_revision="fixture-and-operational-v1",
+            source_revision="operational-and-company-context-v2",
             objects=tuple(objects),
             links=tuple(links),
         )
+
+    def _append_company_context(
+        self,
+        *,
+        objects: list[ObjectRecord],
+        links: list[LinkRecord],
+        seen_equipment: set[str],
+    ) -> None:
+        """Project business/history context beside canonical PdM objects.
+
+        These records provide contextual evidence. Current maintenance workflow
+        state still comes exclusively from the closed-loop owner domain.
+        """
+
+        context = load_company_context()
+        context_kind = str(context.get("context_kind") or "company_operational_context")
+        company = context.get("company") or {}
+        company_id = str(company.get("id") or "company:hanul-precision")
+        objects.append(
+            ObjectRecord(
+                id=company_id,
+                object_type="company",
+                workspace_id=self.workspace_id,
+                properties={**company, "context_kind": context_kind},
+                source_refs=["company-context:root"],
+            )
+        )
+
+        for item in context.get("organization_units") or []:
+            object_id = str(item["id"])
+            objects.append(
+                ObjectRecord(
+                    id=object_id,
+                    object_type="organization_unit",
+                    workspace_id=self.workspace_id,
+                    properties={**item, "context_kind": context_kind},
+                    source_refs=[f"company-context:{object_id}"],
+                )
+            )
+            links.append(
+                LinkRecord(
+                    id=f"company_has_organization_unit:{object_id}",
+                    link_type="company_has_organization_unit",
+                    source_object_id=company_id,
+                    target_object_id=object_id,
+                    workspace_id=self.workspace_id,
+                )
+            )
+
+        for item in context.get("products") or []:
+            object_id = str(item["id"])
+            objects.append(
+                ObjectRecord(
+                    id=object_id,
+                    object_type="product",
+                    workspace_id=self.workspace_id,
+                    properties={**item, "context_kind": context_kind},
+                    source_refs=[f"company-context:{object_id}"],
+                )
+            )
+            links.append(
+                LinkRecord(
+                    id=f"company_sells_product:{object_id}",
+                    link_type="company_sells_product",
+                    source_object_id=company_id,
+                    target_object_id=object_id,
+                    workspace_id=self.workspace_id,
+                )
+            )
+
+        for item in context.get("materials") or []:
+            object_id = str(item["id"])
+            objects.append(
+                ObjectRecord(
+                    id=object_id,
+                    object_type="material",
+                    workspace_id=self.workspace_id,
+                    properties={**item, "context_kind": context_kind},
+                    source_refs=[f"company-context:{object_id}"],
+                )
+            )
+            links.append(
+                LinkRecord(
+                    id=f"company_has_material:{object_id}",
+                    link_type="company_has_material",
+                    source_object_id=company_id,
+                    target_object_id=object_id,
+                    workspace_id=self.workspace_id,
+                )
+            )
+            for asset_id in item.get("related_asset_ids") or []:
+                if str(asset_id) not in seen_equipment:
+                    continue
+                links.append(
+                    LinkRecord(
+                        id=f"equipment_uses_material:{asset_id}:{object_id}",
+                        link_type="equipment_uses_material",
+                        source_object_id=equipment_object_id(str(asset_id)),
+                        target_object_id=object_id,
+                        workspace_id=self.workspace_id,
+                    )
+                )
+
+        for item in context.get("business_metrics") or []:
+            object_id = str(item["id"])
+            objects.append(
+                ObjectRecord(
+                    id=object_id,
+                    object_type="business_metric",
+                    workspace_id=self.workspace_id,
+                    properties={**item, "context_kind": context_kind},
+                    source_refs=[f"company-context:{object_id}"],
+                )
+            )
+            links.append(
+                LinkRecord(
+                    id=f"company_has_business_metric:{object_id}",
+                    link_type="company_has_business_metric",
+                    source_object_id=company_id,
+                    target_object_id=object_id,
+                    workspace_id=self.workspace_id,
+                )
+            )
+
+        for item in context.get("maintenance_records") or []:
+            object_id = str(item["id"])
+            asset_id = str(item.get("asset_id") or "")
+            objects.append(
+                ObjectRecord(
+                    id=object_id,
+                    object_type="maintenance_history_record",
+                    workspace_id=self.workspace_id,
+                    properties={**item, "context_kind": context_kind},
+                    source_refs=[str(item.get("source_ref") or f"company-context:{object_id}")],
+                )
+            )
+            if asset_id in seen_equipment:
+                links.append(
+                    LinkRecord(
+                        id=f"equipment_has_maintenance_history:{asset_id}:{object_id}",
+                        link_type="equipment_has_maintenance_history",
+                        source_object_id=equipment_object_id(asset_id),
+                        target_object_id=object_id,
+                        workspace_id=self.workspace_id,
+                    )
+                )
+
+        for item in context.get("meeting_minutes") or []:
+            object_id = str(item["id"])
+            objects.append(
+                ObjectRecord(
+                    id=object_id,
+                    object_type="meeting_record",
+                    workspace_id=self.workspace_id,
+                    properties={**item, "context_kind": context_kind},
+                    source_refs=[str(item.get("source_ref") or f"company-context:{object_id}")],
+                )
+            )
+
+        for item in context.get("decisions") or []:
+            object_id = str(item["id"])
+            objects.append(
+                ObjectRecord(
+                    id=object_id,
+                    object_type="decision_record",
+                    workspace_id=self.workspace_id,
+                    properties={**item, "context_kind": context_kind},
+                    source_refs=[str(item.get("source_ref") or f"company-context:{object_id}")],
+                )
+            )
+            owner_id = str(item.get("owner_org_unit_id") or "")
+            if owner_id:
+                links.append(
+                    LinkRecord(
+                        id=f"organization_owns_decision:{owner_id}:{object_id}",
+                        link_type="organization_owns_decision",
+                        source_object_id=owner_id,
+                        target_object_id=object_id,
+                        workspace_id=self.workspace_id,
+                    )
+                )
+            for asset_id in item.get("related_asset_ids") or []:
+                if str(asset_id) not in seen_equipment:
+                    continue
+                links.append(
+                    LinkRecord(
+                        id=f"decision_concerns_equipment:{object_id}:{asset_id}",
+                        link_type="decision_concerns_equipment",
+                        source_object_id=object_id,
+                        target_object_id=equipment_object_id(str(asset_id)),
+                        workspace_id=self.workspace_id,
+                    )
+                )
+
+        decision_ids = {str(item.get("id")) for item in context.get("decisions") or []}
+        for meeting in context.get("meeting_minutes") or []:
+            meeting_id = str(meeting["id"])
+            for decision_id in meeting.get("decision_ids") or []:
+                if str(decision_id) not in decision_ids:
+                    continue
+                links.append(
+                    LinkRecord(
+                        id=f"meeting_records_decision:{meeting_id}:{decision_id}",
+                        link_type="meeting_records_decision",
+                        source_object_id=meeting_id,
+                        target_object_id=str(decision_id),
+                        workspace_id=self.workspace_id,
+                    )
+                )
 
     def _append_activity_objects(
         self,

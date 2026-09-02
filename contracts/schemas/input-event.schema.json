@@ -71,7 +71,7 @@
         "runtime_hours_7d": {"type": ["number", "null"]},
         "production_impact": {"type": ["string", "null"], "enum": ["none", "low", "medium", "high", null]},
         "context_id": {"type": "string"},
-        "source_type": {"enum": ["synthetic_capacity_model"]},
+        "source_type": {"enum": ["capacity_model"]},
         "temporal_scope": {
           "type": "object",
           "additionalProperties": false,

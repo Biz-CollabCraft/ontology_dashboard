@@ -26,6 +26,7 @@ import {
 import type {
   AssetDetailViewModel,
   OperationsBootstrapModel,
+  OperationsCompanyContext,
   OperationsDecision,
   OperationsEvent,
   OperationsEventDetailModel,
@@ -34,6 +35,26 @@ import type {
   OperationsRoleLens,
   OperationsSensorWindowId,
 } from "./operationsContracts";
+
+export async function loadOperationsCompanyContext(
+  projectId: string,
+  workspaceId: string,
+): Promise<OperationsCompanyContext> {
+  const params = new URLSearchParams({ workspace_id: workspaceId });
+  const response = await fetch(
+    `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/company-context?${params.toString()}`,
+    { credentials: "include", headers: { Accept: "application/json" } },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      payload?.error?.code ?? "company_context_failed",
+      payload?.error?.message ?? `Company context request failed: ${response.status}`,
+    );
+  }
+  return payload as OperationsCompanyContext;
+}
 
 function idempotencyPart(value: string | null | undefined): string {
   return String(value ?? "none").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80);

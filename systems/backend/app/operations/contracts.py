@@ -1,4 +1,4 @@
-"""Stable request, report, and layout contracts for the demo runtime."""
+"""Stable request, report, and layout contracts for the operations runtime."""
 
 from __future__ import annotations
 

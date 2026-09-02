@@ -72,6 +72,7 @@ from app.infra.db.report_repository import ReportRepository
 from app.infra.db.settings import database_location
 from app.infra.context import Project3HttpContextProvider, ResilientContextProvider
 from app.infra.llm import configured_provider
+from app.operations.agent_answer_provider import GroundedAgentAnswerProvider
 from app.infra.maintenance_cost_basis_provider import JsonMaintenanceCostBasisProvider
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.maintenance.live_service import LivePredictiveMaintenanceService
@@ -186,6 +187,7 @@ def build_manufacturing_service(
         layout_planner=LayoutPlanner(root, provider),
         context_provider_factory=_operations_context_provider,
         agent_review_summary_provider=AgentReviewSummaryProvider(provider),
+        agent_answer_provider=GroundedAgentAnswerProvider(provider),
         agent_review_context_registry=default_agent_review_context_registry(),
         domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
         maintenance_lineage_query=maintenance_lineage_query,

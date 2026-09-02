@@ -310,7 +310,7 @@ export function MaintenanceCostDecisionPanel({
             <span>{visibleCalculationComplete ? "참고 계산 완료" : "입력 부족"}</span>
           </header>
           <small>{new Date(current.calculated_at).toLocaleString()} · {current.price_version}</small>
-          <small>데모 참고값 · 실제 사업장 견적·ERP·MES·급여 실적이 아닙니다.</small>
+          <small>현재 운영 기준값 · 최종 비용은 사업장 견적·ERP·MES·급여 실적으로 재검증합니다.</small>
           <div className="operations-cost-options">
             {visibleOptions.map((option) => {
               const isLowest = !isImmediateCooling

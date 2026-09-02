@@ -4,6 +4,7 @@ import { navigate } from "../../routing";
 import type {
   OperationsAsset,
   OperationsBootstrapModel,
+  OperationsCompanyContext,
   OperationsDecision,
   OperationsEvent,
   OperationsEventDetailModel,
@@ -14,6 +15,7 @@ import type {
 } from "./api/operationsContracts";
 import {
   loadOperationsBootstrap,
+  loadOperationsCompanyContext,
   loadOperationsEventDetail,
   submitOperationsDecision,
   submitOperationsNote,
@@ -32,6 +34,12 @@ import {
   reliabilityWorkspacePreviewEnabled,
 } from "../predictive-maintenance/ReliabilityWorkspacePreview";
 import { resolveReliabilityRoleExperience } from "../predictive-maintenance/workspace/roleExperience";
+import { RoleComposedWorkspace } from "../predictive-maintenance/workspace/RoleComposedWorkspace";
+import {
+  defaultReliabilitySurface,
+  reliabilitySurfaceForView,
+  reliabilitySurfaces,
+} from "../predictive-maintenance/workspace/roleSurfaces";
 import {
   canMaterializeAgentReviewSummary,
   canReadOperationsSystemLogs,
@@ -51,13 +59,15 @@ export function OperationsApplication({ projectId }: { projectId: string }) {
   const roles = user?.active_project_roles.length ? user.active_project_roles : user?.roles ?? [];
   const role = defaultRoleLens(roles);
   const experience = user ? resolveReliabilityRoleExperience(user) : null;
-  const defaultView = experience?.defaultView ?? "overview";
+  const defaultSurface = experience ? defaultReliabilitySurface(experience.kind) : null;
+  const defaultView = defaultSurface?.view ?? experience?.defaultView ?? "overview";
   const defaultReportTab: OperationsReportTab = experience?.kind === "executive" ? "executive-brief" : "status-map";
   return (
     <OperationsSelectionProvider
       projectId={projectId}
       defaultRole={role}
       defaultView={defaultView}
+      defaultSurface={defaultSurface?.id ?? null}
       defaultReportTab={defaultReportTab}
       storageScope={user?.user_id ?? "anonymous"}
     >
@@ -79,9 +89,27 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailVersion, setDetailVersion] = useState(0);
   const [sensorWindow, setSensorWindow] = useState<OperationsSensorWindowId>("24h");
+  const [companyContext, setCompanyContext] = useState<OperationsCompanyContext | null>(null);
+  const [companyContextError, setCompanyContextError] = useState<string | null>(null);
+  const experienceKind = user
+    ? resolveReliabilityRoleExperience(user).kind
+    : selection.role === "field_operator"
+      ? "engineering"
+      : "operations";
+
+  useEffect(() => {
+    const surfaces = reliabilitySurfaces(experienceKind);
+    if (selection.surface && surfaces.some((item) => item.id === selection.surface)) return;
+    const next = defaultReliabilitySurface(experienceKind);
+    updateSelection({ surface: next.id, view: next.view }, { replace: true });
+  }, [experienceKind, selection.surface, updateSelection]);
 
   const refresh = useCallback(() => setRefreshVersion((value) => value + 1), []);
   const retryDetail = useCallback(() => setDetailVersion((value) => value + 1), []);
+  const workflowChanged = useCallback(() => {
+    setDetailVersion((value) => value + 1);
+    setRefreshVersion((value) => value + 1);
+  }, []);
   const signOut = useCallback(async () => {
     await logout();
     navigate("/login", { replace: true });
@@ -136,6 +164,22 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
   );
 
   useEffect(() => {
+    const workspaceId = model?.context.workspaceId;
+    if (!workspaceId) return;
+    let cancelled = false;
+    setCompanyContextError(null);
+    loadOperationsCompanyContext(projectId, workspaceId)
+      .then((payload) => {
+        if (!cancelled) setCompanyContext(payload);
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setCompanyContextError(reason instanceof Error ? reason.message : "회사 운영 문맥을 불러오지 못했습니다.");
+      });
+    return () => { cancelled = true; };
+  }, [model?.context.workspaceId, projectId]);
+
+  useEffect(() => {
     if (!model || !selectedEvent) {
       setDetail(null);
       setDetailError(null);
@@ -162,10 +206,20 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
       })
       .finally(() => !cancelled && setDetailLoading(false));
     return () => { cancelled = true; };
-  }, [detailVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selection.role, sensorWindow]);
+  }, [detailVersion, refreshVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selection.role, sensorWindow]);
 
   const openView = useCallback((view: OperationsView) => {
-    const patch: Parameters<typeof updateSelection>[0] = { view };
+    const surface = reliabilitySurfaceForView(experienceKind, view);
+    const patch: Parameters<typeof updateSelection>[0] = { view, surface: surface.id };
+    if ((view === "operations" || view === "reports") && !selection.eventId && model?.events[0]) {
+      patch.eventId = model.events[0].eventId;
+      patch.assetId = model.events[0].assetId;
+    }
+    updateSelection(patch);
+  }, [experienceKind, model?.events, selection.eventId, updateSelection]);
+
+  const openSurface = useCallback((surfaceId: string, view: OperationsView) => {
+    const patch: Parameters<typeof updateSelection>[0] = { surface: surfaceId, view };
     if ((view === "operations" || view === "reports") && !selection.eventId && model?.events[0]) {
       patch.eventId = model.events[0].eventId;
       patch.assetId = model.events[0].assetId;
@@ -174,22 +228,23 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
   }, [model?.events, selection.eventId, updateSelection]);
 
   const openAsset = useCallback((assetId: string, eventId: string | null) => {
-    updateSelection({ view: "objects", assetId, eventId });
-  }, [updateSelection]);
+    updateSelection({ view: "objects", surface: reliabilitySurfaceForView(experienceKind, "objects").id, assetId, eventId });
+  }, [experienceKind, updateSelection]);
 
   const openEvent = useCallback((eventId: string, assetId: string) => {
-    updateSelection({ view: "operations", eventId, assetId });
-  }, [updateSelection]);
+    updateSelection({ view: "operations", surface: reliabilitySurfaceForView(experienceKind, "operations").id, eventId, assetId });
+  }, [experienceKind, updateSelection]);
 
   const openReport = useCallback((eventId: string | null, assetId: string | null, reportTab: OperationsReportTab = "executive-brief") => {
     const fallback = model?.events[0] ?? null;
     updateSelection({
       view: "reports",
+      surface: reliabilitySurfaceForView(experienceKind, "reports").id,
       reportTab,
       eventId: eventId ?? fallback?.eventId ?? null,
       assetId: assetId ?? fallback?.assetId ?? null,
     });
-  }, [model?.events, updateSelection]);
+  }, [experienceKind, model?.events, updateSelection]);
 
   const previewAsset = useCallback((assetId: string, eventId: string | null) => {
     updateSelection({ assetId, eventId });
@@ -267,14 +322,26 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
   const canMaterializeAgentSummary = canMaterializeAgentReviewSummary(user?.permissions);
   const canReadSystemLogs = canReadOperationsSystemLogs(user?.permissions);
   const selectedAssetId = selection.assetId;
-  const experienceKind = user
-    ? resolveReliabilityRoleExperience(user).kind
-    : selection.role === "field_operator"
-      ? "engineering"
-      : "operations";
-
   let content;
-  if (selection.view === "objects") {
+  if (useReliabilityPreview && selection.view !== "system") {
+    content = <RoleComposedWorkspace
+      experienceKind={experienceKind}
+      view={selection.view}
+      surfaceId={selection.surface}
+      model={model}
+      selectedEvent={selectedEvent}
+      detail={detail}
+      companyContext={companyContext}
+      role={selection.role}
+      canManageWorkflow={canDecide}
+      canExecuteFieldWorkflow={canExecuteFieldWorkflow}
+      canMaterializeAgentSummary={canMaterializeAgentSummary}
+      onSelectEvent={selectEvent}
+      onOpenAsset={openAsset}
+      onOpenReport={openReport}
+      onWorkflowChanged={workflowChanged}
+    />;
+  } else if (selection.view === "objects") {
     content = <OperationsObjectsPage model={model} selectedAssetId={selectedAssetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectAsset={selectAsset} onOpenOperations={openAssetOperations} onOpenReport={openAssetReport} onRetryDetail={retryDetail} />;
   } else if (selection.view === "operations") {
     content = <OperationsOperationsPage model={model} selectedEventId={selection.eventId} detail={detail} detailLoading={detailLoading} detailError={detailError} canDecide={canDecide} canNote={canNote} onSelectEvent={selectEvent} onOpenAsset={openEventAsset} onOpenReport={openEventReport} onDecision={submitDecision} onNote={submitNote} onRetryDetail={retryDetail} />;
@@ -288,17 +355,24 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
     content = <OperationsOverviewPage model={model} role={selection.role} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
-  const body = <>{error ? <div className="operations-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}{content}</>;
+  const body = <>
+    {error ? <div className="operations-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}
+    {detailError && useReliabilityPreview ? <div className="operations-inline-warning" role="alert"><strong>상세 근거 조회 지연</strong><span>{detailError}</span></div> : null}
+    {companyContextError && useReliabilityPreview ? <div className="operations-inline-warning" role="alert"><strong>회사 문맥 조회 지연</strong><span>{companyContextError}</span></div> : null}
+    {detailLoading && useReliabilityPreview ? <div className="rw-composed-detail-loading">선택 설비 근거를 최신 상태로 동기화하고 있습니다.</div> : null}
+    {content}
+  </>;
 
   if (useReliabilityPreview && user) {
     return (
       <ReliabilityWorkspacePreview
         context={model.context}
         activeView={selection.view}
+        activeSurface={selection.surface}
         user={user}
         selectedEvent={selectedEvent}
         detail={detail}
-        onNavigate={openView}
+        onNavigate={openSurface}
         onRefresh={refresh}
         refreshing={loading}
         onLogout={signOut}

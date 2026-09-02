@@ -4,7 +4,6 @@ import {
   ChevronsRight,
   Focus,
   LogOut,
-  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -12,7 +11,6 @@ import {
   RefreshCw,
   Search,
   Settings2,
-  Sun,
   UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -44,14 +42,14 @@ import {
   type ReliabilityAssistantContext,
   type ReliabilityAssistantMessage,
 } from "./workspace/assistantContext";
-import { reliabilityNavigation, reliabilityPageCopy, resolveReliabilityRoleExperience } from "./workspace/roleExperience";
+import { resolveReliabilityRoleExperience } from "./workspace/roleExperience";
+import { reliabilitySurfaces, resolveReliabilitySurface } from "./workspace/roleSurfaces";
 
 const RELIABILITY_THEME_STORAGE_KEY = "ontology-dashboard:reliability-theme";
 const RELIABILITY_LOCALE_STORAGE_KEY = "ontology-dashboard:reliability-locale";
 
 function initialReliabilityTheme(): "dark" | "light" {
-  const saved = window.localStorage.getItem(RELIABILITY_THEME_STORAGE_KEY);
-  return saved === "dark" ? "dark" : "light";
+  return "light";
 }
 
 function initialReliabilityLocale(): "ko-KR" | "en-US" {
@@ -263,6 +261,7 @@ export function ReliabilityWorkspaceLoadingPlaceholder() {
 export function ReliabilityWorkspacePreview({
   context,
   activeView,
+  activeSurface,
   user,
   selectedEvent,
   detail,
@@ -274,10 +273,11 @@ export function ReliabilityWorkspacePreview({
 }: {
   context: OperationsContextModel;
   activeView: OperationsView;
+  activeSurface: string | null;
   user: AuthUser;
   selectedEvent: OperationsEvent | null;
   detail: OperationsEventDetailModel | null;
-  onNavigate: (view: OperationsView) => void;
+  onNavigate: (surfaceId: string, view: OperationsView) => void;
   onRefresh: () => void;
   refreshing: boolean;
   onLogout: () => void | Promise<void>;
@@ -288,14 +288,13 @@ export function ReliabilityWorkspacePreview({
   const [locale, setReliabilityLocaleState] = useState<"ko-KR" | "en-US">(initialReliabilityLocale);
   const english = locale === "en-US";
   const experience = useMemo(() => resolveReliabilityRoleExperience(user), [user]);
-  const navigation = useMemo(() => reliabilityNavigation(experience), [experience]);
+  const navigation = useMemo(() => reliabilitySurfaces(experience.kind), [experience.kind]);
   const preset = displayPreset(preferences);
-  const activeNav = navigation.find((item) => item.view === activeView) ?? navigation[0];
-  const activePageCopy = reliabilityPageCopy(experience, activeView);
+  const activeNav = resolveReliabilitySurface(experience.kind, activeSurface);
+  const activePageCopy = activeNav.page;
   const eyebrow = english ? activePageCopy.eyebrow.en : activePageCopy.eyebrow.ko;
   const title = english ? activePageCopy.title.en : activePageCopy.title.ko;
   const detailCopy = english ? activePageCopy.detail.en : activePageCopy.detail.ko;
-  const [theme, setTheme] = useState<"dark" | "light">(initialReliabilityTheme);
   const [leftOpen, setLeftOpen] = useState(true);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -307,9 +306,15 @@ export function ReliabilityWorkspacePreview({
   const [assistantError, setAssistantError] = useState<string | null>(null);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem(RELIABILITY_THEME_STORAGE_KEY, theme);
-  }, [theme]);
+    document.documentElement.dataset.theme = "light";
+    window.localStorage.setItem(RELIABILITY_THEME_STORAGE_KEY, "light");
+  }, []);
+
+  useEffect(() => {
+    if (experience.kind !== "engineering" && preferences.showTechnicalMetadata) {
+      setShowTechnicalMetadata(false);
+    }
+  }, [experience.kind, preferences.showTechnicalMetadata, setShowTechnicalMetadata]);
 
   useEffect(() => {
     window.localStorage.setItem(RELIABILITY_LOCALE_STORAGE_KEY, locale);
@@ -401,8 +406,8 @@ export function ReliabilityWorkspacePreview({
     ?? context.observedAt
     ?? context.refreshedAt;
   const previewMutationReason = english
-    ? "This public preview is read-only. Workflow changes are intentionally blocked."
-    : "이 public preview는 읽기 전용이며 업무 데이터 변경은 의도적으로 차단됩니다.";
+    ? "This summary card is read-only. Use the governed action block for approval or field execution."
+    : "이 요약 카드는 읽기 전용입니다. 승인·현장 실행은 권한이 적용된 업무 실행 블록에서 수행합니다.";
   const agentSummary = agentSummaryResponse?.summary ?? null;
   const roleSummary = agentSummary?.role_summaries.find((item) => (
     experience.kind === "operations"
@@ -463,6 +468,16 @@ export function ReliabilityWorkspacePreview({
     roleDetail: english ? experience.operationalFocusHint.en : experience.operationalFocusHint.ko,
     english,
   });
+  const showOperationalFocus = new Set([
+    "decision-case",
+    "production-impact",
+    "maintenance-approval",
+    "assets",
+    "sensor-features",
+    "inspection",
+    "maintenance-history",
+    "work-targets",
+  ]).has(activeNav.id);
 
   async function ask(question: string) {
     const trimmed = question.trim();
@@ -542,7 +557,7 @@ export function ReliabilityWorkspacePreview({
           <div className="rw-preview-left-heading"><span>{english ? experience.label.en : experience.label.ko}</span><strong>{english ? "Workspace" : "업무 공간"}</strong></div>
           <nav>
             {navigation.map((item, index) => (
-              <button type="button" key={item.view} className={activeView === item.view ? "is-active" : ""} onClick={() => onNavigate(item.view)} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
+              <button type="button" key={item.id} className={activeNav.id === item.id ? "is-active" : ""} onClick={() => onNavigate(item.id, item.view)} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <div><strong>{english ? item.label.en : item.label.ko}</strong><small>{english ? item.detail.en : item.detail.ko}</small></div>
               </button>
@@ -554,9 +569,8 @@ export function ReliabilityWorkspacePreview({
             {settingsOpen && leftOpen ? <div className="rw-preview-settings-panel">
               <header><strong>{english ? "Workspace settings" : "사용자 환경"}</strong><small>{user.display_name}</small></header>
               <div className="rw-preview-settings-group"><span>{english ? "Language" : "언어"}</span><div className="rw-preview-segmented two"><button type="button" className={!english ? "is-active" : ""} onClick={() => setReliabilityLocale("ko-KR")}>한국어</button><button type="button" className={english ? "is-active" : ""} onClick={() => setReliabilityLocale("en-US")}>English</button></div></div>
-              <div className="rw-preview-settings-group"><span>{english ? "Theme" : "화면 테마"}</span><div className="rw-preview-segmented two"><button type="button" className={theme === "dark" ? "is-active" : ""} onClick={() => setTheme("dark")}><Moon size={12} />Dark</button><button type="button" className={theme === "light" ? "is-active" : ""} onClick={() => setTheme("light")}><Sun size={12} />Light</button></div></div>
               <div className="rw-preview-settings-group"><span>{english ? "Display density" : "화면 밀도"}</span><div className="rw-preview-segmented three">{(["compact", "standard", "accessible"] as const).map((value) => <button type="button" key={value} className={preset === value ? "is-active" : ""} onClick={() => setPreset(value)}>{value === "compact" ? (english ? "Compact" : "조밀") : value === "standard" ? (english ? "Standard" : "기본") : (english ? "Accessible" : "확대")}</button>)}</div></div>
-              <button type="button" className="rw-preview-settings-action" onClick={() => setShowTechnicalMetadata(!preferences.showTechnicalMetadata)}><span>{english ? "Technical metadata" : "기술 메타데이터"}</span><strong>{preferences.showTechnicalMetadata ? (english ? "Shown" : "표시") : (english ? "Hidden" : "숨김")}</strong></button>
+              {experience.kind === "engineering" ? <button type="button" className="rw-preview-settings-action" onClick={() => setShowTechnicalMetadata(!preferences.showTechnicalMetadata)}><span>{english ? "Technical metadata" : "기술 메타데이터"}</span><strong>{preferences.showTechnicalMetadata ? (english ? "Shown" : "표시") : (english ? "Hidden" : "숨김")}</strong></button> : null}
               <button type="button" className="rw-preview-settings-action" onClick={onRefresh} disabled={refreshing}><span><RefreshCw size={12} />{english ? "Refresh data" : "최신 데이터 다시 확인"}</span></button>
               <button type="button" className="rw-preview-settings-action" onClick={() => { setLeftOpen(false); setAssistantOpen(false); setSettingsOpen(false); }}><span><Focus size={12} />{english ? "Focus mode" : "집중 모드"}</span></button>
               <button type="button" className="rw-preview-settings-action is-danger" onClick={() => void onLogout()}><span><LogOut size={12} />{english ? "Switch account" : "계정 전환"}</span></button>
@@ -568,7 +582,7 @@ export function ReliabilityWorkspacePreview({
         <section className="rw-preview-main">
           {context.warnings.length ? <details className="rw-preview-warning"><summary>{english ? `${context.warnings.length} data notice(s)` : `데이터 참고사항 ${context.warnings.length}건`}</summary><ul>{context.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details> : null}
           <header className="rw-preview-page-heading"><span>{eyebrow}</span><h1>{title}</h1><p>{detailCopy}</p></header>
-          {activeView !== "overview" ? <div className="rw-preview-operational-focus">
+          {showOperationalFocus ? <div className="rw-preview-operational-focus">
             <OperationalFocus
               asset={{
                 id: selectedEvent?.assetId ?? context.workspaceId,

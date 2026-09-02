@@ -132,8 +132,8 @@ export function LoginPage() {
 
       {shouldShowDemoAccounts() ? (
         <details className="demo-account-picker" open>
-          <summary>역할별 Decision Workspace 체험</summary>
-          <div className="demo-account-grid" role="group" aria-label="역할별 데모 계정">
+          <summary>역할별 Decision Workspace 계정</summary>
+          <div className="demo-account-grid" role="group" aria-label="역할별 계정">
             {DEMO_ACCOUNTS.map((account) => (
               <button
                 key={account.email}

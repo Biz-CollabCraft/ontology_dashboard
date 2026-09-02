@@ -1,4 +1,4 @@
-"""Canonical manufacturing demonstration application service."""
+"""Canonical manufacturing operations application service."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+from app.common.company_context import retrieve_company_documents
 from app.diagnosis.contracts import derive_features, load_fixture
 from app.diagnosis.domain import (
     build_evidence_package,
@@ -73,6 +74,7 @@ class ManufacturingPredictiveMaintenanceService:
         layout_planner: LayoutPlannerPort,
         context_provider_factory: ContextProviderFactory,
         agent_review_summary_provider: AgentReviewSummaryProvider | None = None,
+        agent_answer_provider: Any | None = None,
         agent_review_context_registry: AgentReviewContextRegistry | None = None,
         domain_review_context_adapter: DomainReviewContextAdapter | None = None,
         maintenance_lineage_query: MaintenanceLineageQueryPort | None = None,
@@ -103,6 +105,7 @@ class ManufacturingPredictiveMaintenanceService:
         self.layout_planner = layout_planner
         self.context_provider_factory = context_provider_factory
         self.agent_review_summary_provider = agent_review_summary_provider
+        self.agent_answer_provider = agent_answer_provider
         self.agent_review_context_registry = agent_review_context_registry
         self.maintenance_lineage_query = maintenance_lineage_query
         self.workspace_id = workspace_id
@@ -596,7 +599,7 @@ class ManufacturingPredictiveMaintenanceService:
             "asset_id": artifact["asset_id"],
             "asset_type": equipment.get("asset_type") or artifact["asset_type"],
             "display_name": equipment.get("display_name") or artifact["asset_id"],
-            "site_id": equipment.get("site_id") or artifact.get("site_id") or "Manufacturing Demo",
+            "site_id": equipment.get("site_id") or artifact.get("site_id") or "Hanul Precision Plant",
             "cell_id": equipment.get("cell_id") or equipment.get("line") or artifact.get("cell_id") or "unknown",
             "observed_at": artifact["observed_at"],
             "criticality": equipment.get("criticality"),
@@ -716,6 +719,7 @@ class ManufacturingPredictiveMaintenanceService:
     def report(self, event_id: str, request: ReportRequest) -> tuple[GroundedReport, dict[str, Any]]:
         fixture = self._fixture(event_id)
         evidence = self._projected_legacy_evidence(fixture)
+        self._attach_report_context(evidence, fixture, request.role)
         report, trace = self.report_agent.generate(
             evidence,
             request.role,
@@ -730,6 +734,27 @@ class ManufacturingPredictiveMaintenanceService:
             {"report_id": report.report_id, "role": request.role, "locale": request.locale, **trace},
         )
         return report, trace
+
+    @staticmethod
+    def _attach_report_context(evidence: dict[str, Any], fixture: dict[str, Any], role: str) -> None:
+        equipment_id = str((fixture.get("equipment") or {}).get("equipment_id") or "")
+        goal = (
+            "생산 영향 매출 공헌이익 자재 재고 운영 의사결정 회의 정비 이력"
+            if role == "manager"
+            else "설비 센서 점검 정비 이력 원인 근거 자재 작업 기록"
+        )
+        documents = retrieve_company_documents(goal, asset_id=equipment_id or None, top_k=8)
+        evidence["company_context_documents"] = [
+            {
+                "evidence_field_id": f"company_context.{item['id']}",
+                "title": item.get("title"),
+                "document_type": item.get("document_type"),
+                "content": item.get("content"),
+                "source_ref": item.get("source_ref"),
+                "related_asset_ids": item.get("related_asset_ids") or [],
+            }
+            for item in documents
+        ]
 
     def _event_evidence_projection(self, fixture: dict[str, Any]) -> dict[str, Any]:
         artifact = self._product_result_artifact(fixture)
@@ -757,6 +782,7 @@ class ManufacturingPredictiveMaintenanceService:
     def layout(self, event_id: str, request: LayoutRequest) -> tuple[UILayout, dict[str, Any]]:
         fixture = self._fixture(event_id)
         evidence = build_evidence_package(fixture, context_provider=self._context_provider(fixture))
+        self._attach_report_context(evidence, fixture, request.role)
         report, report_trace = self.report_agent.generate(
             evidence,
             request.role,

@@ -34,7 +34,7 @@ import ontologySelection from "../../../../../docs/00-team-onboarding/assets/scr
 const CAPTURE_ROOT = "/team-share-adaptive-assets";
 const VERIFIED_TAG = "team-share-adaptive-v3.1-postgresql-20260805";
 const APP_ROUTE = "/app/projects/manufacturing-demo-project/workspaces/manufacturing-demo/modeling";
-const GOLD_FIXTURE_DATASET_NAME = "Manufacturing Gold Fixture Demo — Equipment Registry + Risk Events";
+const GOLD_FIXTURE_DATASET_NAME = "Hanul Precision Operations Reference — Equipment Registry + Risk Events";
 const AI4I_V3_1_DATASET_NAME = "UCI AI4I 2020 Manufacturing Predictive Maintenance — Physics & Maintenance Canonical V3.1";
 const AI4I_V3_1_DATASET_VERSION_ID = "dsv-9fc144c7-d3f8-5b37-8465-04248165b7ce";
 
@@ -322,7 +322,7 @@ export function AdaptiveTeamShareStory() {
           <article>
             <span>LEGACY · OFFLINE FALLBACK</span>
             <strong>{GOLD_FIXTURE_DATASET_NAME}</strong>
-            <p>2개 local fixture Dataset과 15개 rows는 삭제하지 않고 legacy comparison, offline fallback, fixture regression test와 기존 `/team-share` 기록에만 유지합니다.</p>
+            <p>2개 로컬 기준 Dataset과 15개 rows는 삭제하지 않고 legacy comparison, offline fallback, regression test와 기존 `/team-share` 기록에만 유지합니다.</p>
           </article>
         </div>
         <div className="adaptive-share-chain"><span>Dataset schema</span><ArrowRight /><span>Semantic signals</span><ArrowRight /><span>Board selection</span><ArrowRight /><span>Role layout</span><ArrowRight /><span>Personal preference</span></div>

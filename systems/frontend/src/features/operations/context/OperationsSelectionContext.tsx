@@ -50,6 +50,7 @@ export function parseOperationsSelection(input: {
   search: string;
   defaultRole: OperationsRoleLens;
   defaultView?: OperationsView;
+  defaultSurface?: string | null;
   defaultReportTab?: OperationsReportTab;
   sessionValue?: string | null;
 }): OperationsSelection {
@@ -64,6 +65,7 @@ export function parseOperationsSelection(input: {
   const params = new URLSearchParams(input.search);
   const queryHasView = params.has("view");
   const queryView = params.get("view");
+  const queryHasSurface = params.has("surface");
   const queryHasReportTab = params.has("report");
   const queryHasDashboard = params.has("dashboard");
   const queryHasRole = params.has("role");
@@ -75,6 +77,7 @@ export function parseOperationsSelection(input: {
   return {
     projectId: input.projectId,
     view: queryHasView ? validView(queryView) : sessionView ?? defaultView,
+    surface: queryHasSurface ? optionalValue(params.get("surface")) : optionalValue(session.surface ?? input.defaultSurface ?? null),
     dashboard: queryHasDashboard
       ? validDashboard(params.get("dashboard"))
       : validDashboard(typeof session.dashboard === "string" ? session.dashboard : null),
@@ -97,6 +100,7 @@ export function parseOperationsSelection(input: {
 export function selectionSearch(selection: OperationsSelection): string {
   const params = new URLSearchParams();
   params.set("view", selection.view);
+  if (selection.surface) params.set("surface", selection.surface);
   params.set("dashboard", selection.dashboard);
   if (selection.view === "reports") params.set("report", selection.reportTab);
   params.set("role", selection.role);
@@ -110,6 +114,7 @@ export function OperationsSelectionProvider({
   projectId,
   defaultRole,
   defaultView = "overview",
+  defaultSurface = null,
   defaultReportTab = "status-map",
   storageScope = "anonymous",
   children,
@@ -117,6 +122,7 @@ export function OperationsSelectionProvider({
   projectId: string;
   defaultRole: OperationsRoleLens;
   defaultView?: OperationsView;
+  defaultSurface?: string | null;
   defaultReportTab?: OperationsReportTab;
   storageScope?: string;
   children: ReactNode;
@@ -127,9 +133,10 @@ export function OperationsSelectionProvider({
     search: window.location.search,
     defaultRole,
     defaultView,
+    defaultSurface,
     defaultReportTab,
     sessionValue: window.sessionStorage.getItem(storageKey),
-  }), [defaultReportTab, defaultRole, defaultView, projectId, storageKey]);
+  }), [defaultReportTab, defaultRole, defaultSurface, defaultView, projectId, storageKey]);
   const [selection, setSelection] = useState<OperationsSelection>(readSelection);
 
   useEffect(() => {

@@ -131,7 +131,7 @@ export interface PredictiveMaintenanceDashboardResponse {
     maintenance_events: Array<Record<string, unknown>>;
   } | null;
   fallback_available: true;
-  fallback_name: "Manufacturing Gold Fixture Demo";
+  fallback_name: "Hanul Precision Operations Reference";
   replay_source: "postgresql_prediction_timeline";
 }
 

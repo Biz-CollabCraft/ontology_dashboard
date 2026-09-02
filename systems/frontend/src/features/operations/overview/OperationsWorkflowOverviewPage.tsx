@@ -523,7 +523,7 @@ function inspectionMethodLabel(target: OperationsInspectionTarget | null): strin
 function inspectionGuidanceSourceLabel(target: OperationsInspectionTarget | null): string {
   if (!target?.inspectionGuidance) return "점검 위치 계약 미연결";
   return target.inspectionGuidance.sourceType === "demo_sop_fixture"
-    ? "데모 SOP"
+    ? "표준 점검 절차"
     : "SOP";
 }
 

@@ -54,6 +54,11 @@ class ReportAgent:
         refs.update(factor["evidence_field_id"] for factor in evidence["top_factors"])
         refs.update(evidence["maintenance_context"]["source_refs"])
         refs.update(f"data_quality_warnings.{index}" for index, _ in enumerate(evidence["data_quality_warnings"]))
+        refs.update(
+            str(item.get("evidence_field_id"))
+            for item in evidence.get("company_context_documents") or []
+            if item.get("evidence_field_id")
+        )
         return refs
 
     def _validate_grounding(

@@ -80,7 +80,7 @@ test("login exposes the three decision-workspace personas", async ({ page }) => 
     await expect(page.getByText(legacyCopy, { exact: true })).toHaveCount(0);
   }
 
-  const demoAccounts = page.getByRole("group", { name: "역할별 데모 계정" }).getByRole("button");
+  const demoAccounts = page.getByRole("group", { name: "역할별 계정" }).getByRole("button");
   await expect(demoAccounts).toHaveCount(3);
   await expect(page.getByRole("button", { name: /운영 관리자/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /설비\/공정 엔지니어/ })).toBeVisible();
@@ -120,42 +120,184 @@ test("role-aware entry keeps manager, engineer, and executive experiences distin
   }
 
   await signIn(...ACCOUNTS.manager);
-  await expect(page).toHaveURL(/view=operations/);
-  await expect(page.getByTestId("operations-operations")).toBeVisible();
+  await expect(page).toHaveURL(/surface=operations-status/);
+  await expect(page).toHaveURL(/view=overview/);
+  await expect(page.getByTestId("role-composed-operations")).toBeVisible();
   const managerNav = page.locator(".rw-preview-left nav button");
-  await expect(managerNav.nth(0)).toContainText("판단 대기");
-  await expect(managerNav.nth(1)).toContainText("운영 현황");
-  await expect(managerNav.nth(2)).toContainText("생산 영향");
-  await expect(managerNav.nth(3)).toContainText("보고 초안");
-  await expect(page.getByText("생산 영향과 판단 기준", { exact: true }).or(page.locator('[aria-label="생산 영향과 판단 기준"]'))).toBeVisible();
-  await page.getByRole("button", { name: "생산 영향 설비 · 비용 근거" }).click();
+  await expect(managerNav).toHaveCount(7);
+  await expect(managerNav.nth(0)).toContainText("운영 현황");
+  await expect(managerNav.nth(1)).toContainText("판단 대기");
+  await expect(managerNav.nth(2)).toContainText("Decision Case");
+  await expect(managerNav.nth(3)).toContainText("생산 영향");
+  await expect(managerNav.nth(4)).toContainText("정비 승인");
+  await expect(managerNav.nth(5)).toContainText("Backlog");
+  await expect(managerNav.nth(6)).toContainText("보고 초안");
+  await expect(page.getByText("공장 설비 상태맵", { exact: true })).toBeVisible();
+  await managerNav.nth(3).click();
+  await expect(page).toHaveURL(/surface=production-impact/);
   await expect(page).toHaveURL(/view=objects/);
+  await expect(page.getByText("생산 · 재무 영향", { exact: true })).toBeVisible();
 
   await switchAccount();
   await signIn(...ACCOUNTS.executive);
+  await expect(page).toHaveURL(/surface=executive-brief/);
   await expect(page).toHaveURL(/view=reports/);
-  await expect(page).toHaveURL(/report=executive-brief/);
-  await expect(page.getByTestId("operations-executive-report")).toBeVisible();
-  await expect(page.getByTestId("executive-brief-snapshot-status")).toBeVisible();
+  await expect(page.getByTestId("role-composed-executive")).toBeVisible();
   const executiveNav = page.locator(".rw-preview-left nav button");
+  await expect(executiveNav).toHaveCount(7);
   await expect(executiveNav.nth(0)).toContainText("Executive Brief");
-  await expect(executiveNav.nth(1)).toContainText("의사결정 병목");
-  await expect(executiveNav.nth(2)).toContainText("운영 리스크");
-  await expect(executiveNav.nth(3)).toContainText("정비 효과");
-  await expect(page.getByText("공장 설비 상태맵", { exact: true })).toHaveCount(0);
+  await expect(executiveNav.nth(1)).toContainText("운영 리스크");
+  await expect(executiveNav.nth(2)).toContainText("KPI");
+  await expect(executiveNav.nth(3)).toContainText("보고서");
+  await expect(executiveNav.nth(4)).toContainText("의사결정 병목");
+  await expect(executiveNav.nth(5)).toContainText("정비 효과");
+  await expect(executiveNav.nth(6)).toContainText("Roadmap");
+  await expect(page.getByText("공장 설비 상태맵", { exact: true })).toBeVisible();
+  await expect(page.getByText("경영 KPI 기준", { exact: true })).toBeVisible();
 
   await switchAccount();
   await signIn(...ACCOUNTS.engineer);
+  await expect(page).toHaveURL(/surface=monitoring/);
   await expect(page).toHaveURL(/view=overview/);
   const engineerNav = page.locator(".rw-preview-left nav button");
+  await expect(engineerNav).toHaveCount(6);
   await expect(engineerNav.nth(0)).toContainText("모니터링");
-  await expect(engineerNav.nth(1)).toContainText("설비 · 센서 피쳐");
-  await expect(engineerNav.nth(2)).toContainText("점검 · 정비 이력");
-  await expect(engineerNav.nth(3)).toContainText("현장 메모 · 분석 보고");
+  await expect(engineerNav.nth(1)).toContainText("설비");
+  await expect(engineerNav.nth(2)).toContainText("센서 피쳐");
+  await expect(engineerNav.nth(3)).toContainText("점검");
+  await expect(engineerNav.nth(4)).toContainText("정비 이력");
+  await expect(engineerNav.nth(5)).toContainText("현장 메모");
   await expect(page.getByText("공장 설비 상태맵", { exact: true })).toBeVisible();
+  await expect(page.getByText("실시간 피쳐 그래프", { exact: true })).toBeVisible();
   await expect(page).not.toHaveURL(/view=objects/);
 
   await context.close();
+});
+
+test("live exact-event grounding returns SOP inspection targets and RAG evidence", async ({ page }) => {
+  test.setTimeout(60_000);
+  await login(page, OPERATIONS_PATH, "manager");
+
+  const verification = await page.evaluate(async ({ apiUrl, project }) => {
+    const workspace = "manufacturing-demo";
+    const latestResponse = await fetch(
+      `${apiUrl}/api/projects/${encodeURIComponent(project)}/workspaces/${encodeURIComponent(workspace)}/predictive-maintenance/results/latest?limit=500`,
+      { credentials: "include" },
+    );
+    if (!latestResponse.ok) throw new Error(`latest results failed: ${latestResponse.status}`);
+    const latest = await latestResponse.json();
+    const datasetVersionId = latest.context?.dataset_version_id ?? null;
+
+    const candidates = (latest.items ?? []).filter((item: {
+      asset_type?: string;
+    }) => (
+      String(item.asset_type ?? "").toLowerCase() === "cnc"
+    )).sort((left: { failure_probability?: number }, right: { failure_probability?: number }) => (
+      Number(right.failure_probability ?? 0) - Number(left.failure_probability ?? 0)
+    )).slice(0, 12);
+
+    const diagnostics: Array<Record<string, unknown>> = [];
+    for (const item of candidates) {
+      const assetId = item.asset_id;
+      const eventId = item.artifact_id ?? item.provenance?.prediction_id ?? null;
+      if (!assetId || !eventId) continue;
+
+      const packetParams = new URLSearchParams({
+        project_id: project,
+        history_window: "24h",
+        event_id: eventId,
+      });
+      if (datasetVersionId) packetParams.set("dataset_version_id", datasetVersionId);
+      const packetResponse = await fetch(
+        `${apiUrl}/api/objects/${encodeURIComponent(assetId)}/agent-review-packet?${packetParams.toString()}`,
+        { credentials: "include" },
+      );
+      if (!packetResponse.ok) {
+        diagnostics.push({ assetId, eventId, packetStatus: packetResponse.status });
+        continue;
+      }
+      const packet = await packetResponse.json();
+      diagnostics.push({
+        assetId,
+        eventId,
+        failureProbability: item.failure_probability ?? null,
+        predictedFailureType: item.predicted_failure_type ?? null,
+        topFactors: (item.top_factors ?? []).slice(0, 4).map((factor: { feature?: string }) => factor.feature ?? null),
+        sopCount: packet.sop_retrieval?.returned_count ?? 0,
+        packetInspectionTargets: packet.inspection_targets?.length ?? 0,
+      });
+      if ((packet.sop_retrieval?.returned_count ?? 0) < 1) continue;
+
+      const detailParams = new URLSearchParams({
+        project_id: project,
+        workspace_id: workspace,
+        history_window: "24h",
+        event_id: eventId,
+      });
+      if (datasetVersionId) detailParams.set("dataset_version_id", datasetVersionId);
+      const detailResponse = await fetch(
+        `${apiUrl}/api/objects/${encodeURIComponent(assetId)}/detail-view?${detailParams.toString()}`,
+        { credentials: "include" },
+      );
+      diagnostics[diagnostics.length - 1].detailStatus = detailResponse.status;
+      if (!detailResponse.ok) continue;
+      const detail = await detailResponse.json();
+      diagnostics[diagnostics.length - 1].detailInspectionTargets = detail.inspection_targets?.length ?? 0;
+
+      const csrfToken = document.cookie
+        .split(";")
+        .map((value) => value.trim())
+        .find((value) => value.startsWith("ontology_csrf="))
+        ?.slice("ontology_csrf=".length);
+      const queryResponse = await fetch(`${apiUrl}/api/agent/query`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {}),
+        },
+        body: JSON.stringify({
+          project_id: project,
+          workspace_id: workspace,
+          question: "이 설비에서 우선 확인할 기술 근거와 SOP를 알려줘",
+          route: "auto",
+          audience: "engineering",
+          object_type: "equipment",
+          object_id: assetId,
+          event_id: eventId,
+          top_k: 8,
+        }),
+      });
+      diagnostics[diagnostics.length - 1].queryStatus = queryResponse.status;
+      if (!queryResponse.ok) continue;
+      const query = await queryResponse.json();
+      const ragEvidence = (query.state?.evidence ?? []).filter((e: { store?: string }) => e.store === "project3_rag");
+      diagnostics[diagnostics.length - 1].ragEvidenceCount = ragEvidence.length;
+      if (ragEvidence.length < 1) continue;
+
+      return {
+        match: {
+          assetId,
+          eventId,
+          sopCount: packet.sop_retrieval.returned_count,
+          packetInspectionTargets: packet.inspection_targets?.length ?? 0,
+          detailInspectionTargets: detail.inspection_targets?.length ?? 0,
+          ragEvidenceCount: ragEvidence.length,
+          sopSource: packet.sop_guidance?.[0]?.source_ref ?? null,
+        },
+        diagnostics,
+      };
+    }
+    return { match: null, diagnostics };
+  }, { apiUrl: API_URL, project: PROJECT });
+
+  console.log("live grounding diagnostics", JSON.stringify(verification.diagnostics));
+  expect(verification.match).not.toBeNull();
+  expect(verification.match?.sopCount).toBeGreaterThanOrEqual(1);
+  expect(verification.match?.packetInspectionTargets).toBeGreaterThanOrEqual(1);
+  expect(verification.match?.detailInspectionTargets).toBeGreaterThanOrEqual(1);
+  expect(verification.match?.ragEvidenceCount).toBeGreaterThanOrEqual(1);
+  expect(verification.match?.sopSource).toContain("SOP-DEMO-CNC-ROTATING-ASSEMBLY-001");
 });
 
 test("shows normal assets in the current-state overview", async ({ page }) => {
