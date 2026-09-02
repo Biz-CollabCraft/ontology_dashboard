@@ -16,7 +16,7 @@
 - `systems/generator`는 Feature/Label, training과 Model Artifact publish까지 소유한다.
 - Backend Diagnosis가 Runtime Prediction과 Product Result/Evidence를 생성한다.
 - 정비 완료만으로 정상 판정을 만들지 않는다.
-- What-if와 비용 최적화는 핵심 MVP 범위에 포함하지 않는다.
+- What-if와 비용 최적화는 핵심 Operations 범위에 포함하지 않는다.
 
 ## 3. 기존 표현에서 달라지는 부분
 
@@ -101,10 +101,10 @@
 | `architecture.md` | Canonical Replay와 Overlay branch 분리 | 전체 |
 | `ADR-002` | post-maintenance history segment와 inference-ready 조건 | 성민 + 호범 |
 | `final_team_role_and_step_plan.md` | Step 6/10/12와 담당자 인계 | 전체 |
-| `mvp/requirements-specification.md` | Current Replay와 Target Overlay 구분 | 우수 + 전체 |
-| `mvp/runtime-ownership-integration.md` | `gen_data`, Backend, Closed-loop 책임 | 성민 + 호범 + 광우 |
-| `mvp/api-specification.md` | 최종 endpoint/response 확정 후 상태 계약 반영 | 우수 + 광우/호범 |
-| `mvp/traceability-matrix.md` | 실제 코드와 테스트가 생긴 뒤 경로 추가 | 우수 + 전체 |
+| `operations/requirements-specification.md` | Current Replay와 Target Overlay 구분 | 우수 + 전체 |
+| `operations/runtime-ownership-integration.md` | `gen_data`, Backend, Closed-loop 책임 | 성민 + 호범 + 광우 |
+| `operations/api-specification.md` | 최종 endpoint/response 확정 후 상태 계약 반영 | 우수 + 광우/호범 |
+| `operations/traceability-matrix.md` | 실제 코드와 테스트가 생긴 뒤 경로 추가 | 우수 + 전체 |
 
 현재 구현에서 확인된 직접 영향 경로는 다음과 같다. 아래 경로는 이 문서 PR에서
 수정하지 않고 실제 Overlay 저장/API 구현 PR에서 변경한다.
@@ -131,7 +131,7 @@
 
 ## 7. 수정하지 않는 기록
 
-- `docs/mvp/history/2026-08-week2/**`
+- `docs/operations/history/2026-08-week2/**`
 - `gen_data/V3_1_CHANGELOG.md`
 - `gen_data/V3_1_IMPLEMENTATION_REPORT.md`
 - `gen_data/V3_1_RELEASE_VERIFICATION.md`

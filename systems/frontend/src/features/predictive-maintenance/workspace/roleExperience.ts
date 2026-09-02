@@ -1,5 +1,5 @@
 import type { AuthUser } from "../../../types";
-import type { MvpView } from "../../mvp/api/mvpContracts";
+import type { OperationsView } from "../../operations/api/operationsContracts";
 
 export type ReliabilityExperienceKind = "executive" | "operations" | "engineering" | "maintenance";
 
@@ -17,7 +17,7 @@ export interface ReliabilityPageCopy {
 }
 
 export interface ReliabilityNavigationItem {
-  view: MvpView;
+  view: OperationsView;
   label: ReliabilityLocalizedCopy;
   detail: ReliabilityLocalizedCopy;
   page: ReliabilityPageCopy;
@@ -26,7 +26,7 @@ export interface ReliabilityNavigationItem {
 export interface ReliabilityRoleExperience {
   kind: ReliabilityExperienceKind;
   label: ReliabilityLocalizedCopy;
-  defaultView: MvpView;
+  defaultView: OperationsView;
   primaryQuestion: ReliabilityLocalizedCopy;
   focusIntent: ReliabilityFocusIntent;
   firstScreenIntent: ReliabilityLocalizedCopy;
@@ -56,8 +56,8 @@ function page(
 export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, ReliabilityRoleExperience> = {
   executive: {
     kind: "executive",
-    label: copy("경영 보고", "Executive briefing"),
-    defaultView: "overview",
+    label: copy("경영진", "Executive"),
+    defaultView: "reports",
     primaryQuestion: copy(
       "현재 전체 운영 위험과 생산 영향은 무엇인가?",
       "What are the current operational risks and production impacts?",
@@ -74,8 +74,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
     navigation: [
       {
         view: "overview",
-        label: copy("브리핑", "Briefing"),
-        detail: copy("생산 연속성 · 경영 판단", "Continuity · executive decisions"),
+        label: copy("Executive Brief", "Executive Brief"),
+        detail: copy("운영 리스크 · KPI", "Operational risk · KPI"),
         page: page(
           "브리핑",
           "BRIEFING",
@@ -86,9 +86,22 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
         ),
       },
       {
+        view: "operations",
+        label: copy("의사결정 병목", "Decision bottlenecks"),
+        detail: copy("Decision Case · Backlog", "Decision cases · backlog"),
+        page: page(
+          "의사결정 병목",
+          "DECISION BOTTLENECKS",
+          "지연 중인 핵심 의사결정",
+          "Delayed critical decisions",
+          "판단이 지연되는 주요 Decision Case와 다음 책임자를 경영 관점에서 확인합니다.",
+          "Review delayed Decision Cases and accountable next owners from an executive perspective.",
+        ),
+      },
+      {
         view: "reports",
         label: copy("보고서", "Reports"),
-        detail: copy("상황 보고 · 의사결정 기록", "Situation reports · decision record"),
+        detail: copy("요약 생성 · 출력/공유", "Brief generation · export/share"),
         page: page(
           "보고서",
           "REPORTS",
@@ -100,8 +113,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
       },
       {
         view: "objects",
-        label: copy("상세 근거", "Evidence"),
-        detail: copy("필요할 때만 설비 단위 확인", "Asset detail only when needed"),
+        label: copy("정비 효과", "Maintenance effect"),
+        detail: copy("Before-after · 주요 설비", "Before-after · key assets"),
         page: page(
           "상세 근거",
           "EVIDENCE",
@@ -116,7 +129,7 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
   operations: {
     kind: "operations",
     label: copy("생산 운영", "Production operations"),
-    defaultView: "overview",
+    defaultView: "operations",
     primaryQuestion: copy(
       "지금 내가 판단하거나 승인해야 하는 건 무엇인가?",
       "What do I need to decide or approve now?",
@@ -146,8 +159,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
       },
       {
         view: "operations",
-        label: copy("판단 및 작업", "Decisions & work"),
-        detail: copy("점검 · 판단 · 작업 진행", "Inspection · decision · work progress"),
+        label: copy("판단 대기", "Pending decisions"),
+        detail: copy("Decision Case · 정비 승인", "Decision cases · maintenance approval"),
         page: page(
           "판단 및 작업",
           "DECISIONS & WORK",
@@ -159,8 +172,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
       },
       {
         view: "objects",
-        label: copy("설비", "Assets"),
-        detail: copy("설비별 위험과 근거", "Asset risk and evidence"),
+        label: copy("생산 영향", "Production impact"),
+        detail: copy("설비 · 비용 근거", "Assets · cost evidence"),
         page: page(
           "설비",
           "ASSETS",
@@ -172,8 +185,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
       },
       {
         view: "reports",
-        label: copy("보고", "Reports"),
-        detail: copy("운영 보고서 작성", "Operational reporting"),
+        label: copy("보고 초안", "Report draft"),
+        detail: copy("경영진 보고로 전환", "Convert to executive brief"),
         page: page(
           "보고",
           "REPORTS",
@@ -205,8 +218,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
     navigation: [
       {
         view: "overview",
-        label: copy("진단 현황", "Diagnostics"),
-        detail: copy("이상 신호 · 원인 후보", "Signals · suspected causes"),
+        label: copy("모니터링", "Monitoring"),
+        detail: copy("설비 상태맵 · 위험 알림", "Asset map · risk alerts"),
         page: page(
           "진단 현황",
           "DIAGNOSTICS",
@@ -218,8 +231,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
       },
       {
         view: "objects",
-        label: copy("설비 진단", "Asset analysis"),
-        detail: copy("센서 · 예측 · 근거", "Sensors · predictions · evidence"),
+        label: copy("설비 · 센서 피쳐", "Assets · sensor features"),
+        detail: copy("실시간 피쳐 · 이상 센서", "Live features · abnormal sensors"),
         page: page(
           "설비 진단",
           "ASSET ANALYSIS",
@@ -231,8 +244,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
       },
       {
         view: "operations",
-        label: copy("점검 기록", "Inspection record"),
-        detail: copy("현장 결과 · 분석 이력", "Field findings · analysis history"),
+        label: copy("점검 · 정비 이력", "Inspection · maintenance"),
+        detail: copy("점검 실행 · 조치 결과", "Inspection · action results"),
         page: page(
           "점검 기록",
           "INSPECTION RECORD",
@@ -244,8 +257,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
       },
       {
         view: "reports",
-        label: copy("분석 보고", "Analysis report"),
-        detail: copy("근거 검토 · 보고서 작성", "Evidence review · reporting"),
+        label: copy("현장 메모 · 분석 보고", "Field notes · analysis report"),
+        detail: copy("근거 정리 · 공유", "Evidence summary · sharing"),
         page: page(
           "분석 보고",
           "ANALYSIS REPORT",
@@ -335,13 +348,13 @@ export function resolveReliabilityRoleExperience(user: AuthUser): ReliabilityRol
   const roles = user.active_project_roles.length ? user.active_project_roles : user.roles;
   if (roles.includes("executive_viewer")) return RELIABILITY_ROLE_EXPERIENCES.executive;
   if (roles.includes("process_manager") || user.is_admin) return RELIABILITY_ROLE_EXPERIENCES.operations;
-  if (roles.includes("maintenance_technician")) return RELIABILITY_ROLE_EXPERIENCES.maintenance;
+  if (roles.includes("maintenance_technician")) return RELIABILITY_ROLE_EXPERIENCES.engineering;
   return RELIABILITY_ROLE_EXPERIENCES.engineering;
 }
 
 export function reliabilityPageCopy(
   experience: ReliabilityRoleExperience,
-  view: MvpView,
+  view: OperationsView,
 ): ReliabilityPageCopy {
   const activeItem = experience.navigation.find((item) => item.view === view);
   const defaultItem = experience.navigation.find((item) => item.view === experience.defaultView);

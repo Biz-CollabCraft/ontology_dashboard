@@ -42,7 +42,7 @@ from app.maintenance import (
     transition_risk_event,
     transition_work_order,
 )
-from app.mvp.contracts import DecisionRequest
+from app.operations.contracts import DecisionRequest
 
 
 def equipment_identity():
@@ -173,7 +173,7 @@ def test_materialization_preserves_meaning_scope_lineage_and_dedupe_key() -> Non
         )
 
 
-def test_operational_recommendation_rejects_mismatched_mvp_identity() -> None:
+def test_operational_recommendation_rejects_mismatched_operations_identity() -> None:
     payload = proposed_recommendation().model_dump()
     payload["equipment_id"] = "CNC-OTHER"
     with pytest.raises(ValidationError, match="equipment_id = asset_id"):

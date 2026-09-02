@@ -53,7 +53,7 @@ def test_tool_replacement_example_passes_typed_and_json_schema_contracts() -> No
     assert errors == []
 
 
-def test_cost_result_rejects_mismatched_mvp_identity() -> None:
+def test_cost_result_rejects_mismatched_operations_identity() -> None:
     payload = load_json(EXAMPLE_PATH)
     payload["equipment_id"] = "CNC-OTHER"
 

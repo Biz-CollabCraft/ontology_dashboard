@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ontology-dashboard.local/schemas/maintenance-cost-scenario.schema.json",
-  "$comment": "MVP semantic invariant: equipment_id MUST equal asset_id. JSON Schema validates the transport shape; the Backend typed validator and persistence CHECK enforce this cross-field identity invariant.",
+  "$comment": "Operations semantic invariant: equipment_id MUST equal asset_id. JSON Schema validates the transport shape; the Backend typed validator and persistence CHECK enforce this cross-field identity invariant.",
   "$defs": {
     "nonEmptyId": {
       "type": "string",
@@ -41,7 +41,7 @@
         "option_id": {"$ref": "#/$defs/nonEmptyId"},
         "action_candidate_id": {"$ref": "#/$defs/nonEmptyId"},
         "action_code": {
-          "description": "MVP TOOL_REPLACEMENT means replacing exactly one worn carbide cutting insert, not a tool holder or tool set.",
+          "description": "Operations TOOL_REPLACEMENT means replacing exactly one worn carbide cutting insert, not a tool holder or tool set.",
           "enum": ["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"]
         },
         "execution_timing": {
@@ -146,7 +146,7 @@
   },
   "type": "object",
   "title": "MaintenanceCostScenarioResult",
-  "description": "Read-only maintenance cost comparison result. asset_id preserves the Diagnosis/Product Result identity and equipment_id preserves the Maintenance operational identity. The MVP derives equipment_id from asset_id and requires both values to be equal.",
+  "description": "Read-only maintenance cost comparison result. asset_id preserves the Diagnosis/Product Result identity and equipment_id preserves the Maintenance operational identity. The Operations derives equipment_id from asset_id and requires both values to be equal.",
   "additionalProperties": false,
   "properties": {
     "schema_version": {"const": "maintenance-cost-scenario-v1.0"},
@@ -160,7 +160,7 @@
     },
     "equipment_id": {
       "$ref": "#/$defs/nonEmptyId",
-      "description": "Maintenance operational identity. In the MVP this value is derived from asset_id and MUST equal asset_id; callers must not independently choose it."
+      "description": "Maintenance operational identity. In the Operations this value is derived from asset_id and MUST equal asset_id; callers must not independently choose it."
     },
     "calculated_at": {"type": "string", "format": "date-time"},
     "based_on": {

@@ -29,8 +29,8 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
         "paths": ["**"],
         "context": [
             "docs/ai-code-review-context.md",
-            "docs/mvp/current-mvp-implementation-baseline.md",
-            "docs/mvp/requirements-specification.md",
+            "docs/operations/current-operations-implementation-baseline.md",
+            "docs/operations/requirements-specification.md",
         ],
     },
     "architecture": {
@@ -49,12 +49,12 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
         "context": [
             "docs/architecture.md",
             "docs/backend-migration-map.md",
-            "docs/mvp/runtime-ownership-integration.md",
+            "docs/operations/runtime-ownership-integration.md",
             "docs/architecture-decisions/ADR-001-unified-feature-contract.md",
             "docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md",
         ],
     },
-    "mvp": {
+    "operations": {
         "paths": [
             "systems/frontend/**",
             "systems/backend/**/predictive_maintenance*",
@@ -62,9 +62,9 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             "systems/backend/app/report/**",
         ],
         "context": [
-            "docs/mvp/current-mvp-implementation-baseline.md",
-            "docs/mvp/functional-specification.md",
-            "docs/mvp/api-specification.md",
+            "docs/operations/current-operations-implementation-baseline.md",
+            "docs/operations/functional-specification.md",
+            "docs/operations/api-specification.md",
         ],
     },
     "closed_loop": {
@@ -89,8 +89,8 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             "tests/test_product_result*",
         ],
         "context": [
-            "docs/mvp/model-artifact-publish-contract.md",
-            "docs/mvp/generator-feature-label-contract.md",
+            "docs/operations/model-artifact-publish-contract.md",
+            "docs/operations/generator-feature-label-contract.md",
             "docs/closed-loop-runtime-overlay-contract.md",
         ],
     },
@@ -101,8 +101,8 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             "tests/**/*evidence*",
         ],
         "context": [
-            "docs/mvp/pdm-evidence-report-ui-integration-plan.md",
-            "docs/mvp/report-specification.md",
+            "docs/operations/pdm-evidence-report-ui-integration-plan.md",
+            "docs/operations/report-specification.md",
         ],
     },
     "report": {
@@ -113,18 +113,18 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             "contracts/schemas/report.schema.json",
         ],
         "context": [
-            "docs/mvp/report-specification.md",
-            "docs/mvp/pdm-evidence-report-ui-integration-plan.md",
+            "docs/operations/report-specification.md",
+            "docs/operations/pdm-evidence-report-ui-integration-plan.md",
         ],
     },
     "frontend_operations": {
         "paths": [
-            "systems/frontend/src/features/mvp/operations/**",
-            "systems/frontend/src/features/mvp/**",
+            "systems/frontend/src/features/operations/operations/**",
+            "systems/frontend/src/features/operations/**",
         ],
         "context": [
-            "docs/mvp/current-mvp-implementation-baseline.md",
-            "docs/mvp/functional-specification.md",
+            "docs/operations/current-operations-implementation-baseline.md",
+            "docs/operations/functional-specification.md",
             "docs/closed-loop-domain-contract.md",
             "docs/closed-loop-product-consumption-contract.md",
             "docs/closed-loop-runtime-overlay-contract.md",
@@ -133,7 +133,7 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
     "generator": {
         "paths": ["systems/generator/**", "ml/**"],
         "context": [
-            "docs/mvp/generator-feature-label-contract.md",
+            "docs/operations/generator-feature-label-contract.md",
             "docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md",
         ],
     },
@@ -148,7 +148,7 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
         ],
         "context": [
             "docs/architecture.md",
-            "docs/mvp/runtime-ownership-integration.md",
+            "docs/operations/runtime-ownership-integration.md",
         ],
     },
 }
@@ -560,9 +560,9 @@ def build_verified_evidence(args: argparse.Namespace) -> dict[str, Any]:
             "required": _bool(args.frontend_required),
             "verified": _bool(args.frontend_verified),
         },
-        "mvp_e2e": {
-            "required": _bool(args.mvp_required),
-            "verified": _bool(args.mvp_verified),
+        "operations_e2e": {
+            "required": _bool(args.operations_required),
+            "verified": _bool(args.operations_verified),
         },
     }
     missing = [
@@ -874,7 +874,7 @@ RUNTIME-CONFIRMED REVIEWER FACTS
 
 REVIEW PRIORITY
 1. Decide what the PR actually changes and whether PR body matches the diff.
-2. Judge whether the change advances the documented manufacturing Predictive Maintenance MVP and its real manager/engineer workflow.
+2. Judge whether the change advances the documented manufacturing Predictive Maintenance Operations and its real manager/engineer workflow.
 3. Prioritize semantic/domain/product/ownership defects over syntax/lint observations already covered by deterministic CI.
 4. Check Ontology/Action/Evidence/Decision flow, provenance, immutable facts vs mutable operational state, ID ownership, Backend/Frontend responsibility, and fixture hard-coding.
 5. Identify 'code is valid but direction is wrong' changes: unnecessary abstractions, dead UI/API, duplicated business rules, local workarounds that weaken the ontology architecture, or one-fixture product logic.
@@ -902,7 +902,7 @@ Start exactly with these sections (omit optional sections when not applicable):
 2-4 sentences about actual change, not PR marketing copy.
 
 ### 프로젝트 목표와의 정합성
-Explain the relevant MVP/domain/architecture direction and user value. Do not restate unrelated architecture.
+Explain the relevant Operations/domain/architecture direction and user value. Do not restate unrelated architecture.
 
 ### 발견 사항
 Only real actionable [P0]/[P1]/[P2]/[P3] findings with path/symbol, impact, evidence, and concrete fix. If none: '현재 diff와 관련 프로젝트 계약을 함께 검토했으며 추가 actionable finding은 발견되지 않았습니다.'
@@ -1418,8 +1418,8 @@ def parser() -> argparse.ArgumentParser:
     pr.add_argument("--docker-verified", default="false")
     pr.add_argument("--frontend-required", default="true")
     pr.add_argument("--frontend-verified", default="false")
-    pr.add_argument("--mvp-required", default="true")
-    pr.add_argument("--mvp-verified", default="false")
+    pr.add_argument("--operations-required", default="true")
+    pr.add_argument("--operations-verified", default="false")
     pr.add_argument("--pr-number", required=True)
     pr.add_argument("--pr-title", default="")
     pr.add_argument("--pr-body", default="")

@@ -49,7 +49,7 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
 
 ## Identity와 멱등성
 
-- MVP는 `equipment_id = asset_id`를 사용한다.
+- Operations는 `equipment_id = asset_id`를 사용한다.
 - stable equipment key는 `organization_id + project_id + asset_id`이며 Dataset Version을
   포함하지 않는다.
 - mapping 누락, 중복, `asset_type` 불일치는 추정하지 않고 실패한다.
@@ -97,7 +97,7 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
 변경하거나 재해석하지 않고 별도 `recommendation_origin=operations_manual` 객체로
 생성한다.
 
-- MVP Maintenance action vocabulary는 `TOOL_REPLACEMENT`와
+- Operations Maintenance action vocabulary는 `TOOL_REPLACEMENT`와
   `COOLING_SYSTEM_RESTORE`로 제한한다. 두 Action 모두 구조화된 Inspection Result에서
   각각의 후보 조건을 만족한 경우에만 선택할 수 있다.
 - `TOOL_REPLACEMENT`의 교체 단위는 공구 홀더나 공구 세트가 아니라 **마모된 카바이드
@@ -121,7 +121,7 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
   Maintenance action으로 제한한다.
 - Inspection Result는 Maintenance가 소유하는 불변 운영 사실이며 checklist, measurements,
   findings, outcome, note, 작성자/시각과 원본 inspection WorkOrder lineage를 보존한다. Diagnosis는
-  Maintenance DB를 직접 조회하지 않으며, MVP의 Operations manual recommendation은 공식
+  Maintenance DB를 직접 조회하지 않으며, Operations의 Operations manual recommendation은 공식
   Maintenance command/read 경계 안에서만 이 결과를 소비한다.
 
 ## 기존 compatibility projection 교정 범위

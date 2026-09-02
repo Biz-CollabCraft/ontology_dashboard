@@ -123,7 +123,7 @@ sensor stream. Production live data is a separate loop:
    separate `gen-data-wall-clock-live-v2` Dataset Version;
 3. Backend diagnosis invokes the currently promoted CNC and compressor Model
    Artifacts and atomically refreshes the 100 current Result Artifacts;
-4. the MVP frontend refreshes its governed runtime view every 30 seconds.
+4. the Operations frontend refreshes its governed runtime view every 30 seconds.
 
 The immutable Canonical V3.1 Dataset Version remains the training/regression
 baseline and is never appended to by the live loop. Production uses

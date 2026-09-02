@@ -1020,7 +1020,7 @@ def test_postgresql_copy_idempotency_rls_and_atomic_rollback(
             admin.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role)))
 
 
-@pytest.mark.skip(reason="Adaptive Modeling Workbench was removed from the MVP runtime")
+@pytest.mark.skip(reason="Adaptive Modeling Workbench was removed from the Operations runtime")
 def test_postgresql_adaptive_modeling_repository_jsonb_idempotency_and_rls(
     postgresql_database: str,
 ) -> None:

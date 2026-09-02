@@ -9,14 +9,14 @@ import {
   matchDatasetCatalogPath,
   matchGovernancePath,
   matchModelingPath,
-  matchMvpProjectPath,
+  matchOperationsProjectPath,
   matchOntologyPath,
   matchProjectDashboardPath,
   matchProjectHomePath,
-  mvpProjectPath,
+  operationsProjectPath,
   navigate,
   loginPath,
-  week2MvpRedirectPath,
+  week2OperationsRedirectPath,
   usePathname,
 } from "./routing";
 import { ApiError, getProject, getProjectWorkspaces } from "./api";
@@ -28,6 +28,10 @@ import { DisplayPreferencesProvider } from "./ui/foundry/displayPreferences";
 import { I18nProvider } from "./ui/i18n/I18nProvider";
 import { WorkbenchState } from "./ui/foundry/WorkbenchState";
 import { featureFlags } from "./featureFlags";
+import {
+  isReliabilityPreviewLocation,
+  ReliabilityRoutePlaceholder,
+} from "./features/predictive-maintenance/ReliabilityRoutePlaceholder";
 
 const AdminApp = lazy(() =>
   import("./features/admin/AdminApp").then((module) => ({ default: module.AdminApp })),
@@ -47,7 +51,7 @@ const BlueprintComparisonPage = lazy(() =>
 const CommercialV4App = lazy(() =>
   import("./features/commercial-v4/CommercialV4App").then((module) => ({ default: module.CommercialV4App })),
 );
-const MvpApplication = lazy(() => import("./features/mvp/MvpApplication"));
+const OperationsApplication = lazy(() => import("./features/operations/OperationsApplication"));
 const FoundryAppShell = lazy(() =>
   import("./ui/foundry/FoundryAppShell").then((module) => ({ default: module.FoundryAppShell })),
 );
@@ -111,11 +115,13 @@ function ProjectRouteBoundary({
   projectId,
   workspaceId,
   requiredPermission,
+  pending,
   children,
 }: {
   projectId: string;
   workspaceId?: string;
   requiredPermission?: string;
+  pending?: ReactNode;
   children: ReactNode;
 }) {
   const { user } = useAuth();
@@ -168,7 +174,7 @@ function ProjectRouteBoundary({
   }, [projectId, requiredPermission, user, workspaceId]);
 
   if (state === null) {
-    return <RouteLoading operation="Validating Project scope" />;
+    return <>{pending ?? <RouteLoading operation="Validating Project scope" />}</>;
   }
   if (state === "auth-required") {
     return <Redirect to={loginPath(`${window.location.pathname}${window.location.search}`)} />;
@@ -185,9 +191,13 @@ function ProjectPreviewRoute({
   projectId: string;
   children: ReactNode;
 }) {
+  const reliabilityPreview = isReliabilityPreviewLocation();
+  const pending = reliabilityPreview
+    ? <ReliabilityRoutePlaceholder />
+    : <RouteLoading operation="Loading workbench" />;
   return (
-    <ProjectRouteBoundary projectId={projectId}>
-      <Suspense fallback={<RouteLoading operation="Loading workbench" />}>
+    <ProjectRouteBoundary projectId={projectId} pending={pending}>
+      <Suspense fallback={pending}>
         {children}
       </Suspense>
     </ProjectRouteBoundary>
@@ -226,7 +236,9 @@ function AppRouter() {
   if (pathname === "/visualization-compare/echarts") return <EChartsComparisonEmbed />;
 
   if (loading) {
-    return <RouteLoading operation="Checking session" />;
+    return isReliabilityPreviewLocation()
+      ? <ReliabilityRoutePlaceholder />
+      : <RouteLoading operation="Checking session" />;
   }
 
   if (!user) {
@@ -240,22 +252,22 @@ function AppRouter() {
 
   if (pathname === "/admin") return user.is_admin ? <AdminApp /> : <ForbiddenPage />;
 
-  const mvpProjectRoute = matchMvpProjectPath(pathname);
-  if (mvpProjectRoute) {
+  const operationsProjectRoute = matchOperationsProjectPath(pathname);
+  if (operationsProjectRoute) {
     return (
-      <ProjectPreviewRoute projectId={mvpProjectRoute.projectId}>
-        <MvpApplication projectId={mvpProjectRoute.projectId} />
+      <ProjectPreviewRoute projectId={operationsProjectRoute.projectId}>
+        <OperationsApplication projectId={operationsProjectRoute.projectId} />
       </ProjectPreviewRoute>
     );
   }
 
   const defaultProjectId = user.active_project_id ?? user.project_scopes[0] ?? null;
-  const defaultPath = featureFlags.week2MvpOnly && defaultProjectId
-    ? mvpProjectPath(defaultProjectId)
+  const defaultPath = featureFlags.week2OperationsOnly && defaultProjectId
+    ? operationsProjectPath(defaultProjectId)
     : user.default_path;
-  if (featureFlags.week2MvpOnly) {
-    const mvpRedirect = week2MvpRedirectPath(pathname, defaultProjectId, window.location.search);
-    if (mvpRedirect) return <Redirect to={mvpRedirect} />;
+  if (featureFlags.week2OperationsOnly) {
+    const operationsRedirect = week2OperationsRedirectPath(pathname, defaultProjectId, window.location.search);
+    if (operationsRedirect) return <Redirect to={operationsRedirect} />;
   }
 
   const analysisId = matchAnalysisPath(pathname);

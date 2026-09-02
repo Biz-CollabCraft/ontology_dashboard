@@ -95,6 +95,7 @@ export interface AgentQueryInput {
   workspace_id: string;
   question: string;
   route?: "auto" | AgentRoute;
+  audience?: "engineering" | "operations" | "executive" | "maintenance";
   object_type?: string;
   object_id?: string;
   top_k?: number;

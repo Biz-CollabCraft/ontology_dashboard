@@ -1,0 +1,167 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { operationsProjectPath, navigate } from "../../../routing";
+import type { OperationsDashboardMode, OperationsReportTab, OperationsRoleLens, OperationsSelection, OperationsView } from "../api/operationsContracts";
+
+const SESSION_PREFIX = "ontology-dashboard:operations-selection:";
+
+interface OperationsSelectionContextValue {
+  selection: OperationsSelection;
+  updateSelection: (patch: Partial<Omit<OperationsSelection, "projectId">>, options?: { replace?: boolean }) => void;
+}
+
+const OperationsSelectionContext = createContext<OperationsSelectionContextValue | null>(null);
+
+function validView(value: string | null): OperationsView {
+  if (value === "objects" || value === "operations" || value === "reports" || value === "system") return value;
+  if (value === "executive-report" || value === "inspection-report") return "reports";
+  return "overview";
+}
+
+function validReportTab(value: string | null, legacyView?: string | null): OperationsReportTab {
+  if (value === "inspection-request" || value === "status-map" || value === "summary-report" || value === "executive-brief") return value;
+  if (legacyView === "inspection-report") return "inspection-request";
+  if (legacyView === "executive-report") return "executive-brief";
+  return "status-map";
+}
+
+function validRole(value: string | null, fallback: OperationsRoleLens): OperationsRoleLens {
+  return value === "field_operator" || value === "process_manager" ? value : fallback;
+}
+
+function validDashboard(value: string | null): OperationsDashboardMode {
+  return value === "classic" ? "classic" : "workflow";
+}
+
+function optionalValue(value: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+export function parseOperationsSelection(input: {
+  projectId: string;
+  search: string;
+  defaultRole: OperationsRoleLens;
+  defaultView?: OperationsView;
+  defaultReportTab?: OperationsReportTab;
+  sessionValue?: string | null;
+}): OperationsSelection {
+  let session: Partial<OperationsSelection> = {};
+  if (input.sessionValue) {
+    try {
+      session = JSON.parse(input.sessionValue) as Partial<OperationsSelection>;
+    } catch {
+      session = {};
+    }
+  }
+  const params = new URLSearchParams(input.search);
+  const queryHasView = params.has("view");
+  const queryView = params.get("view");
+  const queryHasReportTab = params.has("report");
+  const queryHasDashboard = params.has("dashboard");
+  const queryHasRole = params.has("role");
+  const queryHasWorkspace = params.has("workspace_id");
+  const queryHasAsset = params.has("asset_id");
+  const queryHasEvent = params.has("event_id");
+  const defaultView = input.defaultView ?? "overview";
+  const sessionView = typeof session.view === "string" ? validView(session.view) : null;
+  return {
+    projectId: input.projectId,
+    view: queryHasView ? validView(queryView) : sessionView ?? defaultView,
+    dashboard: queryHasDashboard
+      ? validDashboard(params.get("dashboard"))
+      : validDashboard(typeof session.dashboard === "string" ? session.dashboard : null),
+    reportTab: queryHasReportTab
+      ? validReportTab(params.get("report"), queryView)
+      : queryHasView && (queryView === "executive-report" || queryView === "inspection-report")
+        ? validReportTab(null, queryView)
+      : typeof session.reportTab === "string"
+        ? validReportTab(session.reportTab, queryView ?? sessionView)
+        : input.defaultReportTab ?? validReportTab(null, defaultView),
+    role: queryHasRole
+      ? validRole(params.get("role"), input.defaultRole)
+      : validRole(typeof session.role === "string" ? session.role : null, input.defaultRole),
+    workspaceId: queryHasWorkspace ? optionalValue(params.get("workspace_id")) : optionalValue(session.workspaceId ?? null),
+    assetId: queryHasAsset ? optionalValue(params.get("asset_id")) : optionalValue(session.assetId ?? null),
+    eventId: queryHasEvent ? optionalValue(params.get("event_id")) : optionalValue(session.eventId ?? null),
+  };
+}
+
+export function selectionSearch(selection: OperationsSelection): string {
+  const params = new URLSearchParams();
+  params.set("view", selection.view);
+  params.set("dashboard", selection.dashboard);
+  if (selection.view === "reports") params.set("report", selection.reportTab);
+  params.set("role", selection.role);
+  if (selection.workspaceId) params.set("workspace_id", selection.workspaceId);
+  if (selection.assetId) params.set("asset_id", selection.assetId);
+  if (selection.eventId) params.set("event_id", selection.eventId);
+  return params.toString();
+}
+
+export function OperationsSelectionProvider({
+  projectId,
+  defaultRole,
+  defaultView = "overview",
+  defaultReportTab = "status-map",
+  storageScope = "anonymous",
+  children,
+}: {
+  projectId: string;
+  defaultRole: OperationsRoleLens;
+  defaultView?: OperationsView;
+  defaultReportTab?: OperationsReportTab;
+  storageScope?: string;
+  children: ReactNode;
+}) {
+  const storageKey = `${SESSION_PREFIX}${storageScope}:${projectId}`;
+  const readSelection = useCallback(() => parseOperationsSelection({
+    projectId,
+    search: window.location.search,
+    defaultRole,
+    defaultView,
+    defaultReportTab,
+    sessionValue: window.sessionStorage.getItem(storageKey),
+  }), [defaultReportTab, defaultRole, defaultView, projectId, storageKey]);
+  const [selection, setSelection] = useState<OperationsSelection>(readSelection);
+
+  useEffect(() => {
+    const sync = () => setSelection(readSelection());
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, [readSelection]);
+
+  useEffect(() => {
+    window.sessionStorage.setItem(storageKey, JSON.stringify(selection));
+  }, [selection, storageKey]);
+
+  const updateSelection = useCallback((
+    patch: Partial<Omit<OperationsSelection, "projectId">>,
+    options?: { replace?: boolean },
+  ) => {
+    const current = readSelection();
+    const next: OperationsSelection = { ...current, ...patch, projectId };
+    window.sessionStorage.setItem(storageKey, JSON.stringify(next));
+    const params = new URLSearchParams(selectionSearch(next));
+    const currentParams = new URLSearchParams(window.location.search);
+    const workspaceShell = currentParams.get("workspace_shell");
+    if (workspaceShell) params.set("workspace_shell", workspaceShell);
+    navigate(`${operationsProjectPath(projectId)}?${params.toString()}`, { replace: options?.replace });
+  }, [projectId, readSelection, storageKey]);
+
+  const value = useMemo(() => ({ selection, updateSelection }), [selection, updateSelection]);
+  return <OperationsSelectionContext.Provider value={value}>{children}</OperationsSelectionContext.Provider>;
+}
+
+export function useOperationsSelection() {
+  const value = useContext(OperationsSelectionContext);
+  if (!value) throw new Error("useOperationsSelection must be used inside OperationsSelectionProvider");
+  return value;
+}

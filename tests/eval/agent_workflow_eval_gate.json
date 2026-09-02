@@ -15,7 +15,7 @@
     "output_contract": [
       "agent_review_packet_schema_valid",
       "agent_review_summary_schema_valid",
-      "exact_role_summaries_for_mvp"
+      "exact_role_summaries_for_operations"
     ],
     "groundedness": [
       "summary_source_refs_exist_in_packet",

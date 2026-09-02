@@ -122,7 +122,7 @@ Generator는 threshold 적용, 최종 이상 판정, Product Result Artifact, Ev
 36. 도메인 전용 예외는 각 도메인의 `{domain}_exception.py`에 정의하고, 범도메인 공통 예외는 `common/exceptions.py`로 정의하며, 도메인 레이어에서 `FastAPI`의 `HTTPException`을 직접 import/발생시키지 않는다.
 37. `systems/backend/ontology_dashboard/modeling`과 `ml/src/factory_signal_ml`은 compatibility port/adapter일 수 있으나 semantic mapping, feature build, model training 또는 runtime inference의 canonical owner가 되면 안 된다.
 
-15~19번은 `docs/mvp/generator-feature-label-contract.md`를 근거로 한다.
+15~19번은 `docs/operations/generator-feature-label-contract.md`를 근거로 한다.
 
 20·21번은 PR 단독 import 및 실행 가능성이라는 기존 코드 결함에 근거하며,
 ADR 승인 여부와 무관하게 즉시 적용되는 merge blocker다.
@@ -155,13 +155,13 @@ Model Artifact는 Generator가 만드는 학습/배포 산출물이고 Product R
 - mutable `latest`만 기록하고 실제 immutable model version을 남기지 않는 경우
 - generator가 Product Result Artifact를 최종 생산하거나 Backend가 training을 다시 소유하는 경우
 
-## 5. 공식 MVP 제품 계약
+## 5. 공식 Operations 제품 계약
 
 공식 제품 Surface는 다음을 우선한다.
 
-- 공식 진입점: `/app/projects/{project_id}/mvp`
+- 공식 진입점: `/app/projects/{project_id}/operations`
 - 공식 화면: Overview / Objects / Operations / Event Executive Brief
-- 기본 설정: `VITE_WEEK2_MVP_ONLY=true`
+- 기본 설정: `VITE_WEEK2_Operations_ONLY=true`
 - 핵심 흐름: 역할별 PdM view → 고위험 설비 확인 → Event 기반 Report/Evidence → 현장 엔지니어의
   점검·분석 근거 → 생산 운영 의사결정자의 Recommendation/Decision 판단 → 정비 필요 시 정비 작업자의
   WorkOrder/MaintenanceAction 실행 → Activity/lineage 확인
@@ -169,14 +169,14 @@ Model Artifact는 Generator가 만드는 학습/배포 산출물이고 Product R
 - 제품 표시 의미: 생산 운영 의사결정자, 현장 엔지니어, 정비 작업자
 - 기존 `manager` / `engineer`는 Report/UI compatibility view alias이며 RBAC role code와 동일 enum이 아니다.
 - Dataset / Governance / Modeling / Agent / Analysis / 전체 Ontology Workbench 및 실험 화면은
-  보존할 수 있으나 공식 MVP Surface를 덮어쓰면 안 된다.
+  보존할 수 있으나 공식 Operations Surface를 덮어쓰면 안 된다.
 
 Closed-loop 상태·역할·Action·API 소비 기준은
 [`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)를 사용한다.
 
 Frontend 변경은 다음 regression을 우선 확인한다.
 
-- 공식 MVP route가 사라지거나 다른 experimental surface로 redirect되는지
+- 공식 Operations route가 사라지거나 다른 experimental surface로 redirect되는지
 - role별 첫 화면/정보 우선순위가 깨지는지
 - 고위험 설비 → Report/Evidence 흐름이 끊기는지
 - 이동 후 asset/base path, Vite build, nginx history fallback, Playwright route가 깨지는지
@@ -210,7 +210,7 @@ CI PASS는 supporting evidence이지 correctness의 증명이 아니다.
 11. Frontend build/Playwright/nginx가 `systems/frontend`를 canonical host로 사용하며 route/assets를 유지하는가?
 12. compatibility adapter가 새 canonical implementation copy로 다시 자라나 ownership 중복을 만들었는가?
 13. Model Artifact → Result Artifact/Evidence provenance가 유지되는가?
-14. 공식 MVP workflow와 role surface가 변경으로 인해 퇴행하는가?
+14. 공식 Operations workflow와 role surface가 변경으로 인해 퇴행하는가?
 15. PR branch 단독 import가 가능한가? (상위 stacked PR의 모듈을 참조하지 않고 독립적으로 import되는가)
 16. `REGISTERED_MODELS`가 비어 있지 않은가? (`except ImportError`로 조용히 빈 registry가 되지 않는가)
 17. Model Artifact publish/validate round trip이 가능한가? (Backend `artifact_provider.py`가 실제로 로드할 수 있는가)
@@ -246,9 +246,9 @@ CI PASS는 supporting evidence이지 correctness의 증명이 아니다.
 최소한 runtime host, Generator/Backend import boundary, Model Artifact injection, heuristic fail-fast,
 Docker/CI path, optional dependency, migration path를 평가한다.
 
-### MVP Regression Matrix
+### Operations Regression Matrix
 
-`MVP Contract | Result(PASS/FAIL/NOT PROVEN) | Evidence`
+`Operations Contract | Result(PASS/FAIL/NOT PROVEN) | Evidence`
 
 공식 route/surface, role workflow, Report/Evidence flow, frontend build/runtime path를 평가한다.
 
@@ -284,7 +284,7 @@ Docker runtime, migration, whitespace 등은 `verified evidence`로만 사용한
 다음 semantic/product/domain 판단이다.
 
 1. PR body와 실제 diff가 같은 목적을 향하는지
-2. 현재 Week 2 MVP와 manager/engineer 사용자 workflow에 기여하는지
+2. 현재 Week 2 Operations와 manager/engineer 사용자 workflow에 기여하는지
 3. Ontology / Action / Evidence / Decision 흐름과 책임 경계를 유지하는지
 4. immutable producer fact/provenance와 mutable operational state를 혼동하지 않는지
 5. Backend가 소유해야 할 상태 전이, 권한, persisted ID를 Frontend가 재구현하지 않는지
@@ -343,10 +343,10 @@ Target 범위에만 적용하며 미구현 Target을 현재 동작으로 간주�
 자동 리뷰는 매 PR마다 repository 전체 문서를 prompt에 넣지 않는다. 변경 경로를
 `docs/ai-code-review-context.json`의 category와 매칭해 관련 문서만 선택한다.
 
-대표 category는 `project_intent`, `architecture`, `mvp`, `closed_loop`, `product_result`,
+대표 category는 `project_intent`, `architecture`, `operations`, `closed_loop`, `product_result`,
 `evidence`, `report`, `frontend_operations`, `generator`, `deployment`이다.
 
-reviewer policy, architecture/MVP/ownership/domain 계약, routing manifest는 **PR head가 아니라 base SHA의
+reviewer policy, architecture/Operations/ownership/domain 계약, routing manifest는 **PR head가 아니라 base SHA의
 내용만 trusted context로 사용한다.** PR이 이 파일들을 수정하면 변경 자체는 일반 diff로 검토하되,
 같은 PR의 새 내용으로 자기 변경을 정당화할 수 없다.
 
@@ -362,7 +362,7 @@ bot comment는 추적 대상에서 제외한다. 자동 reviewer는 사람의 Gi
 기본 출력은 다음 구조다.
 
 - `### 이 PR이 하는 일`: 실제 diff의 의미를 2~4문장으로 설명한다.
-- `### 프로젝트 목표와의 정합성`: 변경과 직접 관련된 MVP/Domain/Architecture/사용자 workflow만 판단한다.
+- `### 프로젝트 목표와의 정합성`: 변경과 직접 관련된 Operations/Domain/Architecture/사용자 workflow만 판단한다.
 - `### 발견 사항`: 실제 actionable `[P0]`~`[P3]`만 작성하며 억지 P3를 만들지 않는다.
 - `### 기존 팀 리뷰 반영 상태`: 관련 human technical feedback이 있을 때만 출력한다.
 - `### 다음 단계`: 자연스러운 후속 작업이 있을 때만 출력한다.
@@ -372,7 +372,7 @@ deterministic evidence guard가 허용하는 readiness ceiling을 넘을 수 없
 
 기본적으로 다음은 출력하지 않는다.
 
-- Architecture/Backend/Docker/MVP/Frontend 성공 목록
+- Architecture/Backend/Docker/Operations/Frontend 성공 목록
 - contract별 PASS matrix
 - CI에서 이미 확인 가능한 성공 사실 반복
 - 변경과 무관한 architecture 설명

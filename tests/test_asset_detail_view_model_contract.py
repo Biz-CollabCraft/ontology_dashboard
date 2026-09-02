@@ -1,14 +1,14 @@
 """Contract regression tests for the AssetDetailViewModel candidate contract.
 
-Context: docs/mvp/pdm-evidence-report-ui-integration-plan.md §3.1/§3.2 and
-docs/mvp/schema-definition.md §5.3 define AssetDetailViewModel as a V2
+Context: docs/operations/pdm-evidence-report-ui-integration-plan.md §3.1/§3.2 and
+docs/operations/schema-definition.md §5.3 define AssetDetailViewModel as a V2
 change proposal for `GET /objects/{asset_id}/detail-view`. It does not
 replace the current Event Report API. Per §3.2 step 1, the documented
 contract and test fixtures are added before any implementation. These tests
 only fix the candidate shape and its scenario fixtures; they do not assert
 that a Product API endpoint exists yet.
 
-See docs/mvp/asset-detail-report-viewmodel-frontend-field-audit.md for the
+See docs/operations/asset-detail-report-viewmodel-frontend-field-audit.md for the
 field audit this fixture set is derived from.
 """
 
@@ -223,9 +223,9 @@ def test_review_priority_is_backend_view_model_data_not_frontend_fallback() -> N
     }
 
 
-def test_schema_rejects_mvp_prefixed_additional_property() -> None:
+def test_schema_rejects_operations_prefixed_additional_property() -> None:
     payload = fixture("current_evidence_only")
-    payload["mvpLegacyField"] = True
+    payload["operationsLegacyField"] = True
 
     errors = schema_errors(payload)
 

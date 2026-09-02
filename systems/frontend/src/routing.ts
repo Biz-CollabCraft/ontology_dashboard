@@ -99,12 +99,12 @@ export function matchBlueprintV4ProjectPath(pathname: string): { projectId: stri
   return match ? { projectId: decodeURIComponent(match[1]) } : null;
 }
 
-export function mvpProjectPath(projectId: string) {
-  return `/app/projects/${encodeURIComponent(projectId)}/mvp`;
+export function operationsProjectPath(projectId: string) {
+  return `/app/projects/${encodeURIComponent(projectId)}/operations`;
 }
 
-export function matchMvpProjectPath(pathname: string): { projectId: string } | null {
-  const match = pathname.match(/^\/app\/projects\/([^/]+)\/mvp$/);
+export function matchOperationsProjectPath(pathname: string): { projectId: string } | null {
+  const match = pathname.match(/^\/app\/projects\/([^/]+)\/(?:operations|operations)$/);
   return match ? { projectId: decodeURIComponent(match[1]) } : null;
 }
 
@@ -118,16 +118,16 @@ function isBlueprintComparisonEmbedPath(pathname: string, search: string): boole
   );
 }
 
-export function week2MvpRedirectPath(
+export function week2OperationsRedirectPath(
   pathname: string,
   fallbackProjectId?: string | null,
   search = "",
 ): string | null {
-  if (matchMvpProjectPath(pathname) || !pathname.startsWith("/app")) return null;
-  // Keep the production product focused on the Week 2 MVP while preserving
+  if (matchOperationsProjectPath(pathname) || !pathname.startsWith("/app")) return null;
+  // Keep the production product focused on the operational workspace while preserving
   // the explicitly published design-review surfaces. The comparison page
   // renders legacy workbenches in same-origin iframes with comparison_embed=1,
-  // so those exact preview routes must bypass the MVP redirect as well.
+  // so those exact preview routes must bypass the operations redirect as well.
   if (
     matchBlueprintComparisonPath(pathname)
     || matchBlueprintV4ProjectPath(pathname)
@@ -135,7 +135,7 @@ export function week2MvpRedirectPath(
   ) return null;
   const projectMatch = pathname.match(/^\/app\/projects\/([^/]+)/);
   const projectId = projectMatch ? decodeURIComponent(projectMatch[1]) : fallbackProjectId;
-  return projectId ? mvpProjectPath(projectId) : null;
+  return projectId ? operationsProjectPath(projectId) : null;
 }
 
 export function loginPath(returnTo?: string) {

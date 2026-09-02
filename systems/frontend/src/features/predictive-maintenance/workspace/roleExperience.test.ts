@@ -36,7 +36,7 @@ describe("resolveReliabilityRoleExperience", () => {
     expect(resolveReliabilityRoleExperience(user({
       roles: ["executive_viewer"],
       active_project_roles: ["maintenance_technician"],
-    })).kind).toBe("maintenance");
+    })).kind).toBe("engineering");
   });
 
   it("falls back to account roles and resolves process_manager", () => {
@@ -49,13 +49,13 @@ describe("resolveReliabilityRoleExperience", () => {
     expect(experience.kind).toBe("operations");
   });
 
-  it("resolves maintenance_technician", () => {
+  it("groups maintenance_technician into the engineering persona", () => {
     const experience = resolveReliabilityRoleExperience(user({
       roles: ["maintenance_technician"],
       landing_key: "maintenance_technician",
     }));
 
-    expect(experience.kind).toBe("maintenance");
+    expect(experience.kind).toBe("engineering");
   });
 
   it("resolves process_engineer and preserves engineering as the fallback", () => {
@@ -87,8 +87,8 @@ describe("resolveReliabilityRoleExperience", () => {
 
 describe("RELIABILITY_ROLE_EXPERIENCES", () => {
   it("defines the intended default view for every role experience", () => {
-    expect(RELIABILITY_ROLE_EXPERIENCES.executive.defaultView).toBe("overview");
-    expect(RELIABILITY_ROLE_EXPERIENCES.operations.defaultView).toBe("overview");
+    expect(RELIABILITY_ROLE_EXPERIENCES.executive.defaultView).toBe("reports");
+    expect(RELIABILITY_ROLE_EXPERIENCES.operations.defaultView).toBe("operations");
     expect(RELIABILITY_ROLE_EXPERIENCES.engineering.defaultView).toBe("overview");
     expect(RELIABILITY_ROLE_EXPERIENCES.maintenance.defaultView).toBe("operations");
   });

@@ -80,11 +80,11 @@
       "insufficient_data": false
     },
     "maintenance_context": {
-      "provider": "pdm-mvp-reference",
+      "provider": "pdm-operations-reference",
       "version": "2026-08-11",
       "source_type": "semantic_regression_reference",
       "source_refs": [
-        "semantic-regression:pdm-mvp-critical"
+        "semantic-regression:pdm-operations-critical"
       ],
       "checklist": [
         "회전부 상태 확인",

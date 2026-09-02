@@ -207,8 +207,8 @@ def principal() -> Principal:
         active_project_id="manufacturing-demo-project",
         active_project_roles=["ml_validator"],
         is_admin=False,
-        default_path="/app/projects/manufacturing-demo-project/mvp",
-        landing_key="mvp",
+        default_path="/app/projects/manufacturing-demo-project/operations",
+        landing_key="operations",
     )
 
 

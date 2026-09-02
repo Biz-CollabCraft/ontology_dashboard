@@ -36,7 +36,7 @@ def client(tmp_path: Path):
         app.dependency_overrides.clear()
 
 
-def test_health_and_main_mvp_flow(client: TestClient) -> None:
+def test_health_and_main_operations_flow(client: TestClient) -> None:
     assert client.get("/health/live").json()["status"] == "ok"
     assert client.get("/health/ready").json()["status"] == "ready"
 

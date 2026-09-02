@@ -3,7 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 const PROJECT = "manufacturing-demo-project";
 const WORKSPACE = "manufacturing-demo";
 const EVENT = "EVT-GS-004";
-const PATH = `/app/projects/${PROJECT}/mvp?view=overview&dashboard=workflow&role=process_manager&workspace_id=${WORKSPACE}&asset_id=CNC-S04-L02-03&event_id=${EVENT}`;
+const PATH = `/app/projects/${PROJECT}/operations?view=overview&dashboard=workflow&role=process_manager&workspace_id=${WORKSPACE}&asset_id=CNC-S04-L02-03&event_id=${EVENT}`;
 
 async function login(page: Page) {
   await page.goto(`/login?returnTo=${encodeURIComponent(PATH)}`);
@@ -16,6 +16,7 @@ async function login(page: Page) {
 test("runs cost analysis only on request and keeps the result read-only", async ({ page }) => {
   let analysisCreated = false;
   let calculationRequests = 0;
+  let recommendationRequests = 0;
 
   const analysis = {
     schema_version: "maintenance-cost-scenario-v1.0",
@@ -92,6 +93,20 @@ test("runs cost analysis only on request and keeps the result read-only", async 
       }),
     });
   });
+  await page.route("**/api/projects/*/workspaces/*/maintenance/inspection-results/INSPECTION-RESULT-E2E/action-candidates", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        inspection_result_id: "INSPECTION-RESULT-E2E",
+        items: [{
+          action_candidate_id: "ACTION-CANDIDATE-E2E",
+          inspection_result_id: "INSPECTION-RESULT-E2E",
+          action_code: "TOOL_REPLACEMENT",
+        }],
+      }),
+    });
+  });
 
   await page.route("**/api/projects/*/workspaces/*/maintenance/inspection-results/*/cost-analyses", async (route) => {
     calculationRequests += 1;
@@ -113,22 +128,109 @@ test("runs cost analysis only on request and keeps the result read-only", async 
       }),
     });
   });
+  await page.route("**/api/projects/*/workspaces/*/maintenance/inspection-results/*/recommendations", async (route) => {
+    recommendationRequests += 1;
+    expect(route.request().postDataJSON()).toEqual({
+      action_code: "TOOL_REPLACEMENT",
+      basis: ["inspection_result:INSPECTION-RESULT-E2E"],
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ recommendation_id: "REC-E2E" }),
+    });
+  });
 
   await login(page);
-  await page.locator(".mvp-factory-asset-node.is-selected").click();
+  await page.locator(".operations-factory-asset-node.is-selected").click();
   await page.getByRole("tab", { name: "처리", exact: true }).click();
   const panel = page.getByRole("region", { name: "정비 비용 분석" });
+  const workflow = page.getByRole("region", { name: "Closed-loop 작업 실행" });
   await expect(panel).toBeVisible();
+  await expect(workflow.getByLabel("정비 Action 판단")).toHaveCount(0);
   expect(calculationRequests).toBe(0);
 
   await panel.getByRole("button", { name: "비용 분석 요청", exact: true }).click();
 
   await expect.poll(() => calculationRequests).toBe(1);
   await expect(panel.getByText("계산상 최저비용", { exact: true })).toBeVisible();
+  await expect(panel.locator("article")).toHaveCount(3);
+  await expect(panel.getByText(/재점검 후/)).toHaveCount(0);
   await expect(panel.getByText(/데모 참고값/)).toBeVisible();
   await expect(panel.getByText(/정비 추천·승인·WorkOrder·실행을 생성하지 않습니다/)).toBeVisible();
   await expect(panel.getByRole("button", { name: "이 시점 선택", exact: true })).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "즉시 복구안 선택", exact: true })).toHaveCount(0);
+
+  await expect(workflow.getByLabel("정비 Action 판단")).toBeVisible();
+  await expect(workflow.getByRole("button", { name: "정비안 생성", exact: true })).toBeDisabled();
+  await workflow.getByLabel("정비 Action 판단").selectOption("ACTION-CANDIDATE-E2E");
+  await workflow.getByRole("button", { name: "정비안 생성", exact: true }).click();
+  await expect.poll(() => recommendationRequests).toBe(1);
+});
+
+test("does not show cost analysis before an eligible inspection is completed", async ({ page }) => {
+  await page.route("**/api/projects/*/workspaces/*/maintenance/events/*/lineage", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        event_id: EVENT,
+        work_orders: [{
+          work_order_id: "INSPECTION-WO-OPEN",
+          work_type: "inspection",
+          status: "in_progress",
+        }],
+        inspection_results: [],
+        cost_analyses: [],
+        recommendations: [],
+      }),
+    });
+  });
+
+  await login(page);
+  await page.locator(".operations-factory-asset-node.is-selected").click();
+  await page.getByRole("tab", { name: "처리", exact: true }).click();
+
+  await expect(page.getByRole("region", { name: "정비 비용 분석" })).toHaveCount(0);
+});
+
+test("hides current cost analysis after an operations recommendation is created", async ({ page }) => {
+  await page.route("**/api/projects/*/workspaces/*/maintenance/events/*/lineage", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        event_id: EVENT,
+        work_orders: [{
+          work_order_id: "INSPECTION-WO-DONE",
+          work_type: "inspection",
+          status: "completed",
+        }],
+        inspection_results: [{
+          inspection_result_id: "INSPECTION-RESULT-DONE",
+          work_order_id: "INSPECTION-WO-DONE",
+          event_id: EVENT,
+          asset_id: "CNC-S04-L02-03",
+          equipment_id: "CNC-S04-L02-03",
+          outcome: "maintenance_recommended",
+          recorded_at: "2026-08-31T02:00:00Z",
+        }],
+        cost_analyses: [],
+        recommendations: [{
+          recommendation_id: "OPERATIONS-REC-1",
+          status: "proposed",
+          source_inspection_work_order_id: "INSPECTION-WO-DONE",
+          source_inspection_reference: "INSPECTION-RESULT-DONE",
+        }],
+      }),
+    });
+  });
+
+  await login(page);
+  await page.locator(".operations-factory-asset-node.is-selected").click();
+  await page.getByRole("tab", { name: "처리", exact: true }).click();
+
+  await expect(page.getByRole("region", { name: "정비 비용 분석" })).toHaveCount(0);
 });
 
 test("does not expose a previous inspection's cost analysis for a newer inspection", async ({ page }) => {
@@ -194,9 +296,23 @@ test("does not expose a previous inspection's cost analysis for a newer inspecti
       }),
     });
   });
+  await page.route("**/api/projects/*/workspaces/*/maintenance/inspection-results/INSPECTION-RESULT-B/action-candidates", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        inspection_result_id: "INSPECTION-RESULT-B",
+        items: [{
+          action_candidate_id: "ACTION-CANDIDATE-B",
+          inspection_result_id: "INSPECTION-RESULT-B",
+          action_code: "TOOL_REPLACEMENT",
+        }],
+      }),
+    });
+  });
 
   await login(page);
-  await page.locator(".mvp-factory-asset-node.is-selected").click();
+  await page.locator(".operations-factory-asset-node.is-selected").click();
   await page.getByRole("tab", { name: "처리", exact: true }).click();
   const panel = page.getByRole("region", { name: "정비 비용 분석" });
 

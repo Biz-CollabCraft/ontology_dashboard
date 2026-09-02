@@ -550,7 +550,7 @@ class ArtifactPredictor:
 
 
 def configured_predictor(asset_type: str | None = None) -> Predictor:
-    """Resolve runtime inference from injected artifact or explicit MVP fallback."""
+    """Resolve runtime inference from injected artifact or explicit Operations fallback."""
 
     # Preserve the historical no-argument resolver contract for compatibility
     # callers. Product runtime paths now pass the fixture asset family explicitly.

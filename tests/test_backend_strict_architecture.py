@@ -15,7 +15,7 @@ def _write(path: Path, text: str = "") -> None:
 @pytest.fixture()
 def strict_tree(tmp_path: Path) -> Path:
     app = tmp_path / "systems/backend/app"
-    for name in DOMAINS | {"common", "infra", "mvp"}:
+    for name in DOMAINS | {"common", "infra", "operations"}:
         (app / name).mkdir(parents=True, exist_ok=True)
         _write(app / name / "__init__.py")
     _write(app / "main.py", "from app.application import create_app\napp = create_app()\n")
@@ -66,7 +66,7 @@ def strict_tree(tmp_path: Path) -> Path:
             "ARC014",
         ),
         (
-            "systems/backend/app/mvp/bad.py",
+            "systems/backend/app/operations/bad.py",
             "from app.infra.db.dashboard_repository import DashboardRepository\n",
             "ARC013",
         ),
@@ -163,7 +163,7 @@ def test_strict_verifier_rejects_repo_root_first_playwright_pythonpath(strict_tr
 
 def test_strict_verifier_allows_public_cross_context_boundaries(strict_tree: Path) -> None:
     _write(
-        strict_tree / "systems/backend/app/mvp/good.py",
+        strict_tree / "systems/backend/app/operations/good.py",
         "\n".join(
             [
                 "from app.diagnosis.ports import PredictionResultRepositoryPort",
@@ -191,7 +191,7 @@ def test_strict_verifier_rejects_cross_context_package_root_concrete_services(
     symbol: str,
 ) -> None:
     _write(
-        strict_tree / "systems/backend/app/mvp/bad.py",
+        strict_tree / "systems/backend/app/operations/bad.py",
         f"from {module} import {symbol}\n",
     )
     violations = verify(strict_tree)

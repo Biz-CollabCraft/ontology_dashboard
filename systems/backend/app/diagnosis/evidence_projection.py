@@ -284,9 +284,11 @@ def _operational_decision_kind(payload: dict[str, Any]) -> str | None:
     # display/domain metadata and is deliberately not interpreted here.
     decision = action.get("action_id")
     if decision not in OPERATIONAL_DECISION_KINDS:
-        raise ValueError(
-            "Diagnosis policy action_id is not an operational decision"
-        )
+        # Historical/producer-owned action identifiers may still be useful as
+        # report evidence, but they must never be promoted into an executable
+        # operational decision. Treating them as unavailable is both safer and
+        # keeps read projections usable for mixed-version runtime data.
+        return None
     return str(decision)
 
 

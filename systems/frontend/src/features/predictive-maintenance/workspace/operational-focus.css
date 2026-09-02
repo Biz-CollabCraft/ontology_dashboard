@@ -16,14 +16,16 @@
   border-radius:12px;
   background:
     radial-gradient(circle at 92% -8%,color-mix(in srgb,var(--of-status) 8%,transparent),transparent 21rem),
-    linear-gradient(145deg,color-mix(in srgb,var(--of-surface) 94%,transparent),color-mix(in srgb,var(--of-surface) 72%,#05080b));
+    linear-gradient(145deg,color-mix(in srgb,var(--of-surface) 94%,transparent),color-mix(in srgb,var(--of-surface) 82%,var(--rw-bg,#05080b)));
   box-shadow:0 22px 60px rgba(0,0,0,.2),inset 2px 0 color-mix(in srgb,var(--of-status) 58%,transparent);
 }
 .operational-focus.tone-critical{--of-status:var(--rw-rose,#d78391)}
 .operational-focus.tone-warning{--of-status:var(--rw-amber,#d7aa68)}
 .operational-focus.tone-attention{--of-status:var(--rw-violet,#a99be6)}
 .operational-focus.tone-normal{--of-status:#72bf95}
-.operational-focus-grid{position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:28px 28px;mask-image:radial-gradient(circle at 78% 18%,#000,transparent 58%);opacity:.55}
+.operational-focus-grid{position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(color-mix(in srgb,var(--of-text) 2.2%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--of-text) 2.2%,transparent) 1px,transparent 1px);background-size:28px 28px;mask-image:radial-gradient(circle at 78% 18%,#000,transparent 58%);opacity:.55}
+
+:root[data-theme="light"] .operational-focus{box-shadow:0 16px 42px rgba(55,73,92,.08),inset 2px 0 color-mix(in srgb,var(--of-status) 44%,transparent)}
 .operational-focus *{box-sizing:border-box}.operational-focus h2,.operational-focus h3,.operational-focus p{margin:0}.operational-focus h2,.operational-focus h3,.operational-focus p,.operational-focus span,.operational-focus strong,.operational-focus small,.operational-focus li{word-break:keep-all;overflow-wrap:break-word}
 .operational-focus-object{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:11px;padding:15px 16px 13px;border-bottom:1px solid var(--of-line)}
 .operational-focus-object-mark{width:34px;height:34px;display:grid;place-items:center;border:1px solid color-mix(in srgb,var(--of-accent) 25%,transparent);border-radius:8px;color:var(--of-accent);background:color-mix(in srgb,var(--of-accent) 7%,transparent);box-shadow:0 0 28px color-mix(in srgb,var(--of-accent) 8%,transparent)}

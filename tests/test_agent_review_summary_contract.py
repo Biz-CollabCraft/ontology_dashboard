@@ -5,7 +5,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from app.mvp.agent_review_summary import (
+from app.operations.agent_review_summary import (
     compose_deterministic_agent_review_summary,
     validate_agent_review_summary,
     validate_agent_review_summary_contract,

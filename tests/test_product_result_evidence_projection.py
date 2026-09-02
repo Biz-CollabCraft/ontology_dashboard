@@ -202,6 +202,20 @@ def test_operational_decision_does_not_reinterpret_producer_kind() -> None:
     assert projection["assessment"]["operational_decision_kind"] == "review_shutdown"
 
 
+def test_non_operational_producer_action_is_report_only() -> None:
+    artifact = enriched_critical_artifact()
+    artifact["evidence_payload"]["recommended_actions"][0]["action_id"] = (
+        "inspect_rotating_assembly"
+    )
+
+    projection = product_result_artifact_to_event_evidence_projection(artifact)
+
+    assert projection["assessment"]["operational_decision_kind"] is None
+    assert projection["report_projection"]["recommended_actions"][0]["action_id"] == (
+        "inspect_rotating_assembly"
+    )
+
+
 def test_product_result_contract_rejects_multiple_operational_recommendations() -> None:
     artifact = enriched_critical_artifact()
     artifact["evidence_payload"]["recommended_actions"].append(

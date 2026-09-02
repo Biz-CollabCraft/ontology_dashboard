@@ -842,15 +842,23 @@ class PredictiveMaintenanceRuntimeService:
             workspace_id=workspace_id,
         )
         items: list[DatasetVersionOption] = []
+        latest_result_observed_at: dict[str, datetime | None] = {}
         for index, row in enumerate(rows):
             profile = _dict(row.get("profile_json"))
             governance = self._safe_governance(profile)
             model_version, result_schema, prediction_task = self._runtime_contract(row)
+            dataset_version_key = str(row["id"])
+            raw_latest_observed = row.get("latest_result_observed_at")
+            latest_result_observed_at[dataset_version_key] = (
+                raw_latest_observed
+                if isinstance(raw_latest_observed, datetime)
+                else None
+            )
             items.append(
                 DatasetVersionOption(
                     dataset_id=str(row["dataset_id"]),
                     dataset_name=str(row.get("dataset_name") or row["dataset_id"]),
-                    dataset_version_id=str(row["id"]),
+                    dataset_version_id=dataset_version_key,
                     version_number=int(row["version_number"]),
                     source_version=str(row["source_version"]),
                     bundle_checksum_sha256=str(row["checksum_sha256"]),
@@ -889,10 +897,33 @@ class PredictiveMaintenanceRuntimeService:
             selection_mode = "explicit"
             selection_reason = "explicit_user_selection"
         else:
+            # The default Operations workspace is a wall-clock view, not a
+            # replay browser.  Never auto-select a Dataset Version whose latest
+            # Product Result is in the future.  Historical/replay versions stay
+            # selectable explicitly.
+            wall_clock_cutoff = datetime.now(timezone.utc) + timedelta(minutes=5)
+            safe_items = [
+                item
+                for item in items
+                if (
+                    latest_result_observed_at.get(item.dataset_version_id) is None
+                    or latest_result_observed_at[item.dataset_version_id] <= wall_clock_cutoff
+                )
+            ]
+            wall_clock_live = next(
+                (
+                    item
+                    for item in safe_items
+                    if item.source_version == "gen-data-wall-clock-live-v2"
+                    and item.dataset_status == "published"
+                    and item.result_artifact_count > 0
+                ),
+                None,
+            )
             canonical = next(
                 (
                     item
-                    for item in items
+                    for item in safe_items
                     if item.is_v3_1
                     and item.release_ready
                     and item.dataset_status == "published"
@@ -900,18 +931,20 @@ class PredictiveMaintenanceRuntimeService:
                 None,
             )
             published = next(
-                (item for item in items if item.dataset_status == "published"),
+                (item for item in safe_items if item.dataset_status == "published"),
                 None,
             )
-            selected = canonical or published or (items[0] if items else None)
+            selected = wall_clock_live or canonical or published or (safe_items[0] if safe_items else None)
             selected_id = selected.dataset_version_id if selected else None
             selection_mode = "automatic"
             selection_reason = (
-                "canonical_v3_1_release_ready"
+                "wall_clock_live_runtime"
+                if wall_clock_live is not None
+                else "canonical_v3_1_release_ready"
                 if canonical is not None
                 else "latest_published_predictive_maintenance"
                 if published is not None
-                else "latest_predictive_maintenance"
+                else "latest_wall_clock_safe_predictive_maintenance"
                 if selected is not None
                 else "no_runtime_dataset"
             )

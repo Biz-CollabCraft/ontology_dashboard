@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContextAssistantDrawer } from "./ContextAssistantDrawer";
 import {
   deterministicReliabilityAssistantAnswer,
+  groundedReliabilityAssistantAnswer,
   reliabilityAssistantPrompts,
   type ReliabilityAssistantContext,
 } from "./assistantContext";
@@ -21,6 +22,14 @@ const selectedContext: ReliabilityAssistantContext = {
   workOrderCount: 1,
   maintenanceState: "검토 대기",
   observedAt: "2026-09-02T09:00:00+09:00",
+  priorityReasons: ["진동 기여도가 가장 큼", "점검 요청 대기"],
+  evidenceItems: ["진동 RMS 6.2 mm/s", "온도 78 C"],
+  historyItems: ["24시간 내 유사 이벤트 2건"],
+  aiSummary: "현재 진동 상승과 온도 편차를 함께 검토해야 합니다.",
+  aiSummaryMode: "llm",
+  aiProvider: "openai-compatible",
+  retrievalProvider: "local_sop_metadata_retriever",
+  retrievalCount: 2,
 };
 
 let container: HTMLDivElement;
@@ -69,7 +78,7 @@ describe("ContextAssistantDrawer", () => {
     expect(container.textContent).toContain("현재 단계점검 완료");
     expect(container.textContent).toContain("다음 단계정비안 검토");
     expect(container.textContent).toContain("다음 행동정비안 검토");
-    expect(container.textContent).toContain("Evidence3");
+    expect(container.textContent).toContain("근거3");
   });
 
   it("shows a no-selection context and disables free-form submission", async () => {
@@ -114,14 +123,29 @@ describe("ContextAssistantDrawer", () => {
   it("renders an explicit empty-message state", async () => {
     await renderDrawer({ messages: [] });
     expect(container.textContent).toContain("아직 질문 없음");
-    expect(container.textContent).toContain("선택된 운영 데이터");
+    expect(container.textContent).toContain("Agent Review Packet");
   });
 
-  it("states that the surface is context-only and cannot execute or approve work", async () => {
+  it("shows grounded live sources and cannot execute or approve work", async () => {
     await renderDrawer();
-    expect(container.textContent).toContain("context-only preview");
-    expect(container.textContent).toContain("승인·실행·변경하지 않습니다");
+    expect(container.textContent).toContain("LLM 근거 요약");
+    expect(container.textContent).toContain("local_sop_metadata_retriever");
+    expect(container.textContent).toContain("업무를 승인·실행하거나 workflow 상태를 변경하지 않습니다");
     expect(deterministicReliabilityAssistantAnswer(selectedContext)).toContain("규칙 기반");
     expect(deterministicReliabilityAssistantAnswer(selectedContext)).toContain("승인이나 실행 판단이 아닙니다");
+  });
+
+  it("builds prompt labels from the selected live context", () => {
+    const prompts = reliabilityAssistantPrompts(selectedContext);
+    expect(prompts.find((prompt) => prompt.id === "priority")?.label).toContain("CNC-03 spindle (84%)");
+    expect(prompts.find((prompt) => prompt.id === "evidence")?.label).toContain("3건");
+    expect(prompts.find((prompt) => prompt.id === "lifecycle")?.label).toContain("점검 완료");
+    expect(prompts.find((prompt) => prompt.id === "next-action")?.label).toContain("정비안 검토");
+  });
+
+  it("answers priority and evidence questions from Agent Review grounding", () => {
+    expect(groundedReliabilityAssistantAnswer(selectedContext, "왜 이 설비가 우선인가?")).toContain("진동 기여도가 가장 큼");
+    expect(groundedReliabilityAssistantAnswer(selectedContext, "현재 핵심 근거 요약")).toContain("진동 RMS 6.2 mm/s");
+    expect(groundedReliabilityAssistantAnswer(selectedContext, "현재 핵심 근거 요약")).toContain("SOP guidance 2건");
   });
 });

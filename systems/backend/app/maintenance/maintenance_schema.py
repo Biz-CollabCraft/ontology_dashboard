@@ -101,9 +101,9 @@ class EquipmentIdentity(ScopedRecord):
     asset_type: str = Field(min_length=1, max_length=160)
 
     @model_validator(mode="after")
-    def require_mvp_identity(self) -> EquipmentIdentity:
+    def require_operations_identity(self) -> EquipmentIdentity:
         if self.asset_id != self.equipment_id:
-            raise ValueError("MVP identity requires equipment_id = asset_id")
+            raise ValueError("Operations identity requires equipment_id = asset_id")
         return self
 
     @property
@@ -153,9 +153,9 @@ class OperationalRecommendedAction(ScopedRecord):
     authored_at: datetime | None = None
 
     @model_validator(mode="after")
-    def require_mvp_identity(self) -> OperationalRecommendedAction:
+    def require_operations_identity(self) -> OperationalRecommendedAction:
         if self.asset_id != self.equipment_id:
-            raise ValueError("MVP recommendation requires equipment_id = asset_id")
+            raise ValueError("Operations recommendation requires equipment_id = asset_id")
         manual_required_fields = (
             self.source_inspection_work_order_id,
             self.source_inspection_reference,
@@ -279,7 +279,7 @@ class WorkOrder(ScopedRecord):
         if self.authorization.work_type != self.work_type:
             raise ValueError("work order type must match its authorization")
         if self.asset_id != self.equipment_id:
-            raise ValueError("MVP work order requires equipment_id = asset_id")
+            raise ValueError("Operations work order requires equipment_id = asset_id")
         return self
 
 
@@ -315,7 +315,7 @@ class InspectionResult(ScopedRecord):
     @model_validator(mode="after")
     def require_inspection_identity(self) -> InspectionResult:
         if self.asset_id != self.equipment_id:
-            raise ValueError("MVP inspection result requires equipment_id = asset_id")
+            raise ValueError("Operations inspection result requires equipment_id = asset_id")
         return self
 
 
@@ -333,7 +333,7 @@ class MaintenanceActionCandidate(ScopedRecord):
     @model_validator(mode="after")
     def require_candidate_identity(self) -> MaintenanceActionCandidate:
         if self.asset_id != self.equipment_id:
-            raise ValueError("MVP action candidate requires equipment_id = asset_id")
+            raise ValueError("Operations action candidate requires equipment_id = asset_id")
         return self
 
 
@@ -349,9 +349,9 @@ class MaintenanceAction(ScopedRecord):
     idempotency_key: str = Field(min_length=8, max_length=200)
 
     @model_validator(mode="after")
-    def require_mvp_identity(self) -> MaintenanceAction:
+    def require_operations_identity(self) -> MaintenanceAction:
         if self.asset_id != self.equipment_id:
-            raise ValueError("MVP maintenance action requires equipment_id = asset_id")
+            raise ValueError("Operations maintenance action requires equipment_id = asset_id")
         return self
 
 
@@ -370,9 +370,9 @@ class MaintenanceEvent(ScopedRecord):
     outcome: str = Field(min_length=1, max_length=4000)
 
     @model_validator(mode="after")
-    def require_mvp_identity(self) -> MaintenanceEvent:
+    def require_operations_identity(self) -> MaintenanceEvent:
         if self.asset_id != self.equipment_id:
-            raise ValueError("MVP maintenance event requires equipment_id = asset_id")
+            raise ValueError("Operations maintenance event requires equipment_id = asset_id")
         return self
 
 

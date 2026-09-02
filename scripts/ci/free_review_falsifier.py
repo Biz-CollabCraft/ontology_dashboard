@@ -28,7 +28,7 @@ VERIFIER_DISPLAY = "Gemma 4 26B A4B"
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 MIN_CONFIDENCE = 0.85
 SCOPE_LINE_RE = re.compile(
-    r"(?i)(fixture|demo|\bmvp\b|test|production|deployment|runtime|entrypoint|"
+    r"(?i)(fixture|demo|\boperations\b|test|production|deployment|runtime|entrypoint|"
     r"context_provider|build_evidence_package|resilientcontextprovider|fixturecontextprovider)"
 )
 CONCRETE_RUNTIME_CALLER_RE = re.compile(
@@ -38,8 +38,8 @@ CONCRETE_RUNTIME_CALLER_RE = re.compile(
     r"production caller|deployment caller)"
 )
 EXPLICIT_DEMO_BOUNDARY_RE = re.compile(
-    r"(?is)(?:demo|demonstration|\bmvp\b).{0,120}(?:boundary|compatibility|service)"
-    r"|(?:boundary|compatibility|service).{0,120}(?:demo|demonstration|\bmvp\b)"
+    r"(?is)(?:demo|demonstration|\boperations\b).{0,120}(?:boundary|compatibility|service)"
+    r"|(?:boundary|compatibility|service).{0,120}(?:demo|demonstration|\boperations\b)"
 )
 
 
@@ -116,7 +116,7 @@ def _runtime_scope_evidence(
     source while the caller that proves it is demo-only appears much later. A
     plain prefix slice can therefore make a verifier invent production
     reachability. Preserve a tiny, deterministic set of nearby lines that lets
-    Gemma distinguish demo/MVP compatibility code from deployment runtime.
+    Gemma distinguish demo/Operations compatibility code from deployment runtime.
     """
 
     if kind == "comment":
@@ -265,7 +265,7 @@ Important falsification rule:
 - The existence of a fixture/demo/test provider is NOT by itself evidence that
   production runtime can reach it. Before escalating a fixture/demo fallback as
   P0/P1/P2, identify a concrete production/deployment caller or entrypoint in
-  the supplied evidence. If the visible caller is explicitly an MVP/demo/test
+  the supplied evidence. If the visible caller is explicitly an Operations/demo/test
   compatibility boundary, treat that scope as authoritative unless other
   supplied source proves production reachability.
 - Identifiers such as `fixture`, `demo`, or `test` are legacy names, not runtime

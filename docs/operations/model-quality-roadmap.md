@@ -111,7 +111,7 @@ part of the selection contract.
   validation-selected release threshold produced lower deployment F1 than the
   RandomForest v3 candidate, so it is not promoted.
 - More complex GPU/LSTM/Transformer candidates are still not justified by the
-  current MVP and 16 GiB M1 production target.
+  current Operations and 16 GiB M1 production target.
 
 ## Remaining improvement opportunities
 

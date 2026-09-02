@@ -1,4 +1,4 @@
-"""Final strict architecture checks for the working MVP.
+"""Final strict architecture checks for the working Operations.
 
 The migration is finished: this verifier protects the resulting shape instead
 of tracking a legacy-source baseline. It intentionally uses only the Python
@@ -32,8 +32,8 @@ DOMAINS = {
     "planner",
     "governance",
 }
-BOUNDARY_CONTEXTS = DOMAINS | {"mvp"}
-REQUIRED_APP_DIRS = DOMAINS | {"common", "infra", "mvp"}
+BOUNDARY_CONTEXTS = DOMAINS | {"operations"}
+REQUIRED_APP_DIRS = DOMAINS | {"common", "infra", "operations"}
 FORBIDDEN_APP_TOP_LEVEL = {
     "runtime",
     "routers",
@@ -248,9 +248,9 @@ def verify(root: Path = ROOT) -> list[Violation]:
             ):
                 errors.append(Violation("ARC005", location))
 
-            # ARC013 MVP is an application boundary, never an infrastructure
+            # ARC013 Operations is an application boundary, never an infrastructure
             # composition location.  Concrete adapters belong in dependencies.py.
-            if top == "mvp" and module.startswith("app.infra"):
+            if top == "operations" and module.startswith("app.infra"):
                 errors.append(Violation("ARC013", location))
 
             # ARC014 domain application/core code may not reach infrastructure
@@ -371,7 +371,7 @@ def main() -> int:
     print("- legacy package/import/entrypoint reintroduction is blocked")
     print("- canonical domain/common/infra boundaries are statically guarded")
     print("- cross-context imports use public domain/ports/contracts/schemas only")
-    print("- app/mvp and domain code cannot import infrastructure implementations")
+    print("- app/operations and domain code cannot import infrastructure implementations")
     print("- app.main:app is the runtime host")
     print("- Playwright pins canonical app.main:app with systems/backend app-dir")
     print("- Backend-to-Generator direct imports and unsafe sibling paths are blocked")

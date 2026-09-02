@@ -49,7 +49,7 @@ def run_once(
     max_iterations: int | None,
     stale_policy: str,
 ) -> dict:
-    from app.mvp.agent_review_summary_workflow import AgentReviewSummaryWorkflow
+    from app.operations.agent_review_summary_workflow import AgentReviewSummaryWorkflow
 
     result = AgentReviewSummaryWorkflow(service).run(
         project_id,

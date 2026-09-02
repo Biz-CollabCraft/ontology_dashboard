@@ -35,10 +35,10 @@ main push
 - Backend origin: `127.0.0.1:8110`
 - Frontend container는 기존 `ontology-dashboard-macmini_private` network에 연결되어
   same-origin `/api/*` 요청을 `api:8000`으로 proxy한다.
-- Week 2 MVP-only routing remains enabled for normal product navigation. The
+- Week 2 Operations-only routing remains enabled for normal product navigation. The
   published `blueprint-compare`, `blueprint-v4`, and the comparison page's
   scoped iframe preview routes are explicit exceptions so design-review links
-  do not collapse into `/mvp`.
+  do not collapse into `/operations`.
 - Mac mini Compose enables the scoped read-only public Blueprint comparison
   session. General deployments keep `ENABLE_PUBLIC_BLUEPRINT_COMPARISON=0`
   unless they intentionally expose the same showcase.

@@ -18,10 +18,10 @@ on:
       frontend_unit_verified:
         required: true
         type: string
-      mvp_e2e_required:
+      operations_e2e_required:
         required: true
         type: string
-      mvp_e2e_verified:
+      operations_e2e_verified:
         required: true
         type: string
       workflow_run_id:
@@ -212,7 +212,7 @@ jobs:
                   | select(
                       (.name == "Classify architecture scope"
                       or .name == "Fast validation"
-                      or .name == "Playwright MVP E2E"
+                      or .name == "Playwright Operations E2E"
                       or .name == "Docker runtime smoke"
                       or .name == "architecture")
                       and (.conclusion != "success" and .conclusion != "skipped")
@@ -258,8 +258,8 @@ jobs:
           DOCKER_RUNTIME_VERIFIED: ${{ inputs.docker_runtime_verified }}
           FRONTEND_UNIT_REQUIRED: ${{ inputs.frontend_unit_required }}
           FRONTEND_UNIT_VERIFIED: ${{ inputs.frontend_unit_verified }}
-          MVP_E2E_REQUIRED: ${{ inputs.mvp_e2e_required }}
-          MVP_E2E_VERIFIED: ${{ inputs.mvp_e2e_verified }}
+          Operations_E2E_REQUIRED: ${{ inputs.operations_e2e_required }}
+          Operations_E2E_VERIFIED: ${{ inputs.operations_e2e_verified }}
           BASE_SHA: ${{ inputs.base_sha }}
           HEAD_SHA: ${{ inputs.head_sha }}
           PR_NUMBER: ${{ inputs.pr_number }}
@@ -274,8 +274,8 @@ jobs:
             --docker-verified "$DOCKER_RUNTIME_VERIFIED" \
             --frontend-required "$FRONTEND_UNIT_REQUIRED" \
             --frontend-verified "$FRONTEND_UNIT_VERIFIED" \
-            --mvp-required "$MVP_E2E_REQUIRED" \
-            --mvp-verified "$MVP_E2E_VERIFIED" \
+            --operations-required "$Operations_E2E_REQUIRED" \
+            --operations-verified "$Operations_E2E_VERIFIED" \
             --pr-number "$PR_NUMBER" \
             --pr-title "$PR_TITLE" \
             --pr-body "$PR_BODY" \

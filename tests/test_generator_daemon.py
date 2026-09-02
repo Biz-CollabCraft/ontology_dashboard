@@ -483,10 +483,10 @@ async def test_generator_daemon_auto_training_decision_based_on_artifact_validit
 # 5. Documentation Contracts
 # ==========================================
 
-def test_generator_daemon_docs_in_mvp_dir_and_no_predict():
-    """Test generator internal API specification resides in docs/mvp/ and has no active predict endpoints."""
-    doc_path = Path(__file__).resolve().parents[1] / "docs" / "mvp" / "generator-internal-api-specification.md"
-    assert doc_path.exists(), "Doc must be moved to docs/mvp/generator-internal-api-specification.md"
+def test_generator_daemon_docs_in_operations_dir_and_no_predict():
+    """Test generator internal API specification resides in docs/operations/ and has no active predict endpoints."""
+    doc_path = Path(__file__).resolve().parents[1] / "docs" / "operations" / "generator-internal-api-specification.md"
+    assert doc_path.exists(), "Doc must be moved to docs/operations/generator-internal-api-specification.md"
 
     content = doc_path.read_text(encoding="utf-8")
     assert "GET /health" in content

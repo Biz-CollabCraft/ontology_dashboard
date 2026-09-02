@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from app.mvp.agent_review_summary import (
+from app.operations.agent_review_summary import (
     FORBIDDEN_SUMMARY_CLAIMS,
     compose_deterministic_agent_review_summary,
     validate_agent_review_summary_contract,

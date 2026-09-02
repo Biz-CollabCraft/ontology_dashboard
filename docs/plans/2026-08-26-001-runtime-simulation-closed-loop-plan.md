@@ -2,14 +2,14 @@
 
 Status: draft
 Date: 2026-08-26
-Base reference: PR #128 `feat(mvp): 역할별 overview와 asset detail 작업 흐름 정리`
+Base reference: PR #128 `feat(operations): 역할별 overview와 asset detail 작업 흐름 정리`
 Related:
 
 - PR #127 `Generator Runtime Prediction Result Pipeline 및 Outbox 전달 경계 구현`
-- `docs/mvp/runtime-ownership-integration.md`
+- `docs/operations/runtime-ownership-integration.md`
 - `docs/closed-loop-product-consumption-contract.md`
 - `docs/closed-loop-runtime-overlay-contract.md`
-- `docs/mvp/asset-detail-overview-ui-decision-log.md`
+- `docs/operations/asset-detail-overview-ui-decision-log.md`
 - `docs/plans/ai-workflow/2026-08-27-001-pr130-sop-sensor-judgment-proposal.md`
 
 ## 1. 목적
@@ -87,7 +87,7 @@ raw upstream input이며, 화면/Closed-loop trigger가 아니다.
 PR #128의 범위는 UI/UX 책임 정리와 read-only 업무 표면이다.
 
 - `AssetDetailViewModel`을 canonical consumer contract로 삼는다.
-- classic/workflow Overview variant를 병행하되 같은 MVP adapter 계약을 소비한다.
+- classic/workflow Overview variant를 병행하되 같은 Operations adapter 계약을 소비한다.
 - 현장 관리자와 생산 관리자의 첫 질문을 분리한다.
 - Side Task View를 `상태`와 `처리`로 나눈다.
 - 작업 상태 큐와 처리 탭은 closed-loop state를 받을 수 있는 surface로 준비한다.
@@ -449,7 +449,7 @@ PR #128 UI는 다음 ViewModel 필드를 기대한다.
 - API contract tests
 - `tests/test_asset_detail_view_model_composer.py`
 - `tests/test_asset_detail_view_model_contract.py`
-- `tests/test_mvp.py`
+- `tests/test_operations.py`
 
 ## 8. Frontend 작업 계획
 
@@ -466,7 +466,7 @@ acceptance 안에서 같이 검증되어야 한다.
 
 범위:
 
-- `mvpAdapters`의 raw fallback 축소
+- `operationsAdapters`의 raw fallback 축소
 - `closed_loop` / `available_actions` rendering source 고정
 - runtime status badge
 - `source_kind` 표시
@@ -481,8 +481,8 @@ acceptance 안에서 같이 검증되어야 한다.
 
 검증:
 
-- `npm test -- mvpAdapters`
-- `npm test -- --run src/features/mvp/context/MvpSelectionContext.test.ts src/features/mvp/api/mvpAdapters.test.ts`
+- `npm test -- operationsAdapters`
+- `npm test -- --run src/features/operations/context/OperationsSelectionContext.test.ts src/features/operations/api/operationsAdapters.test.ts`
 - `npm run build`
 - Playwright: field operator, process manager, report entry, runtime status
 
@@ -490,7 +490,7 @@ acceptance 안에서 같이 검증되어야 한다.
 
 목표:
 
-- 실시간 push 인프라가 없어도 MVP에서 새 Product Result 생성을 사용자가 볼 수 있게 한다.
+- 실시간 push 인프라가 없어도 Operations에서 새 Product Result 생성을 사용자가 볼 수 있게 한다.
 
 방향:
 

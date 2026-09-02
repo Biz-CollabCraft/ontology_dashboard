@@ -37,7 +37,7 @@
   },
   "kg_level1_experiment": {
     "status": "implemented_as_in_memory_graph",
-    "module": "systems/backend/app/mvp/agent_context_graph.py",
+    "module": "systems/backend/app/operations/agent_context_graph.py",
     "graph_store": "none",
     "dependency_added": false,
     "purpose": "Verify graph-shaped traversal over the existing read-only packet before adopting a production graph database.",

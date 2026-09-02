@@ -117,9 +117,11 @@ class DatasetVersionOptions(StrictModel):
     default_dataset_version_id: str | None = None
     selection_mode: Literal["automatic", "explicit"] = "automatic"
     selection_reason: Literal[
+        "wall_clock_live_runtime",
         "canonical_v3_1_release_ready",
         "latest_published_predictive_maintenance",
         "latest_predictive_maintenance",
+        "latest_wall_clock_safe_predictive_maintenance",
         "explicit_user_selection",
         "no_runtime_dataset",
     ] = "no_runtime_dataset"

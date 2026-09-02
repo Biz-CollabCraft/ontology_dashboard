@@ -128,7 +128,7 @@ snapshot이 바뀌었다면 같은 승인 요청의 replay로 처리하지 않�
   - runtime `event_evidence_projection()`은 `artifact_id=event_id`로 단일 Product Result row를 조회하므로, event id가 artifact id로 고정된 경로에서는 단순 latest drift 가능성이 낮다.
 - **Candidate Edges:**
   - UI가 오래된 `AssetDetailViewModel`을 본 뒤, 같은 asset의 새 Product Result가 만들어졌지만 Closed-loop 요청은 `event_id`만 보내는 경우.
-  - MVP fixture 경로처럼 요청마다 artifact를 재계산하는 consumer가 있을 때, 같은 event/asset이라도 predictor/config/fallback 정책 변경으로 artifact content가 달라지는 경우.
+  - Operations fixture 경로처럼 요청마다 artifact를 재계산하는 consumer가 있을 때, 같은 event/asset이라도 predictor/config/fallback 정책 변경으로 artifact content가 달라지는 경우.
   - Report가 ViewModel 표현을 재사용하는 동안 Closed-loop는 별도 Evidence Projection을 조회해, 사용자에게 보인 문구와 저장된 authorization lineage가 같은 basis인지 증명할 수 없는 경우.
   - event id가 artifact id가 아닌 legacy event id 또는 compatibility id로 들어오는 경로가 섞일 경우.
 - **Non-Edges / Already Guarded:**
@@ -142,12 +142,12 @@ snapshot이 바뀌었다면 같은 승인 요청의 replay로 처리하지 않�
 
 ### U1. Snapshot basis 타입 추가
 
-- **Status:** Implemented. `AssetDetailViewModel` and `AgentReviewPacket` now expose the same `snapshot_basis` object derived from Product Result/Evidence, and golden tests assert equality for the current MVP service path.
+- **Status:** Implemented. `AssetDetailViewModel` and `AgentReviewPacket` now expose the same `snapshot_basis` object derived from Product Result/Evidence, and golden tests assert equality for the current Operations service path.
 - **Goal:** Product Result/Evidence에서 공통 basis를 추출하는 작은 타입을 만든다.
 - **Files:**
   - `systems/backend/app/diagnosis/evidence_projection.py`
-  - `systems/backend/app/mvp/asset_detail_view_model.py`
-  - `systems/backend/app/mvp/agent_review_packet.py`
+  - `systems/backend/app/operations/asset_detail_view_model.py`
+  - `systems/backend/app/operations/agent_review_packet.py`
   - `contracts/schemas/asset-detail-view-model.schema.json`
   - `contracts/schemas/agent-review-packet.schema.json`
   - `tests/test_asset_detail_view_model_contract.py`
@@ -163,9 +163,9 @@ snapshot이 바뀌었다면 같은 승인 요청의 replay로 처리하지 않�
 - **Goal:** Closed-loop가 ViewModel이 아니라 EvidenceSnapshot에서 별도 입력을 만들게 한다.
 - **Files:**
   - `systems/backend/app/maintenance/service.py`
-  - `systems/backend/app/mvp/service.py`
+  - `systems/backend/app/operations/service.py`
   - `contracts/schemas/recommendation-input.schema.json`
-  - `tests/test_mvp.py`
+  - `tests/test_operations.py`
 - **Verification:**
   - RecommendationInput과 AssetDetailViewModel의 `snapshot_basis`가 동일하다.
   - ViewModel 표시 필드가 RecommendationInput의 필수 정책 입력으로 섞이지 않는다.
@@ -189,7 +189,7 @@ snapshot이 바뀌었다면 같은 승인 요청의 replay로 처리하지 않�
 - **Files:**
   - `systems/backend/app/maintenance/service.py`
   - `systems/backend/app/diagnosis/runtime_service.py`
-  - `tests/test_mvp.py`
+  - `tests/test_operations.py`
 - **Verification:**
   - 1회 재생성 후 match되면 진행한다.
   - 1회 후에도 mismatch면 reject한다.
@@ -199,10 +199,10 @@ snapshot이 바뀌었다면 같은 승인 요청의 replay로 처리하지 않�
 
 - **Goal:** Report와 Agent Review가 ViewModel 또는 Summary를 신뢰 원본으로 착각하지 않게 한다.
 - **Files:**
-  - `systems/backend/app/mvp/agent_review_packet.py`
-  - `systems/backend/app/mvp/service.py`
+  - `systems/backend/app/operations/agent_review_packet.py`
+  - `systems/backend/app/operations/service.py`
   - `tests/test_agent_review_packet_golden.py`
-  - `tests/test_mvp.py`
+  - `tests/test_operations.py`
 - **Verification:**
   - AgentReviewPacket의 source refs가 ViewModel 표시값만이 아니라 Evidence/Product Result basis를 포함한다.
   - Report는 ViewModel 문구 재사용 여부와 별개로 Evidence provenance를 유지한다.

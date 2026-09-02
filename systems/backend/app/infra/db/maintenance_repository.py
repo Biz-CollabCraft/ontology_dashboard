@@ -1821,7 +1821,7 @@ class MaintenanceRepository:
             for option in result.options
         }
         if len(candidate_keys) != 1:
-            raise ValueError("MVP cost analysis requires exactly one Action candidate")
+            raise ValueError("Operations cost analysis requires exactly one Action candidate")
         action_candidate_id, action_code = next(iter(candidate_keys))
         if action_code not in {
             MaintenanceActionCode.TOOL_REPLACEMENT,

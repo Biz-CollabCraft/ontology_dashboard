@@ -408,6 +408,7 @@ data/*.csv
 
 # Gemini CLI / GitHub Actions local artifacts
 .gemini/
+.devspace/
 gha-creds-*.json
 
 # Local demo datasets and frontend test artifacts

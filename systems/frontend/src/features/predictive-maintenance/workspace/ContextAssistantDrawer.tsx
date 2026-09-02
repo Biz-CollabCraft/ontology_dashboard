@@ -20,6 +20,9 @@ export interface ContextAssistantDrawerProps {
   prompts?: ReliabilityAssistantPrompt[];
   onSubmit?: (question: string) => void;
   locale?: ReliabilityAssistantLocale;
+  loading?: boolean;
+  submitting?: boolean;
+  error?: string | null;
 }
 
 export function ContextAssistantDrawer({
@@ -30,6 +33,9 @@ export function ContextAssistantDrawer({
   prompts,
   onSubmit,
   locale = "ko-KR",
+  loading = false,
+  submitting = false,
+  error = null,
 }: ContextAssistantDrawerProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -112,18 +118,34 @@ export function ContextAssistantDrawer({
           </p>
         ) : (
           <dl className="rw-context-assistant__facts">
-            {context?.assetId ? <div><dt>Asset</dt><dd>{context.assetId}</dd></div> : null}
-            {context?.eventId ? <div><dt>Event</dt><dd>{context.eventId}</dd></div> : null}
+            {(context?.roleKind === "engineering" || context?.roleKind === "maintenance") && context?.assetId ? <div><dt>{english ? "Asset ID" : "설비 ID"}</dt><dd>{context.assetId}</dd></div> : null}
+            {(context?.roleKind === "engineering" || context?.roleKind === "maintenance") && context?.eventId ? <div><dt>{english ? "Event ID" : "이벤트 ID"}</dt><dd>{context.eventId}</dd></div> : null}
             {riskLabel ? <div><dt>{english ? "Risk" : "위험도"}</dt><dd>{riskLabel}</dd></div> : null}
             {context?.currentLifecycleLabel ? <div><dt>{english ? "Current step" : "현재 단계"}</dt><dd>{context.currentLifecycleLabel}</dd></div> : null}
             {context?.nextLifecycleLabel ? <div><dt>{english ? "Next step" : "다음 단계"}</dt><dd>{context.nextLifecycleLabel}</dd></div> : null}
             {context?.primaryActionLabel ? <div className="is-action"><dt>{english ? "Primary action" : "다음 행동"}</dt><dd>{context.primaryActionLabel}</dd></div> : null}
-            {context?.evidenceCount !== null && context?.evidenceCount !== undefined ? <div><dt>Evidence</dt><dd>{context.evidenceCount}</dd></div> : null}
-            {context?.workOrderCount !== null && context?.workOrderCount !== undefined ? <div><dt>WorkOrder</dt><dd>{context.workOrderCount}</dd></div> : null}
-            {context?.maintenanceState ? <div><dt>Maintenance</dt><dd>{context.maintenanceState}</dd></div> : null}
+            {context?.evidenceCount !== null && context?.evidenceCount !== undefined ? <div><dt>{english ? "Evidence" : "근거"}</dt><dd>{context.evidenceCount}</dd></div> : null}
+            {context?.workOrderCount !== null && context?.workOrderCount !== undefined ? <div><dt>{english ? "Work items" : "작업 건수"}</dt><dd>{context.workOrderCount}</dd></div> : null}
+            {context?.maintenanceState ? <div><dt>{english ? "Maintenance status" : "정비 상태"}</dt><dd>{context.maintenanceState}</dd></div> : null}
           </dl>
         )}
         {context?.evidenceSummary ? <p className="rw-context-assistant__evidence-summary">{context.evidenceSummary}</p> : null}
+        {selected ? (
+          <div className="rw-context-assistant__sources" aria-label={english ? "Assistant grounding sources" : "Assistant 근거 소스"}>
+            <span>{loading ? (english ? "Refreshing context…" : "문맥 갱신 중…") : (english ? "Live context" : "실시간 문맥")}</span>
+            {context?.aiSummaryMode ? (
+              <strong className={`mode-${context.aiSummaryMode}`}>
+                {context.aiSummaryMode === "llm"
+                  ? (english ? "LLM grounded" : "LLM 근거 요약")
+                  : (english ? "Validated fallback" : "검증 fallback")}
+              </strong>
+            ) : null}
+            {context?.retrievalProvider ? (
+              <small>{context.retrievalProvider}{context.retrievalCount !== null && context.retrievalCount !== undefined ? ` · ${context.retrievalCount}` : ""}</small>
+            ) : null}
+          </div>
+        ) : null}
+        {error ? <p className="rw-context-assistant__error">{error}</p> : null}
       </section>
 
       {suggestedPrompts.length ? (
@@ -133,7 +155,7 @@ export function ContextAssistantDrawer({
           </div>
           <div>
             {suggestedPrompts.map((prompt) => (
-              <button type="button" key={prompt.id} onClick={() => submit(prompt.label)} disabled={!onSubmit}>
+              <button type="button" key={prompt.id} onClick={() => submit(prompt.label)} disabled={!onSubmit || submitting}>
                 <span>{prompt.label}</span><ChevronRight size={13} aria-hidden="true" />
               </button>
             ))}
@@ -151,7 +173,9 @@ export function ContextAssistantDrawer({
         )) : (
           <div className="rw-context-assistant__empty-thread">
             <span>{english ? "NO QUESTIONS YET" : "아직 질문 없음"}</span>
-            <p>{english ? "Use a context question or enter a question about the selected operational data." : "위 문맥 질문을 선택하거나 현재 선택된 운영 데이터에 대해 질문할 수 있습니다."}</p>
+            <p>{english
+              ? "Questions are answered from the selected live event, Agent Review Packet, stored grounded AI summary, and linked retrieval metadata when available."
+              : "선택된 실시간 이벤트, Agent Review Packet, 저장된 근거 기반 AI 요약과 연결 retrieval metadata를 사용해 답합니다."}</p>
           </div>
         )}
       </section>
@@ -168,11 +192,11 @@ export function ContextAssistantDrawer({
             ? (english ? "Ask about the selected operational context" : "선택된 운영 문맥에 대해 질문")
             : (english ? "Select an asset or event first" : "먼저 설비나 이벤트를 선택하세요")}
           rows={2}
-          disabled={!selected || !onSubmit}
+          disabled={!selected || !onSubmit || submitting}
         />
         <button
           type="submit"
-          disabled={!selected || !onSubmit || !draft.trim()}
+          disabled={!selected || !onSubmit || submitting || !draft.trim()}
           aria-label={english ? "Submit context question" : "문맥 질문 보내기"}
         >
           <Send size={15} />
@@ -181,8 +205,8 @@ export function ContextAssistantDrawer({
 
       <footer className="rw-context-assistant__disclaimer">
         {english
-          ? "Context-only preview. It summarizes connected operational data and does not approve, execute, or mutate work."
-          : "현재 연결된 운영 데이터만 요약하는 context-only preview입니다. 작업을 승인·실행·변경하지 않습니다."}
+          ? "Read-only assistant. Grounding comes from canonical operational data and Agent Review context; AI generation never approves, executes, or changes workflow state."
+          : "읽기 전용 Assistant입니다. 현재 연결된 운영 데이터와 검토 근거를 사용하며 AI 생성은 업무를 승인·실행하거나 workflow 상태를 변경하지 않습니다."}
       </footer>
     </aside>
   );

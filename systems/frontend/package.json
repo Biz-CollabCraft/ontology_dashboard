@@ -13,7 +13,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 3100 --strictPort",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:mvp": "playwright test e2e/mvp-frontend-convergence.spec.ts --project=chromium",
+    "test:e2e:operations": "playwright test e2e/operations-frontend-convergence.spec.ts --project=chromium",
     "test:e2e:overhaul": "playwright test e2e/workbench-final-overhaul.spec.ts",
     "capture:team-share": "CAPTURE_TEAM_SHARE=1 playwright test e2e/team-share-captures.spec.ts --project=chromium",
     "capture:team-share-story": "CAPTURE_TEAM_SHARE=1 playwright test e2e/team-share-story.spec.ts e2e/team-share-responsive.spec.ts --project=chromium",

@@ -196,7 +196,7 @@ class MaintenanceCostScenarioResult(FrozenModel):
     @model_validator(mode="after")
     def require_result_invariants(self) -> MaintenanceCostScenarioResult:
         if self.asset_id != self.equipment_id:
-            raise ValueError("MVP cost analysis requires equipment_id = asset_id")
+            raise ValueError("Operations cost analysis requires equipment_id = asset_id")
 
         option_ids = [option.option_id for option in self.options]
         if len(option_ids) != len(set(option_ids)):

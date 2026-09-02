@@ -22,11 +22,11 @@ type OperationalFocusLocale = "ko-KR" | "en-US";
 
 const COPY = {
   "ko-KR": {
-    eyebrow: "OPERATIONAL FOCUS",
+    eyebrow: "운영 판단 포커스",
     situation: "현재 상황",
     impact: "운영 영향",
     evidence: "핵심 근거",
-    lifecycle: "현재 workflow",
+    lifecycle: "현재 업무 흐름",
     current: "현재 단계",
     next: "다음 단계",
     owner: "담당",
@@ -65,9 +65,20 @@ export interface OperationalFocusProps {
 function freshnessText(
   freshness: OperationalFocusFreshnessViewModel | null | undefined,
   fallback: string,
+  locale: OperationalFocusLocale,
 ) {
   if (!freshness) return fallback;
-  return freshness.label || freshness.observedAt || fallback;
+  const raw = freshness.label || freshness.observedAt;
+  if (!raw) return fallback;
+  const timestamp = Date.parse(raw);
+  if (!Number.isFinite(timestamp)) return raw;
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
 }
 
 export function OperationalFocus({
@@ -98,7 +109,6 @@ export function OperationalFocus({
           <span>{copy.eyebrow}</span>
           <h2 id={`operational-focus-title-${domId}`}>{asset.name}</h2>
           <div className="operational-focus-object-meta">
-            <code>{asset.id}</code>
             {asset.contextLabel ? <small>{asset.contextLabel}</small> : null}
           </div>
         </div>
@@ -139,7 +149,7 @@ export function OperationalFocus({
         <div className="operational-focus-section-heading">
           <span><SearchCheck size={13} /></span>
           <div>
-            <small>WHY</small>
+            <small>{locale === "ko-KR" ? "판단 근거" : "WHY"}</small>
             <strong id={`operational-focus-evidence-${domId}`}>{copy.evidence}</strong>
           </div>
         </div>
@@ -162,7 +172,7 @@ export function OperationalFocus({
         <div className="operational-focus-section-heading">
           <span><Workflow size={13} /></span>
           <div>
-            <small>CANONICAL LIFECYCLE</small>
+            <small>{locale === "ko-KR" ? "업무 흐름" : "CANONICAL LIFECYCLE"}</small>
             <strong id={`operational-focus-lifecycle-${domId}`}>{copy.lifecycle}</strong>
           </div>
         </div>
@@ -207,8 +217,8 @@ export function OperationalFocus({
           <span><Clock3 size={11} />{copy.freshness}</span>
           <strong>
             {freshness?.observedAt ? (
-              <time dateTime={freshness.observedAt}>{freshnessText(freshness, copy.unavailable)}</time>
-            ) : freshnessText(freshness, copy.unavailable)}
+              <time dateTime={freshness.observedAt}>{freshnessText(freshness, copy.unavailable, locale)}</time>
+            ) : freshnessText(freshness, copy.unavailable, locale)}
           </strong>
           {freshness?.sourceLabel ? <small>{freshness.sourceLabel}</small> : null}
         </div>

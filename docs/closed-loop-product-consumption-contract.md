@@ -36,7 +36,7 @@ PR #42가 `main`에 merge된 뒤에도 Backend Domain과 Product/UI가 서로 �
 7. `process_manager`는 시스템 Admin이 아니라 **생산 운영 의사결정자**다.
 8. `process_engineer`는 **현장 엔지니어**다.
 9. `maintenance_technician`은 승인된 작업을 실제 수행하는 **정비 작업자**다.
-10. 핵심 MVP UX는 **현장 엔지니어 → 생산 운영 의사결정자** 흐름이며, 정비가 필요한 경우
+10. 핵심 Operations UX는 **현장 엔지니어 → 생산 운영 의사결정자** 흐름이며, 정비가 필요한 경우
     **정비 작업자**가 Closed-loop 실행을 이어간다.
 
 ## 3. 역할·표시명 계약
@@ -393,7 +393,7 @@ Product aggregation root는 `event_id`다.
 - `maintenance_action_id`
 - `maintenance_event_id`
 
-MVP identity는 `asset_id = equipment_id`를 사용한다. Frontend는 operational ID를 생성하지 않고
+Operations identity는 `asset_id = equipment_id`를 사용한다. Frontend는 operational ID를 생성하지 않고
 Persistence/API가 반환한 ID를 이어서 사용한다.
 
 다음 값은 provenance이며 operational join ID의 대체물이 아니다.
@@ -443,7 +443,7 @@ Operational PostgreSQL transaction 실패와 outbox/외부 projection 실패도 
 Ontology projection이 지연·실패한 경우에는 PostgreSQL 운영 정본을 되돌리지 않고 projection 상태를
 별도로 표시·복구한다.
 
-## 10. MVP E2E persona와 기본 흐름
+## 10. Operations E2E persona와 기본 흐름
 
 대표 fixture:
 
@@ -460,7 +460,7 @@ persona:
 | 현장 엔지니어 | `engineer@ontology.local` | `process_engineer` |
 | 정비 작업자 | `technician@ontology.local` | `maintenance_technician` |
 
-`process_engineer`는 optional persona가 아니라 핵심 MVP 의사결정 흐름의 선행 역할이다.
+`process_engineer`는 optional persona가 아니라 핵심 Operations 의사결정 흐름의 선행 역할이다.
 
 기본 업무 흐름:
 

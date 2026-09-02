@@ -6,9 +6,9 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from app.dependencies import build_manufacturing_service
-from app.mvp.agent_review_packet import compose_agent_review_packet
-from app.mvp.context_providers import AgentReviewContext, AgentReviewContextRegistry
-from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
+from app.operations.agent_review_packet import compose_agent_review_packet
+from app.operations.context_providers import AgentReviewContext, AgentReviewContextRegistry
+from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 
 
 ROOT = Path(__file__).resolve().parents[1]

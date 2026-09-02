@@ -208,7 +208,7 @@ Overlay Observation과 `runtime_overlay.observations.available`은 각각
 
 ## 8. 정비 효과 계약
 
-MVP의 두 Maintenance Action은 Action별 typed patch를 사용한다.
+Operations의 두 Maintenance Action은 Action별 typed patch를 사용한다.
 
 ```json
 {
@@ -362,7 +362,7 @@ Observation의 `state_version`은 원인이 된 최신 maintenance lifecycle ver
 Version 기반 identity를 사용한다. Runtime Overlay 행을 Canonical 테이블에 그대로
 삽입하거나 Canonical 행을 update하지 않는다.
 
-MVP Target은 별도 append-only Runtime Overlay 저장소를 사용한다. 실제 테이블명은
+Operations Target은 별도 append-only Runtime Overlay 저장소를 사용한다. 실제 테이블명은
 migration PR에서 확정하지만 논리적으로 다음 key와 lineage를 보존해야 한다.
 
 ```text

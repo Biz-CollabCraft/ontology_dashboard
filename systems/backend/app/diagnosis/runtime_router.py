@@ -12,7 +12,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.mvp.contracts import AppLocale
+from app.operations.contracts import AppLocale
 from app.dependencies import (
     client_ip,
     get_identity_service,

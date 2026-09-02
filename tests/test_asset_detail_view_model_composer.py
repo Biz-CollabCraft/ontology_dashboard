@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
-from systems.backend.app.mvp.asset_detail_view_model import (
+from systems.backend.app.operations.asset_detail_view_model import (
     AssetDetailRequest,
     AssetDetailViewModelService,
     compose_asset_detail_view_model,

@@ -40,7 +40,7 @@ or failover drill. The concrete rollback smoke record and procedure are kept in
 
 Production validation must include all three backend health endpoints, database
 migration/row-count comparison, artifact checksum validation, a real Generator
-run, HTTPS through Cloudflare, and the browser MVP login → assets → report →
+run, HTTPS through Cloudflare, and the browser Operations login → assets → report →
 evidence flow. Only after those pass should the Mac mini be treated as primary;
 retirement of Render/Neon is a separate change.
 

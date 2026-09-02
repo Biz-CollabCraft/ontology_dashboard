@@ -84,7 +84,9 @@ class PredictiveMaintenanceRuntimeRepository:
                      AS result_artifact_schema_version,
                    (SELECT r.prediction_task FROM pm_result_artifacts r
                     WHERE r.dataset_version_id=v.id ORDER BY r.observed_at DESC LIMIT 1)
-                     AS runtime_prediction_task
+                     AS runtime_prediction_task,
+                   (SELECT MAX(r.observed_at) FROM pm_result_artifacts r
+                    WHERE r.dataset_version_id=v.id) AS latest_result_observed_at
             FROM dataset_versions v
             JOIN datasets d ON d.id=v.dataset_id
             LEFT JOIN store_projections rel

@@ -101,17 +101,18 @@ from app.infra.db.postgresql_repositories import (
 )
 from app.infra.db.project_repository import SQLiteProjectContextResolver as RuntimeProjectContextResolver
 from app.infra.db.role_workflow_repository import RoleWorkflowRepository
-from app.infra.db.mvp_audit_repository import AuditRepository
-from app.mvp.role_workflow_service import RoleWorkflowService
-from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
-from app.mvp.context_providers import default_agent_review_context_registry
-from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
-from app.mvp.service import ManufacturingPredictiveMaintenanceService
+from app.infra.db.operations_audit_repository import AuditRepository
+from app.operations.role_workflow_service import RoleWorkflowService
+from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider
+from app.operations.context_providers import default_agent_review_context_registry
+from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
+from app.operations.service import ManufacturingPredictiveMaintenanceService
 
 
 ROOT = project_root()
 MANUFACTURING_WORKSPACE = "manufacturing-demo"
 _MIGRATION_LOCK = Lock()
+_SERVICE_BUILD_LOCK = Lock()
 
 
 def database_target() -> str:
@@ -124,7 +125,7 @@ def ensure_database_migrations() -> tuple[str, ...]:
         return tuple(migrate(database_target()))
 
 
-def _mvp_fixture_masters(root: Path) -> list[tuple[str, dict[str, Any]]]:
+def _operations_fixture_masters(root: Path) -> list[tuple[str, dict[str, Any]]]:
     fixture_root = root / "data" / "fixtures"
     masters: list[tuple[str, dict[str, Any]]] = []
     for pattern in ("GS-*.json", "AZ-*.json", "MPT-*.json"):
@@ -139,7 +140,7 @@ def _mvp_fixture_masters(root: Path) -> list[tuple[str, dict[str, Any]]]:
     return masters
 
 
-def _mvp_context_provider(fixture: dict[str, Any]):
+def _operations_context_provider(fixture: dict[str, Any]):
     fallback = FixtureContextProvider()
     if fixture["runtime"]["context_provider"] == "project3_http":
         return ResilientContextProvider(Project3HttpContextProvider(), fallback)
@@ -151,7 +152,7 @@ def build_manufacturing_service(
     *,
     root: Path = ROOT,
 ) -> ManufacturingPredictiveMaintenanceService:
-    """Compose the MVP application service with concrete runtime adapters."""
+    """Compose the Operations application service with concrete runtime adapters."""
 
     target = str(database_path)
     migrate(target)
@@ -162,7 +163,7 @@ def build_manufacturing_service(
     )
     provider = configured_provider()
     equipment_service = EquipmentService(
-        FixtureEquipmentRepository(_mvp_fixture_masters(root))
+        FixtureEquipmentRepository(_operations_fixture_masters(root))
     )
     return ManufacturingPredictiveMaintenanceService(
         root,
@@ -170,7 +171,7 @@ def build_manufacturing_service(
         equipment_service=equipment_service,
         report_agent=ReportAgent(root, provider),
         layout_planner=LayoutPlanner(root, provider),
-        context_provider_factory=_mvp_context_provider,
+        context_provider_factory=_operations_context_provider,
         agent_review_summary_provider=AgentReviewSummaryProvider(provider),
         agent_review_context_registry=default_agent_review_context_registry(),
         domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
@@ -178,9 +179,18 @@ def build_manufacturing_service(
 
 
 @lru_cache(maxsize=1)
-def get_service() -> ManufacturingPredictiveMaintenanceService:
-    return build_manufacturing_service(database_target())
+def _cached_manufacturing_service(target: str) -> ManufacturingPredictiveMaintenanceService:
+    return build_manufacturing_service(target)
 
+
+def get_service() -> ManufacturingPredictiveMaintenanceService:
+    # lru_cache protects repeated calls after initialization, but it does not
+    # serialize concurrent first misses. The public preview opens several
+    # Operations reads in parallel after login; without this lock, each cold
+    # request can run migrations and create its own PostgreSQL pool before the
+    # first service is cached, exhausting low-limit Team DB roles.
+    with _SERVICE_BUILD_LOCK:
+        return _cached_manufacturing_service(database_target())
 
 def _password_hasher() -> PasswordHasher:
     return PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1, hash_len=32, salt_len=16)

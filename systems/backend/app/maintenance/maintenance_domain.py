@@ -305,7 +305,7 @@ def resolve_equipment_identity(
     asset_type: str,
     candidates: Sequence[tuple[str, str]],
 ) -> EquipmentIdentity:
-    """Resolve direct MVP identity and fail instead of guessing a mapping."""
+    """Resolve direct Operations identity and fail instead of guessing a mapping."""
 
     matches = [
         _EquipmentCandidate(equipment_id=equipment_id, asset_type=candidate_type)

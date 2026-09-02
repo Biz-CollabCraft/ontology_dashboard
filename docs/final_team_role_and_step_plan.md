@@ -680,7 +680,7 @@ Backend가 독립적으로 소비할 수 있는 immutable Model Artifact를 실�
 
 > 성민이 발행한 Artifact를 호범 Backend가 독립적으로 읽어 실제 observation에
 > inference하고, 동일 고정 이력에서 Generator와 Backend의 Feature 이름·순서·dtype·값이
-> 일치한다. MVP active model과 threshold/risk-grade mapping도 명시되어 있다.
+> 일치한다. Operations active model과 threshold/risk-grade mapping도 명시되어 있다.
 
 ---
 

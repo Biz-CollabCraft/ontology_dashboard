@@ -9,7 +9,7 @@
     "tests/eval/test_agent_tool_pipeline_eval.py",
     "tests/eval/agent_tool_trajectory_gold.jsonl",
     "tests/eval/langgraph_decision_gate.json",
-    "systems/backend/app/mvp/agent_context_tool_pipeline.py"
+    "systems/backend/app/operations/agent_context_tool_pipeline.py"
   ],
   "verified_claims": [
     "Different gold scenarios select different read-only tool plans.",

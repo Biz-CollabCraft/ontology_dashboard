@@ -20,7 +20,7 @@ PR #50의 2026-08-19 실행에서 `backend-contract` job은 1분 27초에 완료
 | Backend contract 의존성 설치 | 31초 | 가장 큰 backend-contract 단계 |
 | Product Result/Evidence 계약 테스트 | 9초 | 테스트 실행 자체는 병목이 아님 |
 | `architecture`의 Playwright 직전 단계 | 약 1분 23초 | Python/Node 설치, import smoke, unit/build가 직렬 실행됨 |
-| Playwright Chromium 설치 이후 | 실행 중 장시간 | Browser 설치, MVP E2E, Docker build/start가 뒤이어 직렬 실행됨 |
+| Playwright Chromium 설치 이후 | 실행 중 장시간 | Browser 설치, Operations E2E, Docker build/start가 뒤이어 직렬 실행됨 |
 
 현재 `.github/workflows/architecture.yml`은 backend 변경 시 integration과 Docker 검증을 함께 활성화한다. `tests/*` 변경은 fail-closed로 전체 검증을 활성화한다. 이는 범위를 줄이는 문제가 아니라 한 job 안에서 browser와 Docker까지 순차 실행하는 구조가 대기 시간을 키운다.
 
@@ -29,7 +29,7 @@ PR #50의 2026-08-19 실행에서 `backend-contract` job은 1분 27초에 완료
 ### 목표
 
 - PR push 뒤 정적 규칙·migration ratchet·영향 범위 계약 테스트의 실패를 먼저 알린다.
-- Playwright MVP smoke와 Docker runtime smoke는 계속 실행한다.
+- Playwright Operations smoke와 Docker runtime smoke는 계속 실행한다.
 - 같은 브랜치에 연속 push가 발생하면 오래된 실행을 취소한다.
 - 캐시 효과와 검증 범위를 job 로그로 측정할 수 있게 한다.
 
@@ -48,7 +48,7 @@ PR #50의 2026-08-19 실행에서 `backend-contract` job은 1분 27초에 완료
 | Job | 책임 | 실행 조건 |
 | --- | --- | --- |
 | `architecture-fast` | architecture rules, migration ratchet, generator/backend smoke, 영향받은 frontend unit/build | 모든 PR에서 정적 규칙; classifier에 따라 domain smoke |
-| `mvp-e2e` | Playwright 설치와 대표 MVP browser smoke | `integration=true` |
+| `operations-e2e` | Playwright 설치와 대표 Operations browser smoke | `integration=true` |
 | `docker-runtime` | Docker image build, compose 기동, health와 storage smoke | `docker=true` |
 | `architecture` gate | 위 결과와 required/verified output을 집계 | 모든 PR |
 
