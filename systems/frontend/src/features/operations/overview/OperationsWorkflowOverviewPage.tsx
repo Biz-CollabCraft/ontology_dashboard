@@ -1251,12 +1251,12 @@ function FactoryMonitoringMapPanel({
   return (
     <OperationsPanel title="공장 설비 상태맵" eyebrow="실시간 라인/셀 현황" className="operations-process-panel operations-factory-map-panel">
       <div className="operations-plan-impact-note">
-        {FACTORY_LAYOUT_NOTICE} · {planningBasis.fallback ? "생산 영향 계산 준비 중" : "생산계획 연계"} · {planningBasis.value}
+        {FACTORY_LAYOUT_NOTICE} · {planningBasis.fallback ? "생산 영향 데이터 미연결" : "생산계획 연계"} · {planningBasis.value}
       </div>
       {factoryCells.length ? (
         <div className="operations-factory-map">
           <div className="operations-factory-map-legend" aria-label="설비 상태 범례">
-            <i className="normal">정상</i><i className="attention">주의</i><i className="critical">긴급</i><i className="warning">점검 중</i><i className="hold">완료 확인 필요</i><i className="slot">준비 중</i>
+            <i className="normal">정상</i><i className="attention">주의</i><i className="critical">긴급</i><i className="warning">점검 중</i><i className="hold">완료 확인 필요</i><i className="slot">미연결</i>
           </div>
           <div className="operations-factory-line-map">
             {FACTORY_SITE_IDS.map((site) => {
@@ -1286,7 +1286,7 @@ function FactoryMonitoringMapPanel({
                       <section key={cell.id} className={`operations-factory-cell-card tone-${cell.summary ? riskTone(cell.summary) : "empty"} ${cell.slots.some((slot) => slot.asset?.assetId === selectedAsset?.assetId) ? "is-selected" : ""}`} aria-label={cell.label}>
                         <header>
                           <strong>{displayFactoryCell(cell.cell)}</strong>
-                          <small>{cell.summary ? `${cell.summary.assets.length}대 연결` : "설비 정보 준비 중"}</small>
+                          <small>{cell.summary ? `${cell.summary.assets.length}대 연결` : "연결 설비 없음"}</small>
                         </header>
                         <div className="operations-factory-cell-slots">
                           {cell.slots.map((slot) => {
@@ -1298,7 +1298,7 @@ function FactoryMonitoringMapPanel({
                             const tone = asset ? mapTone(currentPrediction?.statusGrade ?? asset.status) : "slot";
                             const title = asset
                               ? `${displayFactorySlotName(slot, cell)} · ${operationsMonitorStatusLabel(currentPrediction?.statusGrade ?? asset.status)} · ${formatProbability(currentPrediction?.failureProbability ?? asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}`
-                              : `${cell.label} · ${slot.label} · 설비 정보 준비 중`;
+                              : `${cell.label} · ${slot.label} · 설비 미연결`;
                             return (
                               <button
                                 key={slot.id}
@@ -2199,7 +2199,7 @@ function AssetPreviewPanel({
       <div className="operations-asset-preview-panel">
         <div className="operations-asset-preview">
           <header>
-            <span className="operations-slot-status">설비 정보 준비 중</span>
+            <span className="operations-slot-status">설비 미연결</span>
             <div><strong>{displayFactorySlotName(slot, cell)}</strong><small>{slot.assetId} · 고장 확정 아님</small></div>
           </header>
           <WorkStatusFixedBar status={effectiveWorkStatus} actionLabel={effectiveWorkActionLabel} statusSource={workStatusSource} disabled />
@@ -2218,7 +2218,7 @@ function AssetPreviewPanel({
                 <div><dt>상태</dt><dd>상세 데이터 미연결</dd></div>
                 <div><dt>작업 ID</dt><dd>{workId}</dd></div>
                 <div><dt>관측 상세</dt><dd>상세 데이터 미연결</dd></div>
-                <div><dt>계획 기준</dt><dd>생산 영향 계산 준비 중</dd></div>
+                <div><dt>계획 기준</dt><dd>생산 영향 데이터 미연결</dd></div>
               </dl>
               <section className="operations-production-impact-block" aria-label="정상 설비 상세">
                 <header><Activity size={14} /><strong>설비 상세</strong><span>공장 배치</span></header>
@@ -2234,7 +2234,7 @@ function AssetPreviewPanel({
             <section className="operations-overview-action-panel" aria-label="정상 설비 처리">
               <header><ClipboardCheck size={14} /><strong>처리</strong><span>작업요청 없음</span></header>
               <div className="operations-action-summary-card">
-                <span className="operations-slot-status">설비 정보 준비 중</span>
+                <span className="operations-slot-status">설비 미연결</span>
                 <div>
                   <strong>{slot.label}</strong>
                   <small>작업요청 ID 없음 · 현재 조치 대상 아님</small>
@@ -2302,7 +2302,7 @@ function AssetPreviewPanel({
                 windowId={sensorWindow}
                 onWindowChange={onSensorWindowChange}
                 emptyTitle={detailLoading ? "센서 이력 로딩 중" : "센서 이력 없음"}
-                emptyDetail={detailError || "선택 설비의 주요 피쳐 이력이 내려오면 이 영역에서 바로 갱신됩니다."}
+                emptyDetail={detailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
               />
               <p className="operations-live-feature-note">
                 원본 필드명 대신 한국어 현장 용어로 표시합니다. 새 관측 snapshot이 들어오면 현재값과 그래프의 마지막 지점이 갱신됩니다.

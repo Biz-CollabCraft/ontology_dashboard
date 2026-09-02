@@ -193,7 +193,7 @@ export function OperationsMapReportAssetDetailView({
           </div>
           {status ? <span className={`status-badge ${status.tone}`}>{status.label}</span> : null}
         </section>
-        <div className="asset-chart-empty"><Database size={20} /><strong>상세 데이터 준비 중</strong><span>선택 설비의 상세 운영 데이터가 준비되면 이 영역에 표시합니다.</span></div>
+        <div className="asset-chart-empty"><Database size={20} /><strong>연결된 상세 데이터 없음</strong><span>현재 선택 설비에 연결된 상세 운영 데이터가 없습니다.</span></div>
       </div>
     );
   }

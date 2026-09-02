@@ -70,7 +70,7 @@ export function AuthShell({
   return (
     <main className="auth-page">
       <header className="auth-platform-bar">
-        <button className="auth-brand" onClick={() => navigate("/login")}><span className="brand-mark">RO</span><span><strong>Reliability Operations</strong><small>Predictive Maintenance Decision Workspace</small></span></button>
+        <button className="auth-brand" onClick={() => navigate("/login")}><span className="brand-mark">HT</span><span><strong>Hanbit Tech</strong><small>Reliability Operations</small></span></button>
         <div><DisplayMenu className="auth-display-menu" /><span><Activity size={13} /> Monitoring live</span><span><ShieldCheck size={13} /> Decision traceable</span><span>Asia/Seoul</span></div>
       </header>
       <div className="auth-control-plane">

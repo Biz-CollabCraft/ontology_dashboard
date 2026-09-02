@@ -216,9 +216,9 @@ export async function loadOperationsBootstrap(
   return {
     context: {
       projectId: project.id,
-      projectName: isHanbitReferenceProject ? "Hanbit Tech Reliability Operations" : project.display_name,
+      projectName: isHanbitReferenceProject ? "Smart Factory A" : project.display_name,
       workspaceId: workspace.id,
-      workspaceName: isHanbitReferenceProject ? "Hanbit Tech Operations Workspace" : workspace.display_name,
+      workspaceName: isHanbitReferenceProject ? "Production Reliability" : workspace.display_name,
       datasetVersionId,
       datasetLabel: dataSource?.dataset_name
         ? `${dataSource.dataset_name} · ${sourceVersion}`

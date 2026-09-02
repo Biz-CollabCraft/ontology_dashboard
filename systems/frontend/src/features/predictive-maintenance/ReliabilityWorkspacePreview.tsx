@@ -204,7 +204,7 @@ export function ReliabilityWorkspaceLoadingPlaceholder() {
     >
       <header className="rw-preview-topbar">
         <div className="rw-preview-topbar-left">
-          <div className="rw-preview-brand"><span><Focus size={14} /></span><strong>Reliability Operations</strong></div>
+          <div className="rw-preview-brand"><span><Focus size={14} /></span><div><strong>Hanbit Tech</strong><small>Reliability Operations</small></div></div>
           <div className="rw-preview-loading-line is-breadcrumb" />
         </div>
         <div className="rw-preview-loading-line is-user" />
@@ -559,7 +559,7 @@ export function ReliabilityWorkspacePreview({
       <header className="rw-preview-topbar">
         <div className="rw-preview-topbar-left">
           <button type="button" className="rw-preview-icon-button" onClick={() => setLeftOpen((value) => !value)} aria-label={leftOpen ? "Collapse navigation" : "Open navigation"}>{leftOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}</button>
-          <div className="rw-preview-brand"><span><Activity size={15} /></span><strong>Reliability Operations</strong></div>
+          <div className="rw-preview-brand"><span><Activity size={15} /></span><div><strong>Hanbit Tech</strong><small>Reliability Operations</small></div></div>
           <div className="rw-preview-breadcrumb"><span>{context.projectName}</span><i>/</i><strong>{english ? activeNav.label.en : activeNav.label.ko}</strong></div>
         </div>
         <div className="rw-preview-topbar-right">

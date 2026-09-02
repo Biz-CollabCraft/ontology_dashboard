@@ -5,6 +5,8 @@
   color: var(--fd-text);
   background: var(--fd-canvas);
 }
+.auth-page :where(p,h1,h2,h3,strong,small,span,li,label,button) { word-break: keep-all; overflow-wrap: break-word; }
+.auth-page :where(p,li,small) { text-wrap: pretty; }
 
 .auth-platform-bar {
   display: flex;

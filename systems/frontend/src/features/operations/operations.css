@@ -31,6 +31,11 @@
 .operations-app textarea { font: inherit; }
 .operations-app button { color: inherit; }
 .operations-app code { overflow-wrap: anywhere; }
+.operations-app :where(p,h1,h2,h3,h4,strong,small,span,li,dt,dd,blockquote,button,label) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.operations-app :where(p,li,small,blockquote) { text-wrap: pretty; }
 
 .operations-route-state {
   min-height: 100vh;
