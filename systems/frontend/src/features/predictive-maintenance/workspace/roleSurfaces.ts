@@ -6,6 +6,7 @@ import type {
 } from "./roleExperience";
 
 export type ReliabilitySurfaceId =
+  | "factory-status"
   | "executive-brief"
   | "operational-risk"
   | "executive-kpi"
@@ -71,18 +72,67 @@ export const RELIABILITY_SURFACES: Record<ReliabilityExperienceKind, Reliability
   ],
 };
 
-export function reliabilitySurfaces(kind: ReliabilityExperienceKind): ReliabilitySurface[] {
-  return RELIABILITY_SURFACES[kind];
+const FACTORY_STATUS_SURFACE: Record<Exclude<ReliabilityExperienceKind, "maintenance">, ReliabilitySurface> = {
+  executive: {
+    id: "factory-status",
+    view: "overview",
+    label: copy("설비 상태 근거", "Factory status evidence"),
+    detail: copy("구역 · 셀 · 알림", "Zone · cell · alerts"),
+    page: page(
+      "설비 상태 근거",
+      "공장 전체 설비 상태를 직접 확인",
+      "경영 요약에서 더 깊게 확인할 필요가 있을 때 구역·셀 배치와 설비별 알림을 같은 실시간 근거로 확인합니다.",
+      "FACTORY STATUS EVIDENCE",
+      "Inspect plant-wide equipment status directly",
+      "When executive summaries need deeper evidence, inspect zone, cell, and asset alerts from the same live operational state.",
+    ),
+  },
+  operations: {
+    id: "factory-status",
+    view: "overview",
+    label: copy("설비 현황", "Factory status"),
+    detail: copy("구역 · 셀 · 실시간 알림", "Zone · cell · live alerts"),
+    page: page(
+      "실시간 설비 현황",
+      "공장 전체 상태와 알림을 한눈에 확인",
+      "구역과 셀 배치 위에서 주의·긴급 설비와 새 알림 수를 먼저 확인한 뒤 Decision Case로 내려갑니다.",
+      "LIVE FACTORY STATUS",
+      "See plant-wide status and alerts at a glance",
+      "Start from zone and cell layout, identify warning and critical assets, then drill into the corresponding Decision Case.",
+    ),
+  },
+  engineering: {
+    id: "factory-status",
+    view: "overview",
+    label: copy("설비 현황", "Factory status"),
+    detail: copy("셀 배치 · 위험 알림", "Cell layout · risk alerts"),
+    page: page(
+      "실시간 설비 현황",
+      "조사할 설비를 위치와 알림으로 좁히기",
+      "공장 배치에서 이상 알림이 발생한 셀과 설비를 먼저 찾고 센서·피쳐 근거로 이어갑니다.",
+      "LIVE FACTORY STATUS",
+      "Narrow investigation by location and alert",
+      "Find the affected zone, cell, and asset first, then continue into sensor and feature evidence.",
+    ),
+  },
+};
+
+export function reliabilitySurfaces(kind: ReliabilityExperienceKind, backupMode = false): ReliabilitySurface[] {
+  const baseline = RELIABILITY_SURFACES[kind];
+  if (backupMode || kind === "maintenance") return baseline;
+  const factoryStatus = FACTORY_STATUS_SURFACE[kind];
+  if (kind === "executive") return [...baseline, factoryStatus];
+  return [factoryStatus, ...baseline];
 }
 
-export function defaultReliabilitySurface(kind: ReliabilityExperienceKind): ReliabilitySurface {
-  return RELIABILITY_SURFACES[kind][0];
+export function defaultReliabilitySurface(kind: ReliabilityExperienceKind, backupMode = false): ReliabilitySurface {
+  return reliabilitySurfaces(kind, backupMode)[0];
 }
 
-export function resolveReliabilitySurface(kind: ReliabilityExperienceKind, surfaceId: string | null | undefined): ReliabilitySurface {
-  return RELIABILITY_SURFACES[kind].find((item) => item.id === surfaceId) ?? defaultReliabilitySurface(kind);
+export function resolveReliabilitySurface(kind: ReliabilityExperienceKind, surfaceId: string | null | undefined, backupMode = false): ReliabilitySurface {
+  return reliabilitySurfaces(kind, backupMode).find((item) => item.id === surfaceId) ?? defaultReliabilitySurface(kind, backupMode);
 }
 
-export function reliabilitySurfaceForView(kind: ReliabilityExperienceKind, view: OperationsView): ReliabilitySurface {
-  return RELIABILITY_SURFACES[kind].find((item) => item.view === view) ?? defaultReliabilitySurface(kind);
+export function reliabilitySurfaceForView(kind: ReliabilityExperienceKind, view: OperationsView, backupMode = false): ReliabilitySurface {
+  return reliabilitySurfaces(kind, backupMode).find((item) => item.view === view) ?? defaultReliabilitySurface(kind, backupMode);
 }

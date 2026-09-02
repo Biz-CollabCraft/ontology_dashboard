@@ -269,6 +269,7 @@ export function ReliabilityWorkspacePreview({
   onRefresh,
   refreshing,
   onLogout,
+  backupMode = false,
   children,
 }: {
   context: OperationsContextModel;
@@ -281,6 +282,7 @@ export function ReliabilityWorkspacePreview({
   onRefresh: () => void;
   refreshing: boolean;
   onLogout: () => void | Promise<void>;
+  backupMode?: boolean;
   children: ReactNode;
 }) {
   const { setLocale } = useI18n();
@@ -288,9 +290,9 @@ export function ReliabilityWorkspacePreview({
   const [locale, setReliabilityLocaleState] = useState<"ko-KR" | "en-US">(initialReliabilityLocale);
   const english = locale === "en-US";
   const experience = useMemo(() => resolveReliabilityRoleExperience(user), [user]);
-  const navigation = useMemo(() => reliabilitySurfaces(experience.kind), [experience.kind]);
+  const navigation = useMemo(() => reliabilitySurfaces(experience.kind, backupMode), [backupMode, experience.kind]);
   const preset = displayPreset(preferences);
-  const activeNav = resolveReliabilitySurface(experience.kind, activeSurface);
+  const activeNav = resolveReliabilitySurface(experience.kind, activeSurface, backupMode);
   const activePageCopy = activeNav.page;
   const eyebrow = english ? activePageCopy.eyebrow.en : activePageCopy.eyebrow.ko;
   const title = english ? activePageCopy.title.en : activePageCopy.title.ko;

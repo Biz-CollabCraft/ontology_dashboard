@@ -325,11 +325,11 @@ class IdentityRepository:
             (
                 project_id,
                 "manufacturing-demo",
-                "Hanul Precision Operations Project",
+                "Hanbit Tech Reliability Operations",
                 "Gold/E2E regression baseline for the manufacturing domain pack.",
                 "manufacturing-predictive-maintenance",
                 workspace_id,
-                "Hanul Precision Manufacturing",
+                "Hanbit Tech Operations Workspace",
             ),
             (
                 "azure-fleet-maintenance-project",

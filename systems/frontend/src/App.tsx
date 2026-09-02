@@ -252,6 +252,16 @@ function AppRouter() {
 
   if (pathname === "/admin") return user.is_admin ? <AdminApp /> : <ForbiddenPage />;
 
+  if (pathname === "/backup") {
+    const backupProjectId = user.active_project_id ?? user.project_scopes[0] ?? null;
+    if (!backupProjectId) return <Redirect to={user.default_path} />;
+    return (
+      <ProjectPreviewRoute projectId={backupProjectId}>
+        <OperationsApplication projectId={backupProjectId} backupMode />
+      </ProjectPreviewRoute>
+    );
+  }
+
   const operationsProjectRoute = matchOperationsProjectPath(pathname);
   if (operationsProjectRoute) {
     return (

@@ -2,9 +2,9 @@
   "schema_version": "company-context-v1",
   "context_kind": "company_operational_context",
   "company": {
-    "id": "company:hanul-precision",
-    "name": "한울정밀제조",
-    "english_name": "Hanul Precision Manufacturing",
+    "id": "company:hanbit-tech",
+    "name": "한빛테크",
+    "english_name": "Hanbit Tech",
     "industry": "정밀 가공 및 산업용 구동부품 제조",
     "headquarters": "대한민국 경기도",
     "fiscal_year": 2026,
@@ -274,9 +274,9 @@
   "documents": [
     {
       "id": "doc:company-operating-model",
-      "title": "한울정밀제조 운영 모델",
+      "title": "한빛테크 운영 모델",
       "document_type": "company_policy",
-      "content": "한울정밀제조의 데모 운영 모델은 엔지니어가 센서와 점검 근거를 확인하고, 생산운영실이 생산 영향과 정비 승인 여부를 판단하며, 경영 운영위원회가 리스크·KPI·보고 요약을 확인하는 구조다. 모든 단계는 같은 Risk Event와 Evidence를 기준으로 연결한다.",
+      "content": "한빛테크의 운영 모델은 엔지니어가 센서와 점검 근거를 확인하고, 생산운영실이 생산 영향과 정비 승인 여부를 판단하며, 경영 운영위원회가 리스크·KPI·보고 요약을 확인하는 구조다. 모든 단계는 같은 Risk Event와 Evidence를 기준으로 연결한다.",
       "tags": ["조직", "persona", "decision case", "handoff"],
       "related_asset_ids": [],
       "source_ref": "knowledge:company-operating-model"

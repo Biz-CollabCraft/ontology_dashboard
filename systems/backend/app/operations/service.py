@@ -599,7 +599,7 @@ class ManufacturingPredictiveMaintenanceService:
             "asset_id": artifact["asset_id"],
             "asset_type": equipment.get("asset_type") or artifact["asset_type"],
             "display_name": equipment.get("display_name") or artifact["asset_id"],
-            "site_id": equipment.get("site_id") or artifact.get("site_id") or "Hanul Precision Plant",
+            "site_id": equipment.get("site_id") or artifact.get("site_id") or "Hanbit Tech Plant",
             "cell_id": equipment.get("cell_id") or equipment.get("line") or artifact.get("cell_id") or "unknown",
             "observed_at": artifact["observed_at"],
             "criticality": equipment.get("criticality"),

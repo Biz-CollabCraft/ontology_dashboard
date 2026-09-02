@@ -211,13 +211,14 @@ export async function loadOperationsBootstrap(
     ?? events[0]?.datasetVersionId
     ?? "dsv-canonical-v3-1";
   const sourceVersion = dataSource?.source_version ?? context?.source_version ?? "Canonical V3.1";
+  const isHanbitReferenceProject = project.id === "manufacturing-demo-project";
 
   return {
     context: {
       projectId: project.id,
-      projectName: project.display_name,
+      projectName: isHanbitReferenceProject ? "Hanbit Tech Reliability Operations" : project.display_name,
       workspaceId: workspace.id,
-      workspaceName: workspace.display_name,
+      workspaceName: isHanbitReferenceProject ? "Hanbit Tech Operations Workspace" : workspace.display_name,
       datasetVersionId,
       datasetLabel: dataSource?.dataset_name
         ? `${dataSource.dataset_name} · ${sourceVersion}`

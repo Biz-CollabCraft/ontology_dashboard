@@ -316,7 +316,7 @@ function eventAsset(event: OperationsEvent): OperationsAsset {
       : event.assetId.toUpperCase().startsWith("CMP-")
         ? "compressor"
         : "equipment",
-    site: event.assetId.match(/^[A-Z]+-(S\d+)-/)?.[1] ?? "Hanul Precision Plant",
+    site: event.assetId.match(/^[A-Z]+-(S\d+)-/)?.[1] ?? "Hanbit Tech Plant",
     line: event.line,
     cell: event.line,
     status: event.status,

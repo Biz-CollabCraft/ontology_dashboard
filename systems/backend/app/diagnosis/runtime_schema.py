@@ -545,8 +545,8 @@ class PredictiveMaintenanceDashboardResponse(StrictModel):
     selected_event_id: str | None = None
     selected_event_detail: DashboardEventDetail | None = None
     fallback_available: Literal[True] = True
-    fallback_name: Literal["Hanul Precision Operations Reference"] = (
-        "Hanul Precision Operations Reference"
+    fallback_name: Literal["Hanbit Tech Operations Reference"] = (
+        "Hanbit Tech Operations Reference"
     )
     replay_source: Literal["postgresql_prediction_timeline"] = (
         "postgresql_prediction_timeline"

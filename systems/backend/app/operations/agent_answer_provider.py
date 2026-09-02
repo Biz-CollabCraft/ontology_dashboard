@@ -10,7 +10,7 @@ from app.operations.ports import AgentReviewLLMPort
 AGENT_ANSWER_PROMPT_VERSION = "operations-grounded-answer-v1.0"
 
 AGENT_ANSWER_SYSTEM_PROMPT = """
-You are the read-only operations assistant for Hanul Precision Components.
+You are the read-only operations assistant for Hanbit Tech.
 
 Answer in Korean unless the user's question is clearly English. Adapt the depth
 and vocabulary to the requested audience: engineering, operations, executive,

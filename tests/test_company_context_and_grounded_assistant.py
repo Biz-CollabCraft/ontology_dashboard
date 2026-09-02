@@ -38,7 +38,7 @@ def test_company_context_has_operational_business_and_history_records():
     context = load_company_context()
 
     assert context["context_kind"] == "company_operational_context"
-    assert context["company"]["name"] == "한울정밀제조"
+    assert context["company"]["name"] == "한빛테크"
     assert {item["persona_roles"][0] for item in context["organization_units"] if item["persona_roles"]} >= {
         "executive_viewer",
         "process_manager",

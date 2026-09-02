@@ -291,7 +291,7 @@ class ManufacturingOntologyAdapter:
         context = load_company_context()
         context_kind = str(context.get("context_kind") or "company_operational_context")
         company = context.get("company") or {}
-        company_id = str(company.get("id") or "company:hanul-precision")
+        company_id = str(company.get("id") or "company:hanbit-tech")
         objects.append(
             ObjectRecord(
                 id=company_id,

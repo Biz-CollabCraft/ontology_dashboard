@@ -54,12 +54,12 @@ function defaultRoleLens(roles: string[]): OperationsRoleLens {
     : "process_manager";
 }
 
-export function OperationsApplication({ projectId }: { projectId: string }) {
+export function OperationsApplication({ projectId, backupMode = false }: { projectId: string; backupMode?: boolean }) {
   const { user } = useAuth();
   const roles = user?.active_project_roles.length ? user.active_project_roles : user?.roles ?? [];
   const role = defaultRoleLens(roles);
   const experience = user ? resolveReliabilityRoleExperience(user) : null;
-  const defaultSurface = experience ? defaultReliabilitySurface(experience.kind) : null;
+  const defaultSurface = experience ? defaultReliabilitySurface(experience.kind, backupMode) : null;
   const defaultView = defaultSurface?.view ?? experience?.defaultView ?? "overview";
   const defaultReportTab: OperationsReportTab = experience?.kind === "executive" ? "executive-brief" : "status-map";
   return (
@@ -69,15 +69,15 @@ export function OperationsApplication({ projectId }: { projectId: string }) {
       defaultView={defaultView}
       defaultSurface={defaultSurface?.id ?? null}
       defaultReportTab={defaultReportTab}
-      storageScope={user?.user_id ?? "anonymous"}
+      storageScope={`${user?.user_id ?? "anonymous"}${backupMode ? ":backup-v1" : ""}`}
     >
-      <OperationsApplicationController projectId={projectId} />
+      <OperationsApplicationController projectId={projectId} backupMode={backupMode} />
     </OperationsSelectionProvider>
   );
 }
 export default OperationsApplication;
 
-function OperationsApplicationController({ projectId }: { projectId: string }) {
+function OperationsApplicationController({ projectId, backupMode }: { projectId: string; backupMode: boolean }) {
   const { user, logout } = useAuth();
   const { selection, updateSelection } = useOperationsSelection();
   const [model, setModel] = useState<OperationsBootstrapModel | null>(null);
@@ -98,11 +98,11 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
       : "operations";
 
   useEffect(() => {
-    const surfaces = reliabilitySurfaces(experienceKind);
+    const surfaces = reliabilitySurfaces(experienceKind, backupMode);
     if (selection.surface && surfaces.some((item) => item.id === selection.surface)) return;
-    const next = defaultReliabilitySurface(experienceKind);
+    const next = defaultReliabilitySurface(experienceKind, backupMode);
     updateSelection({ surface: next.id, view: next.view }, { replace: true });
-  }, [experienceKind, selection.surface, updateSelection]);
+  }, [backupMode, experienceKind, selection.surface, updateSelection]);
 
   const refresh = useCallback(() => setRefreshVersion((value) => value + 1), []);
   const retryDetail = useCallback(() => setDetailVersion((value) => value + 1), []);
@@ -209,14 +209,14 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
   }, [detailVersion, refreshVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selection.role, sensorWindow]);
 
   const openView = useCallback((view: OperationsView) => {
-    const surface = reliabilitySurfaceForView(experienceKind, view);
+    const surface = reliabilitySurfaceForView(experienceKind, view, backupMode);
     const patch: Parameters<typeof updateSelection>[0] = { view, surface: surface.id };
     if ((view === "operations" || view === "reports") && !selection.eventId && model?.events[0]) {
       patch.eventId = model.events[0].eventId;
       patch.assetId = model.events[0].assetId;
     }
     updateSelection(patch);
-  }, [experienceKind, model?.events, selection.eventId, updateSelection]);
+  }, [backupMode, experienceKind, model?.events, selection.eventId, updateSelection]);
 
   const openSurface = useCallback((surfaceId: string, view: OperationsView) => {
     const patch: Parameters<typeof updateSelection>[0] = { surface: surfaceId, view };
@@ -228,23 +228,23 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
   }, [model?.events, selection.eventId, updateSelection]);
 
   const openAsset = useCallback((assetId: string, eventId: string | null) => {
-    updateSelection({ view: "objects", surface: reliabilitySurfaceForView(experienceKind, "objects").id, assetId, eventId });
-  }, [experienceKind, updateSelection]);
+    updateSelection({ view: "objects", surface: reliabilitySurfaceForView(experienceKind, "objects", backupMode).id, assetId, eventId });
+  }, [backupMode, experienceKind, updateSelection]);
 
   const openEvent = useCallback((eventId: string, assetId: string) => {
-    updateSelection({ view: "operations", surface: reliabilitySurfaceForView(experienceKind, "operations").id, eventId, assetId });
-  }, [experienceKind, updateSelection]);
+    updateSelection({ view: "operations", surface: reliabilitySurfaceForView(experienceKind, "operations", backupMode).id, eventId, assetId });
+  }, [backupMode, experienceKind, updateSelection]);
 
   const openReport = useCallback((eventId: string | null, assetId: string | null, reportTab: OperationsReportTab = "executive-brief") => {
     const fallback = model?.events[0] ?? null;
     updateSelection({
       view: "reports",
-      surface: reliabilitySurfaceForView(experienceKind, "reports").id,
+      surface: reliabilitySurfaceForView(experienceKind, "reports", backupMode).id,
       reportTab,
       eventId: eventId ?? fallback?.eventId ?? null,
       assetId: assetId ?? fallback?.assetId ?? null,
     });
-  }, [experienceKind, model?.events, updateSelection]);
+  }, [backupMode, experienceKind, model?.events, updateSelection]);
 
   const previewAsset = useCallback((assetId: string, eventId: string | null) => {
     updateSelection({ assetId, eventId });
@@ -308,7 +308,7 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
     retryDetail();
   }, [retryDetail, selectedEvent, user]);
 
-  const useReliabilityPreview = reliabilityWorkspacePreviewEnabled();
+  const useReliabilityPreview = backupMode || reliabilityWorkspacePreviewEnabled();
 
   if (loading && !model) return useReliabilityPreview
     ? <ReliabilityWorkspaceLoadingPlaceholder />
@@ -323,7 +323,9 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
   const canReadSystemLogs = canReadOperationsSystemLogs(user?.permissions);
   const selectedAssetId = selection.assetId;
   let content;
-  if (useReliabilityPreview && selection.view !== "system") {
+  if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
+    content = <OperationsOverviewPage model={model} role={selection.role} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+  } else if (useReliabilityPreview && selection.view !== "system") {
     content = <RoleComposedWorkspace
       experienceKind={experienceKind}
       view={selection.view}
@@ -376,6 +378,7 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
         onRefresh={refresh}
         refreshing={loading}
         onLogout={signOut}
+        backupMode={backupMode}
       >
         {body}
       </ReliabilityWorkspacePreview>
