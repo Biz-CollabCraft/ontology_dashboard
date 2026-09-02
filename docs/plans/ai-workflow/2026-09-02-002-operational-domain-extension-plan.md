@@ -1033,6 +1033,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U6. Runtime Context Orchestration
 
+- **Status:** Partially Verified. 단일 bounded read-only Agent executor, versioned policy, loop/tool budget, transient retry, structured trajectory, Impact Simulation 호출과 저장 전 domain version 재검증을 구현했다. Relation Resolver, 실제 DB adapter, summary materialization/API consumer 연결은 미구현이다.
 - packet getter와 runtime DB executor를 명시적으로 분리
 - single bounded ReAct executor와 versioned execution policy 구현
 - allowlist, loop/tool budget, stop condition과 reason code 구현
