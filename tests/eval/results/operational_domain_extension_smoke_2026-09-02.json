@@ -1,0 +1,35 @@
+{
+  "evaluation_schema_version": "operational-decision-smoke-v1.0",
+  "evaluation_mode": "deterministic_synthetic_smoke",
+  "candidate_sha": "5633f9143baf6b80b73dd14732c769382d69c1fa",
+  "executed_at": "2026-09-02",
+  "live_llm_evaluation": false,
+  "actual_mes_cmms_wms_qms_evaluation": false,
+  "scenario_count": 3,
+  "terminal_states": {
+    "ready": "complete",
+    "part_blocked": "partial_with_gaps",
+    "quality_hold": "partial_with_gaps"
+  },
+  "temporal_validation_pass_count": 3,
+  "mutation_attempt_count": 0,
+  "recommendation_count": 0,
+  "role_truth_consistent": true,
+  "relation_source_metadata_complete": true,
+  "quality_hold_not_calculable": true,
+  "part_blocked_planned_maintenance_not_calculable": true,
+  "regression": {
+    "passed": 154,
+    "failed": 0,
+    "environment": {
+      "APP_ENV": "test",
+      "ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK": "1"
+    }
+  },
+  "limitations": [
+    "Synthetic deterministic smoke; not production effectiveness evidence.",
+    "Does not compare B1/B2/B3 live LLM quality.",
+    "Does not claim actual MES/CMMS/WMS/QMS connectivity."
+  ],
+  "passed": true
+}

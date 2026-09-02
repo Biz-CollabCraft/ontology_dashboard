@@ -1,7 +1,7 @@
 ---
 title: Operational Domain Extension Plan
 type: feat
-status: active
+status: implementation-candidate-frozen
 date: 2026-09-02
 ---
 
@@ -69,12 +69,15 @@ source-ref subset, bounded retry와 trajectory다.
 | Synthetic production planning context | Verified | Pass | operation-context schema, fixture, ViewModel consumer |
 | Packet section tool routing | Verified | Pass | eval-only pipeline과 trajectory tests |
 | Fixed identity/context envelope contract | Verified | Pass | immutable schema, freshness/scope/version validator와 contract tests; runtime 미연결 |
-| 실제 DB runtime domain tool | Not Proven | Unknown | executor seam만 존재 |
-| Production Order/WIP/Alternative Capacity 확장 | Not Proven | Unknown | 통합 source/port 계약 없음 |
-| Maintenance/part/technician readiness 확장 | Not Proven | Unknown | 일부 fixture/backlog만 존재 |
-| Dynamic context temporal validation | Not Proven | Risk | Evidence Snapshot guard만 구현 |
-| Deterministic Impact Simulation | Not Proven | Unknown | 기존 production impact/What-if 기반만 존재 |
-| KG/LangGraph 필요성 | Not Proven | Pass | 도입 보류가 현재 결정 |
+| 격리 DB runtime domain tool | Verified | Pass | scope-bound SQLite snapshot read port와 Agent 통합 test |
+| 실제 MES/CMMS/WMS/QMS runtime tool | Not Proven | Unknown | external source는 not_connected 유지 |
+| Production Order/WIP/Alternative Capacity 확장 | Verified | Pass | typed synthetic contract, fixture/DB port, Agent/brief consumer |
+| Maintenance/part/technician readiness 확장 | Verified | Pass | action candidate-part-inventory-skill chain, blocker test |
+| Quality/Lot/Delivery 확장 | Verified | Pass | lot-WIP-order-delivery relation과 hold blocker test |
+| Dynamic context temporal validation | Verified | Pass | version 재조회, mismatch discard, materialization guard |
+| Deterministic Impact Simulation | Verified | Pass | 세 option, formula/intermediate/source refs, no recommendation |
+| Relation Resolver | Verified | Pass | flat-ID/RDB resolver, gap/conflict gate, source metadata |
+| KG/LangGraph 필요성 | Not Proven | Pass | production 도입 보류가 현재 gate 결정 |
 
 문서 또는 fixture가 존재한다는 이유만으로 runtime 구현 완료를 주장하지 않는다. 각 구현 단위는
 code, contract, test, consumer 또는 실제 service/DB trace 중 두 종류 이상의 독립 증거가 있을 때만
@@ -996,7 +999,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U2. Production Decision Context
 
-- **Status:** Partially Verified. typed synthetic ProductionOrder/WIP/Alternative Capacity source와 versioned read port, 관계 검증을 구현했다. 실제 MES/APS source와 Agent/ViewModel consumer 연결은 미구현이다.
+- **Status:** Verified for synthetic/isolated DB vertical slice. typed source, versioned fixture/SQLite read port, Agent/relation/brief consumer를 검증했다. 실제 MES/APS source는 not_connected이며 후속 integration 대상이다.
 - Production Order/WIP read port
 - Alternative Resource/Capacity read port
 - synthetic fixture와 격리 DB adapter
@@ -1005,7 +1008,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U3. Maintenance Readiness Context
 
-- **Status:** Partially Verified. synthetic Maintenance Window, ActionCandidate-PartRequirement, InventorySnapshot, Technician/Skill 후보와 결정론적 blocker 판정을 versioned read port로 구현했다. 실제 CMMS/WMS/인력 source 및 예약·출고·배정 command 연결은 미구현이다.
+- **Status:** Verified for synthetic/isolated DB vertical slice. Maintenance Window, ActionCandidate-PartRequirement, InventorySnapshot, Technician/Skill과 blocker/role consumer를 검증했다. 실제 CMMS/WMS/workforce source와 command는 not_connected 및 Closed-loop 후속 범위다.
 - Maintenance Window read port
 - MaintenanceAction/ActionCandidate 기반 PartRequirement read contract
 - Spare Part Readiness와 InventorySnapshot read port
@@ -1016,7 +1019,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U4. Quality and Delivery Context
 
-- **Status:** Partially Verified. synthetic QualityLot/DeliveryCommitment source와 versioned read port, lot→WIP→order→delivery 관계 및 quality hold blocker를 구현했다. 실제 QMS/ERP source와 consumer 연결은 미구현이다.
+- **Status:** Verified for synthetic/isolated DB vertical slice. QualityLot/DeliveryCommitment, lot→WIP→order→delivery 관계, hold blocker와 brief consumer를 검증했다. 실제 QMS/ERP source는 not_connected다.
 - Quality/Lot read port
 - Customer/Delivery relationship read port
 - quality hold와 missing relationship에서 impact 계산 차단
@@ -1024,7 +1027,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U5. Impact Simulation
 
-- **Status:** Partially Verified. versioned assumptions와 context version set을 사용하는 세 선택지 결정론적 계산, quality/readiness blocker, intermediate values와 limitation 보존을 구현했다. Agent/UI consumer와 실제 운영값 평가는 미구현이다.
+- **Status:** Verified for contract and consumer. 세 선택지 결정론적 계산, blocker, assumptions/formula/intermediate/source refs와 Agent/brief consumer를 검증했다. 실제 운영 효과 평가는 final evaluation에서도 별도 주장하지 않는다.
 - 제품 코드의 결정론적 simulation policy와 versioned result contract 구현
 - 세 선택지 계산과 `not_calculable` 처리
 - assumptions/formula/intermediate values/source refs 보존
@@ -1033,7 +1036,7 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U6. Runtime Context Orchestration
 
-- **Status:** Partially Verified. 단일 bounded read-only Agent executor, versioned policy, loop/tool budget, transient retry, structured trajectory, Impact Simulation 호출과 저장 전 domain version 재검증을 구현했다. Relation Resolver, 실제 DB adapter, summary materialization/API consumer 연결은 미구현이다.
+- **Status:** Verified for bounded synthetic/isolated DB execution. allowlist, budget, retry, trajectory, Relation Resolver, simulation, domain version 재검증, role brief와 immutable materialization을 연결했다. public API와 실제 external source composition은 후속 integration이다.
 - packet getter와 runtime DB executor를 명시적으로 분리
 - single bounded ReAct executor와 versioned execution policy 구현
 - allowlist, loop/tool budget, stop condition과 reason code 구현
@@ -1044,10 +1047,21 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 
 ### U7. Relation Resolver Decision Gate
 
+- **Status:** Verified. flat-ID/RDB resolver와 gate fixture가 현재 질문 경로를 충족하므로 KG/LangGraph production 도입을 보류한다.
 - flat IDs와 indexed RDB read model로 동일 질문을 먼저 해결
 - 관계 질문 정확도, query complexity, latency와 변경 비용을 기록
 - RDB 경계가 실제로 부족한 경우에만 KG 실험
 - 독립 tool branching/복구 상태가 service method를 넘는 경우에만 LangGraph 실험
+
+### U8. Consumer, Materialization, and Handoff
+
+- **Status:** Verified for structured consumer contract.
+- 동일 truth를 유지하는 process manager/engineer/maintenance technician/system admin 역할별 brief
+- why-now, relationship map, readiness, option comparison, gap/conflict와 source classification 보존
+- context version diff와 stale derived output invalidation
+- temporal validation 뒤 version-keyed immutable brief snapshot 생성
+- 사람 선택 뒤에만 non-command Decision Handoff Package 생성
+- recommendation, approval, WorkOrder, reservation/issue/usage mutation 0건 검증
 
 ## Verification Strategy
 
@@ -1108,6 +1122,20 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 - actual runtime integration이 없으면 synthetic/not_connected 표시 유지
 - KG/LangGraph는 decision gate 전 production dependency로 추가하지 않음
 - 구현 완료 후 final evaluation candidate SHA 고정
+
+## Implementation Candidate Evidence
+
+- candidate SHA: `5633f9143baf6b80b73dd14732c769382d69c1fa`
+- regression: `154 passed, 0 failed`
+- deterministic smoke: 3 scenarios passed
+- mutation attempts: 0
+- generated recommendations: 0
+- role truth consistency: pass
+- relation source/version/as-of completeness: pass
+- result: `tests/eval/results/operational_domain_extension_smoke_2026-09-02.json`
+- implementation report: `docs/eval/2026-09-02-operational-domain-extension-implementation-report.md`
+- live B1/B2/B3, gold quality, concurrency and human sample: **구현 완료 후 수행하는 final evaluation 단계로 미실행**
+- 실제 MES/CMMS/WMS/QMS 효과: **not connected / not evaluated**
 
 ## Non-goals
 
