@@ -308,6 +308,8 @@ def test_workflow_eval_gate_covers_minimum_release_axes(tmp_path: Path) -> None:
         "fallback_retry",
         "domain_context_grounding",
         "closed_loop_boundary",
+        "baseline_comparison",
+        "stability_evaluation_output",
     }
     assert set(gate["minimum_release_gates"]) == set(gate["evaluation_scope"])
     assert {
