@@ -1,8 +1,9 @@
-"""Prepare the two family artifacts used by the local real-time runtime.
+"""Prepare the frozen Canonical V3.1 models for the local real-time runtime.
 
-This is intentionally an explicit local bootstrap, not an implicit application
-fallback.  It publishes real Model Artifacts from the sibling gen_data canonical
-package and atomically selects one CNC and one compressor model.
+The launcher must not select a new algorithm or promote the newest local
+candidate.  It reconstructs the approved ``independent-logreg-v3.1`` artifacts
+from the immutable Canonical package when absent, verifies their lineage, and
+pins exactly those versions in the active model set.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+LEGACY_MODEL_VERSION = "independent-logreg-v3.1"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -82,23 +84,54 @@ def prepare(*, gen_data_root: Path, models_store: Path, force: bool = False) -> 
             result.append(candidate)
         return result
 
-    required = {
-        "compressor-failure-risk": "train-publish",
-        "cnc-failure-risk": "train-publish-cnc",
+    required = ("compressor-failure-risk", "cnc-failure-risk")
+
+    def pinned_candidate(model_id: str) -> dict | None:
+        for candidate in valid_candidates(model_id):
+            if candidate.get("model_version") != LEGACY_MODEL_VERSION:
+                continue
+            training_config = candidate.get("training_config") or {}
+            provenance = candidate.get("provenance") or {}
+            if (
+                training_config.get("training_config_version")
+                != "independent-logreg-v3.1-frozen-reconstruction-v1"
+                or float(training_config.get("selected_threshold", -1.0)) != 0.50
+                or provenance.get("reconstruction")
+                != "deterministic_from_frozen_v3.1_recipe"
+            ):
+                raise RuntimeError(
+                    f"pinned legacy artifact has incompatible lineage: "
+                    f"{model_id}/{LEGACY_MODEL_VERSION}"
+                )
+            return candidate
+        return None
+
+    # ``force`` re-runs validation but never replaces an immutable artifact.
+    # It is retained for CLI compatibility with earlier PR #160 invocations.
+    pinned = {model_id: pinned_candidate(model_id) for model_id in required}
+    if force or any(candidate is None for candidate in pinned.values()):
+        print(
+            f"[models] reconstructing frozen {LEGACY_MODEL_VERSION} artifacts "
+            f"from {gen_data_root}",
+            flush=True,
+        )
+        _publish(
+            "reconstruct-publish-v3-1",
+            gen_data_root=gen_data_root,
+            models_store=models_store,
+        )
+        pinned = {model_id: pinned_candidate(model_id) for model_id in required}
+
+    missing = [model_id for model_id, candidate in pinned.items() if candidate is None]
+    if missing:
+        raise RuntimeError(
+            "legacy V3.1 publication produced no valid pinned artifact: "
+            + ", ".join(missing)
+        )
+    selected = {
+        model_id: {"model_version": LEGACY_MODEL_VERSION, "required": True}
+        for model_id in required
     }
-    selected: dict[str, dict[str, object]] = {}
-    for model_id, command in required.items():
-        candidates = [] if force else valid_candidates(model_id)
-        if not candidates:
-            print(f"[models] publishing {model_id} from {gen_data_root}", flush=True)
-            _publish(command, gen_data_root=gen_data_root, models_store=models_store)
-            candidates = valid_candidates(model_id)
-        if not candidates:
-            raise RuntimeError(f"model publication produced no valid manifest: {model_id}")
-        selected[model_id] = {
-            "model_version": str(candidates[-1]["model_version"]),
-            "required": True,
-        }
 
     from systems.generator.app.runtime_pipeline.active_model_set_service import (
         ActiveModelSetService,
@@ -107,7 +140,7 @@ def prepare(*, gen_data_root: Path, models_store: Path, force: bool = False) -> 
 
     model_set = ActiveModelSet(
         model_set_id="pdm-local-realtime",
-        model_set_version="1.0.0",
+        model_set_version="3.1.0-independent-logreg-pinned",
         updated_at=datetime.now(timezone.utc),
         models=selected,
     )

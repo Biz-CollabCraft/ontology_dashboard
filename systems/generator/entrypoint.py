@@ -34,6 +34,16 @@ from systems.generator.model.compressor_training import (
     train_compressor_model,
 )
 from systems.generator.model.model_registry import publish_model_artifact
+from systems.generator.model.legacy_v31_training import (
+    CLASS_WEIGHT as LEGACY_CLASS_WEIGHT,
+    FAMILY_SENSORS as LEGACY_FAMILY_SENSORS,
+    MAX_ITER as LEGACY_MAX_ITER,
+    MODEL_VERSION as LEGACY_MODEL_VERSION,
+    RANDOM_SEED as LEGACY_RANDOM_SEED,
+    REFERENCE_PROBABILITY_TOLERANCE as LEGACY_PROBABILITY_TOLERANCE,
+    REGULARIZATION_C as LEGACY_REGULARIZATION_C,
+    reconstruct_legacy_v31_model,
+)
 from systems.generator.ontology_mapping.mapping_agent import map_all_sources
 from systems.generator.ontology_mapping.mapping_cache import get_mapping_store
 
@@ -398,6 +408,220 @@ def publish_cnc_training_artifact(*, force_reanalyze: bool = False) -> Path:
         )
 
 
+def publish_legacy_v31_artifacts() -> dict[str, Path]:
+    """Reconstruct and publish the frozen Canonical V3.1 runtime models.
+
+    Publication is allowed only when the immutable source/truth checksums match
+    the legacy model contract and the reconstructed latest probabilities match
+    the checked-in reference snapshots.
+    """
+
+    artifact_uri = os.getenv("MODEL_ARTIFACT_URI", "").strip()
+    if not artifact_uri:
+        raise RuntimeError("MODEL_ARTIFACT_URI is required for Generator publication")
+
+    data_dir = PATHS.data_dir.resolve()
+    truth_dir = data_dir.parent / "evaluation_truth"
+    output_dir = data_dir.parent / "model_outputs"
+    contract_path = output_dir / "model_contract.json"
+    metrics_path = output_dir / "model_metrics.json"
+    snapshot_path = output_dir / "prediction_snapshot.jsonl"
+    for required_path in (contract_path, metrics_path, snapshot_path):
+        if not required_path.is_file():
+            raise ValueError(f"Canonical V3.1 reconstruction input is missing: {required_path}")
+
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    if contract.get("model_version") != LEGACY_MODEL_VERSION:
+        raise ValueError(
+            "Canonical model contract does not describe "
+            f"{LEGACY_MODEL_VERSION}: {contract.get('model_version')!r}"
+        )
+    if contract.get("dataset_version") != "canonical-ai4i-physics-v3.1":
+        raise ValueError("Canonical model contract dataset version is not V3.1")
+    expected_outputs = contract.get("output_sha256") or {}
+    for reference_path in (metrics_path, snapshot_path):
+        if _sha256(reference_path) != expected_outputs.get(reference_path.name):
+            raise ValueError(
+                f"Canonical V3.1 reference output checksum mismatch: {reference_path}"
+            )
+    reference_metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+
+    specifications = {
+        "compressor": {
+            "model_id": "compressor-failure-risk",
+            "feature_kind": "compressor-temporal-v2",
+            "feature_schema_version": "compressor-independent-logreg-v3.1-features-v1",
+            "history_requirement_version": "compressor-independent-logreg-v3.1-history-v1",
+        },
+        "cnc": {
+            "model_id": "cnc-failure-risk",
+            "feature_kind": "cnc-temporal-v1",
+            "feature_schema_version": "cnc-independent-logreg-v3.1-features-v1",
+            "history_requirement_version": "cnc-independent-logreg-v3.1-history-v1",
+        },
+    }
+    published: dict[str, Path] = {}
+    artifact_root = Path(str(artifact_uri).removeprefix("file://")).expanduser().resolve()
+
+    for family, specification in specifications.items():
+        observation_path = data_dir / f"{family}_sensor_observation.csv"
+        truth_path = truth_dir / f"{family}_failure_truth.csv"
+        expected_observation_sha = (contract.get("canonical_input_sha256") or {}).get(
+            observation_path.name
+        )
+        expected_truth_sha = (contract.get("evaluation_truth_input_sha256") or {}).get(
+            truth_path.name
+        )
+        if not observation_path.is_file() or _sha256(observation_path) != expected_observation_sha:
+            raise ValueError(f"Canonical V3.1 observation checksum mismatch: {observation_path}")
+        if not truth_path.is_file() or _sha256(truth_path) != expected_truth_sha:
+            raise ValueError(f"Canonical V3.1 failure truth checksum mismatch: {truth_path}")
+
+        destination = artifact_root / str(specification["model_id"]) / LEGACY_MODEL_VERSION
+        if destination.exists():
+            manifest = json.loads((destination / "manifest.json").read_text(encoding="utf-8"))
+            provenance = manifest.get("provenance") or {}
+            if (
+                manifest.get("model_version") != LEGACY_MODEL_VERSION
+                or provenance.get("canonical_model_contract_sha256") != _sha256(contract_path)
+                or provenance.get("reference_snapshot_sha256") != _sha256(snapshot_path)
+            ):
+                raise ValueError(
+                    f"Existing {LEGACY_MODEL_VERSION} artifact does not match the frozen "
+                    f"Canonical V3.1 reconstruction contract: {destination}"
+                )
+            published[family] = destination
+            continue
+
+        reconstruction = reconstruct_legacy_v31_model(
+            family=family,
+            observation_path=observation_path,
+            truth_path=truth_path,
+            reference_snapshot_path=snapshot_path,
+        )
+        feature_schema_version = str(specification["feature_schema_version"])
+        feature_schema = {
+            "schema_version": feature_schema_version,
+            "feature_schema_version": feature_schema_version,
+            "features": reconstruction.feature_columns,
+            "target": "failure_within_24h",
+            "prediction_task": "binary_failure_within_horizon",
+            "observation_family": family,
+            "feature_engineering": {
+                "kind": specification["feature_kind"],
+                "base_sensors": LEGACY_FAMILY_SENSORS[family],
+                "expected_cadence_minutes": 10.0,
+                "rolling_rows": 36,
+                "rolling_min_periods": 12,
+                "sample_stride_rows": 6,
+                "baseline_days": 7,
+                "runtime_context": {
+                    "asset_baseline": "artifact_embedded_per_asset_first_7d_running",
+                    "recent_history_rows_required": 35,
+                    "history_order": "strictly_ascending_before_current_observation",
+                    "new_asset_policy": "calibrate_baseline_before_inference",
+                },
+                "baseline_stats": reconstruction.baseline_stats,
+            },
+        }
+        training_config = {
+            "training_config_version": "independent-logreg-v3.1-frozen-reconstruction-v1",
+            "training_version": "independent-logreg-v3.1",
+            "selected_model": "logistic_regression",
+            "random_seed": LEGACY_RANDOM_SEED,
+            "max_iter": LEGACY_MAX_ITER,
+            "class_weight": LEGACY_CLASS_WEIGHT,
+            "regularization_c": LEGACY_REGULARIZATION_C,
+            # V3.1 used 0.5 for the binary failure/no-failure label.  The
+            # lower operational severity boundaries are Backend policy, not a
+            # replacement binary classifier threshold.
+            "selected_threshold": 0.50,
+            "severity_thresholds": {
+                "attention": 0.20,
+                "warning": 0.45,
+                "critical": 0.75,
+            },
+            "label_horizon_hours": 24,
+            "reconstruction_policy": (
+                "fit frozen recipe only; publish iff latest predictions reproduce "
+                "the immutable Canonical V3.1 snapshots"
+            ),
+        }
+        family_metrics = dict(reference_metrics[family])
+        family_metrics["runtime_reconstruction"] = {
+            "feature_table_rows": reconstruction.rows,
+            "positive_rows": reconstruction.positive_rows,
+            "reference_prediction_count": reconstruction.reference_prediction_count,
+            "max_abs_probability_error": reconstruction.max_reference_probability_error,
+            "probability_tolerance": LEGACY_PROBABILITY_TOLERANCE,
+            "verified": True,
+        }
+        history_requirement = {
+            "history_requirement_version": specification["history_requirement_version"],
+            "feature_executor_version": feature_schema_version,
+            "observation_family": family,
+            "current_observation_required": True,
+            "prior_observations_required": 35,
+            "minimum_history_rows": 36,
+            "required_columns": LEGACY_FAMILY_SENSORS[family],
+            "missing_history_policy": "fail_closed",
+            "expected_cadence_minutes": 10.0,
+            "ordering": "strictly_ascending_before_current_observation",
+            "new_asset_policy": "calibrate_baseline_before_inference",
+        }
+        label_schema = {
+            "label_schema_version": f"{family}-failure-within-horizon-v3.1",
+            "target": "failure_within_24h",
+            "prediction_task": "binary_failure_within_horizon",
+            "prediction_horizon_hours": 24,
+            "positive_semantics": "next failure strictly after observation and within 24 hours",
+            "post_failure_rows_positive": False,
+            "right_censoring": "exclude final 24h of each asset observation horizon",
+            "maintenance_rows_excluded": True,
+            "truth_usage": "label creation and reconstruction verification only",
+        }
+
+        with tempfile.TemporaryDirectory(prefix=f"{family}-legacy-v31-") as work:
+            model_file = Path(work) / "model.joblib"
+            import joblib
+
+            joblib.dump(reconstruction.model, model_file)
+            published[family] = publish_model_artifact(
+                artifact_uri=artifact_uri,
+                model_id=str(specification["model_id"]),
+                model_version=LEGACY_MODEL_VERSION,
+                dataset_version=str(contract["dataset_version"]),
+                feature_schema_version=feature_schema_version,
+                model_file=model_file,
+                feature_schema=feature_schema,
+                training_config=training_config,
+                metrics=family_metrics,
+                provenance={
+                    "source_repository": "Biz-CollabCraft/gen_data",
+                    "source_contract": "Canonical V3.1 file/artifact",
+                    "source_package_root": "gen_data/canonical",
+                    "source_file": observation_path.name,
+                    "source_file_sha256": expected_observation_sha,
+                    "failure_truth_file": truth_path.name,
+                    "failure_truth_file_sha256": expected_truth_sha,
+                    "canonical_model_contract_sha256": _sha256(contract_path),
+                    "reference_snapshot_sha256": _sha256(snapshot_path),
+                    "producer": "ontology_dashboard/systems/generator",
+                    "reconstruction": "deterministic_from_frozen_v3.1_recipe",
+                },
+                compatibility={
+                    "runtime": "ontology_dashboard.systems.generator.runtime_pipeline",
+                    "prediction_task": "binary_failure_within_horizon",
+                    "observation_family": family,
+                    "python": ">=3.11",
+                },
+                label_schema=label_schema,
+                history_requirement=history_requirement,
+                extra_files={"legacy_model_contract": contract_path},
+            )
+    return published
+
+
 def update_current_alias(artifact_path: Path) -> Path:
     alias = artifact_path.parent / "current"
     temporary = artifact_path.parent / ".current.tmp"
@@ -503,6 +727,7 @@ def main() -> int:
             "train-publish",
             "train-publish-cnc",
             "train-publish-all",
+            "reconstruct-publish-v3-1",
             "llm-smoke",
         ),
         nargs="?",
@@ -559,6 +784,15 @@ def main() -> int:
             except RuntimeError as exc:
                 result["cnc_artifact"]["promotion_error"] = str(exc)
                 promotion_failures.append(f"cnc: {exc}")
+    if args.command == "reconstruct-publish-v3-1":
+        legacy_artifacts = publish_legacy_v31_artifacts()
+        result["legacy_v3_1_artifacts"] = {
+            family: {
+                "path": str(path),
+                "model_version": LEGACY_MODEL_VERSION,
+            }
+            for family, path in sorted(legacy_artifacts.items())
+        }
     if args.command == "llm-smoke":
         result["llm"] = llm_smoke()
 
