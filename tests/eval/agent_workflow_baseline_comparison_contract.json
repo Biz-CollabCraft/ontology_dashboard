@@ -20,9 +20,11 @@
       "label": "direct_llm",
       "input": "minimally_normalized_raw_input",
       "uses": [
-        "same_read_only_output_schema"
+        "same_read_only_output_schema",
+        "empty_role_shape_hint_only"
       ],
       "excludes": [
+        "deterministic_summary_answer_prose",
         "evidence_packet",
         "workflow_orchestration",
         "saved_summary_reuse",
@@ -106,9 +108,24 @@
     "latency_p50_p95",
     "fine_grained_field_variance",
     "evidence_reference_agreement",
-    "stale_recovery_rate",
     "abnormal_running_row_rate"
   ],
+  "temporal_consistency_extension": {
+    "harness": "scripts/evaluate_temporal_consistency.py",
+    "fault_scenarios": [
+      "risk_escalation",
+      "risk_recovery",
+      "artifact_replacement",
+      "evidence_history_update"
+    ],
+    "primary_metrics": [
+      "stale_candidate_accepted_rate",
+      "snapshot_mismatch_detection_rate",
+      "stale_output_block_rate",
+      "fresh_state_recovery_rate"
+    ],
+    "boundary": "B3 uses production MaintenanceLoopService snapshot mismatch/requery logic; B1/B2 acceptance-side side effects are simulated only."
+  },
   "fault_injection": {
     "primary_arm": "B3",
     "execution_scope": [

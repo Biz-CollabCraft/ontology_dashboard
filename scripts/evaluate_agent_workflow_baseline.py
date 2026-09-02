@@ -31,6 +31,22 @@ ARMS = ("B1", "B2", "B3")
 FAULTS = ("none", "malformed_output", "provider_timeout", "snapshot_mismatch")
 MAX_ATTEMPTS = 2
 
+DIRECT_LLM_SYSTEM_PROMPT = """
+You write a Korean read-only maintenance review summary from minimally normalized raw input.
+
+Hard contract:
+- Use only facts present in raw_input.
+- Do not assume Evidence Packet fields, source references, inspection targets, SOP guidance,
+  evidence gaps, or deterministic summary prose that are not present in raw_input.
+- Do not create work orders, approvals, maintenance events, replay requests, action IDs,
+  state patches, or any closed-loop mutation.
+- Do not claim repair completion, auto approval, real downtime reduction, root-cause certainty,
+  or actual failure prevention.
+- Return JSON only, matching the provided editable output schema.
+- Return title, summary, and exactly one role summary for each role listed in output_roles.
+- Keep role values unchanged. All prose must be read-only Korean and grounded in raw_input.
+""".strip()
+
 
 class JsonProvider(Protocol):
     name: str
@@ -56,12 +72,16 @@ class MockJsonProvider:
 
     def generate_json(self, system_prompt: str, payload: dict[str, Any], **_: Any) -> dict[str, Any]:
         editable = payload.get("baseline_editable_fields") or {}
+        role_rows = editable.get("role_summaries") or [
+            {"role": role, "quote": "검토 필요"}
+            for role in payload.get("output_roles") or ("field_operator", "process_manager")
+        ]
         return {
             "title": editable.get("title") or "설비 검토 요약",
             "summary": editable.get("summary") or "제공된 입력을 검토해야 합니다.",
             "role_summaries": [
                 {"role": item["role"], "quote": item.get("quote") or "검토 필요"}
-                for item in editable.get("role_summaries") or []
+                for item in role_rows
             ],
         }
 
@@ -83,7 +103,8 @@ class FaultInjectingProvider:
 
 
 def raw_input_payload(packet: dict[str, Any], baseline: dict[str, Any]) -> dict[str, Any]:
-    """Project raw-ish fixture fields without the Evidence Packet envelope or source refs."""
+    """Project raw-ish fixture fields without Evidence Packet or deterministic answer prose."""
+    del baseline
     return {
         "raw_input": {
             "asset_id": packet.get("asset_id"),
@@ -94,12 +115,13 @@ def raw_input_payload(packet: dict[str, Any], baseline: dict[str, Any]) -> dict[
             "operation_context": packet.get("operation_context_summary"),
             "maintenance_history": packet.get("maintenance_history_summary"),
         },
+        "output_roles": ["field_operator", "process_manager"],
         "baseline_editable_fields": {
-            "title": baseline.get("title"),
-            "summary": baseline.get("summary"),
+            "title": "",
+            "summary": "",
             "role_summaries": [
-                {"role": item["role"], "quote": item.get("quote")}
-                for item in baseline.get("role_summaries") or []
+                {"role": "field_operator", "quote": ""},
+                {"role": "process_manager", "quote": ""},
             ],
         },
         "allowed_output_fields": ["title", "summary", "role_summaries"],
@@ -203,17 +225,19 @@ def run_arm(
     injected = FaultInjectingProvider(provider, fault)
     attempts = MAX_ATTEMPTS if arm == "B3" else 1
     candidate: dict[str, Any] | None = None
+    raw_llm_output: dict[str, Any] | None = None
     errors: list[str] = []
     failure_reason: str | None = None
 
     for attempt in range(1, attempts + 1):
         try:
             editable = injected.generate_json(
-                AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT,
+                DIRECT_LLM_SYSTEM_PROMPT if arm == "B1" else AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT,
                 payload,
                 response_schema=agent_review_summary_editable_schema(),
                 response_schema_name="agent_review_summary_editable",
             )
+            raw_llm_output = editable
             editable_errors = _validate_editable_candidate(editable)
             if editable_errors:
                 errors = editable_errors
@@ -268,6 +292,7 @@ def run_arm(
         fallback=fallback,
         fallback_reason=failure_reason,
         trace=trace,
+        raw_llm_output=raw_llm_output,
     )
 
 
@@ -336,6 +361,7 @@ def _row(
     fallback: bool,
     fallback_reason: str | None,
     trace: dict[str, Any],
+    raw_llm_output: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     errors = validate_agent_review_summary_contract(candidate, packet=packet) if candidate else ["empty"]
     usage = (
@@ -358,6 +384,7 @@ def _row(
         "schema_valid": not errors,
         "schema_validation": {"passed": not errors, "errors": errors},
         "llm_output": candidate,
+        "raw_llm_output": raw_llm_output,
         "gold_accuracy": gold,
         "accuracy_goldset_score": (
             gold.get("accuracy_goldset_score") if isinstance(gold, dict) else None
@@ -527,6 +554,8 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         total_cost = round(sum(costs), 8) if cost_state == "measured" else None
         by_arm[arm] = {
             "runs": len(arm_rows),
+            "gold_scored_runs": len(scores),
+            "gold_unscored_runs": len(arm_rows) - len(scores),
             "gold_score_mean": round(statistics.mean(scores), 6) if scores else None,
             "gold_score_median": round(statistics.median(scores), 6) if scores else None,
             "gold_score_variance": round(statistics.pvariance(scores), 8) if scores else None,

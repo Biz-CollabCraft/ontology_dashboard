@@ -184,5 +184,19 @@ def test_b1_uses_raw_projection_and_b2_uses_evidence_payload() -> None:
     assert "raw_input" in raw
     assert "summary_context" not in raw
     assert "source_refs" not in raw["raw_input"]
+    assert raw["baseline_editable_fields"] == {
+        "title": "",
+        "summary": "",
+        "role_summaries": [
+            {"role": "field_operator", "quote": ""},
+            {"role": "process_manager", "quote": ""},
+        ],
+    }
+    assert raw["output_roles"] == ["field_operator", "process_manager"]
+    assert baseline["summary"] not in json.dumps(raw, ensure_ascii=False)
+    assert all(
+        item["quote"] not in json.dumps(raw, ensure_ascii=False)
+        for item in baseline["role_summaries"]
+    )
     assert "summary_context" in evidence
     assert evidence["summary_context"]["source_refs"]
