@@ -181,14 +181,14 @@ Model Artifact가 발행됐다고 성민 역할이 끝나지 않는다.
 
 그리고 Product Result / Evidence가 안정화된 이후에는 **Evidence-grounded 동적 보고서 기능의 feature owner**를 맡는다.
 
-호범 파트의 개발 역량 포인트는 단순한 LLM 출력 검증 테스트가 아니라, ML Artifact를 제품 Backend Runtime으로 전환하고 그 결과를 Evidence API와 Grounded Report / LLM 입력까지 연결하는 제품화 레이어다.
+호범 파트의 개발 역량 포인트는 단순한 LLM 출력 검증 테스트가 아니라, Generator Prediction Result Batch를 제품 Backend 판단 결과로 승격하고 그 결과를 Evidence API와 Grounded Report / LLM 입력까지 연결하는 제품화 레이어다.
 
 ### Primary Ownership
 
 ```text
-Model Artifact
-→ Artifact Validation / Load
-→ Runtime Inference
+Prediction Result Batch
+→ Batch Validation / Lineage Check
+→ Threshold Decision
 → Product Result Artifact
 → Evidence Payload / Provenance
 → Event Evidence Projection
@@ -199,11 +199,10 @@ Model Artifact
 
 ### Backend Intelligence 담당 작업
 
-- Model Artifact loader
-- manifest / `artifact_files[*].sha256` / compatibility validation
-- current observation 조회
-- history requirement 처리
-- runtime inference orchestration
+- Prediction Result Batch inbox
+- schema / scope / checksum / lineage validation
+- Generator model_id / model_version / raw score provenance 보존
+- Threshold Policy 적용
 - failure probability / failure type / status 산출
 - Product Result `normal / attention / warning / critical`과 runtime
   `available / unavailable` 상태를 분리해 처리
@@ -1174,7 +1173,9 @@ Model Training / Evaluation
         ↓
 Model Artifact
         ↓
-Backend Runtime Inference
+Generator Runtime Prediction / Prediction Result Batch
+        ↓
+Backend Threshold / Product Result Promotion
         ↓
 Product Result / Evidence
         ↓

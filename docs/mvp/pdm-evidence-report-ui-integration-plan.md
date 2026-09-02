@@ -27,7 +27,7 @@ Dashboard UI
 - `ontology-dashboard`는 제품 API, 프론트엔드, 역할별 리포트 스키마, MVP 화면을 담당한다.
 - `systems/generator`는 센서/프로토콜 로그로부터 정제된 Observation/Feature Series를 생성하고 Model Artifact를 발행하는 목표 생산자(Target Producer)다.
 - Generator의 Observation/Feature Series는 후속 구현 목표인 **Target 산출물**이며, 현재 `main`에서는 Model Artifact 발행 위주로 운영 중이다.
-- Product Result Artifact/Evidence의 운영 producer는 `systems/backend/app/diagnosis`이며, Generator가 발행한 Observation/Feature와 Model Artifact를 기반으로 runtime feature 재현 및 inference를 수행한다.
+- Product Result Artifact/Evidence의 운영 producer는 `systems/backend/app/diagnosis`이며, Generator가 발행한 Prediction Result Batch를 검증·판정·승격한다.
 - `risk_series`는 Generator의 Feature Series가 아니라, **Backend Diagnosis Prediction History**에서 생성되는 런타임 진단 시계열이다.
 - Backend Report 및 프론트엔드는 raw `gen_data` 로그를 직접 읽지 않으며, 공식 read boundary를 통해 ViewModel을 구성한다.
 - `pdm-mvp`는 운영 producer가 아니라 Evidence Package 필드 의미, source field, deterministic 역할별 리포트 블록의 reference implementation이다.
@@ -47,7 +47,7 @@ Dashboard UI
 | 대상 | 현재 검증 수준 | 2주차 계획에서의 해석 |
 |---|---|---|
 | dashboard fixture | `data/fixtures/GS-*.json` schema/audit, expected prediction, 의도된 data-quality fixture 검증 | demo/gold regression 기준. 운영 source of truth로 취급하지 않음 |
-| diagnosis | `systems/backend/app/diagnosis`가 Result Artifact/Evidence producer 책임을 갖고 schema validation 수행 | producer 책임은 공식. 운영 Model Artifact 주입 기반 검증은 별도 단계 |
+| diagnosis | `systems/backend/app/diagnosis`가 Result Artifact/Evidence producer 책임을 갖고 Batch/schema validation과 Threshold 판정을 수행 | producer 책임은 공식. 운영 Prediction Result Batch 기반 검증은 별도 단계 |
 | Product Result Artifact | `result-artifact-v1.0`, `prediction_task`, `canonical_source_mutated=false`, top factor shape 검증 | 제품 예측 결과 공식 기록. 예측 성능 검증과는 구분 |
 | dashboard Evidence | `contracts/schemas/evidence-package.schema.json`과 MVP report/layout 테스트로 검증 | 현행 consumer를 깨뜨리지 않는 compatibility 기준. `pdm-mvp` 필드 의미와 완전 일치한다고 보지는 않음 |
 
@@ -189,8 +189,10 @@ flowchart TD
 
   GEN["systems/generator\nfeature engineering / training"] --> MA["Model Artifact\nmodel-artifact-v1.0\nfeature schema / history requirement / provenance"]
 
-  OBS --> DIA["Backend Diagnosis\nhistory window load\nModel Artifact validation\nruntime inference"]
-  MA --> DIA
+  OBS --> GENRT["Generator Runtime Pipeline\nhistory window / Model Artifact validation\nruntime prediction score"]
+  MA --> GENRT
+  GENRT --> BATCH["Prediction Result Batch"]
+  BATCH --> DIA["Backend Diagnosis\nbatch validation\nthreshold / promotion"]
   DIA --> RA["Product Result Artifact\nresult-artifact-v1.0\ncurrent risk / status / top factors"]
   DIA --> EV["Evidence Payload\nsensor evidence / baseline / gaps / provenance"]
   DIA --> RTS["Runtime Prediction/Result Timeline\nrisk_series source"]
@@ -324,13 +326,12 @@ type AssetDetailViewModel = {
 | `risk_series` | (미구현) Backend Diagnosis Runtime Prediction History Query Contract. canonical source는 `pm_result_artifacts` append-only Product Result history이며, detail payload가 필요할 때만 `prediction_result_id`로 `prediction_results`를 join | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; `pm_prediction_timeline`, `precomputed_prediction_timeline`, gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
 | `equipment_history` | Activity, Decision, Maintenance, WorkOrder source | Operations/Maintenance API | 빈 배열과 `evidence.gaps[]` |
 
-`features[].history.points`는 센서/피처 시계열이고, `risk_series`는 runtime inference 결과의
+`features[].history.points`는 센서/피처 시계열이고, `risk_series`는 Runtime Prediction Batch를 Backend가 승격한 결과의
 누적이다. 따라서 센서 Observation series는 Backend canonical/overlay Observation read contract에서
 읽고, 파생 Feature series는 versioned Feature Schema/transform contract를 적용한 Backend Feature
 Executor result에서 제공한다. `systems/generator`는 Feature/Label 의미, History Requirement,
 transform contract, Model Artifact publish를 소유하지만 제품 runtime series를 Product API source로
-publish하지 않는다. `risk_series`는 Backend Diagnosis가 Model Artifact와 Observation/Feature
-입력으로 runtime inference를 수행해 생성한 Product Result history에서 파생한다. 현재 canonical
+publish하지 않는다. `risk_series`는 Backend Diagnosis가 Prediction Result Batch를 검증·판정·승격해 생성한 Product Result history에서 파생한다. 현재 canonical
 source는 `pm_result_artifacts`의 asset별 append-only Product Result history이며, 상세 payload가
 실제로 필요할 때만 `prediction_result_id`로 `prediction_results`를 조회한다. Product API는 내부
 테이블 shape를 직접 노출하지 않는다.
@@ -593,7 +594,7 @@ Evidence-state 기준으로 PR #25 Step 1~13의 historical evidence는 보존하
 
 - `gen_data`: SensorRecord / protocol record 생성과 source lineage 보존
 - `systems/generator`: protocol/source record 검증, measurement 조립, quality policy, history window, Feature/Label 생성, Model Artifact publish
-- `systems/backend/app/diagnosis`: Model Artifact와 Observation/Feature 입력을 소비해 runtime inference를 수행하고, Product Result Artifact/Evidence 생성, Runtime Prediction History 저장/조회, Result/Evidence read model 제공
+- `systems/backend/app/diagnosis`: Prediction Result Batch를 소비해 Threshold 판정과 Product Result Artifact/Evidence 생성, Runtime Prediction History 저장/조회, Result/Evidence read model 제공
 
 ```text
 유지: Diagnosis Producer -> Product Result Artifact -> Event Evidence Projection -> Report/ViewModel
@@ -753,7 +754,7 @@ Historical PR #50 근거로는 legacy `systems/backend/ontology_dashboard/predic
 
 이 매핑을 service 내부에 계속 두지 말고 producer enrichment 결과를 읽는 projection layer를 호출하도록 분리한다.
 
-PR #18/#41 당시 `/api/events/{event_id}/evidence`와 `/api/events/{event_id}/report`는 legacy `systems/backend/ontology_dashboard/service.py`의 fixture service 경로도 사용했고, legacy `systems/backend/ontology_dashboard/product_result_evidence_projection.py`의 projection 계약을 우선 고정했다. PR #92 이후 현행 구현은 canonical `systems/backend/app/diagnosis/evidence_projection.py` 및 `systems/backend/app/...` service/adapter 경계로 수렴한다. 다음 구현은 runtime inference와 Product Result Artifact/Evidence 최종 생성 책임을 가진 `systems/backend/app/diagnosis`가 `evidence_payload`를 산출하도록 유지하고, Product API adapter도 canonical `systems/backend/app/...` 경계만 사용한다.
+PR #18/#41 당시 `/api/events/{event_id}/evidence`와 `/api/events/{event_id}/report`는 legacy `systems/backend/ontology_dashboard/service.py`의 fixture service 경로도 사용했고, legacy `systems/backend/ontology_dashboard/product_result_evidence_projection.py`의 projection 계약을 우선 고정했다. PR #92 이후 현행 구현은 canonical `systems/backend/app/diagnosis/evidence_projection.py` 및 `systems/backend/app/...` service/adapter 경계로 수렴한다. 다음 구현은 Prediction Result Batch 검증·판정과 Product Result Artifact/Evidence 최종 생성 책임을 가진 `systems/backend/app/diagnosis`가 `evidence_payload`를 산출하도록 유지하고, Product API adapter도 canonical `systems/backend/app/...` 경계만 사용한다.
 
 ### 5.4 Report Generator 의미 병합
 
@@ -994,7 +995,7 @@ Status 값은 다음만 사용한다.
 
 - 기본 `GET /api/events/{event_id}/evidence` 응답은 legacy shape를 유지한다.
 - canonical Event Evidence projection은 명시적 selector가 있을 때만 반환된다.
-- runtime inference와 Product Result Artifact/Evidence 최종 생성 책임은 `systems/backend/app/diagnosis`에 유지된다.
+- Runtime Prediction score/Batch 생성 책임은 `systems/generator`, Product Result Artifact/Evidence 최종 생성 책임은 `systems/backend/app/diagnosis`에 유지된다.
 - API contract regression이 legacy/canonical 응답을 모두 검증한다.
 - runtime 생성 결과와 imported 기존 결과가 동일한 Result API shape를 사용하고, Evidence 부재가 계약 전체 강등이나 화면 분기로 이어지지 않는다.
 

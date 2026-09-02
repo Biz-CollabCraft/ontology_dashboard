@@ -4,7 +4,7 @@
 Dashboard, Operations, Executive Brief, API에서 일관되게 활용하기 위한 팀 프로젝트입니다.
 
 이 저장소는 단순 예측 모델 저장소가 아니라 `Biz-CollabCraft/gen_data`가 생성한 source data를
-소비해 Feature/Model Artifact, runtime inference, Product Result Artifact/Evidence, 업무 Action,
+소비해 Feature/Model Artifact, Generator Runtime Prediction, Product Result Artifact/Evidence, 업무 Action,
 Frontend와 Report까지 연결하는 제품 실행 저장소입니다.
 
 ## 1. 프로젝트 목표
@@ -18,7 +18,9 @@ Feature / Label / Model Training
         ↓
 Model Artifact
         ↓
-Backend Runtime Inference
+Generator Runtime Prediction / Prediction Result Batch
+        ↓
+Backend Threshold / Product Result Promotion
         ↓
 Product Result Artifact / Evidence
         ↓
@@ -47,10 +49,11 @@ Source Data Producer / Canonical V3.1 source-reference baseline
 systems/generator
 extraction → ontology mapping → topology → feature → training/evaluation
 → immutable versioned Model Artifact
-        ↓ MODEL_ARTIFACT_URI
+→ runtime prediction score → Prediction Result Batch
+        ↓ Prediction Result Batch Contract
 systems/backend/app/diagnosis
-current observation + Model Artifact
-→ runtime inference → Product Result Artifact / Evidence
+batch validation + threshold policy
+→ Product Result Artifact / Evidence
         ↓
 Backend Product API
         ↓
@@ -60,8 +63,8 @@ systems/frontend / Executive Brief / LLM Report
 ```
 
 - `Biz-CollabCraft/gen_data`: raw/simulation/synthetic sensor data, Canonical V3.1 생성 기준, source/reference fixture와 재현성의 Source of Truth
-- `systems/generator`: Extraction, Feature/Label, Model Training/Evaluation, versioned Model Artifact producer
-- `systems/backend/app/diagnosis`: Model Artifact loader, runtime inference, Product Result Artifact/Evidence 최종 producer
+- `systems/generator`: Extraction, Feature/Label, Model Training/Evaluation, versioned Model Artifact와 Runtime Prediction score/Batch producer
+- `systems/backend/app/diagnosis`: Prediction Result Batch 수신·검증, Threshold Policy 적용, Product Result Artifact/Evidence 최종 producer
 - Backend Product API: Frontend, Report, Closed-loop가 공통으로 소비하는 제품 경계
 - Ontology Closed-loop: Decision, Recommended Action, Maintenance Action과 설비 상태 연결
 - `systems/frontend`: Overview, Objects, Operations, Executive Brief와 최종 사용자 경험
@@ -248,7 +251,8 @@ Canonical V3.1
 → Feature / Label
 → Model Training
 → Model Artifact
-→ Backend Runtime Inference
+→ Generator Runtime Prediction / Prediction Result Batch
+→ Backend Threshold / Product Result Promotion
 → Product Result / Evidence
 → Recommended Action / Manager Decision
 → Maintenance Action / Event

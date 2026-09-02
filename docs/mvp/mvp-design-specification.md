@@ -68,7 +68,7 @@ Overview 위험 현황
 |---|---|
 | gen_data/팀원3 | raw/simulation/synthetic sensor data, Canonical V3.1 물리·생성 기준, source/reference fixture, 원천 생성 재현성 |
 | ontology_dashboard Generator / 팀원3 | Protocol Extraction/Parsing 및 승인 Mapping 적용, Preprocessing Plan, Feature Schema/Recipe 기반 Feature Dataset Bundle, Model Training 및 versioned Model Artifact 발행, source-to-artifact provenance |
-| ontology_dashboard Backend Diagnosis·Query API / 팀원3 | Model Artifact 검증·로드, runtime inference, Product Result Artifact/Evidence, Prediction 조회, 목록·상세·집계 API 및 runtime provenance |
+| ontology_dashboard Backend Diagnosis·Query API / 팀원3 | Prediction Result Batch 검증·저장, Threshold 판정, Product Result Artifact/Evidence, Prediction 조회, 목록·상세·집계 API 및 runtime provenance |
 | Frontend/팀원1 | 네 화면, ViewModel, 상태·이동·접근성 |
 | Report API/팀원4 | 리포트 endpoint, ReportInput/Output, deterministic·LLM·template, 근거 추적 |
 | 문서/팀원2 | 요구사항·스키마·기능·API·보고서·추적성 |
@@ -101,4 +101,3 @@ Overview 위험 현황
 - LLM 실패 시에도 구조화 보고서를 표시한다.
 - 요구사항부터 테스트까지 추적 가능하다.
 - 미합의·후속 기능은 명확히 표시된다.
-

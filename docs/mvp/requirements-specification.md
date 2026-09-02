@@ -15,7 +15,8 @@
 ```text
 gen_data의 버전된 합성 원천 데이터
 → systems/generator의 Feature·Model Artifact
-→ systems/backend/diagnosis의 runtime inference
+→ systems/generator의 Runtime Prediction score·Batch
+→ systems/backend/diagnosis의 Threshold 판정·Product Result 승격
 → Product Result Artifact·Evidence
 → API
 → Dashboard·Report
@@ -68,7 +69,7 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
   - Observation Dataset의 구조와 컬럼 역할을 분석하여 불변 Preprocessing Plan을 발행한다.
   - Ontology Mapping을 조회하지 않고 Feature Schema/Recipe 및 Label Schema를 실행하여 Feature Dataset Bundle을 발행한다.
   - Feature Dataset Bundle을 소비하여 모델을 학습·평가하고 versioned Model Artifact를 발행한다.
-- `systems/backend/app/diagnosis`: Model Artifact 검증·로드, runtime inference,
+- `systems/backend/app/diagnosis`: Prediction Result Batch 검증·저장, Threshold Policy 적용,
   Product Result Artifact와 Evidence 생성.
 - Frontend: API가 제공한 공통 결과의 사용자 화면 표현.
 - Report: 검증된 구조화 결과의 역할별 문장·블록 생성.

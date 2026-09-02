@@ -5,6 +5,7 @@ API 계약과 팀 공유 문서를 관리한다.
 
 ## 문서 묶음
 
+- [문서 구조와 네이밍 기준](./documentation-structure.md)
 - [최종 역할 분배 및 Step별 실행 계획](./final_team_role_and_step_plan.md)
 - [Ontology Operations & Closed-loop 구현 계획](./closed-loop-implementation-plan.md)
 - [Closed-loop Domain 계약](./closed-loop-domain-contract.md)
@@ -16,6 +17,7 @@ API 계약과 팀 공유 문서를 관리한다.
 - [Backend Domain-First Migration Map](./backend-migration-map.md)
 - [Architecture Decision Records](./architecture-decisions/README.md)
 - [MVP / Product documentation](./mvp/README.md)
+  - [Backend Runtime / Evidence / Agent Review 경계](./mvp/backend-runtime-evidence-agent-review-boundary.md)
   - [요구사항 명세](./mvp/requirements-specification.md)
   - [기능 명세](./mvp/functional-specification.md)
   - [API 명세](./mvp/api-specification.md)
@@ -25,6 +27,8 @@ API 계약과 팀 공유 문서를 관리한다.
   - [Runtime Ownership](./mvp/runtime-ownership-integration.md)
   - [추적성 매트릭스](./mvp/traceability-matrix.md)
   - [2026-08 Week 2 history](./mvp/history/2026-08-week2/)
+- [Schema and Diagram Documents](./schema/README.md)
+  - [Workflow and Closed-loop DB Diagram](./schema/db-diagram.md)
 - [AI 코드 리뷰 컨텍스트](./ai-code-review-context.md)
 
 ## 개인 기여 문서
@@ -44,6 +48,8 @@ API 계약과 팀 공유 문서를 관리한다.
 - 다른 저장소의 번호형 디렉터리 체계를 그대로 복사하지 않는다.
 - 데이터 원본과 대용량 결과 파일은 문서 디렉터리에 중복 저장하지 않는다.
 - 검증된 사실, 요구사항 초안, 팀 합의가 필요한 항목을 문서 상태로 구분한다.
+- 현재 팀 계약은 `docs/mvp/`, 아키텍처 결정은 `docs/architecture-decisions/`,
+  실행 계획은 `docs/plans/`, 개인 기여 근거는 `docs/contributions/`에 둔다.
 - 현재 계약 위치는 각 문서에서 명시한다. 공유 계약 migration 완료 후 시스템 경계를
   넘는 기계 판독 계약의 정본은 `contracts/`의 versioned Schema로 관리하며,
   milestone 문서는 결정 배경과 변경 이력으로 유지한다.

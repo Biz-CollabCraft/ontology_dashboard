@@ -15,19 +15,22 @@
 7. [MVP 설계 명세](./mvp-design-specification.md)
 8. [MVP 추적성 매트릭스](./traceability-matrix.md)
 9. [Runtime Ownership 통합 기준](./runtime-ownership-integration.md)
-10. [Generator Feature/Label 계약](./generator-feature-label-contract.md)
-11. [Model Artifact Publish 계약](./model-artifact-publish-contract.md)
-12. [Canonical V3.1 필드 검증표](./v3.1-field-validation.md)
-13. [PdM Evidence/Report UI 통합 계획](./pdm-evidence-report-ui-integration-plan.md)
-14. [Canonical V3.1 위험 상승 탐지 기준](./preventive-risk-rise-analysis.md)
-15. [예방조치 What-if 개발 계획](./preventive-what-if-development-plan.md)
-16. [Asset Detail / Overview UI 의사결정 로그](./asset-detail-overview-ui-decision-log.md)
+10. [Backend Runtime / Evidence / Agent Review 경계](./backend-runtime-evidence-agent-review-boundary.md)
+11. [Generator Feature/Label 계약](./generator-feature-label-contract.md)
+12. [Model Artifact Publish 계약](./model-artifact-publish-contract.md)
+13. [Canonical V3.1 필드 검증표](./v3.1-field-validation.md)
+14. [PdM Evidence/Report UI 통합 계획](./pdm-evidence-report-ui-integration-plan.md)
+15. [Canonical V3.1 위험 상승 탐지 기준](./preventive-risk-rise-analysis.md)
+16. [예방조치 What-if 개발 계획](./preventive-what-if-development-plan.md)
+17. [Asset Detail / Overview UI 의사결정 로그](./asset-detail-overview-ui-decision-log.md)
 
 Closed-loop 상태 머신의 canonical source는 [`../closed-loop-domain-contract.md`](../closed-loop-domain-contract.md),
 Product/API/UI의 역할·Action·소비 규칙은
 [`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 따른다.
 정비 완료 이후 대상 설비 Overlay와 정비 후 Runtime Prediction handoff는
 [`../closed-loop-runtime-overlay-contract.md`](../closed-loop-runtime-overlay-contract.md)를 따른다.
+Workflow 화면과 Closed-loop 저장 구조를 볼 때는
+[`../schema/db-diagram.md`](../schema/db-diagram.md)를 함께 확인한다.
 
 ## Current vs history
 

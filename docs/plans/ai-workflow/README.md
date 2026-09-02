@@ -1,6 +1,13 @@
-# AI Workflow Plans
+# AI Workflow and Evidence Boundary Plans
 
-AI, LLM, agent review, SOP grounding, and evaluation-related implementation plans live here. Closed-loop runtime, AssetDetailViewModel, and non-AI product workflow plans remain in `docs/plans/`.
+AI, LLM, Agent Review, SOP grounding, and adjacent Evidence boundary implementation
+plans live here. This folder is not limited to prompt work: Product Result/Evidence
+materialization and snapshot consistency plans live here when they define the
+trusted input boundary for Agent Review or LLM-facing workflow.
+
+Closed-loop runtime, AssetDetailViewModel, and non-AI product workflow plans remain
+in `docs/plans/`. Current team contracts live in `docs/mvp/`, and architecture
+decisions live in `docs/architecture-decisions/`.
 
 ## Current Canonical Plan
 
@@ -10,6 +17,9 @@ AI, LLM, agent review, SOP grounding, and evaluation-related implementation plan
 - `2026-08-27-001-pr130-sop-sensor-judgment-proposal.md`: PR #130 based Agent Review Packet, SOP judgment, scenario-based agent rationale, LLM summary, and minimum eval plan.
 
 Use the 2026-08-29 AI context plan as the current source of truth for the next AI workflow architecture slice. Use the Product Result/Evidence materialization plan as its lower trusted-evidence prerequisite, not as an AI-only pipeline. Use the Evidence Snapshot Consistency Guard plan when discussing how UI, Report, Closed-loop, and Agent Review share one evidence basis while remaining separate projections. Use the 2026-08-27 PR #130 plan as the baseline source for read-only agent review, SOP maturity gate, field inspection reference, and LLM summary sequencing.
+
+For the team-facing summary of these boundaries, start with
+[`../../mvp/backend-runtime-evidence-agent-review-boundary.md`](../../mvp/backend-runtime-evidence-agent-review-boundary.md).
 
 ## Supporting Background Plans
 
