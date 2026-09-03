@@ -460,6 +460,24 @@ export function ReliabilityWorkspacePreview({
   const lifecycleNext = lifecycleSummary?.nextStep
     ? { id: lifecycleSummary.nextStep, label: lifecycleLabel(lifecycleSummary.nextStep, english) ?? lifecycleSummary.nextStep }
     : null;
+  const fallbackLifecycleCurrent = selectedEvent
+    ? {
+      id: "decision_candidate",
+      label: english ? "Decision candidate selected" : "판단 후보 추천됨",
+    }
+    : null;
+  const fallbackLifecycleNext = selectedEvent
+    ? {
+      id: "review_next_action",
+      label: experience.kind === "engineering"
+        ? (english ? "Review evidence" : "근거 확인")
+        : experience.kind === "executive"
+          ? (english ? "Review brief" : "보고 검토")
+          : (english ? "Review work request" : "작업 요청 검토"),
+    }
+    : null;
+  const lifecycleCurrentForDisplay = lifecycleCurrent ?? fallbackLifecycleCurrent;
+  const lifecycleNextForDisplay = lifecycleNext ?? fallbackLifecycleNext;
   const lifecycleTimeline = detail?.closedLoop?.timeline.map((item) => ({
     id: item.timelineId,
     label: item.label,
@@ -507,15 +525,15 @@ export function ReliabilityWorkspacePreview({
     recommendedDecisionLabel: recommendedDecisionLabel(selectedEvent?.recommendedDecision, english),
     predictedFailureType: selectedEvent?.predictedFailureType ?? null,
     assignedEngineer: selectedEvent?.assignedEngineer ?? null,
-    currentLifecycleLabel: lifecycleCurrent?.label ?? null,
-    nextLifecycleLabel: lifecycleNext?.label ?? null,
+    currentLifecycleLabel: lifecycleCurrentForDisplay?.label ?? null,
+    nextLifecycleLabel: lifecycleNextForDisplay?.label ?? null,
     primaryActionLabel: primaryAction?.label ?? null,
     evidenceCount: evidence.length,
     evidenceSummary: assistantEvidenceItems.length
       ? assistantEvidenceItems.join(" · ")
       : null,
     workOrderCount,
-    maintenanceState: lifecycleCurrent?.label ?? null,
+    maintenanceState: lifecycleCurrentForDisplay?.label ?? null,
     observedAt: freshnessObservedAt,
     freshnessLabel: freshnessObservedAt ?? null,
     priorityReasons: agentPacket?.review_priority?.reasons ?? [],
@@ -559,8 +577,8 @@ export function ReliabilityWorkspacePreview({
   const focusCopy = operationalFocusCopy({
     selectedEvent,
     detail,
-    lifecycleCurrentLabel: lifecycleCurrent?.label ?? null,
-    lifecycleNextLabel: lifecycleNext?.label ?? null,
+    lifecycleCurrentLabel: lifecycleCurrentForDisplay?.label ?? null,
+    lifecycleNextLabel: lifecycleNextForDisplay?.label ?? null,
     primaryActionLabel: primaryAction?.label ?? null,
     roleHeadline: english ? experience.primaryQuestion.en : experience.primaryQuestion.ko,
     roleDetail: english ? experience.operationalFocusHint.en : experience.operationalFocusHint.ko,
@@ -729,8 +747,8 @@ export function ReliabilityWorkspacePreview({
               }}
               evidence={evidence}
               lifecycle={{
-                currentLabel: lifecycleCurrent?.label ?? (english ? "Current step is being confirmed" : "현재 처리 단계 확인 중"),
-                nextLabel: lifecycleNext?.label ?? (lifecycleSummary ? (english ? "No next step" : "다음 단계 없음") : null),
+                currentLabel: lifecycleCurrentForDisplay?.label ?? (english ? "Current step is being confirmed" : "현재 처리 단계 확인 중"),
+                nextLabel: lifecycleNextForDisplay?.label ?? null,
                 ownerLabel: primaryAction?.ownerLabel ?? null,
               }}
               primaryAction={primaryAction ? {
@@ -778,8 +796,8 @@ export function ReliabilityWorkspacePreview({
         <LifecycleInstrument
           title={selectedEvent?.assetName ?? (english ? "No case selected" : "Case 미선택")}
           completedSteps={lifecycleCompletedSteps}
-          current={lifecycleCurrent}
-          next={lifecycleNext}
+          current={lifecycleCurrentForDisplay}
+          next={lifecycleNextForDisplay}
           timeline={lifecycleTimeline}
           locale={locale}
           mode={lifecycleMode}

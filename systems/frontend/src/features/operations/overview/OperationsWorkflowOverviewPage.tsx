@@ -2299,8 +2299,7 @@ function MapReportFeatureSeries({
   const liveValueLabel = liveValue === null ? "값 없음" : `${liveValue.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${unit ? ` ${unit}` : ""}`;
   const livePillWidth = Math.min(188, Math.max(86, liveValueLabel.length * 7.2 + 48));
   const livePillX = forecastRight - livePillWidth - 4;
-  const livePillUsesBottomLane = Boolean(livePoint && typeof livePoint.y === "number" && livePoint.y < (frame.top + frame.bottom) / 2);
-  const livePillY = livePillUsesBottomLane ? frame.bottom + 8 : 6;
+  const livePillY = 6;
   const recentNumericPoints = numericPoints.slice(-4);
   const recentFirst = recentNumericPoints[0];
   const recentLast = recentNumericPoints.at(-1);
@@ -2392,11 +2391,11 @@ function MapReportFeatureSeries({
             <line className="asset-live-cursor" x1={livePoint.x} x2={livePoint.x} y1={frame.top} y2={frame.bottom} />
             <circle className="asset-live-ring" cx={livePoint.x} cy={livePoint.y} r="9" style={{ stroke: color }} />
             <circle className="asset-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.8" style={{ fill: color }} />
-            <g className={`asset-live-value-pill ${livePillUsesBottomLane ? "is-bottom" : "is-top"}`} transform={`translate(${livePillX} ${livePillY})`}>
+            <g className="asset-live-value-pill is-top" transform={`translate(${livePillX} ${livePillY})`}>
               <rect width={livePillWidth} height="28" rx="7" />
               <text x="9" y="18">LIVE {liveValueLabel}</text>
             </g>
-            <text className="asset-live-now-label" x={frame.right + 3} y={livePillUsesBottomLane ? frame.bottom + 4 : frame.top - 5} textAnchor="start">NOW</text>
+            <text className="asset-live-now-label" x={frame.right + 3} y={frame.top - 5} textAnchor="start">NOW</text>
           </g>
         ) : null}
         {coords.map((point, index) => point.qualityStatus === "bad" || point.qualityStatus === "unknown"

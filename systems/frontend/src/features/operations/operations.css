@@ -378,7 +378,7 @@
 .operations-work-kanban-card small { grid-column: 2; color: var(--operations-dim); font-size: 9px; line-height: 1.35; }
 .operations-work-kanban-card > span:last-child { grid-column: 1 / -1; color: var(--operations-muted); font-size: 9px; font-weight: 900; }
 .operations-assignment-popover { position: fixed; z-index: 4; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(5,10,19,.42); }
-.operations-detail-drawer .operations-assignment-popover { position: fixed; inset: 0 0 0 auto; width: clamp(720px, 70vw, calc(100vw - 46px)); min-height: auto; height: 100vh; padding: 18px; background: rgba(5,10,19,.36); pointer-events: auto; }
+.operations-detail-drawer .operations-assignment-popover { box-sizing: border-box; position: fixed; inset: 0 0 0 auto; width: min(100vw, clamp(720px, 70vw, calc(100vw - 46px))); min-height: auto; height: 100vh; padding: 18px; background: rgba(5,10,19,.36); pointer-events: auto; }
 .operations-assignment-card { width: min(440px, 100%); display: grid; gap: 11px; padding: 13px; border: 1px solid rgba(76,144,240,.34); border-radius: 8px; background: #17202b; box-shadow: 0 22px 50px rgba(0,0,0,.42); pointer-events: auto; }
 .operations-assignment-card > header { min-width: 0; display: flex; align-items: start; justify-content: space-between; gap: 10px; }
 .operations-assignment-card > header div { min-width: 0; display: grid; gap: 3px; }
@@ -560,7 +560,7 @@
 .operations-asset-preview-panel { position: sticky; top: 102px; }
 .operations-detail-drawer-layer { position: fixed; z-index: 90; inset: 0; display: grid; pointer-events: auto; }
 .operations-detail-drawer-scrim { position: fixed; inset: 0; border: 0; background: rgba(5,10,19,.58); cursor: pointer; }
-.operations-detail-drawer { position: fixed; top: 0; right: 0; width: clamp(720px, 70vw, calc(100vw - 46px)); height: 100vh; overflow-y: auto; padding: 14px; border-left: 1px solid rgba(181,196,214,.18); background: var(--operations-surface); box-shadow: -28px 0 60px rgba(0,0,0,.48); animation: operationsDrawerIn .18s ease-out; }
+.operations-detail-drawer { box-sizing: border-box; position: fixed; top: 0; right: 0; width: min(100vw, clamp(720px, 70vw, calc(100vw - 46px))); max-width: 100vw; height: 100vh; overflow-y: auto; padding: 14px; border-left: 1px solid rgba(181,196,214,.18); background: var(--operations-surface); box-shadow: -28px 0 60px rgba(0,0,0,.48); animation: operationsDrawerIn .18s ease-out; }
 .operations-detail-drawer-close { position: sticky; top: 0; z-index: 8; margin: 0 0 8px auto; width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--operations-border); border-radius: 8px; color: var(--operations-muted); background: color-mix(in srgb,var(--operations-surface) 94%,transparent); box-shadow: 0 6px 18px rgba(0,0,0,.14); backdrop-filter: blur(10px); cursor: pointer; }
 .operations-detail-drawer-close:hover,.operations-detail-drawer-close:focus-visible { color: var(--operations-text); border-color: rgba(76,144,240,.42); outline: none; }
 .operations-detail-drawer { scrollbar-width: none; -ms-overflow-style: none; }
@@ -2162,8 +2162,8 @@
   .operations-live-kpi-grid .operations-plan-impact-card.is-live-stage-card,
   .operations-live-kpi-grid .operations-plan-impact-card.is-live-result-card { grid-column: 1 / -1; }
   .operations-factory-cell-grid { grid-template-columns: repeat(2,minmax(118px,1fr)); }
-  .operations-detail-drawer { width: calc(100vw - 18px); padding: 12px; }
-  .operations-detail-drawer .operations-assignment-popover { width: calc(100vw - 18px); padding: 12px; }
+  .operations-detail-drawer { width: 100vw; padding: 12px; border-left: 0; }
+  .operations-detail-drawer .operations-assignment-popover { width: 100vw; padding: 12px; }
   .operations-work-queue-board { overflow: hidden; }
   .operations-work-queue-board > header { align-items: start; flex-direction: column; }
   .operations-work-kanban { grid-auto-columns: minmax(150px, 1fr); grid-template-columns: none; overflow-x: auto; padding-bottom: 6px; }
@@ -2777,12 +2777,12 @@
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-grid { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 4px; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-card { gap: 4px; padding: 4px; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-card header { min-height: 17px; }
-.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-card header strong { font-size: 9px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-card header strong { font-size: 10px; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-card header small { display: none; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-slots { gap: 3px; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-slots .operations-factory-asset-node { min-height: 25px; aspect-ratio: auto; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-slots .compressor { min-height: 22px; aspect-ratio: auto; }
-.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-asset-node span { max-width: 100%; font-size: 9px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-asset-node span { max-width: 100%; font-size: 10px; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-asset-alert-badge { top: -5px; right: -5px; }
 
 /* Desktop is the readable operational baseline. Small semantic copy should
