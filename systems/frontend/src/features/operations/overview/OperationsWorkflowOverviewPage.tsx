@@ -312,6 +312,7 @@ const LIVE_SIGNAL_LABELS: Record<string, string> = {
   temperature_gap_k: "공정 온도 편차",
 };
 const LIVE_FEATURE_PRIORITY = ["tool_wear_min", "torque_nm", "temperature_gap_k", "rotational_speed_rpm", "process_temperature_k"];
+const LIVE_FEATURE_CHART_LIMIT = 3;
 
 function isDerivedFeatureKey(key: string): boolean {
   return DERIVED_FEATURE_KEYS.has(key)
@@ -785,6 +786,16 @@ interface SeriesDatum {
   qualityStatus?: "good" | "bad" | "unknown";
 }
 
+interface ChartSeriesDatum extends SeriesDatum {
+  bucketStartAt?: string;
+  bucketEndAt?: string;
+  bucketCount?: number;
+  bucketMin?: number;
+  bucketMinObservedAt?: string;
+  bucketMax?: number;
+  bucketMaxObservedAt?: string;
+}
+
 function formatSeriesTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -818,6 +829,47 @@ function filterSeriesPoints(points: SeriesDatum[], currentObservedAt: string | n
     const observedAt = timestampMillis(point.observedAt);
     return observedAt === null || observedAt >= start;
   });
+}
+
+function aggregateSeriesByTenMinuteBucket(points: SeriesDatum[]): ChartSeriesDatum[] {
+  const bucketMs = 10 * 60 * 1000;
+  const buckets = new Map<number, Array<SeriesDatum & { time: number; value: number }>>();
+  points.forEach((point) => {
+    if (typeof point.value !== "number" || !Number.isFinite(point.value)) return;
+    const time = timestampMillis(point.observedAt);
+    if (time === null) return;
+    const key = Math.floor(time / bucketMs) * bucketMs;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push({ ...point, time, value: point.value });
+    buckets.set(key, bucket);
+  });
+  return [...buckets.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([bucketStart, bucket]) => {
+      const ordered = [...bucket].sort((left, right) => left.time - right.time);
+      const sum = ordered.reduce((total, point) => total + point.value, 0);
+      const average = sum / ordered.length;
+      const minimum = ordered.reduce((lowest, point) => point.value < lowest.value ? point : lowest, ordered[0]);
+      const maximum = ordered.reduce((highest, point) => point.value > highest.value ? point : highest, ordered[0]);
+      const latest = ordered[ordered.length - 1];
+      const qualityStatus = ordered.some((point) => point.qualityStatus === "bad")
+        ? "bad"
+        : ordered.some((point) => point.qualityStatus === "unknown")
+          ? "unknown"
+          : "good";
+      return {
+        observedAt: latest.observedAt,
+        value: average,
+        qualityStatus,
+        bucketStartAt: new Date(bucketStart).toISOString(),
+        bucketEndAt: new Date(bucketStart + bucketMs).toISOString(),
+        bucketCount: ordered.length,
+        bucketMin: minimum.value,
+        bucketMinObservedAt: minimum.observedAt,
+        bucketMax: maximum.value,
+        bucketMaxObservedAt: maximum.observedAt,
+      };
+    });
 }
 
 function seriesRangeLabel(points: SeriesDatum[], windowId: OperationsSensorWindowId, window: OperationsFeatureHistoryWindow | null | undefined): string {
@@ -2143,8 +2195,9 @@ function MapReportFeatureSeries({
   const color = title.includes("진동") || title.includes("토크") ? "#a7630c" : "#285fcb";
   const filteredPoints = filterSeriesPoints(points, currentObservedAt, windowId);
   const currentNumericValue = typeof currentValue === "number" && Number.isFinite(currentValue) ? currentValue : null;
-  const visiblePoints = filteredPoints.length
-    ? filteredPoints
+  const historicalPoints = liveDemo ? aggregateSeriesByTenMinuteBucket(filteredPoints) : filteredPoints;
+  const visiblePoints: ChartSeriesDatum[] = historicalPoints.length
+    ? historicalPoints
     : currentNumericValue !== null && currentObservedAt
       ? [{ observedAt: currentObservedAt, value: currentNumericValue, qualityStatus: "good" as const }]
       : [];
@@ -2204,7 +2257,7 @@ function MapReportFeatureSeries({
   const bandHeight = Math.max(2, yAt(bandLower) - yAt(bandUpper));
   const crossing = coords.find((point) => typeof point.value === "number" && typeof point.y === "number" && (point.value < scale.bandLower || point.value > scale.bandUpper));
   const crossingText = crossing && typeof crossing.value === "number"
-    ? `최근 분포 대비 이탈 ${formatSeriesTime(crossing.observedAt)} · ${crossing.value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${unit ? ` ${unit}` : ""}`
+    ? `최근 분포 대비 이탈 ${formatSeriesTime(crossing.bucketMaxObservedAt ?? crossing.observedAt)} · ${(crossing.bucketMax ?? crossing.value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${unit ? ` ${unit}` : ""}`
     : null;
   const crossingLabelWidth = crossingText ? Math.min(260, Math.max(150, crossingText.length * 6.6 + 18)) : 0;
   const crossingLabelX = crossing && crossingText ? clamp(crossing.x - crossingLabelWidth / 2, frame.left + 6, frame.right - crossingLabelWidth - 6) : null;
@@ -2256,7 +2309,7 @@ function MapReportFeatureSeries({
     <section className={[primary ? "asset-series-block is-primary" : "asset-series-block", liveDemo ? "is-live-chart" : ""].filter(Boolean).join(" ")}>
       <header className="asset-series-heading">
         <div><RotateCcw size={17} /><strong>{title}</strong></div>
-        <span className="asset-baseline-key"><i style={{ background: color }} />{liveDemo ? "LIVE now · 과거 관측 + 단기 추세" : seriesRangeLabel(visiblePoints, windowId, window)}</span>
+        <span className="asset-baseline-key"><i style={{ background: color }} />{liveDemo ? "10분 요약 · NOW 실시간 · 호버 고/저점" : seriesRangeLabel(visiblePoints, windowId, window)}</span>
       </header>
       <svg className="asset-series-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${title} 관측 흐름`}>
         <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
@@ -2269,6 +2322,18 @@ function MapReportFeatureSeries({
         })}
         <rect className="asset-baseline-band" x={frame.left} y={bandY} width={width} height={bandHeight} style={{ fill: color }} />
         <line className="asset-baseline-mean" x1={frame.left} x2={frame.right} y1={yAt((scale.bandLower + scale.bandUpper) / 2)} y2={yAt((scale.bandLower + scale.bandUpper) / 2)} />
+        {liveDemo ? coords.map((point, index) => {
+          if (typeof point.bucketMin !== "number" || typeof point.bucketMax !== "number" || typeof point.y !== "number") return null;
+          const highY = yAt(point.bucketMax);
+          const lowY = yAt(point.bucketMin);
+          return (
+            <g key={`${point.observedAt}-bucket-range-${index}`}>
+              <line className="asset-bucket-range" x1={point.x} x2={point.x} y1={highY} y2={lowY} style={{ stroke: color }} />
+              <circle className="asset-bucket-range-dot" cx={point.x} cy={highY} r="2.4" style={{ fill: color }} />
+              <circle className="asset-bucket-range-dot" cx={point.x} cy={lowY} r="2.4" style={{ fill: color }} />
+            </g>
+          );
+        }) : null}
         {segments.map((segment, index) => <polyline key={`${title}-segment-${index}`} className="asset-series-line" points={segment.map((point) => `${point.x},${point.y}`).join(" ")} style={{ stroke: color }} />)}
         {forecastBandPath ? <path className="asset-forecast-band" d={forecastBandPath} /> : null}
         {forecastLinePoints ? <polyline className="asset-forecast-line" points={forecastLinePoints} style={{ stroke: color }} /> : null}
@@ -2306,11 +2371,20 @@ function MapReportFeatureSeries({
           : null)}
         {coords.map((point, index) => {
           if (typeof point.value !== "number" || typeof point.y !== "number") return null;
-          const timeLabel = formatSeriesTooltipTime(point.observedAt);
+          const timeLabel = point.bucketStartAt && point.bucketEndAt
+            ? `${formatSeriesTime(point.bucketStartAt)}–${formatSeriesTime(point.bucketEndAt)}`
+            : formatSeriesTooltipTime(point.observedAt);
           const valueLabel = `${point.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""}`;
-          const tooltipWidth = 184;
+          const highLabel = point.bucketMax !== undefined && point.bucketMaxObservedAt
+            ? `고 ${point.bucketMax.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""} · ${formatSeriesTooltipTime(point.bucketMaxObservedAt)}`
+            : "";
+          const lowLabel = point.bucketMin !== undefined && point.bucketMinObservedAt
+            ? `저 ${point.bucketMin.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""} · ${formatSeriesTooltipTime(point.bucketMinObservedAt)}`
+            : "";
+          const tooltipWidth = point.bucketCount ? 254 : 184;
+          const tooltipHeight = point.bucketCount ? 52 : 33;
           const tooltipX = clamp(point.x - tooltipWidth / 2, frame.left + 4, frame.right - tooltipWidth - 4);
-          const tooltipY = clamp(point.y - 42, frame.top + 4, frame.bottom - 36);
+          const tooltipY = clamp(point.y - tooltipHeight - 9, frame.top + 4, frame.bottom - tooltipHeight - 4);
           return (
             <g key={`${point.observedAt}-hit-${index}`} className="asset-chart-hover-point">
               <circle
@@ -2321,12 +2395,16 @@ function MapReportFeatureSeries({
                 tabIndex={0}
                 aria-label={`${timeLabel} ${valueLabel}`}
               >
-                <title>{`${timeLabel} · ${valueLabel} · 품질 ${point.qualityStatus ?? "unknown"}`}</title>
+                <title>{point.bucketCount
+                  ? `${timeLabel} · 평균 ${valueLabel} · ${highLabel} · ${lowLabel} · ${point.bucketCount}개 관측`
+                  : `${timeLabel} · ${valueLabel} · 품질 ${point.qualityStatus ?? "unknown"}`}</title>
               </circle>
               <g className="asset-chart-tooltip" transform={`translate(${tooltipX} ${tooltipY})`}>
-                <rect width={tooltipWidth} height="33" rx="6" />
-                <text x="9" y="13">{timeLabel}</text>
-                <text className="is-value" x="9" y="26">{valueLabel} · {point.qualityStatus ?? "unknown"}</text>
+                <rect width={tooltipWidth} height={tooltipHeight} rx="6" />
+                <text x="9" y="13">{point.bucketCount ? `10분 요약 ${timeLabel}` : timeLabel}</text>
+                <text className="is-value" x="9" y="26">{point.bucketCount ? `평균 ${valueLabel}` : `${valueLabel} · ${point.qualityStatus ?? "unknown"}`}</text>
+                {point.bucketCount ? <text x="9" y="38">{highLabel}</text> : null}
+                {point.bucketCount ? <text x="9" y="49">{lowLabel}</text> : null}
               </g>
             </g>
           );
@@ -2568,10 +2646,8 @@ function AssetPreviewPanel({
       .filter((sensor): sensor is ReturnType<typeof sensorSeries>[number] => Boolean(sensor)),
     ...numericFeatureSnapshots.filter((sensor) => !LIVE_FEATURE_PRIORITY.includes(sensor.id)),
   ];
-  // Compressors expose five directly observed operational signals, including
-  // relative vibration. Keep all five on the live panel so a meaningful
-  // sensor does not disappear simply because it is fifth in the ViewModel.
-  const liveFeatureSnapshots = (isLiveAsset ? orderedLiveFeatureSnapshots : realtimeDirectFeatureSnapshots).slice(0, 5);
+  const liveFeatureSnapshots = (isLiveAsset ? orderedLiveFeatureSnapshots : realtimeDirectFeatureSnapshots)
+    .slice(0, isLiveAsset ? LIVE_FEATURE_CHART_LIMIT : 5);
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
     ? detail.inspectionTargets.slice(0, 3).map((target, index) => ({
       target,
@@ -2754,67 +2830,67 @@ function AssetPreviewPanel({
           <WorkStatusTimeline status={effectiveWorkStatus} lifecycleSummary={lifecycleSummary} />
           <ClosedLoopActivityTimeline timeline={activityTimeline} />
           {activeTab === "status" ? (
-            <dl className="operations-monitoring-detail-grid" aria-label="선택 설비 현재 상태">
-              <div><dt>설비명</dt><dd>{assetDisplayName}</dd></div>
-              <div><dt>현재 상태</dt><dd>{operationsMonitorStatusLabel(asset.status, effectiveWorkStatus)}</dd></div>
-              <div><dt>이상 센서</dt><dd>{factors.length ? factors.slice(0, 4).map((factor) => displaySensorLabel(factor.feature, factor.label)).join(", ") : "이상 센서 근거 없음"}</dd></div>
-              <div><dt>생산 영향</dt><dd>{planningImpact ? productionLossLabel(planningImpact.estimatedLossUnits) : displayProductionImpact(detail?.operationContext?.productionImpact)}</dd></div>
-              <div><dt>최근 정비일</dt><dd>{detail?.equipmentHistory[0]?.occurredAt ? formatTimestamp(detail.equipmentHistory[0].occurredAt) : "기록 없음"}</dd></div>
-              <div><dt>현재 조치 상태</dt><dd>{WORK_STATUS_LABEL[effectiveWorkStatus]}</dd></div>
-              <div className="is-wide"><dt>다음 액션</dt><dd>{effectiveWorkActionLabel ?? planningImpact?.nextAction ?? WORK_STATUS_ACTION[effectiveWorkStatus].label}</dd></div>
-            </dl>
-          ) : null}
-          {activeTab === "status" ? (
-            <section className="operations-live-feature-monitor operations-side-map-report" aria-label="실시간 피쳐 변화">
-              <header>
-                <LineChart size={14} />
-                <strong>실시간 피쳐 변화</strong>
-                <span className={`operations-live-feed-status ${isLiveAsset ? "is-hot" : ""}`}>
-                  {isLiveAsset ? "LIVE now" : "최신 관측 기준"} · {formatTimestamp(isLiveAsset ? liveDemo.nowAt : asset.observedAt)}
-                </span>
-              </header>
-              {isLiveAsset ? (
-                <div className="operations-live-signal-strip" aria-label="방금 수신된 설비별 신호">
-                  <div className="operations-live-signal-main">
-                    <span>{liveDemo.sourceLabel}</span>
-                    <strong>{formatProbability(liveDemo.risk)} · {operationsMonitorStatusLabel(liveDemo.status)}</strong>
-                    <small>{liveDemo.signal}</small>
-                    {liveTickError ? <em>생성 tick 지연 · {liveTickError}</em> : null}
+            <>
+              <section className="operations-live-feature-monitor operations-side-map-report" aria-label="실시간 피쳐 변화">
+                <header>
+                  <LineChart size={14} />
+                  <strong>실시간 피쳐 변화</strong>
+                  <span className={`operations-live-feed-status ${isLiveAsset ? "is-hot" : ""}`}>
+                    {isLiveAsset ? "LIVE now" : "최신 관측 기준"} · {formatTimestamp(isLiveAsset ? liveDemo.nowAt : asset.observedAt)}
+                  </span>
+                </header>
+                {isLiveAsset ? (
+                  <div className="operations-live-signal-strip" aria-label="방금 수신된 설비별 신호">
+                    <div className="operations-live-signal-main">
+                      <span>{liveDemo.sourceLabel}</span>
+                      <strong>{formatProbability(liveDemo.risk)} · {operationsMonitorStatusLabel(liveDemo.status)}</strong>
+                      <small>{liveDemo.signal}</small>
+                      {liveTickError ? <em>생성 tick 지연 · {liveTickError}</em> : null}
+                    </div>
+                    <div className="operations-live-signal-factors">
+                      {liveDemo.factors.length ? liveDemo.factors.map((factor) => (
+                        <div key={factor.id}>
+                          <span>{factor.label}</span>
+                          <strong>
+                            {factor.value === null ? "값 없음" : factor.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+                            {factor.unit ? ` ${factor.unit}` : ""}
+                          </strong>
+                          <i><b style={{ width: `${Math.min(100, Math.max(6, Math.round(Math.abs(factor.contribution) * 100)))}%` }} /></i>
+                        </div>
+                      )) : (
+                        <div>
+                          <span>위험도</span>
+                          <strong>{formatProbability(liveDemo.risk)}</strong>
+                          <i><b style={{ width: `${Math.round(liveDemo.risk * 100)}%` }} /></i>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="operations-live-signal-factors">
-                    {liveDemo.factors.length ? liveDemo.factors.map((factor) => (
-                      <div key={factor.id}>
-                        <span>{factor.label}</span>
-                        <strong>
-                          {factor.value === null ? "값 없음" : factor.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
-                          {factor.unit ? ` ${factor.unit}` : ""}
-                        </strong>
-                        <i><b style={{ width: `${Math.min(100, Math.max(6, Math.round(Math.abs(factor.contribution) * 100)))}%` }} /></i>
-                      </div>
-                    )) : (
-                      <div>
-                        <span>위험도</span>
-                        <strong>{formatProbability(liveDemo.risk)}</strong>
-                        <i><b style={{ width: `${Math.round(liveDemo.risk * 100)}%` }} /></i>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-              <FeatureSeriesCollection
-                title="핵심 센서"
+                ) : null}
+                <FeatureSeriesCollection
+                  title="핵심 센서"
                   sensors={liveFeatureSnapshots}
                   windowId={sensorWindow}
                   onWindowChange={onSensorWindowChange}
                   liveDemo={isLiveAsset ? liveDemo : null}
-                loading={detailLoading}
-                emptyTitle="관측 이력 없음"
-                emptyDetail={detailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
-              />
-              <p className="operations-live-feature-note">
-                원본 필드명 대신 한국어 현장 용어로 표시합니다. LIVE 그래프는 과거 관측 이력 위에 지금 값과 단기 추세 범위를 함께 표시합니다.
-              </p>
-            </section>
+                  loading={detailLoading}
+                  emptyTitle="관측 이력 없음"
+                  emptyDetail={detailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
+                />
+                <p className="operations-live-feature-note">
+                  원본 필드명 대신 한국어 현장 용어로 표시합니다. LIVE 그래프는 과거 관측 이력 위에 지금 값과 단기 추세 범위를 함께 표시합니다.
+                </p>
+              </section>
+              <dl className="operations-monitoring-detail-grid" aria-label="선택 설비 현재 상태">
+                <div><dt>설비명</dt><dd>{assetDisplayName}</dd></div>
+                <div><dt>현재 상태</dt><dd>{operationsMonitorStatusLabel(asset.status, effectiveWorkStatus)}</dd></div>
+                <div><dt>이상 센서</dt><dd>{factors.length ? factors.slice(0, 4).map((factor) => displaySensorLabel(factor.feature, factor.label)).join(", ") : "이상 센서 근거 없음"}</dd></div>
+                <div><dt>생산 영향</dt><dd>{planningImpact ? productionLossLabel(planningImpact.estimatedLossUnits) : displayProductionImpact(detail?.operationContext?.productionImpact)}</dd></div>
+                <div><dt>최근 정비일</dt><dd>{detail?.equipmentHistory[0]?.occurredAt ? formatTimestamp(detail.equipmentHistory[0].occurredAt) : "기록 없음"}</dd></div>
+                <div><dt>현재 조치 상태</dt><dd>{WORK_STATUS_LABEL[effectiveWorkStatus]}</dd></div>
+                <div className="is-wide"><dt>다음 액션</dt><dd>{effectiveWorkActionLabel ?? planningImpact?.nextAction ?? WORK_STATUS_ACTION[effectiveWorkStatus].label}</dd></div>
+              </dl>
+            </>
           ) : null}
           {role === "process_manager" && activeTab === "status" ? (
             <>
