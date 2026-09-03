@@ -54,9 +54,14 @@
 .rw-feature-trends article > header strong { font-size: 10px; }
 .rw-feature-trends article > header span, .rw-feature-trends article > small { color: var(--rw-muted, #8ea0b3); font-size: 8px; }
 .rw-feature-trends article > header b { font-size: 10px; }
-.rw-feature-trends svg { display: block; width: 100%; height: 70px; margin: 6px 0 4px; overflow: visible; }
+.rw-feature-trends svg { display: block; width: 100%; height: 96px; margin: 6px 0 4px; overflow: visible; }
 .rw-feature-trends svg path { fill: none; stroke: currentColor; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
-.rw-feature-trends svg circle { fill: currentColor; animation: rw-feature-pulse 1.8s ease-in-out infinite; }
+.rw-feature-chart-frame { fill: rgba(148,163,184,.025); stroke: rgba(148,163,184,.14); stroke-width: 1; }
+.rw-feature-chart-grid { stroke: rgba(148,163,184,.13); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.rw-feature-chart-axis,.rw-feature-chart-axis-title { fill: var(--rw-muted,#8ea0b3); font-size: 7px; font-weight: 800; }
+.rw-feature-point { fill: currentColor; }
+.rw-feature-hit { fill: transparent; stroke: transparent; pointer-events: all; cursor: crosshair; animation: none; }
+.rw-feature-hit:focus { outline: none; stroke: currentColor; stroke-width: 1; opacity: .45; }
 @keyframes rw-feature-pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
 .rw-composed-kv { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
 .rw-composed-kv > div { display: flex; min-height: 45px; flex-direction: column; justify-content: center; gap: 3px; border: 1px solid rgba(148,163,184,.12); border-radius: 6px; padding: 7px 8px; }
@@ -119,6 +124,9 @@
 .rw-composed-block.is-warning-block p, .rw-composed-block.is-warning-block li { font-size: 9px; line-height: 1.5; }
 
 [data-theme="light"] .rw-composed-block { --rw-text: #17202a; --rw-muted: #667788; --rw-surface: #fff; --rw-surface-strong: #fbfcfd; --rw-border: #dce3e9; box-shadow: 0 6px 18px rgba(15,23,42,.05); }
+[data-theme="light"] .rw-feature-trends article { background:#fff; border-color:#dce3e9; }
+[data-theme="light"] .rw-feature-chart-frame { fill:#f8fafc; stroke:#dce3e9; }
+[data-theme="light"] .rw-feature-chart-grid { stroke:#e3e9ef; }
 
 :root[data-density="compact"] .rw-composed-grid { gap: 6px; }
 :root[data-density="compact"] .rw-composed-block > header { min-height: 34px; padding: 5px 8px; }

@@ -192,18 +192,10 @@ function FactoryMapBlock({ model, selectedEvent, onSelectEvent }: {
   </Block>;
 }
 
-function chartPath(points: Array<{ value: number | null }>, width = 260, height = 70): string {
-  const values = points.map((item) => item.value).filter((value): value is number => typeof value === "number");
-  if (values.length < 2) return "";
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const filtered = points.filter((item): item is { value: number } => typeof item.value === "number");
-  return filtered.map((item, index) => {
-    const x = filtered.length === 1 ? width : (index / (filtered.length - 1)) * width;
-    const y = height - ((item.value - min) / range) * (height - 8) - 4;
-    return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+function shortTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 }
 
 function FeatureTrendBlock({ detail }: { detail: OperationsEventDetailModel | null }) {
@@ -211,8 +203,19 @@ function FeatureTrendBlock({ detail }: { detail: OperationsEventDetailModel | nu
   return <Block title="실시간 피쳐 그래프" eyebrow="FEATURE TREND" icon={<RadioTower size={15} />} className="span-12">
     {sensors.length ? <div className="rw-feature-trends">{sensors.map((sensor) => {
       const points = sensor.historyPoints ?? [];
-      const path = chartPath(points);
-      return <article key={sensor.id}><header><div><strong>{sensor.label}</strong><span>{sensor.historyWindow?.requested ?? "recent"} · {sensor.qualityStatus ?? "unknown"}</span></div><b>{String(sensor.value ?? "—")}{sensor.unit ? ` ${sensor.unit}` : ""}</b></header><svg viewBox="0 0 260 70" role="img" aria-label={`${sensor.label} 최근 추세`} preserveAspectRatio="none"><path d={path} /><circle cx="258" cy="35" r="2.5" /></svg><small>{sensor.historyPoints?.length ?? 0} points · 마지막 관측 {dateTime(sensor.observedAt)}</small></article>;
+      const numericPoints = points.filter((point): point is typeof point & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
+      const values = numericPoints.map((point) => point.value);
+      const minimum = Math.min(...values);
+      const maximum = Math.max(...values);
+      const range = maximum - minimum || 1;
+      const frame = { left: 38, right: 272, top: 8, bottom: 69 };
+      const xAt = (index: number) => frame.left + (index / Math.max(1, numericPoints.length - 1)) * (frame.right - frame.left);
+      const yAt = (value: number) => frame.bottom - ((value - minimum) / range) * (frame.bottom - frame.top);
+      const coords = numericPoints.map((point, index) => ({ ...point, x: xAt(index), y: yAt(point.value) }));
+      const path = coords.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+      const yTicks = [maximum, (minimum + maximum) / 2, minimum];
+      const middleIndex = Math.floor((numericPoints.length - 1) / 2);
+      return <article key={sensor.id}><header><div><strong>{sensor.label}</strong><span>{sensor.historyWindow?.requested ?? "recent"} · {sensor.qualityStatus ?? "unknown"}</span></div><b>{String(sensor.value ?? "—")}{sensor.unit ? ` ${sensor.unit}` : ""}</b></header><svg viewBox="0 0 280 96" role="img" aria-label={`${sensor.label} 최근 추세`} preserveAspectRatio="none"><rect className="rw-feature-chart-frame" x={frame.left} y={frame.top} width={frame.right - frame.left} height={frame.bottom - frame.top} />{yTicks.map((tick) => <g key={tick}><line className="rw-feature-chart-grid" x1={frame.left} x2={frame.right} y1={yAt(tick)} y2={yAt(tick)} /><text className="rw-feature-chart-axis" x="33" y={yAt(tick) + 3} textAnchor="end">{tick.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}</text></g>)}<text className="rw-feature-chart-axis-title" transform="translate(10 40) rotate(-90)" textAnchor="middle">{sensor.unit || "값"}</text><path d={path} />{coords.map((point, index) => <g key={`${sensor.id}-${point.observedAt}-${index}`}><circle className="rw-feature-point" cx={point.x} cy={point.y} r={index === coords.length - 1 ? 3.2 : 2.2} /><circle className="rw-feature-hit" cx={point.x} cy={point.y} r="8" tabIndex={0} aria-label={`${dateTime(point.observedAt)} ${point.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${sensor.unit ? ` ${sensor.unit}` : ""}`}><title>{`${dateTime(point.observedAt)} · ${point.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${sensor.unit ? ` ${sensor.unit}` : ""} · 품질 ${point.qualityStatus}`}</title></circle></g>)}{numericPoints[0] ? <text className="rw-feature-chart-axis" x={frame.left} y="86" textAnchor="start">{shortTime(numericPoints[0].observedAt)}</text> : null}{numericPoints.length > 2 ? <text className="rw-feature-chart-axis" x={xAt(middleIndex)} y="86" textAnchor="middle">{shortTime(numericPoints[middleIndex].observedAt)}</text> : null}{numericPoints.at(-1) ? <text className="rw-feature-chart-axis" x={frame.right} y="86" textAnchor="end">{shortTime(numericPoints.at(-1)?.observedAt)}</text> : null}<text className="rw-feature-chart-axis-title" x="155" y="95" textAnchor="middle">시간</text></svg><small>{sensor.historyPoints?.length ?? 0} points · 마지막 관측 {dateTime(sensor.observedAt)}</small></article>;
     })}</div> : <Empty text="선택 설비의 시계열 관측이 준비되면 핵심 피쳐 2~4개를 표시합니다." />}
   </Block>;
 }

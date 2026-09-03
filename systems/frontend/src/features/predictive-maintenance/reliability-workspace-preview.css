@@ -224,6 +224,27 @@
   .rw-preview-warning { margin-inline: 7px; }
 }
 
+/* Height-safe workspace chrome. Keep role navigation scrollable while the
+   identity/scope/settings controls remain anchored in the rail. */
+.rw-preview-left {
+  min-height: 0;
+  grid-template-rows: auto minmax(0,1fr) auto auto auto;
+}
+.rw-preview-left > nav {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+.rw-preview-left > nav::-webkit-scrollbar { width: 5px; }
+.rw-preview-left > nav::-webkit-scrollbar-thumb { border-radius: 999px; background: color-mix(in srgb,var(--rw-muted) 48%,transparent); }
+
+@media (max-width: 860px) {
+  .rw-preview-left > nav { overflow-y: auto; }
+}
+
 @media print {
   .rw-preview-shell { display:block!important; height:auto!important; overflow:visible!important; color:#111827!important; background:#fff!important; }
   .rw-preview-topbar,.rw-preview-left,.rw-preview-bottom,.rw-context-assistant,.rw-preview-page-heading,.rw-preview-warning { display:none!important; }

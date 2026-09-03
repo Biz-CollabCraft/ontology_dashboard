@@ -226,7 +226,9 @@ test("requires report type review before opening the browser print flow", async 
 
   const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
   await expect(shell).toBeVisible({ timeout: 15_000 });
-  await shell.locator(".operations-factory-asset-node:not(.slot)").first().click();
+  const chartAsset = shell.locator(".operations-factory-asset-node.critical, .operations-factory-asset-node.warning, .operations-factory-asset-node.attention, .operations-factory-asset-node.hold").first();
+  await expect(chartAsset).toBeVisible({ timeout: 15_000 });
+  await chartAsset.click();
 
   const detailDrawer = page.getByRole("dialog", { name: "선택 설비 상세" });
   await expect(detailDrawer).toBeVisible({ timeout: 15_000 });
@@ -403,4 +405,84 @@ test("organizes engineering navigation by work intent instead of duplicated data
   for (const group of ["OBSERVE · 감지", "DIAGNOSE · 진단", "LEARN · 이력"]) {
     await expect(rail.getByText(group, { exact: true })).toBeVisible();
   }
+});
+
+test("keeps short-height rails and assistant content scrollable and dismisses the mobile rail after navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 700 });
+  await login(page);
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+
+  const rail = shell.locator(".rw-preview-left");
+  const nav = rail.locator(":scope > nav");
+  const railMetrics = await nav.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    overflowY: getComputedStyle(element).overflowY,
+  }));
+  expect(railMetrics.scrollHeight).toBeGreaterThan(railMetrics.clientHeight);
+  expect(railMetrics.overflowY).toBe("auto");
+  await nav.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  expect(await nav.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  await shell.getByRole("button", { name: /Assistant/ }).click();
+  const assistant = page.getByRole("dialog", { name: "Reliability Assistant" });
+  await expect(assistant).toBeVisible();
+  const thread = assistant.locator(".rw-context-assistant__thread");
+  const threadMetrics = await thread.evaluate((element) => ({ clientHeight: element.clientHeight, overflowY: getComputedStyle(element).overflowY }));
+  expect(threadMetrics.clientHeight).toBeGreaterThanOrEqual(96);
+  expect(threadMetrics.overflowY).toBe("auto");
+  await assistant.getByRole("button", { name: /닫기|Close Reliability Assistant/ }).click();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shell.getByRole("button", { name: "Open navigation" }).click();
+  await expect(rail).toBeVisible();
+  await rail.getByRole("button", { name: /운영 현황/ }).click();
+  await expect(shell).toHaveClass(/left-collapsed/);
+});
+
+test("keeps light-mode report cards and charts light and exposes chart axes and point hover values", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("ontology-dashboard:reliability-theme", "light");
+    window.localStorage.setItem("ontology-dashboard:reliability-locale", "ko-KR");
+  });
+  await login(page);
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+  const drawer = page.getByRole("dialog", { name: "선택 설비 상세" });
+  const candidates = shell.locator(".operations-factory-asset-node:not(.slot)");
+  const chart = drawer.locator(".asset-series-chart").first();
+  const candidateCount = Math.min(await candidates.count(), 16);
+  for (let index = 0; index < candidateCount; index += 1) {
+    await candidates.nth(index).click();
+    await expect(drawer).toBeVisible();
+    const monitor = drawer.locator(".operations-live-feature-monitor");
+    await expect(monitor).not.toContainText("센서 이력 로딩 중", { timeout: 4_000 }).catch(() => undefined);
+    if (await chart.count()) break;
+    await drawer.getByRole("button", { name: "선택 설비 상세 닫기" }).click();
+  }
+  if (await chart.count()) {
+    await expect(chart).toBeVisible();
+    await expect(chart.locator(".asset-chart-axis-title")).toHaveCount(2);
+    expect(await chart.locator(".asset-chart-hit-target").count()).toBeGreaterThan(0);
+    const chartTheme = await chart.evaluate((element) => {
+      const frame = element.querySelector<SVGElement>(".asset-chart-frame");
+      return {
+        background: getComputedStyle(element).backgroundColor,
+        frameFill: frame ? getComputedStyle(frame).fill : "",
+      };
+    });
+    expect(chartTheme.background).toBe("rgb(255, 255, 255)");
+    expect(chartTheme.frameFill).toBe("rgb(248, 250, 252)");
+  } else {
+    await candidates.first().click();
+    await expect(drawer).toBeVisible();
+    await expect(drawer.locator(".operations-live-feature-monitor")).toContainText(/센서 이력 없음|센서 이력 로딩 중/);
+  }
+
+  await drawer.getByRole("button", { name: "보고서 출력" }).click();
+  const outputDialog = page.getByRole("dialog", { name: "보고서 출력 유형 선택" });
+  const outputCard = outputDialog.locator(".operations-report-output-card");
+  await expect(outputCard).toBeVisible();
+  expect(await outputCard.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(255, 255, 255)");
 });

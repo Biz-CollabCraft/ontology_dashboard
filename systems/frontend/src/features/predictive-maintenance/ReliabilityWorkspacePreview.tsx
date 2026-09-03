@@ -310,6 +310,14 @@ export function ReliabilityWorkspacePreview({
   const [assistantError, setAssistantError] = useState<string | null>(null);
 
   useEffect(() => {
+    function syncRailForViewport() {
+      if (window.innerWidth <= 860) setLeftOpen(false);
+    }
+    window.addEventListener("resize", syncRailForViewport);
+    return () => window.removeEventListener("resize", syncRailForViewport);
+  }, []);
+
+  useEffect(() => {
     if (experience.kind !== "engineering" && preferences.showTechnicalMetadata) {
       setShowTechnicalMetadata(false);
     }
@@ -622,7 +630,7 @@ export function ReliabilityWorkspacePreview({
                 <header>{english ? group.label.en : group.label.ko}</header>
                 <div>
                   {group.surfaces.map((item) => (
-                    <button type="button" key={item.id} className={activeNav.id === item.id ? "is-active" : ""} onClick={() => { setSettingsOpen(false); onNavigate(item.id, item.view); }} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
+                    <button type="button" key={item.id} className={activeNav.id === item.id ? "is-active" : ""} onClick={() => { setSettingsOpen(false); if (window.innerWidth <= 860) setLeftOpen(false); onNavigate(item.id, item.view); }} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
                       <span aria-hidden="true">•</span>
                       <div><strong>{english ? item.label.en : item.label.ko}</strong><small>{english ? item.detail.en : item.detail.ko}</small></div>
                     </button>

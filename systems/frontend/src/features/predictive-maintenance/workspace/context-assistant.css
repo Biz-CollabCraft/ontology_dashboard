@@ -443,6 +443,30 @@
   border: 0;
 }
 
+/* Keep the conversation usable at short laptop heights. Conditional prompt
+   rows must not shift the thread/composer into the wrong CSS-grid tracks. */
+.rw-context-assistant {
+  grid-template-rows: auto minmax(88px,.8fr) auto minmax(96px,1.2fr) auto auto;
+  overflow: hidden;
+}
+.rw-context-assistant__header { grid-row: 1; }
+.rw-context-assistant__context {
+  grid-row: 2;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.rw-context-assistant__prompts {
+  grid-row: 3;
+  min-height: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.rw-context-assistant__thread { grid-row: 4; }
+.rw-context-assistant__composer { grid-row: 5; }
+.rw-context-assistant__disclaimer { grid-row: 6; }
+
 @media (max-width: 680px) {
   .rw-context-assistant {
     width: 100vw;

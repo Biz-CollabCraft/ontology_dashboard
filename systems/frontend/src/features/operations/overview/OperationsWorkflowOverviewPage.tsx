@@ -12,6 +12,7 @@ import {
   RefreshCw,
   RotateCcw,
   Wrench,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createOperationsAgentReviewSummary, getOperationsAgentReviewSummary } from "../../../api";
@@ -607,6 +608,12 @@ function formatSeriesTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatSeriesTooltipTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function timestampMillis(value: string | null | undefined): number | null {
@@ -1767,6 +1774,7 @@ export function OperationsWorkflowOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="operations-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
+            <button type="button" className="operations-detail-drawer-close" aria-label="선택 설비 상세 닫기" onClick={() => setDetailDrawerOpen(false)}><X size={16} /></button>
             <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "작업 이력" : drawerClosedLoop ? "업무 기록" : "현재 판단"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
@@ -1862,6 +1870,9 @@ function MapReportFeatureSeries({
   const latestHistory = [...coords].reverse().find((point) => typeof point.value === "number" && typeof point.y === "number");
   const currentTimeLabel = currentObservedAt ? formatSeriesTime(currentObservedAt) : "현재 시간 없음";
   const currentPoint = currentNumericValue === null || !currentObservedAt ? null : { x: xAt(visiblePoints.length), y: yAt(currentNumericValue), value: currentNumericValue };
+  const middleIndex = Math.floor((visiblePoints.length - 1) / 2);
+  const middlePoint = visiblePoints[middleIndex] ?? null;
+  const endHistoryPoint = visiblePoints.at(-1) ?? null;
   return (
     <section className={primary ? "asset-series-block is-primary" : "asset-series-block"}>
       <header className="asset-series-heading">
@@ -1870,6 +1881,7 @@ function MapReportFeatureSeries({
       </header>
       <svg className="asset-series-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${title} 관측 흐름`}>
         <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
+        <text className="asset-chart-axis-title" transform={`translate(16 ${(frame.top + frame.bottom) / 2}) rotate(-90)`} textAnchor="middle">{unit || "값"}</text>
         {ticks.map((tick) => {
           const y = yAt(tick);
           return <g key={tick}><line className="asset-chart-grid" x1={frame.left} x2={frame.right} y1={y} y2={y} /><text className="asset-chart-axis" x="58" y={y + 4} textAnchor="end">{tick.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}</text></g>;
@@ -1896,8 +1908,48 @@ function MapReportFeatureSeries({
             ? <circle key={`${point.observedAt}-${point.value}-${index}`} className="asset-quality-marker" cx={point.x} cy={point.y} r="4.4" style={{ fill: color }} />
             : <circle key={`${point.observedAt}-gap-${index}`} className="asset-gap-marker" cx={point.x} cy={frame.bottom} r="4.2" />
           : null)}
+        {coords.map((point, index) => {
+          if (typeof point.value !== "number" || typeof point.y !== "number") return null;
+          const timeLabel = formatSeriesTooltipTime(point.observedAt);
+          const valueLabel = `${point.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""}`;
+          const tooltipWidth = 184;
+          const tooltipX = clamp(point.x - tooltipWidth / 2, frame.left + 4, frame.right - tooltipWidth - 4);
+          const tooltipY = clamp(point.y - 42, frame.top + 4, frame.bottom - 36);
+          return (
+            <g key={`${point.observedAt}-hit-${index}`} className="asset-chart-hover-point">
+              <circle
+                className="asset-chart-hit-target"
+                cx={point.x}
+                cy={point.y}
+                r="10"
+                tabIndex={0}
+                aria-label={`${timeLabel} ${valueLabel}`}
+              >
+                <title>{`${timeLabel} · ${valueLabel} · 품질 ${point.qualityStatus ?? "unknown"}`}</title>
+              </circle>
+              <g className="asset-chart-tooltip" transform={`translate(${tooltipX} ${tooltipY})`}>
+                <rect width={tooltipWidth} height="33" rx="6" />
+                <text x="9" y="13">{timeLabel}</text>
+                <text className="is-value" x="9" y="26">{valueLabel} · {point.qualityStatus ?? "unknown"}</text>
+              </g>
+            </g>
+          );
+        })}
+        {currentPoint && currentObservedAt ? (
+          <g className="asset-chart-hover-point">
+            <circle className="asset-chart-hit-target" cx={currentPoint.x} cy={currentPoint.y} r="11" tabIndex={0} aria-label={`현재 ${formatSeriesTooltipTime(currentObservedAt)} ${currentPoint.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""}`}>
+              <title>{`현재 · ${formatSeriesTooltipTime(currentObservedAt)} · ${currentPoint.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""}`}</title>
+            </circle>
+            <g className="asset-chart-tooltip" transform={`translate(${frame.right - 188} ${clamp(currentPoint.y - 42, frame.top + 4, frame.bottom - 36)})`}>
+              <rect width="184" height="33" rx="6" />
+              <text x="9" y="13">현재 · {formatSeriesTooltipTime(currentObservedAt)}</text>
+              <text className="is-value" x="9" y="26">{currentPoint.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}{unit ? ` ${unit}` : ""}</text>
+            </g>
+          </g>
+        ) : null}
         <text className="asset-chart-axis" x={frame.left} y="252" textAnchor="start">{formatSeriesTime(visiblePoints[0].observedAt)}</text>
-        {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y="252" textAnchor="end">현재 {currentTimeLabel}</text> : null}
+        {middlePoint && visiblePoints.length > 2 ? <text className="asset-chart-axis" x={xAt(middleIndex)} y="252" textAnchor="middle">{formatSeriesTime(middlePoint.observedAt)}</text> : null}
+        {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y="252" textAnchor="end">현재 {currentTimeLabel}</text> : endHistoryPoint ? <text className="asset-chart-axis" x={frame.right} y="252" textAnchor="end">{formatSeriesTime(endHistoryPoint.observedAt)}</text> : null}
         <text className="asset-chart-axis-title" x="376" y="270" textAnchor="middle">시간</text>
       </svg>
     </section>
