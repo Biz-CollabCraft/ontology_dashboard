@@ -32,7 +32,7 @@ import type {
   OperationsEventDetailModel,
   OperationsView,
 } from "../operations/api/operationsContracts";
-import { displayAssetName, displayExplanationMethod, displayLineLabel, displaySensorLabel } from "../operations/displayLabels";
+import { displayAssetName, displayExplanationMethod, displayLineLabel, displaySensorFactorLabel, displaySensorLabel } from "../operations/displayLabels";
 import "./reliability-workspace-preview.css";
 import { ContextAssistantDrawer } from "./workspace/ContextAssistantDrawer";
 import { ReliabilityCommandPalette, type ReliabilitySearchEntity } from "./workspace/ReliabilityCommandPalette";
@@ -155,8 +155,13 @@ function factorValue(value: number | null, unit: string | null) {
 function evidenceItemLabel(
   item: OperationsAgentReviewPacket["model_expression_context"]["top_factors"][number],
 ) {
-  const rawValue = item.value === null || item.value === undefined ? null : String(item.value);
-  return `${displaySensorLabel(item.feature, item.display_name)}${rawValue ? ` ${rawValue}${item.unit ? ` ${item.unit}` : ""}` : ""}`;
+  const rawValue = item.value === null || item.value === undefined
+    ? null
+    : typeof item.value === "number"
+      ? item.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })
+      : String(item.value);
+  const unit = item.unit && item.unit !== "model unit" ? ` ${item.unit}` : "";
+  return `${displaySensorFactorLabel(item.feature, item.display_name)}${rawValue ? ` ${rawValue}${unit}` : ""}`;
 }
 
 function operationalFocusCopy(input: {
@@ -323,6 +328,7 @@ export function ReliabilityWorkspacePreview({
   const title = english ? activePageCopy.title.en : activePageCopy.title.ko;
   const detailCopy = english ? activePageCopy.detail.en : activePageCopy.detail.ko;
   const [leftOpen, setLeftOpen] = useState(() => window.innerWidth > 860);
+  const railCollapsedByViewportRef = useRef(window.innerWidth <= 860);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -337,7 +343,13 @@ export function ReliabilityWorkspacePreview({
 
   useEffect(() => {
     function syncRailForViewport() {
-      if (window.innerWidth <= 860) setLeftOpen(false);
+      if (window.innerWidth <= 860) {
+        railCollapsedByViewportRef.current = true;
+        setLeftOpen(false);
+      } else if (railCollapsedByViewportRef.current) {
+        railCollapsedByViewportRef.current = false;
+        setLeftOpen(true);
+      }
     }
     window.addEventListener("resize", syncRailForViewport);
     return () => window.removeEventListener("resize", syncRailForViewport);

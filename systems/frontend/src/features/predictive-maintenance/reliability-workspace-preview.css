@@ -1,5 +1,5 @@
-.rw-preview-shell{--rw-bg:#07090c;--rw-panel:rgba(8,11,15,.94);--rw-surface:rgba(15,21,28,.72);--rw-surface-2:rgba(20,28,36,.68);--rw-line:rgba(155,185,205,.13);--rw-line-strong:rgba(155,198,221,.24);--rw-text:#edf4f8;--rw-subtle:#a7b8c4;--rw-muted:#657886;--rw-cyan:#79c8e8;--rw-violet:#a99be6;--rw-amber:#d7aa68;--rw-rose:#d78391;height:100vh;display:grid;grid-template-rows:48px minmax(0,1fr) auto;overflow:hidden;color:var(--rw-text);background:radial-gradient(circle at 52% -18%,rgba(93,185,213,.11),transparent 31rem),radial-gradient(circle at 88% 26%,rgba(128,104,196,.06),transparent 28rem),var(--rw-bg);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-:root[data-theme="light"] .rw-preview-shell{--rw-bg:#f3f6f9;--rw-panel:rgba(255,255,255,.96);--rw-surface:rgba(248,250,252,.95);--rw-surface-2:#eef3f7;--rw-line:rgba(54,75,96,.14);--rw-line-strong:rgba(54,75,96,.26);--rw-text:#17212c;--rw-subtle:#415264;--rw-muted:#76879a;--rw-cyan:#336fae;background:#f3f6f9}
+.rw-preview-shell{--rw-bg:#07090c;--rw-panel:rgba(8,11,15,.94);--rw-surface:rgba(15,21,28,.72);--rw-surface-2:rgba(20,28,36,.68);--rw-line:rgba(155,185,205,.13);--rw-line-strong:rgba(155,198,221,.24);--rw-text:#edf4f8;--rw-subtle:#b6c5cf;--rw-muted:#8ca0ae;--rw-cyan:#79c8e8;--rw-violet:#a99be6;--rw-amber:#d7aa68;--rw-rose:#d78391;height:100vh;display:grid;grid-template-rows:48px minmax(0,1fr) auto;overflow:hidden;color:var(--rw-text);background:radial-gradient(circle at 52% -18%,rgba(93,185,213,.11),transparent 31rem),radial-gradient(circle at 88% 26%,rgba(128,104,196,.06),transparent 28rem),var(--rw-bg);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+:root[data-theme="light"] .rw-preview-shell{--rw-bg:#f3f6f9;--rw-panel:rgba(255,255,255,.96);--rw-surface:rgba(248,250,252,.95);--rw-surface-2:#eef3f7;--rw-line:rgba(54,75,96,.14);--rw-line-strong:rgba(54,75,96,.26);--rw-text:#17212c;--rw-subtle:#34485b;--rw-muted:#5f7184;--rw-cyan:#336fae;background:#f3f6f9}
 :root[data-theme="light"] .rw-preview-left{background:linear-gradient(180deg,#fbfcfd,#f2f5f8);box-shadow:none}
 :root[data-theme="light"] .rw-preview-main{background:radial-gradient(circle at 50% 18%,rgba(51,111,174,.045),transparent 34rem),linear-gradient(#f7f9fb,#eef3f7)}
 :root[data-theme="light"] .rw-preview-main:before{background-image:linear-gradient(rgba(54,75,96,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(54,75,96,.035) 1px,transparent 1px);opacity:.48}
@@ -130,11 +130,11 @@
 :root[data-density="standard"] .rw-preview-scope span,
 :root[data-density="standard"] .rw-preview-scope small,
 :root[data-density="standard"] .rw-preview-settings-trigger,
-:root[data-density="standard"] .rw-preview-collapse { font-size: 9px; }
+:root[data-density="standard"] .rw-preview-collapse { font-size: 12px; }
 :root[data-density="standard"] .rw-preview-left nav button>span,
-:root[data-density="standard"] .rw-preview-page-heading>span { font-size: 9px; }
+:root[data-density="standard"] .rw-preview-page-heading>span { font-size: 12px; }
 :root[data-density="standard"] .rw-preview-left nav strong,
-:root[data-density="standard"] .rw-preview-user strong { font-size: 10px; }
+:root[data-density="standard"] .rw-preview-user strong { font-size: 13px; }
 :root[data-density="standard"] .rw-preview-brand small { display:block; color:var(--rw-muted); line-height:1.2; }
 :root[data-density="standard"] .rw-preview-brand>div { display:grid; gap:1px; }
 

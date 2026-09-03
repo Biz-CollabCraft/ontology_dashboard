@@ -232,33 +232,35 @@ def test_historical_selected_result_keeps_explicit_case_scoped_and_frozen(
 
     service = PredictiveMaintenanceRuntimeService(Repository())  # type: ignore[arg-type]
     frozen_result = object()
+    historical_context = SimpleNamespace(dataset_version_id="dataset-v3")
     monkeypatch.setattr(service, "_product_result", lambda **_kwargs: frozen_result)
-    context = SimpleNamespace(dataset_version_id="dataset-v3")
+    context_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        service,
+        "context",
+        lambda **kwargs: context_calls.append(kwargs) or historical_context,
+    )
 
     resolved = service._historical_selected_result(
         organization_id="org-a",
         project_id="project-a",
         workspace_id="workspace-a",
         selected_event_id="RESULT#frozen-case",
-        context=context,  # type: ignore[arg-type]
     )
 
-    assert resolved is frozen_result
+    assert resolved == (frozen_result, historical_context)
     assert calls == [{
         "organization_id": "org-a",
         "project_id": "project-a",
         "workspace_id": "workspace-a",
         "artifact_id": "RESULT#frozen-case",
     }]
-
-    mismatch_context = SimpleNamespace(dataset_version_id="dataset-v4")
-    assert service._historical_selected_result(
-        organization_id="org-a",
-        project_id="project-a",
-        workspace_id="workspace-a",
-        selected_event_id="RESULT#frozen-case",
-        context=mismatch_context,  # type: ignore[arg-type]
-    ) is None
+    assert context_calls == [{
+        "organization_id": "org-a",
+        "project_id": "project-a",
+        "workspace_id": "workspace-a",
+        "dataset_version_id": "dataset-v3",
+    }]
 
 
 def _append_csv(path: Path, row: dict[str, object]) -> None:

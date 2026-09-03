@@ -247,11 +247,25 @@
 .rw-feature-threshold-label { fill:var(--rw-amber); font-size:8px; font-weight:800; }
 .rw-feature-point.quality-bad { fill:var(--rw-rose)!important; stroke:var(--rw-rose); stroke-width:1.2; }
 .rw-feature-point.quality-unknown { fill:var(--rw-panel)!important; stroke:var(--rw-amber); stroke-width:1.5; }
+.rw-feature-hit { fill:transparent; stroke:transparent; pointer-events:all; cursor:crosshair; }
+.rw-feature-hit.is-keyboard-active { stroke:var(--rw-cyan); stroke-width:1.8; vector-effect:non-scaling-stroke; }
+.rw-feature-trends svg:focus-visible { outline:2px solid var(--rw-cyan); outline-offset:3px; border-radius:6px; }
+.rw-chart-keyboard-value { display:block; margin-top:5px; color:var(--rw-subtle); font-size:12px!important; line-height:1.45; }
+
+[data-surface="executive-brief"] .executive-summary-card { min-height:0; }
+[data-surface="executive-brief"] .executive-summary-card .rw-composed-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+[data-surface="executive-brief"] .executive-summary-card .rw-bottleneck-sla-note { display:none; }
+[data-surface="executive-brief"] .executive-summary-card .rw-composed-report > div > p { display:-webkit-box; overflow:hidden; -webkit-line-clamp:3; -webkit-box-orient:vertical; }
+
+.rw-composed-grid :where(.rw-composition-reason strong,.rw-composition-reason span,.rw-composed-block>header span,.rw-composed-metrics span,.rw-operational-kpis span,.rw-composed-list small,.rw-composed-bars,.rw-factory-map span,.rw-factory-map i,.rw-feature-trends article>header span,.rw-feature-trends article>small,.rw-composed-kv span,.rw-composed-lifecycle span,.rw-composed-lifecycle p,.rw-case-lineage i,.rw-case-lineage small,.rw-composed-cards span,.rw-composed-cards p,.rw-composed-timeline time,.rw-composed-timeline small,.rw-composed-timeline p,.rw-maintenance-effect span,.rw-maintenance-effect small,.rw-maintenance-effect p,.rw-composed-report-sections span,.rw-composed-report-sections p,.rw-report-controls label,.rw-report-controls select,.rw-report-controls>span,.rw-report-evidence summary,.rw-report-evidence li,.rw-report-actions button,.rw-report-artifact-meta span,.rw-report-artifact-meta strong,.rw-report-artifact-meta small,.rw-composed-context small,.rw-context-source-row>span,.rw-composed-context-grid span,.rw-composed-context-grid small,.rw-composed-meeting span,.rw-composed-decision small,.rw-composed-empty,.rw-bottleneck-sla-note,.rw-bottleneck-table>header,.rw-feature-risk-chart>small) { font-size:12px!important; line-height:1.45; }
+.rw-composed-grid :where(.rw-composed-block>header strong,.rw-composed-list strong,.rw-composed-list b,.rw-composed-kv strong,.rw-feature-trends article>header strong,.rw-feature-trends article>header b,.rw-composed-cards strong,.rw-composed-timeline strong,.rw-case-lineage strong) { font-size:13px!important; }
+.rw-feature-chart-axis,.rw-feature-chart-axis-title,.rw-feature-threshold-label { font-size:12px!important; }
 
 :root[data-density="standard"] .rw-composed-grid :where(p,li,button,input,textarea,select,dd) { font-size:13px!important; line-height:1.5; }
-:root[data-density="standard"] .rw-composed-grid :where(small,dt,time,em,summary,code) { font-size:11px!important; line-height:1.45; }
+:root[data-density="standard"] .rw-composed-grid :where(small,dt,time,em,summary,code) { font-size:12px!important; line-height:1.45; }
 :root[data-density="standard"] .rw-composed-grid :where(.rw-composed-block>header strong,.rw-composed-list strong,.rw-composed-kv strong,.rw-feature-trends strong,.rw-composed-cards strong,.rw-composed-timeline strong,.rw-case-lineage strong) { font-size:13px!important; }
 :root[data-density="standard"] .rw-composed-grid :where(button,select,input) { min-height:40px; }
+:root[data-density="standard"] .rw-composed-grid .operations-maintenance-workflow-panel :where(span,p,small,label,legend) { font-size:12px!important; line-height:1.45; }
 
 @media (max-width: 760px) {
   .rw-bottleneck-table { overflow-x:auto; }

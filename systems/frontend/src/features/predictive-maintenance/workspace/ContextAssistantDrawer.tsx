@@ -147,8 +147,8 @@ export function ContextAssistantDrawer({
                   : (english ? "Validated fallback" : "검증 fallback")}
               </strong>
             ) : null}
-            {context?.retrievalProvider ? (
-              <small>{context.retrievalProvider}{context.retrievalCount !== null && context.retrievalCount !== undefined ? ` · ${context.retrievalCount}` : ""}</small>
+            {context?.retrievalCount !== null && context?.retrievalCount !== undefined ? (
+              <small>검증된 SOP 안내 · {context.retrievalCount}</small>
             ) : null}
           </div>
         ) : null}

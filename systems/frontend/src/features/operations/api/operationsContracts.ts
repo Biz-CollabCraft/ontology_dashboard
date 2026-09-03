@@ -150,6 +150,7 @@ export interface OperationsBootstrapModel {
   events: OperationsEvent[];
   metrics: OperationsMetrics;
   lineRisk: OperationsLineRisk[];
+  selectionRestoreError?: string | null;
 }
 
 export interface OperationsSensorValue {

@@ -179,13 +179,14 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   }, [projectId, refreshVersion, selection.workspaceId]);
 
   const selectedEvent = useMemo(() => {
-    const explicit = model?.events.find((item) => item.eventId === selection.eventId) ?? null;
-    if (explicit) return explicit;
-    if ((selection.view === "operations" || selection.view === "reports") && model?.events[0]) {
-      return model.events[0];
-    }
-    return null;
-  }, [model, selection.eventId, selection.view]);
+    return model?.events.find((item) => item.eventId === selection.eventId) ?? null;
+  }, [model, selection.eventId]);
+
+  const selectedSnapshotUnavailable = Boolean(
+    selection.eventId
+    && model
+    && (model.selectionRestoreError || !selectedEvent),
+  );
 
   useEffect(() => {
     if (!model || selection.eventId || (selection.view !== "operations" && selection.view !== "reports")) return;
@@ -424,7 +425,13 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   const canReadSystemLogs = canReadOperationsSystemLogs(user?.permissions);
   const selectedAssetId = selection.assetId;
   let content;
-  if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
+  if (useReliabilityPreview && selectedSnapshotUnavailable) {
+    content = <OperationsState
+      kind="error"
+      title="선택 snapshot 복원 불가"
+      detail={`선택한 Decision Case ${selection.eventId}의 immutable Result Artifact를 복원하지 못했습니다. 최신 Event로 자동 대체하지 않습니다. 다른 Case를 명시적으로 선택해 주세요.`}
+    />;
+  } else if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
     content = <OperationsOverviewPage model={model} role={authorizedRole} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   } else if (useReliabilityPreview && selection.view !== "system") {
     content = <RoleComposedWorkspace

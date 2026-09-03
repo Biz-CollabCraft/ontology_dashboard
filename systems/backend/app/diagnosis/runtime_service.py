@@ -1539,8 +1539,7 @@ class PredictiveMaintenanceRuntimeService:
         project_id: str,
         workspace_id: str,
         selected_event_id: str,
-        context: DatasetVersionRuntimeContext,
-    ) -> GovernedProductResult | None:
+    ) -> tuple[GovernedProductResult, DatasetVersionRuntimeContext] | None:
         """Resolve a frozen historical Result Artifact for an explicit Case.
 
         Latest-result collections intentionally advance with new observations.
@@ -1556,13 +1555,17 @@ class PredictiveMaintenanceRuntimeService:
         )
         if selected_row is None:
             return None
-        if str(selected_row.get("dataset_version_id")) != context.dataset_version_id:
-            return None
+        historical_context = self.context(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=str(selected_row["dataset_version_id"]),
+        )
         return self._product_result(
-            context=context,
+            context=historical_context,
             row=selected_row,
             source_contract="result_artifact",
-        )
+        ), historical_context
 
     def event_evidence_projection(
         self,
@@ -1825,12 +1828,17 @@ class PredictiveMaintenanceRuntimeService:
         }
         if role == "executive":
             risk_text = f"{result.failure_probability * 100:.1f}%"
+            criticality_label = {
+                "high": "높음" if locale == "ko-KR" else "high",
+                "medium": "중간" if locale == "ko-KR" else "medium",
+                "low": "낮음" if locale == "ko-KR" else "low",
+            }.get(equipment.criticality, "확인 필요" if locale == "ko-KR" else "not provided")
             if resolved_report_type == "operations-decision":
                 report["headline"] = f"{result.asset_id} · 경영 의사결정 요청"
                 report["summary"] = f"현재 위험도 {risk_text}, 상태 {status_label}입니다. 현재 요청된 판단은 '{action_label}'이며 자동 실행되지 않습니다."
                 report["sections"] = [
                     {"section_id": "decision-request", "title": "의사결정 요청", "body": action_label, "evidence_field_ids": ["recommended_decision"]},
-                    {"section_id": "operational-exposure", "title": "운영 노출", "body": f"설비 중요도 {equipment.criticality} · 예상 정지 노출 {equipment.estimated_downtime_minutes}분", "evidence_field_ids": ["equipment.criticality", "equipment.estimated_downtime_minutes"]},
+                    {"section_id": "operational-exposure", "title": "운영 노출", "body": f"설비 중요도 {criticality_label} · 예상 정지 노출 {equipment.estimated_downtime_minutes}분", "evidence_field_ids": ["equipment.criticality", "equipment.estimated_downtime_minutes"]},
                 ]
             elif resolved_report_type == "inspection-summary":
                 report["headline"] = f"{result.asset_id} · 현장 확인 필요"
@@ -1856,7 +1864,7 @@ class PredictiveMaintenanceRuntimeService:
                 report["summary"] = f"현재 위험도 {risk_text}, 상태 {status_label}입니다. 고장 유형은 현장 확인 전 가설이며 현재 경영 판단 요청은 '{action_label}'입니다."
                 report["sections"] = [
                     {"section_id": "executive-status", "title": "경영 판단 요약", "body": report["summary"], "evidence_field_ids": ["status", "failure_probability", "recommended_decision"]},
-                    {"section_id": "executive-exposure", "title": "운영 노출", "body": f"예상 정지 노출 {equipment.estimated_downtime_minutes}분 · 설비 중요도 {equipment.criticality}", "evidence_field_ids": ["equipment.estimated_downtime_minutes", "equipment.criticality"]},
+                    {"section_id": "executive-exposure", "title": "운영 노출", "body": f"예상 정지 노출 {equipment.estimated_downtime_minutes}분 · 설비 중요도 {criticality_label}", "evidence_field_ids": ["equipment.estimated_downtime_minutes", "equipment.criticality"]},
                 ]
             # Raw feature identifiers and release provenance remain available
             # through Evidence details, not the normal executive narrative.
@@ -1946,6 +1954,7 @@ class PredictiveMaintenanceRuntimeService:
         events: list[DashboardEventSummary] = []
         equipment_by_event: dict[str, DashboardEquipment] = {}
         result_by_event: dict[str, GovernedProductResult] = {}
+        context_by_event: dict[str, DatasetVersionRuntimeContext] = {}
         for result in results.items:
             event_id = self._dashboard_event_id(result)
             # Evidence for a prediction must not include maintenance completed
@@ -1979,6 +1988,7 @@ class PredictiveMaintenanceRuntimeService:
             )
             equipment_by_event[event_id] = equipment
             result_by_event[event_id] = result
+            context_by_event[event_id] = context
 
         # A Decision Case is a frozen prediction snapshot, not an alias for the
         # latest prediction of the same asset.  The latest-results collection
@@ -1987,14 +1997,14 @@ class PredictiveMaintenanceRuntimeService:
         # artifact repository instead of silently falling forward to a newer
         # event.
         if selected_event_id and selected_event_id not in result_by_event:
-            selected_result = self._historical_selected_result(
+            historical = self._historical_selected_result(
                 organization_id=organization_id,
                 project_id=project_id,
                 workspace_id=workspace_id,
                 selected_event_id=selected_event_id,
-                context=context,
             )
-            if selected_result is not None:
+            if historical is not None:
+                selected_result, selected_context = historical
                 selected_maintenance = [
                     item
                     for item in maintenance_by_asset.get(selected_result.asset_id, [])
@@ -2019,11 +2029,12 @@ class PredictiveMaintenanceRuntimeService:
                             else "Review governed prediction"
                         ),
                         observed_at=selected_result.observed_at,
-                        dataset_version_id=context.dataset_version_id,
+                        dataset_version_id=selected_context.dataset_version_id,
                     )
                 )
                 equipment_by_event[canonical_selected_id] = selected_equipment
                 result_by_event[canonical_selected_id] = selected_result
+                context_by_event[canonical_selected_id] = selected_context
         events.sort(
             key=lambda item: (
                 {"critical": 0, "warning": 1, "attention": 2, "normal": 3}.get(
@@ -2044,6 +2055,7 @@ class PredictiveMaintenanceRuntimeService:
         detail = None
         if selected_id:
             selected_result = result_by_event[selected_id]
+            selected_context = context_by_event[selected_id]
             selected_maintenance = [
                 item
                 for item in maintenance_by_asset.get(selected_result.asset_id, [])
@@ -2058,7 +2070,7 @@ class PredictiveMaintenanceRuntimeService:
                     organization_id=organization_id,
                     project_id=project_id,
                     workspace_id=workspace_id,
-                    context=context,
+                    context=selected_context,
                     result=selected_result,
                     equipment=equipment_by_event[selected_id],
                     maintenance=selected_maintenance,

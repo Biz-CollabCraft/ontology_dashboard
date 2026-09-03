@@ -176,9 +176,15 @@ export async function loadOperationsBootstrap(
   const [dashboardState, resultState] = await Promise.allSettled([dashboardPromise, resultPromise]);
 
   const warnings: string[] = [];
+  let selectionRestoreError: string | null = null;
   let rawEvents = dashboardState.status === "fulfilled" ? dashboardState.value.events : [];
   if (dashboardState.status === "rejected") {
-    warnings.push(`운영 현황 일부 지연: ${warningMessage(dashboardState.reason, "사용 불가")}`);
+    if (selectedEventId) {
+      selectionRestoreError = `선택 snapshot 복원 불가 · ${selectedEventId}`;
+      warnings.push(selectionRestoreError);
+    } else {
+      warnings.push(`운영 현황 일부 지연: ${warningMessage(dashboardState.reason, "사용 불가")}`);
+    }
     try {
       rawEvents = await getProjectEvents(projectId);
     } catch (reason) {
@@ -201,6 +207,10 @@ export async function loadOperationsBootstrap(
     .at(-1) ?? null;
 
   const canonical = dashboardState.status === "fulfilled" ? dashboardState.value : null;
+  if (selectedEventId && canonical?.selected_event_id !== selectedEventId) {
+    selectionRestoreError = `선택 snapshot 복원 불가 · ${selectedEventId}`;
+    if (!warnings.includes(selectionRestoreError)) warnings.push(selectionRestoreError);
+  }
   const resultContext = resultState.status === "fulfilled" ? resultState.value.context : null;
   const dataSource = canonical?.data_source;
   const context = canonical?.context ?? resultContext;
@@ -240,6 +250,7 @@ export async function loadOperationsBootstrap(
     events,
     metrics,
     lineRisk,
+    selectionRestoreError,
   };
 }
 

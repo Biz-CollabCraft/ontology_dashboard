@@ -529,7 +529,7 @@ export function MaintenanceWorkflowActionPanel({
   }
 
   return (
-    <section className="operations-maintenance-workflow-panel" aria-label="Closed-loop 작업 실행">
+    <section className="operations-maintenance-workflow-panel" aria-label="Closed-loop 작업 실행" data-event-id={eventId}>
       <header><div><span>Closed-loop</span><strong>{role === "process_manager" ? "운영 관리자 작업" : "현장 점검 작업"}</strong></div><button type="button" className="operations-icon-button" onClick={() => void refresh()} aria-label="작업 상태 새로고침">↻</button></header>
       <p>{loading ? "작업 상태를 확인하고 있습니다." : helper}</p>
       {role === "process_manager"

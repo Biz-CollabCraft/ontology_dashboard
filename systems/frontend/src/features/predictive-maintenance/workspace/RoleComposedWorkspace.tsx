@@ -38,7 +38,7 @@ import type {
   OperationsRoleLens,
   OperationsView,
 } from "../../operations/api/operationsContracts";
-import { displayExplanationMethod, displaySensorLabel, fieldFailureLabel } from "../../operations/displayLabels";
+import { displayExplanationMethod, displayInspectionAssociation, displaySensorFactorLabel, displaySensorLabel, fieldFailureLabel } from "../../operations/displayLabels";
 import { MaintenanceWorkflowActionPanel } from "../../operations/maintenance/MaintenanceWorkflowActionPanel";
 import type { ReliabilityExperienceKind } from "./roleExperience";
 import { resolveReliabilityComposition, type ReliabilityBlockId } from "./roleComposition";
@@ -221,9 +221,9 @@ function exposure(input: {
   return { product, lostUnits, contributionExposure, revenueExposure };
 }
 
-function RiskMetricsBlock({ model, detail }: { model: OperationsBootstrapModel; detail: OperationsEventDetailModel | null }) {
+function RiskMetricsBlock({ model, detail, compact = false }: { model: OperationsBootstrapModel; detail: OperationsEventDetailModel | null; compact?: boolean }) {
   const activeWork = detail?.closedLoop?.workOrders.some((item) => ["approved", "in_progress"].includes(item.status)) ? 1 : 0;
-  const metrics = [
+  const allMetrics = [
     ["전체 연결 설비", model.metrics.totalAssets.toLocaleString("ko-KR")],
     ["정상 설비", model.metrics.normal.toLocaleString("ko-KR")],
     ["주의 설비", (model.metrics.attention + model.metrics.warning).toLocaleString("ko-KR")],
@@ -232,7 +232,10 @@ function RiskMetricsBlock({ model, detail }: { model: OperationsBootstrapModel; 
     ["판단 대기", model.metrics.pendingDecisions.toLocaleString("ko-KR")],
     ["마지막 수신", dateTime(model.context.observedAt ?? model.context.refreshedAt)],
   ];
-  return <Block title="현재 운영 신호" eyebrow="LIVE STATUS" icon={<Gauge size={15} />} className="span-12">
+  const metrics = compact
+    ? allMetrics.filter(([label]) => ["긴급 설비", "주의 설비", "판단 대기", "마지막 수신"].includes(label))
+    : allMetrics;
+  return <Block title={compact ? "전체 운영 리스크" : "현재 운영 신호"} eyebrow="LIVE STATUS" icon={<Gauge size={15} />} className={compact ? "span-6 executive-summary-card" : "span-12"}>
     <div className="rw-composed-metrics">{metrics.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
   </Block>;
 }
@@ -268,6 +271,7 @@ function shortTime(value: string | null | undefined) {
 }
 
 function CompactRiskTrend({ detail }: { detail: OperationsEventDetailModel | null }) {
+  const [activeIndex, setActiveIndex] = useState(0);
   if (!detail || detail.riskSeries.length < 2) return null;
   const history = [...detail.riskSeries].sort((left, right) => left.observedAt.localeCompare(right.observedAt));
   const currentAt = detail.event.observedAt;
@@ -286,36 +290,46 @@ function CompactRiskTrend({ detail }: { detail: OperationsEventDetailModel | nul
   const yAt = (value: number) => frame.bottom - ((value - min) / range) * (frame.bottom - frame.top);
   const coords = series.map((point, index) => ({ ...point, x: xAt(index), y: yAt(point.failureProbability) }));
   const path = coords.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-  const focusStep = Math.max(1, Math.ceil(coords.length / 24));
-  return <article className="rw-feature-risk-chart"><header><div><strong>고장 위험 추세</strong><span>{lastHistoryAt && currentAt && Date.parse(currentAt) > Date.parse(lastHistoryAt) ? `plot ${shortTime(lastHistoryAt)} · 현재 ${shortTime(currentAt)}` : `마지막 ${shortTime(currentAt ?? lastHistoryAt)}`}</span></div><b>{probability(detail.event.failureProbability)}</b></header><svg viewBox="0 0 280 96" role="img" aria-label="고장 위험 추세와 판단 임계값" preserveAspectRatio="none"><rect className="rw-feature-chart-frame" x={frame.left} y={frame.top} width={frame.right - frame.left} height={frame.bottom - frame.top} /><line className="rw-feature-chart-grid" x1={frame.left} x2={frame.right} y1={yAt((min + max) / 2)} y2={yAt((min + max) / 2)} />{typeof detail.threshold === "number" ? <><line className="rw-feature-threshold-line" x1={frame.left} x2={frame.right} y1={yAt(detail.threshold)} y2={yAt(detail.threshold)} /><text className="rw-feature-threshold-label" x={frame.right - 2} y={yAt(detail.threshold) - 3} textAnchor="end">판단 경계 {Math.round(detail.threshold * 100)}%</text></> : null}<path d={path} />{coords.map((point, index) => <g key={`${point.observedAt}-${index}`}><circle className={`rw-feature-point quality-${point.status ?? "unknown"}`} cx={point.x} cy={point.y} r={index === coords.length - 1 ? 3.4 : 2.2} />{index % focusStep === 0 || index === coords.length - 1 ? <circle className="rw-feature-hit" cx={point.x} cy={point.y} r="8" tabIndex={0} aria-label={`${dateTime(point.observedAt)} 위험도 ${probability(point.failureProbability)} · ${riskLabel(point.status as OperationsEvent["status"] | null)}`}><title>{`${dateTime(point.observedAt)} · 위험도 ${probability(point.failureProbability)} · ${riskLabel(point.status as OperationsEvent["status"] | null)}`}</title></circle> : null}</g>)}<text className="rw-feature-chart-axis" x={frame.left} y="86" textAnchor="start">{shortTime(series[0]?.observedAt)}</text><text className="rw-feature-chart-axis" x={frame.right} y="86" textAnchor="end">{shortTime(series.at(-1)?.observedAt)}</text><text className="rw-feature-chart-axis-title" x="155" y="95" textAnchor="middle">시간</text></svg><small>{lastHistoryAt && currentAt && Date.parse(currentAt) > Date.parse(lastHistoryAt) ? "현재값은 history plot 이후 새 관측으로 이어 표시합니다." : "현재 Case의 고정 관측 기준입니다."}</small></article>;
+  const safeIndex = Math.min(activeIndex, coords.length - 1);
+  const activePoint = coords[safeIndex];
+  const move = (delta: number) => setActiveIndex((index) => Math.max(0, Math.min(coords.length - 1, index + delta)));
+  const activeLabel = `${dateTime(activePoint.observedAt)} · 위험도 ${probability(activePoint.failureProbability)} · ${riskLabel(activePoint.status as OperationsEvent["status"] | null)}`;
+  return <article className="rw-feature-risk-chart"><header><div><strong>고장 위험 추세</strong><span>{lastHistoryAt && currentAt && Date.parse(currentAt) > Date.parse(lastHistoryAt) ? `plot ${shortTime(lastHistoryAt)} · 현재 ${shortTime(currentAt)}` : `마지막 ${shortTime(currentAt ?? lastHistoryAt)}`}</span></div><b>{probability(detail.event.failureProbability)}</b></header><svg viewBox="0 0 280 96" role="img" tabIndex={0} aria-label={`고장 위험 추세와 판단 임계값. 좌우 방향키로 ${coords.length}개 관측을 탐색합니다.`} onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowUp") { event.preventDefault(); move(1); } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") { event.preventDefault(); move(-1); } else if (event.key === "Home") { event.preventDefault(); setActiveIndex(0); } else if (event.key === "End") { event.preventDefault(); setActiveIndex(coords.length - 1); } }} preserveAspectRatio="none"><rect className="rw-feature-chart-frame" x={frame.left} y={frame.top} width={frame.right - frame.left} height={frame.bottom - frame.top} /><line className="rw-feature-chart-grid" x1={frame.left} x2={frame.right} y1={yAt((min + max) / 2)} y2={yAt((min + max) / 2)} />{typeof detail.threshold === "number" ? <><line className="rw-feature-threshold-line" x1={frame.left} x2={frame.right} y1={yAt(detail.threshold)} y2={yAt(detail.threshold)} /><text className="rw-feature-threshold-label" x={frame.right - 2} y={yAt(detail.threshold) - 3} textAnchor="end">판단 경계 {Math.round(detail.threshold * 100)}%</text></> : null}<path d={path} />{coords.map((point, index) => <g key={`${point.observedAt}-${index}`}><circle className={`rw-feature-point quality-${point.status ?? "unknown"}`} cx={point.x} cy={point.y} r={index === coords.length - 1 ? 3.4 : 2.2} /><circle className={`rw-feature-hit ${index === safeIndex ? "is-keyboard-active" : ""}`} cx={point.x} cy={point.y} r="8"><title>{`${dateTime(point.observedAt)} · 위험도 ${probability(point.failureProbability)} · ${riskLabel(point.status as OperationsEvent["status"] | null)}`}</title></circle></g>)}<text className="rw-feature-chart-axis" x={frame.left} y="86" textAnchor="start">{shortTime(series[0]?.observedAt)}</text><text className="rw-feature-chart-axis" x={frame.right} y="86" textAnchor="end">{shortTime(series.at(-1)?.observedAt)}</text><text className="rw-feature-chart-axis-title" x="155" y="95" textAnchor="middle">시간</text></svg><span className="rw-chart-keyboard-value" aria-live="polite">선택 관측 · {activeLabel}</span><small>{lastHistoryAt && currentAt && Date.parse(currentAt) > Date.parse(lastHistoryAt) ? "현재값은 history plot 이후 새 관측으로 이어 표시합니다." : "현재 Case의 고정 관측 기준입니다."}</small></article>;
+}
+
+function SensorTrendChart({ sensor }: { sensor: OperationsEventDetailModel["sensors"][number] }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const points = sensor.historyPoints ?? [];
+  const numericHistory = points.filter((point): point is typeof point & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
+  const numericPoints = [...numericHistory];
+  const latestHistory = numericHistory.at(-1) ?? null;
+  if (typeof sensor.value === "number" && sensor.observedAt && (!latestHistory || Date.parse(sensor.observedAt) > Date.parse(latestHistory.observedAt))) {
+    numericPoints.push({ observedAt: sensor.observedAt, value: sensor.value, qualityStatus: sensor.qualityStatus ?? "unknown" });
+  }
+  if (numericPoints.length < 2) return null;
+  const values = numericPoints.map((point) => point.value);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const range = maximum - minimum || 1;
+  const frame = { left: 38, right: 272, top: 8, bottom: 69 };
+  const xAt = (index: number) => frame.left + (index / Math.max(1, numericPoints.length - 1)) * (frame.right - frame.left);
+  const yAt = (value: number) => frame.bottom - ((value - minimum) / range) * (frame.bottom - frame.top);
+  const coords = numericPoints.map((point, index) => ({ ...point, x: xAt(index), y: yAt(point.value) }));
+  const path = coords.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const yTicks = [maximum, (minimum + maximum) / 2, minimum];
+  const middleIndex = Math.floor((numericPoints.length - 1) / 2);
+  const coverage = sensor.historyWindow?.coverageStatus;
+  const safeIndex = Math.min(activeIndex, coords.length - 1);
+  const activePoint = coords[safeIndex];
+  const activeLabel = `${dateTime(activePoint.observedAt)} · ${activePoint.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${sensor.unit ? ` ${sensor.unit}` : ""} · 품질 ${activePoint.qualityStatus === "bad" ? "불량" : activePoint.qualityStatus === "good" ? "정상" : "미확인"}`;
+  const move = (delta: number) => setActiveIndex((index) => Math.max(0, Math.min(coords.length - 1, index + delta)));
+  return <article><header><div><strong>{sensor.label}</strong><span>{sensor.historyWindow?.requested ?? "최근"} · {coverage === "partial" ? "일부 구간" : coverage === "complete" ? "전체 구간" : "범위 확인 중"} · 품질 {sensor.qualityStatus === "bad" ? "불량" : sensor.qualityStatus === "good" ? "정상" : "미확인"}</span></div><b>{String(sensor.value ?? "—")}{sensor.unit ? ` ${sensor.unit}` : ""}</b></header><svg viewBox="0 0 280 96" role="img" tabIndex={0} aria-label={`${sensor.label} 최근 추세. 좌우 방향키로 ${coords.length}개 관측을 탐색합니다.`} onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowUp") { event.preventDefault(); move(1); } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") { event.preventDefault(); move(-1); } else if (event.key === "Home") { event.preventDefault(); setActiveIndex(0); } else if (event.key === "End") { event.preventDefault(); setActiveIndex(coords.length - 1); } }} preserveAspectRatio="none"><rect className="rw-feature-chart-frame" x={frame.left} y={frame.top} width={frame.right - frame.left} height={frame.bottom - frame.top} />{yTicks.map((tick) => <g key={tick}><line className="rw-feature-chart-grid" x1={frame.left} x2={frame.right} y1={yAt(tick)} y2={yAt(tick)} /><text className="rw-feature-chart-axis" x="33" y={yAt(tick) + 3} textAnchor="end">{tick.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}</text></g>)}<text className="rw-feature-chart-axis-title" transform="translate(10 40) rotate(-90)" textAnchor="middle">{sensor.unit || "값"}</text><path d={path} />{coords.map((point, index) => <g key={`${sensor.id}-${point.observedAt}-${index}`}><circle className={`rw-feature-point quality-${point.qualityStatus}`} cx={point.x} cy={point.y} r={point.qualityStatus === "bad" ? 3.5 : point.qualityStatus === "unknown" ? 3 : index === coords.length - 1 ? 3.2 : 2.2} /><circle className={`rw-feature-hit ${index === safeIndex ? "is-keyboard-active" : ""}`} cx={point.x} cy={point.y} r="8"><title>{`${dateTime(point.observedAt)} · ${point.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${sensor.unit ? ` ${sensor.unit}` : ""} · 품질 ${point.qualityStatus === "bad" ? "불량" : point.qualityStatus === "good" ? "정상" : "미확인"}`}</title></circle></g>)}{numericPoints[0] ? <text className="rw-feature-chart-axis" x={frame.left} y="86" textAnchor="start">{shortTime(numericPoints[0].observedAt)}</text> : null}{numericPoints.length > 2 ? <text className="rw-feature-chart-axis" x={xAt(middleIndex)} y="86" textAnchor="middle">{shortTime(numericPoints[middleIndex].observedAt)}</text> : null}{numericPoints.at(-1) ? <text className="rw-feature-chart-axis" x={frame.right} y="86" textAnchor="end">{shortTime(numericPoints.at(-1)?.observedAt)}</text> : null}<text className="rw-feature-chart-axis-title" x="155" y="95" textAnchor="middle">시간</text></svg><span className="rw-chart-keyboard-value" aria-live="polite">선택 관측 · {activeLabel}</span><small>history {numericHistory.length}개 · plot 마지막 {dateTime(latestHistory?.observedAt)}{sensor.observedAt && latestHistory && Date.parse(sensor.observedAt) > Date.parse(latestHistory.observedAt) ? ` · 현재값 ${dateTime(sensor.observedAt)}는 plot 이후 관측` : ""}</small></article>;
 }
 
 function FeatureTrendBlock({ detail }: { detail: OperationsEventDetailModel | null }) {
   const sensors = detail?.sensors.filter((sensor) => (sensor.historyPoints?.length ?? 0) > 1).slice(0, 4) ?? [];
   return <Block title="실시간 피쳐 그래프" eyebrow="FEATURE TREND" icon={<RadioTower size={15} />} className="span-12">
-    {detail?.riskSeries.length || sensors.length ? <div className="rw-feature-trends"><CompactRiskTrend detail={detail} />{sensors.map((sensor) => {
-      const points = sensor.historyPoints ?? [];
-      const numericHistory = points.filter((point): point is typeof point & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
-      const numericPoints = [...numericHistory];
-      const latestHistory = numericHistory.at(-1) ?? null;
-      if (typeof sensor.value === "number" && sensor.observedAt && (!latestHistory || Date.parse(sensor.observedAt) > Date.parse(latestHistory.observedAt))) {
-        numericPoints.push({ observedAt: sensor.observedAt, value: sensor.value, qualityStatus: sensor.qualityStatus ?? "unknown" });
-      }
-      const values = numericPoints.map((point) => point.value);
-      const minimum = Math.min(...values);
-      const maximum = Math.max(...values);
-      const range = maximum - minimum || 1;
-      const frame = { left: 38, right: 272, top: 8, bottom: 69 };
-      const xAt = (index: number) => frame.left + (index / Math.max(1, numericPoints.length - 1)) * (frame.right - frame.left);
-      const yAt = (value: number) => frame.bottom - ((value - minimum) / range) * (frame.bottom - frame.top);
-      const coords = numericPoints.map((point, index) => ({ ...point, x: xAt(index), y: yAt(point.value) }));
-      const path = coords.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-      const yTicks = [maximum, (minimum + maximum) / 2, minimum];
-      const middleIndex = Math.floor((numericPoints.length - 1) / 2);
-      const focusStep = Math.max(1, Math.ceil(coords.length / 24));
-      const coverage = sensor.historyWindow?.coverageStatus;
-      return <article key={sensor.id}><header><div><strong>{sensor.label}</strong><span>{sensor.historyWindow?.requested ?? "최근"} · {coverage === "partial" ? "일부 구간" : coverage === "complete" ? "전체 구간" : "범위 확인 중"} · 품질 {sensor.qualityStatus === "bad" ? "불량" : sensor.qualityStatus === "good" ? "정상" : "미확인"}</span></div><b>{String(sensor.value ?? "—")}{sensor.unit ? ` ${sensor.unit}` : ""}</b></header><svg viewBox="0 0 280 96" role="img" aria-label={`${sensor.label} 최근 추세`} preserveAspectRatio="none"><rect className="rw-feature-chart-frame" x={frame.left} y={frame.top} width={frame.right - frame.left} height={frame.bottom - frame.top} />{yTicks.map((tick) => <g key={tick}><line className="rw-feature-chart-grid" x1={frame.left} x2={frame.right} y1={yAt(tick)} y2={yAt(tick)} /><text className="rw-feature-chart-axis" x="33" y={yAt(tick) + 3} textAnchor="end">{tick.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}</text></g>)}<text className="rw-feature-chart-axis-title" transform="translate(10 40) rotate(-90)" textAnchor="middle">{sensor.unit || "값"}</text><path d={path} />{coords.map((point, index) => <g key={`${sensor.id}-${point.observedAt}-${index}`}><circle className={`rw-feature-point quality-${point.qualityStatus}`} cx={point.x} cy={point.y} r={point.qualityStatus === "bad" ? 3.5 : point.qualityStatus === "unknown" ? 3 : index === coords.length - 1 ? 3.2 : 2.2} />{index % focusStep === 0 || index === coords.length - 1 ? <circle className="rw-feature-hit" cx={point.x} cy={point.y} r="8" tabIndex={0} aria-label={`${dateTime(point.observedAt)} ${point.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${sensor.unit ? ` ${sensor.unit}` : ""} · 품질 ${point.qualityStatus}`}><title>{`${dateTime(point.observedAt)} · ${point.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${sensor.unit ? ` ${sensor.unit}` : ""} · 품질 ${point.qualityStatus === "bad" ? "불량" : point.qualityStatus === "good" ? "정상" : "미확인"}`}</title></circle> : null}</g>)}{numericPoints[0] ? <text className="rw-feature-chart-axis" x={frame.left} y="86" textAnchor="start">{shortTime(numericPoints[0].observedAt)}</text> : null}{numericPoints.length > 2 ? <text className="rw-feature-chart-axis" x={xAt(middleIndex)} y="86" textAnchor="middle">{shortTime(numericPoints[middleIndex].observedAt)}</text> : null}{numericPoints.at(-1) ? <text className="rw-feature-chart-axis" x={frame.right} y="86" textAnchor="end">{shortTime(numericPoints.at(-1)?.observedAt)}</text> : null}<text className="rw-feature-chart-axis-title" x="155" y="95" textAnchor="middle">시간</text></svg><small>history {numericHistory.length}개 · plot 마지막 {dateTime(latestHistory?.observedAt)}{sensor.observedAt && latestHistory && Date.parse(sensor.observedAt) > Date.parse(latestHistory.observedAt) ? ` · 현재값 ${dateTime(sensor.observedAt)}는 plot 이후 관측` : ""}</small></article>;
-    })}</div> : <Empty text="선택 설비의 시계열 관측이 준비되면 핵심 피쳐 2~4개를 표시합니다." />}
+    {detail?.riskSeries.length || sensors.length ? <div className="rw-feature-trends"><CompactRiskTrend detail={detail} />{sensors.map((sensor) => <SensorTrendChart key={sensor.id} sensor={sensor} />)}</div> : <Empty text="선택 설비의 시계열 관측이 준비되면 핵심 피쳐 2~4개를 표시합니다." />}
   </Block>;
 }
 
@@ -414,19 +428,20 @@ function DecisionQueueBlock({ model, selectedEvent, onSelectEvent }: { model: Op
   </Block>;
 }
 
-function DecisionBottleneckBlock({ model, selectedEvent, detail, onSelectEvent }: {
+function DecisionBottleneckBlock({ model, selectedEvent, detail, onSelectEvent, compact = false }: {
   model: OperationsBootstrapModel;
   selectedEvent: OperationsEvent | null;
   detail: OperationsEventDetailModel | null;
   onSelectEvent: (event: OperationsEvent) => void;
+  compact?: boolean;
 }) {
   const delayed = model.events
     .filter((event) => event.recommendedDecision !== "continue_monitoring")
     .sort((left, right) => (waitingMinutes(right.observedAt) ?? 0) - (waitingMinutes(left.observedAt) ?? 0))
-    .slice(0, 5);
-  return <Block title="의사결정 병목" eyebrow="DECISION BOTTLENECK" icon={<TimerReset size={15} />} className="span-12">
+    .slice(0, compact ? 3 : 5);
+  return <Block title="의사결정 병목" eyebrow="DECISION BOTTLENECK" icon={<TimerReset size={15} />} className={compact ? "span-6 executive-summary-card" : "span-12"}>
     <p className="rw-bottleneck-sla-note"><strong>대기시간 기준</strong> 현재 Backend에 승인된 Decision SLA 계약이 없어 SLA 초과 여부를 임의 계산하지 않습니다. 아래 값은 Case 발생 후 경과시간입니다.</p>
-    {delayed.length ? <div className="rw-bottleneck-table" role="table" aria-label="지연 Decision Case">
+    {compact && delayed.length ? <div className="rw-composed-list rw-bottleneck-compact">{delayed.map((event) => <button type="button" key={event.eventId} className={selectedEvent?.eventId === event.eventId ? "is-active" : ""} onClick={() => onSelectEvent(event)}><div><strong>{event.assetName}</strong><small>{ownerLabel(event.assignedEngineer)} · {decisionLabel(event.recommendedDecision)}</small></div><b>{duration(waitingMinutes(event.observedAt))}</b></button>)}</div> : delayed.length ? <div className="rw-bottleneck-table" role="table" aria-label="지연 Decision Case">
       <header role="row"><span>Case</span><span>대기</span><span>Owner</span><span>결정 요청</span><span>영향</span></header>
       {delayed.map((event) => {
         const active = selectedEvent?.eventId === event.eventId;
@@ -541,13 +556,13 @@ function SensorSignalsBlock({ detail }: { detail: OperationsEventDetailModel | n
 
 function EvidenceFactorsBlock({ detail }: { detail: OperationsEventDetailModel | null }) {
   return <Block title="위험 기여 근거" eyebrow="MODEL EVIDENCE" icon={<ChartNoAxesCombined size={15} />} className="span-6">
-    {detail?.topFactors.length ? <div className="rw-composed-list static">{detail.topFactors.slice(0, 7).map((factor) => <article key={factor.id}><div><strong>{displaySensorLabel(factor.feature, factor.label)}</strong><small>{factorDirectionLabel(factor.direction)} · {displayExplanationMethod(factor.explanationMethod) ?? "모델 근거"}</small></div><b>{Math.round(Math.abs(factor.contribution) * 100)}%</b></article>)}</div> : <Empty text="모델 기여 근거가 없습니다." />}
+    {detail?.topFactors.length ? <div className="rw-composed-list static" data-event-id={detail.event.eventId}>{detail.topFactors.slice(0, 7).map((factor) => <article key={factor.id}><div><strong>{displaySensorFactorLabel(factor.feature, factor.label)}</strong><small>{factorDirectionLabel(factor.direction)} · {displayExplanationMethod(factor.explanationMethod) ?? "모델 근거"}</small></div><b>{Math.round(Math.abs(factor.contribution) * 100)}%</b></article>)}</div> : <Empty text="모델 기여 근거가 없습니다." />}
   </Block>;
 }
 
 function InspectionTargetsBlock({ detail }: { detail: OperationsEventDetailModel | null }) {
   return <Block title="점검 대상" eyebrow="INSPECTION PLAN" icon={<ClipboardCheck size={15} />} className="span-6">
-    {detail?.inspectionTargets.length ? <div className="rw-composed-cards">{detail.inspectionTargets.slice(0, 5).map((target) => <article key={target.targetId}><strong>{target.componentLabel}</strong><span>{target.locationLabel ?? "위치 확인 필요"}</span><p>{target.inspectionMethod ?? target.association}</p></article>)}</div> : <Empty text="현재 근거에서 특정된 점검 대상이 없습니다." />}
+    {detail?.inspectionTargets.length ? <div className="rw-composed-cards">{detail.inspectionTargets.slice(0, 5).map((target) => <article key={target.targetId}><strong>{target.componentLabel}</strong><span>{target.locationLabel ?? "위치 확인 필요"}</span><p>{target.inspectionMethod ?? displayInspectionAssociation(target.association)}</p></article>)}</div> : <Empty text="현재 근거에서 특정된 점검 대상이 없습니다." />}
   </Block>;
 }
 
@@ -609,6 +624,7 @@ function ReportSummaryBlock({
   experienceKind,
   canMaterializeAgentSummary,
   onOpenReport,
+  compact = false,
 }: {
   detail: OperationsEventDetailModel | null;
   event: OperationsEvent | null;
@@ -616,6 +632,7 @@ function ReportSummaryBlock({
   experienceKind: ReliabilityExperienceKind;
   canMaterializeAgentSummary: boolean;
   onOpenReport: RoleComposedWorkspaceProps["onOpenReport"];
+  compact?: boolean;
 }) {
   const [brief, setBrief] = useState<OperationsAgentReviewSummaryResponse | null>(null);
   const defaultReportType: ReportType = experienceKind === "executive" ? "executive-brief" : experienceKind === "engineering" ? "inspection-summary" : "operations-decision";
@@ -687,13 +704,13 @@ function ReportSummaryBlock({
   const maintenanceDone = maintenanceCompletedAt(detail);
   const outcomeObserved = maintenanceDone ? detail?.riskSeries.some((point) => Date.parse(point.observedAt) > Date.parse(maintenanceDone)) ?? false : false;
   const artifactStatus = maintenanceDone && outcomeObserved ? "검토 가능한 결과 보고" : "업무 진행 중 · 초안";
-  return <Block title="역할별 보고 요약" eyebrow="GROUNDED REPORT" icon={<FileText size={15} />} className="span-12">
+  return <Block title={compact ? "보고 준비 상태" : "역할별 보고 요약"} eyebrow="GROUNDED REPORT" icon={<FileText size={15} />} className={compact ? "span-6 executive-summary-card" : "span-12"}>
     {roleSummary && headline ? <div className="rw-composed-report">
       <div className="rw-report-controls"><label><span>보고 유형</span><select value={reportType} onChange={(event) => setReportType(event.target.value as ReportType)}><option value="inspection-summary">현장 점검 요약</option><option value="operations-decision">운영 판단 보고</option><option value="executive-brief">경영진 Executive Brief</option><option value="maintenance-effect">정비 효과 before-after</option><option value="weekly-risk">주간 리스크 요약</option></select></label><span>{variantLoading ? "보고 전환 중" : brief?.summary?.mode === "llm" || report?.mode === "llm" ? "AI 근거 요약" : "검증된 기본 보고"}</span></div>
-      {report ? <div className="rw-report-artifact-meta"><span>{artifactStatus}</span><strong>{report.reportType}</strong><small>artifact {report.reportId}</small><small>as-of {dateTime(report.asOf ?? detail?.event.observedAt)}</small>{report.revision > 0 ? <small>rev {report.revision}</small> : null}</div> : null}
+      {report ? <div className="rw-report-artifact-meta"><span>{artifactStatus}</span><strong>{report.reportType}</strong><small>Case {event?.eventId ?? "—"}</small><small>artifact {report.reportId}</small><small>as-of {dateTime(report.asOf ?? detail?.event.observedAt)}</small>{report.revision > 0 ? <small>rev {report.revision}</small> : null}</div> : null}
       <div><strong>{headline}</strong><p>{roleSummary}</p></div>
-      {report ? <div className="rw-composed-report-sections">{report.sections.slice(0, experienceKind === "executive" ? 3 : 4).map((section) => <article key={section.id}><span>{section.title}</span><p>{section.body}</p></article>)}</div> : null}
-      <details className="rw-report-evidence"><summary>근거 데이터 확인 · {new Set(evidenceRefs).size} refs</summary><ul>{[...new Set(evidenceRefs)].slice(0, 12).map((ref) => <li key={ref}><code>{ref}</code></li>)}</ul></details>
+      {report && !compact ? <div className="rw-composed-report-sections">{report.sections.slice(0, experienceKind === "executive" ? 3 : 4).map((section) => <article key={section.id}><span>{section.title}</span><p>{section.body}</p></article>)}</div> : null}
+      {!compact ? <details className="rw-report-evidence"><summary>근거 데이터 확인 · {new Set(evidenceRefs).size} refs</summary><ul>{[...new Set(evidenceRefs)].slice(0, 12).map((ref) => <li key={ref}><code>{ref}</code></li>)}</ul></details> : null}
       <div className="rw-report-actions"><button type="button" onClick={() => onOpenReport(event?.eventId ?? null, event?.assetId ?? null, reportType === "inspection-summary" ? "inspection-request" : "executive-brief")}>내용 미리보기</button><button type="button" onClick={() => window.print()}>출력 전 확인</button></div>
     </div> : <Empty text="선택 이벤트의 grounded report를 불러오는 중입니다." />}
   </Block>;
@@ -720,8 +737,9 @@ function Empty({ text }: { text: string }) {
 
 function renderBlock(id: ReliabilityBlockId, props: RoleComposedWorkspaceProps) {
   const assetId = props.selectedEvent?.assetId ?? null;
+  const compactExecutiveBrief = props.experienceKind === "executive" && props.surfaceId === "executive-brief";
   switch (id) {
-    case "risk-metrics": return <RiskMetricsBlock key={id} model={props.model} detail={props.detail} />;
+    case "risk-metrics": return <RiskMetricsBlock key={id} model={props.model} detail={props.detail} compact={compactExecutiveBrief} />;
     case "factory-map": return <FactoryMapBlock key={id} model={props.model} selectedEvent={props.selectedEvent} onSelectEvent={props.onSelectEvent} />;
     case "business-kpis": return <BusinessKpisBlock key={id} context={props.companyContext} />;
     case "operational-kpis": return <OperationalKpisBlock key={id} model={props.model} detail={props.detail} companyContext={props.companyContext} />;
@@ -731,7 +749,7 @@ function renderBlock(id: ReliabilityBlockId, props: RoleComposedWorkspaceProps) 
     case "asset-brief": return <AssetBriefBlock key={id} model={props.model} event={props.selectedEvent} onOpenAsset={props.onOpenAsset} />;
     case "production-exposure": return <ProductionExposureBlock key={id} detail={props.detail} companyContext={props.companyContext} />;
     case "decision-queue": return <DecisionQueueBlock key={id} model={props.model} selectedEvent={props.selectedEvent} onSelectEvent={props.onSelectEvent} />;
-    case "decision-bottleneck": return <DecisionBottleneckBlock key={id} model={props.model} selectedEvent={props.selectedEvent} detail={props.detail} onSelectEvent={props.onSelectEvent} />;
+    case "decision-bottleneck": return <DecisionBottleneckBlock key={id} model={props.model} selectedEvent={props.selectedEvent} detail={props.detail} onSelectEvent={props.onSelectEvent} compact={compactExecutiveBrief} />;
     case "workflow-lifecycle": return <WorkflowLifecycleBlock key={id} detail={props.detail} />;
     case "case-lineage": return <CaseLineageBlock key={id} props={props} />;
     case "workflow-actions": return <WorkflowActionsBlock key={id} props={props} />;
@@ -743,7 +761,7 @@ function renderBlock(id: ReliabilityBlockId, props: RoleComposedWorkspaceProps) 
     case "maintenance-effect": return <MaintenanceEffectBlock key={id} detail={props.detail} companyContext={props.companyContext} assetId={assetId} />;
     case "material-context": return <MaterialContextBlock key={id} companyContext={props.companyContext} assetId={assetId} />;
     case "decision-history": return <DecisionHistoryBlock key={id} detail={props.detail} context={props.companyContext} assetId={assetId} />;
-    case "report-summary": return <ReportSummaryBlock key={id} detail={props.detail} event={props.selectedEvent} model={props.model} experienceKind={props.experienceKind} canMaterializeAgentSummary={props.canMaterializeAgentSummary} onOpenReport={props.onOpenReport} />;
+    case "report-summary": return <ReportSummaryBlock key={id} detail={props.detail} event={props.selectedEvent} model={props.model} experienceKind={props.experienceKind} canMaterializeAgentSummary={props.canMaterializeAgentSummary} onOpenReport={props.onOpenReport} compact={compactExecutiveBrief} />;
     case "context-evidence": return <ContextEvidenceBlock key={id} context={props.companyContext} assetId={assetId} />;
     case "data-quality": return <DataQualityBlock key={id} detail={props.detail} model={props.model} />;
   }
@@ -784,6 +802,7 @@ export function RoleComposedWorkspace(props: RoleComposedWorkspaceProps) {
     className={`rw-composed-grid composition-${props.experienceKind}`}
     data-testid={`role-composed-${props.experienceKind}`}
     data-surface={props.surfaceId ?? "default"}
+    data-selected-event-id={props.selectedEvent?.eventId ?? ""}
     data-composition={blocks.join(",")}
   >
     {promotionReason ? <div className="rw-composition-reason" role="status"><strong>{promotionReason}</strong><span>현재 운영 상태에 따라 중요한 블록을 위로 배치했습니다.</span></div> : null}

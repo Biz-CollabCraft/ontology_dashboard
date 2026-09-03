@@ -261,7 +261,7 @@ def dashboard_source(
         workspace_id=workspace_id,
     )
     try:
-        return service.dashboard(
+        response = service.dashboard(
             organization_id=principal.organization_id,
             project_id=project_id,
             workspace_id=workspace_id,
@@ -273,7 +273,17 @@ def dashboard_source(
             intent=intent,
             locale=locale,
             view=view,
-        ).model_dump(mode="json")
+        )
+        if selected_event_id and response.selected_event_id != selected_event_id:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "selected_snapshot_not_found",
+                    "message": "The explicitly selected Decision Case snapshot could not be restored.",
+                    "selected_event_id": selected_event_id,
+                },
+            )
+        return response.model_dump(mode="json")
     except KeyError as error:
         raise HTTPException(status_code=404, detail=f"Dataset Version not found: {error.args[0]}") from error
 

@@ -233,6 +233,11 @@ def render_report(
             ),
         ]
     elif role == "executive":
+        criticality_label = {
+            "high": "높음" if locale == "ko-KR" else "high",
+            "medium": "중간" if locale == "ko-KR" else "medium",
+            "low": "낮음" if locale == "ko-KR" else "low",
+        }.get(str(equipment.get("criticality")), "확인 필요" if locale == "ko-KR" else "not provided")
         if locale == "ko-KR":
             if resolved_report_type == "inspection-summary":
                 headline = f"{equipment_name} · 현장 확인 필요"
@@ -260,14 +265,14 @@ def render_report(
                 summary = f"현재 {status_label} 상태이며 위험도는 {_probability_text(evidence, locale)}입니다. 예상 정지 노출은 {equipment['estimated_downtime_minutes']}분이고, 현재 요청된 판단은 '{decision_label}'입니다."
                 sections = [
                     ReportSection(section_id="executive-decision-request", title="의사결정 요청", body=decision_label, evidence_field_ids=["recommended_decision"]),
-                    ReportSection(section_id="executive-decision-impact", title="운영 노출", body=f"예상 정지 노출 {equipment['estimated_downtime_minutes']}분 · 설비 중요도 {equipment['criticality']}", evidence_field_ids=["equipment.estimated_downtime_minutes", "equipment.criticality"]),
+                    ReportSection(section_id="executive-decision-impact", title="운영 노출", body=f"예상 정지 노출 {equipment['estimated_downtime_minutes']}분 · 설비 중요도 {criticality_label}", evidence_field_ids=["equipment.estimated_downtime_minutes", "equipment.criticality"]),
                 ]
             else:
                 headline = f"Executive Brief · {equipment_name}"
                 summary = f"현재 {status_label} 상태이며 위험도는 {_probability_text(evidence, locale)}입니다. {failure_label}은 점검 전 가설이며, 경영 관점의 현재 판단 요청은 '{decision_label}'입니다."
                 sections = [
                     ReportSection(section_id="executive-status", title="경영 판단 요약", body=summary, evidence_field_ids=["status", "failure_probability", "predicted_failure_type", "recommended_decision"]),
-                    ReportSection(section_id="executive-impact", title="운영 노출", body=f"예상 정지 노출은 {equipment['estimated_downtime_minutes']}분이며 설비 중요도는 {equipment['criticality']}입니다.", evidence_field_ids=["equipment.estimated_downtime_minutes", "equipment.criticality"]),
+                    ReportSection(section_id="executive-impact", title="운영 노출", body=f"예상 정지 노출은 {equipment['estimated_downtime_minutes']}분이며 설비 중요도는 {criticality_label}입니다.", evidence_field_ids=["equipment.estimated_downtime_minutes", "equipment.criticality"]),
                     ReportSection(section_id="executive-request", title="결정 요청", body=decision_label, evidence_field_ids=["recommended_decision"]),
                 ]
         else:

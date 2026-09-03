@@ -33,6 +33,23 @@ export const SENSOR_FIELD_LABELS: Record<string, string> = {
 
 const FEATURE_WINDOW_SUFFIX = /(?:(?:_(?:1h|6h|12h|24h|7d|30d)_(?:max_abs|abs_max|abs_mean|change|max|min|mean|std|last))|(?:_(?:current|abs_current)))$/;
 
+const FEATURE_WINDOW_LABELS: Array<[RegExp, string]> = [
+  [/_abs_current$/, "현재 절대값"],
+  [/_current$/, "현재값"],
+  [/_1h_mean$/, "1시간 평균"],
+  [/_6h_mean$/, "6시간 평균"],
+  [/_6h_abs_mean$/, "6시간 절대평균"],
+  [/_6h_(?:max_abs|abs_max)$/, "6시간 최대 절대값"],
+  [/_6h_max$/, "6시간 최대값"],
+  [/_6h_min$/, "6시간 최소값"],
+  [/_6h_std$/, "6시간 변동폭"],
+  [/_6h_change$/, "6시간 변화량"],
+  [/_12h_mean$/, "12시간 평균"],
+  [/_24h_mean$/, "24시간 평균"],
+  [/_7d_mean$/, "7일 평균"],
+  [/_30d_mean$/, "30일 평균"],
+];
+
 function normalizedFeatureKey(value: string): string {
   return value.replace(FEATURE_WINDOW_SUFFIX, "");
 }
@@ -148,6 +165,19 @@ export function displayEventLabel(event: Pick<DisplayEventLike, "eventId"> | str
 export function displaySensorLabel(key: string, fallback?: string | null): string {
   const normalized = normalizedFeatureKey(key);
   return SENSOR_FIELD_LABELS[key] ?? SENSOR_FIELD_LABELS[normalized] ?? fallback ?? normalized.replaceAll("_", " ");
+}
+
+export function displaySensorFactorLabel(key: string, fallback?: string | null): string {
+  const base = displaySensorLabel(key, fallback);
+  const windowLabel = FEATURE_WINDOW_LABELS.find(([pattern]) => pattern.test(key))?.[1] ?? null;
+  return windowLabel ? `${base} · ${windowLabel}` : base;
+}
+
+export function displayInspectionAssociation(value?: string | null): string {
+  if (!value) return "점검 방법 확인 필요";
+  if (value === "inspection_candidate") return "모델 근거 기반 점검 후보";
+  if (value === "inspection_required") return "현장 점검 필요";
+  return humanizeOperationalText(value.replaceAll("_", " "));
 }
 
 export function displayExplanationMethod(value?: string | null): string | null {

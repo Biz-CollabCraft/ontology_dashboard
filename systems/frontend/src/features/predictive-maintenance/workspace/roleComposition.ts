@@ -84,7 +84,7 @@ const SURFACE_COMPOSITIONS: Partial<Record<ReliabilitySurfaceId, ReliabilityBloc
   "report-draft": ["report-summary", "case-lineage", "production-exposure", "decision-history"],
 
   monitoring: ["risk-queue", "feature-trend", "sensor-signals", "evidence-factors", "case-lineage"],
-  assets: ["feature-trend", "evidence-factors", "inspection-targets", "sensor-signals", "case-lineage"],
+  assets: ["evidence-factors", "inspection-targets", "sensor-signals", "feature-trend", "case-lineage"],
   "sensor-features": ["feature-trend", "sensor-signals", "evidence-factors", "maintenance-history"],
   inspection: ["inspection-targets", "workflow-actions", "workflow-lifecycle", "feature-trend", "evidence-factors", "case-lineage"],
   "maintenance-history": ["maintenance-history", "maintenance-effect", "decision-history", "evidence-factors"],
@@ -120,7 +120,11 @@ export function resolveReliabilityComposition(
     ? ["maintenance-effect", "feature-trend", "sensor-signals", "maintenance-history", "evidence-factors"] satisfies ReliabilityBlockId[]
     : null;
   let blocks = [...(roleSpecificSurfaceBlocks ?? surfaceBlocks ?? COMPOSITIONS[kind][view])];
-  const invariantCount = surfaceBlocks || roleSpecificSurfaceBlocks ? Math.min(3, blocks.length) : 0;
+  const invariantCount = surfaceId === "executive-brief"
+    ? Math.min(4, blocks.length)
+    : surfaceBlocks || roleSpecificSurfaceBlocks
+      ? Math.min(3, blocks.length)
+      : 0;
   if (signals.hasDataQualityHold) {
     blocks = promoteAfterInvariant(blocks, "data-quality", invariantCount, 0);
   }
