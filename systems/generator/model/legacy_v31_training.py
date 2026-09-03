@@ -1,7 +1,7 @@
 """Deterministic reconstruction of the Canonical V3.1 logistic models.
 
-The original ``independent-logreg-v3.1`` binaries were not retained.  This
-module reconstructs their fitted parameters from the immutable Canonical V3.1
+The original ``independent-logreg-v3.1`` binaries were not retained. This
+module publishes distinctly versioned reconstructed artifacts from the immutable Canonical V3.1
 inputs and refuses publication unless the reconstructed latest predictions
 match the checked-in reference snapshots.
 """
@@ -21,7 +21,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 
-MODEL_VERSION = "independent-logreg-v3.1"
+REFERENCE_MODEL_VERSION = "independent-logreg-v3.1"
+MODEL_VERSION = "independent-logreg-v3.1-reconstructed-v1"
 RANDOM_SEED = 42
 MAX_ITER = 1500
 CLASS_WEIGHT = "balanced"

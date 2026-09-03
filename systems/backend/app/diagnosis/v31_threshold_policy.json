@@ -1,7 +1,8 @@
 {
   "schema_version": "1.0",
   "policy_version": "canonical-v3.1-operational-policy-v1",
-  "model_version": "independent-logreg-v3.1",
+  "model_version": "independent-logreg-v3.1-reconstructed-v1",
+  "compatibility_target_model_version": "independent-logreg-v3.1",
   "decision_threshold": 0.5,
   "minimum_recall_target": 0.8,
   "severity_rules": {

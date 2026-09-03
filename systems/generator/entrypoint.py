@@ -38,8 +38,9 @@ from systems.generator.model.legacy_v31_training import (
     CLASS_WEIGHT as LEGACY_CLASS_WEIGHT,
     FAMILY_SENSORS as LEGACY_FAMILY_SENSORS,
     MAX_ITER as LEGACY_MAX_ITER,
-    MODEL_VERSION as LEGACY_MODEL_VERSION,
+    MODEL_VERSION as RECONSTRUCTED_MODEL_VERSION,
     RANDOM_SEED as LEGACY_RANDOM_SEED,
+    REFERENCE_MODEL_VERSION as LEGACY_REFERENCE_MODEL_VERSION,
     REFERENCE_PROBABILITY_TOLERANCE as LEGACY_PROBABILITY_TOLERANCE,
     REGULARIZATION_C as LEGACY_REGULARIZATION_C,
     reconstruct_legacy_v31_model,
@@ -431,10 +432,10 @@ def publish_legacy_v31_artifacts() -> dict[str, Path]:
             raise ValueError(f"Canonical V3.1 reconstruction input is missing: {required_path}")
 
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
-    if contract.get("model_version") != LEGACY_MODEL_VERSION:
+    if contract.get("model_version") != LEGACY_REFERENCE_MODEL_VERSION:
         raise ValueError(
             "Canonical model contract does not describe "
-            f"{LEGACY_MODEL_VERSION}: {contract.get('model_version')!r}"
+            f"{LEGACY_REFERENCE_MODEL_VERSION}: {contract.get('model_version')!r}"
         )
     if contract.get("dataset_version") != "canonical-ai4i-physics-v3.1":
         raise ValueError("Canonical model contract dataset version is not V3.1")
@@ -477,17 +478,23 @@ def publish_legacy_v31_artifacts() -> dict[str, Path]:
         if not truth_path.is_file() or _sha256(truth_path) != expected_truth_sha:
             raise ValueError(f"Canonical V3.1 failure truth checksum mismatch: {truth_path}")
 
-        destination = artifact_root / str(specification["model_id"]) / LEGACY_MODEL_VERSION
+        destination = (
+            artifact_root
+            / str(specification["model_id"])
+            / RECONSTRUCTED_MODEL_VERSION
+        )
         if destination.exists():
             manifest = json.loads((destination / "manifest.json").read_text(encoding="utf-8"))
             provenance = manifest.get("provenance") or {}
             if (
-                manifest.get("model_version") != LEGACY_MODEL_VERSION
+                manifest.get("model_version") != RECONSTRUCTED_MODEL_VERSION
+                or provenance.get("compatibility_target_model_version")
+                != LEGACY_REFERENCE_MODEL_VERSION
                 or provenance.get("canonical_model_contract_sha256") != _sha256(contract_path)
                 or provenance.get("reference_snapshot_sha256") != _sha256(snapshot_path)
             ):
                 raise ValueError(
-                    f"Existing {LEGACY_MODEL_VERSION} artifact does not match the frozen "
+                    f"Existing {RECONSTRUCTED_MODEL_VERSION} artifact does not match the frozen "
                     f"Canonical V3.1 reconstruction contract: {destination}"
                 )
             published[family] = destination
@@ -526,7 +533,8 @@ def publish_legacy_v31_artifacts() -> dict[str, Path]:
         }
         training_config = {
             "training_config_version": "independent-logreg-v3.1-frozen-reconstruction-v1",
-            "training_version": "independent-logreg-v3.1",
+            "training_version": RECONSTRUCTED_MODEL_VERSION,
+            "compatibility_target_model_version": LEGACY_REFERENCE_MODEL_VERSION,
             "selected_model": "logistic_regression",
             "random_seed": LEGACY_RANDOM_SEED,
             "max_iter": LEGACY_MAX_ITER,
@@ -589,7 +597,7 @@ def publish_legacy_v31_artifacts() -> dict[str, Path]:
             published[family] = publish_model_artifact(
                 artifact_uri=artifact_uri,
                 model_id=str(specification["model_id"]),
-                model_version=LEGACY_MODEL_VERSION,
+                model_version=RECONSTRUCTED_MODEL_VERSION,
                 dataset_version=str(contract["dataset_version"]),
                 feature_schema_version=feature_schema_version,
                 model_file=model_file,
@@ -608,11 +616,13 @@ def publish_legacy_v31_artifacts() -> dict[str, Path]:
                     "reference_snapshot_sha256": _sha256(snapshot_path),
                     "producer": "ontology_dashboard/systems/generator",
                     "reconstruction": "deterministic_from_frozen_v3.1_recipe",
+                    "compatibility_target_model_version": LEGACY_REFERENCE_MODEL_VERSION,
                 },
                 compatibility={
                     "runtime": "ontology_dashboard.systems.generator.runtime_pipeline",
                     "prediction_task": "binary_failure_within_horizon",
                     "observation_family": family,
+                    "compatibility_target_model_version": LEGACY_REFERENCE_MODEL_VERSION,
                     "python": ">=3.11",
                 },
                 label_schema=label_schema,
@@ -789,7 +799,7 @@ def main() -> int:
         result["legacy_v3_1_artifacts"] = {
             family: {
                 "path": str(path),
-                "model_version": LEGACY_MODEL_VERSION,
+                "model_version": RECONSTRUCTED_MODEL_VERSION,
             }
             for family, path in sorted(legacy_artifacts.items())
         }

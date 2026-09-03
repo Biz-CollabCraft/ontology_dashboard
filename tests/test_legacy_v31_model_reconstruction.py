@@ -84,8 +84,16 @@ def test_legacy_publication_is_pinned_to_frozen_recipe(
 
     assert set(result) == {"compressor", "cnc"}
     assert {item["model_version"] for item in published_kwargs} == {
-        "independent-logreg-v3.1"
+        "independent-logreg-v3.1-reconstructed-v1"
     }
+    assert {
+        item["provenance"]["compatibility_target_model_version"]
+        for item in published_kwargs
+    } == {"independent-logreg-v3.1"}
+    assert {
+        item["compatibility"]["compatibility_target_model_version"]
+        for item in published_kwargs
+    } == {"independent-logreg-v3.1"}
     assert {item["training_config"]["selected_model"] for item in published_kwargs} == {
         "logistic_regression"
     }
@@ -113,16 +121,18 @@ def test_local_model_preparation_selects_pinned_legacy_not_newest_candidate(
             },
             {
                 "model_id": model_id,
-                "model_version": "independent-logreg-v3.1",
+                "model_version": "independent-logreg-v3.1-reconstructed-v1",
                 "created_at": "2026-08-10T00:00:00Z",
                 "training_config": {
                     "training_config_version": (
                         "independent-logreg-v3.1-frozen-reconstruction-v1"
                     ),
+                    "compatibility_target_model_version": "independent-logreg-v3.1",
                     "selected_threshold": 0.5,
                 },
                 "provenance": {
-                    "reconstruction": "deterministic_from_frozen_v3.1_recipe"
+                    "reconstruction": "deterministic_from_frozen_v3.1_recipe",
+                    "compatibility_target_model_version": "independent-logreg-v3.1",
                 },
                 "_artifact_dir": str(tmp_path / "legacy"),
             },
@@ -160,10 +170,13 @@ def test_local_model_preparation_selects_pinned_legacy_not_newest_candidate(
         models_store=tmp_path / "models",
     )
 
-    assert result["model_set_version"] == "3.1.0-independent-logreg-pinned"
+    assert (
+        result["model_set_version"]
+        == "3.1.0-independent-logreg-reconstructed-v1"
+    )
     assert {
         item["model_version"] for item in result["models"].values()
-    } == {"independent-logreg-v3.1"}
+    } == {"independent-logreg-v3.1-reconstructed-v1"}
 
 
 def test_backend_severity_policy_preserves_v3_1_risk_bands() -> None:
