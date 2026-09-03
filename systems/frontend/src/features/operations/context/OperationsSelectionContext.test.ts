@@ -125,4 +125,24 @@ describe("Operations URL selection contract", () => {
     expect(selection.surface).toBe("production-impact");
     expect(selection.view).toBe("objects");
   });
+
+  it("does not restore a stale selected Case when a broad workspace URL is opened", () => {
+    const selection = parseOperationsSelection({
+      projectId: "project-a",
+      search: "?view=overview&dashboard=workflow&role=process_manager&workspace_id=workspace-a",
+      defaultRole: "process_manager",
+      defaultSurface: "factory-status",
+      pathSurface: "factory-status",
+      sessionValue: JSON.stringify({
+        view: "overview",
+        surface: "factory-status",
+        assetId: "CNC-S04-L04-01",
+        eventId: "RESULT#OLD-SESSION",
+        workspaceId: "workspace-a",
+      }),
+    });
+    expect(selection.surface).toBe("factory-status");
+    expect(selection.assetId).toBeNull();
+    expect(selection.eventId).toBeNull();
+  });
 });

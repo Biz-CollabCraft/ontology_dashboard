@@ -1712,6 +1712,7 @@ export function OperationsWorkflowOverviewPage({
   const [postMaintenancePredictions, setPostMaintenancePredictions] = useState<Record<string, PostMaintenancePredictionSummary>>({});
   const [liveTickError, setLiveTickError] = useState<string | null>(null);
   const autoOpenedDrawerKeyRef = useRef<string | null>(null);
+  const suppressAutoOpenDrawerRef = useRef(false);
   const handlePostMaintenancePrediction = useCallback((assetId: string, prediction: PostMaintenancePredictionSummary) => {
     setPostMaintenancePredictions((current) => {
       const previous = current[assetId];
@@ -1756,6 +1757,7 @@ export function OperationsWorkflowOverviewPage({
   }, [model.context.datasetVersionId, model.context.projectId, model.context.workspaceId, onRefresh]);
   useEffect(() => {
     if (!selectedAsset || detailDrawerOpen) return;
+    if (suppressAutoOpenDrawerRef.current) return;
     const params = new URLSearchParams(window.location.search);
     const requestedAssetId = params.get("asset_id");
     const requestedEventId = params.get("event_id");
@@ -1768,21 +1770,9 @@ export function OperationsWorkflowOverviewPage({
     setDetailDrawerOpen(true);
     setDetailDrawerTab("status");
   }, [detailDrawerOpen, selectedAsset, selectedEvent?.eventId]);
-  useEffect(() => {
-    if (model.context.projectId !== "manufacturing-demo-project" || model.context.workspaceId !== "manufacturing-demo") return;
-    if (!liveDemo.eventId) return;
-    if (selectedAsset?.assetId === liveDemo.assetId && selectedEvent?.eventId === liveDemo.eventId) return;
-    setFactorySlotPreview(null);
-    onPreviewAsset(liveDemo.assetId, liveDemo.eventId);
-  }, [
-    liveDemo.assetId,
-    liveDemo.eventId,
-    model.context.projectId,
-    model.context.workspaceId,
-    onPreviewAsset,
-    selectedAsset?.assetId,
-    selectedEvent?.eventId,
-  ]);
+  // Live demo ticks update cards and map emphasis only. They must not mutate
+  // the selected Case because that writes asset_id/event_id into the URL and
+  // reopens the detail drawer after login or after the user closes it.
   const drawerAssetSource = factorySlotPreview?.slot.asset ?? (factorySlotPreview ? null : selectedAsset);
   const drawerPrediction = drawerAssetSource ? postMaintenancePredictions[drawerAssetSource.assetId] : null;
   const drawerAsset = drawerAssetSource && drawerPrediction
@@ -1873,16 +1863,22 @@ export function OperationsWorkflowOverviewPage({
   const liveResultCardSource = rotatingLiveResult?.sourceLabel ?? liveDemo.sourceLabel;
   const liveResultCardObservedAt = rotatingLiveResult?.observedAt ?? liveDemo.generatedAt;
 
+  const closeDetailDrawer = useCallback(() => {
+    suppressAutoOpenDrawerRef.current = true;
+    setDetailDrawerOpen(false);
+  }, []);
+
   useEffect(() => {
     if (!detailDrawerOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDetailDrawerOpen(false);
+      if (event.key === "Escape") closeDetailDrawer();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [detailDrawerOpen]);
+  }, [closeDetailDrawer, detailDrawerOpen]);
 
   const previewInDrawer = (assetId: string, eventId: string | null) => {
+    suppressAutoOpenDrawerRef.current = false;
     setFactorySlotPreview(null);
     onPreviewAsset(assetId, eventId);
     setDetailDrawerOpen(true);
@@ -1890,6 +1886,7 @@ export function OperationsWorkflowOverviewPage({
   };
 
   const previewFactoryAssetSlot = (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => {
+    suppressAutoOpenDrawerRef.current = false;
     setFactorySlotPreview({ slot, cell });
     onPreviewAsset(asset.assetId, asset.eventId);
     setDetailDrawerOpen(true);
@@ -2172,10 +2169,10 @@ export function OperationsWorkflowOverviewPage({
             type="button"
             className="operations-detail-drawer-scrim"
             aria-label="상세 패널 닫기"
-            onClick={() => setDetailDrawerOpen(false)}
+            onClick={closeDetailDrawer}
           />
           <aside className="operations-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <button type="button" className="operations-detail-drawer-close" aria-label="선택 설비 상세 닫기" onClick={() => setDetailDrawerOpen(false)}><X size={16} /></button>
+            <button type="button" className="operations-detail-drawer-close" aria-label="선택 설비 상세 닫기" onClick={closeDetailDrawer}><X size={16} /></button>
             <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} liveDemo={liveDemo} liveTickError={liveTickError} role={role} currentUserId={currentUserId} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "작업 이력" : drawerClosedLoop ? "업무 기록" : "현재 판단"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>

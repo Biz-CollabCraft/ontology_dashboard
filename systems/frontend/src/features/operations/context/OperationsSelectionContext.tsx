@@ -73,6 +73,17 @@ export function parseOperationsSelection(input: {
   const queryHasWorkspace = params.has("workspace_id");
   const queryHasAsset = params.has("asset_id");
   const queryHasEvent = params.has("event_id");
+  const routeHasSurface = Boolean(input.pathSurface);
+  const explicitNavigation = Boolean(
+    routeHasSurface
+    || queryHasView
+    || queryHasSurface
+    || queryHasReportTab
+    || queryHasDashboard
+    || queryHasRole
+    || queryHasWorkspace,
+  );
+  const shouldRestoreSessionSelection = !explicitNavigation || queryHasAsset || queryHasEvent;
   const defaultView = input.defaultView ?? "overview";
   const sessionView = typeof session.view === "string" ? validView(session.view) : null;
   return {
@@ -95,8 +106,16 @@ export function parseOperationsSelection(input: {
       ? validRole(params.get("role"), input.defaultRole)
       : validRole(typeof session.role === "string" ? session.role : null, input.defaultRole),
     workspaceId: queryHasWorkspace ? optionalValue(params.get("workspace_id")) : optionalValue(session.workspaceId ?? null),
-    assetId: queryHasAsset ? optionalValue(params.get("asset_id")) : optionalValue(session.assetId ?? null),
-    eventId: queryHasEvent ? optionalValue(params.get("event_id")) : optionalValue(session.eventId ?? null),
+    assetId: queryHasAsset
+      ? optionalValue(params.get("asset_id"))
+      : shouldRestoreSessionSelection
+        ? optionalValue(session.assetId ?? null)
+        : null,
+    eventId: queryHasEvent
+      ? optionalValue(params.get("event_id"))
+      : shouldRestoreSessionSelection
+        ? optionalValue(session.eventId ?? null)
+        : null,
   };
 }
 
