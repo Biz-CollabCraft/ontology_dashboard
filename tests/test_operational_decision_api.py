@@ -25,7 +25,7 @@ PARAMS = {
     "project_id": "manufacturing-demo-project",
     "workspace_id": "manufacturing-demo",
     "evidence_snapshot_id": "ARTIFACT-GS-004",
-    "decision_as_of": "2026-09-02T01:00:00Z",
+    "decision_as_of": "2026-08-01T00:00:00+09:00",
     "role": "process_manager",
 }
 

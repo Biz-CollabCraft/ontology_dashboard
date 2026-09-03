@@ -90,6 +90,22 @@ async function openDecisionSupport(page: Page) {
   return dialog.getByRole("region", { name: "운영 판단 지원" });
 }
 
+test("unmocked browser path materializes through FastAPI and SQLite", async ({ page }) => {
+  await login(page, "manager");
+  const panel = await openDecisionSupport(page);
+  const responsePromise = page.waitForResponse((response) =>
+    response.request().method() === "POST"
+    && response.url().includes("/decision-support-brief"),
+  );
+  await panel.getByRole("button", { name: "맥락 갱신" }).click();
+  const response = await responsePromise;
+  expect(response.status()).toBe(200);
+  await expect(panel).toContainText("DEMO-PO-001");
+  await expect(panel).toContainText("시간 검증 passed");
+  await expect(panel).toContainText("자동 선택하지 않음");
+  await expect(panel).toContainText("WorkOrder·정비 실행을 생성하지 않습니다");
+});
+
 test("manager materializes a decision brief and sees relationship context", async ({ page }) => {
   let stored = false;
   let postCount = 0;

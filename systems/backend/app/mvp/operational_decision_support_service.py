@@ -141,8 +141,8 @@ class OperationalDecisionSupportService:
         try:
             result = self._agent(identity).run(
                 request=request,
-                retrieved_at=now,
-                validated_at=now,
+                retrieved_at=identity.decision_as_of,
+                validated_at=identity.decision_as_of,
             )
             brief = compose_operational_decision_brief(request=request, result=result)
             snapshot = materialize_operational_brief(
@@ -309,9 +309,9 @@ class OperationalDecisionSupportService:
         self, identity: OperationalRequestIdentity
     ) -> BoundedOperationalDecisionAgent:
         fixture_root = self.root / "data" / "fixtures" / "operation_context"
-        production = _load(fixture_root / "operational-decision-context-v1.json")
-        maintenance = _load(fixture_root / "maintenance-readiness-context-v1.json")
-        quality = _load(fixture_root / "quality-delivery-context-v1.json")
+        production = _load(fixture_root / "operational-decision-context-evidence-aligned-v1.json")
+        maintenance = _load(fixture_root / "maintenance-readiness-context-evidence-aligned-v1.json")
+        quality = _load(fixture_root / "quality-delivery-context-evidence-aligned-v1.json")
         for context in (production, maintenance, quality):
             context["scope"]["organization_id"] = identity.organization_id
             context["scope"]["project_id"] = identity.project_id
@@ -327,15 +327,15 @@ class OperationalDecisionSupportService:
             ports={
                 "production": FixtureProductionDecisionContextReadPort(
                     context=production,
-                    source_ref="fixture:operational-decision-context-v1",
+                    source_ref="fixture:operational-decision-context-evidence-aligned-v1",
                 ),
                 "maintenance_readiness": FixtureMaintenanceReadinessContextReadPort(
                     context=maintenance,
-                    source_ref="fixture:maintenance-readiness-context-v1",
+                    source_ref="fixture:maintenance-readiness-context-evidence-aligned-v1",
                 ),
                 "quality_delivery": FixtureQualityDeliveryContextReadPort(
                     context=quality,
-                    source_ref="fixture:quality-delivery-context-v1",
+                    source_ref="fixture:quality-delivery-context-evidence-aligned-v1",
                 ),
             },
             impact_assumptions=ImpactSimulationAssumptions(
