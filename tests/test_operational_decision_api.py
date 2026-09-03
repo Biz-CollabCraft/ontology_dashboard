@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Event
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,7 +16,11 @@ from app.dependencies import (
 )
 from app.identity import CSRF_COOKIE, IdentityService
 from app.main import app
+from app.mvp.operational_context_contract import OperationalRequestIdentity
+from app.mvp.operational_decision_brief import DecisionBriefRole
 from app.mvp.operational_decision_support_service import (
+    DECISION_SUPPORT_RUNNING_LEASE_SECONDS,
+    DecisionSupportMaterializationInProgress,
     OperationalDecisionSupportService,
 )
 from identity_test_support import build_identity_service
@@ -28,6 +35,43 @@ PARAMS = {
     "decision_as_of": "2026-08-01T00:00:00+09:00",
     "role": "process_manager",
 }
+IDENTITY = OperationalRequestIdentity(
+    organization_id="org-ontology-demo",
+    project_id=PARAMS["project_id"],
+    workspace_id=PARAMS["workspace_id"],
+    asset_id=ASSET_ID,
+    evidence_snapshot_id=PARAMS["evidence_snapshot_id"],
+    decision_as_of=datetime.fromisoformat(PARAMS["decision_as_of"]),
+)
+
+
+def running_record(
+    service: OperationalDecisionSupportService,
+    *,
+    run_id: str,
+    started_at: datetime,
+) -> tuple[str, dict[str, object]]:
+    key = service._cache_key(
+        identity=IDENTITY,
+        actor_role=DecisionBriefRole.PROCESS_MANAGER,
+    )
+    timestamp = started_at.isoformat()
+    return key, {
+        "workflow_run_id": run_id,
+        "asset_id": ASSET_ID,
+        "project_id": PARAMS["project_id"],
+        "cache_key": key,
+        "status": "running",
+        "reason": None,
+        "context_version_set": {},
+        "temporal_validation": "not_measured",
+        "stale_recovered": False,
+        "trajectory": [],
+        "started_at": timestamp,
+        "completed_at": None,
+        "updated_at": timestamp,
+        "recorded_at": timestamp,
+    }
 
 
 @pytest.fixture()
@@ -140,6 +184,114 @@ def test_audit_runs_are_admin_only_and_read_only(api_client) -> None:
         key not in rows[0]
         for key in ("recommendation", "work_order", "maintenance_action")
     )
+
+
+def test_atomic_guard_rejects_concurrent_materialization_across_service_instances(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_path = tmp_path / "decision-support-concurrency.db"
+    first = OperationalDecisionSupportService(ROOT, database_path)
+    second = OperationalDecisionSupportService(ROOT, database_path)
+    delegate = first._agent(IDENTITY)
+    entered = Event()
+    release = Event()
+
+    class BlockingAgent:
+        def run(self, **kwargs):
+            entered.set()
+            assert release.wait(timeout=5)
+            return delegate.run(**kwargs)
+
+    monkeypatch.setattr(first, "_agent", lambda _identity: BlockingAgent())
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future = executor.submit(
+            first.materialize,
+            identity=IDENTITY,
+            actor_role=DecisionBriefRole.PROCESS_MANAGER,
+            risk_status="critical",
+            trigger="ui_manual_regeneration",
+        )
+        assert entered.wait(timeout=5)
+        try:
+            with pytest.raises(
+                DecisionSupportMaterializationInProgress,
+                match="decision_support_materialization_in_progress",
+            ):
+                second.materialize(
+                    identity=IDENTITY,
+                    actor_role=DecisionBriefRole.PROCESS_MANAGER,
+                    risk_status="critical",
+                    trigger="ui_manual_regeneration",
+                )
+        finally:
+            release.set()
+        _brief, trace = future.result(timeout=5)
+
+    assert trace.status == "completed"
+    runs = second.workflow_runs(
+        project_id=PARAMS["project_id"],
+        asset_id=ASSET_ID,
+        status=None,
+        limit=10,
+    )
+    assert [run["status"] for run in runs] == ["completed"]
+
+
+def test_stale_running_reservation_is_expired_before_retry(tmp_path: Path) -> None:
+    service = OperationalDecisionSupportService(
+        ROOT,
+        tmp_path / "decision-support-stale.db",
+    )
+    now = datetime.now(timezone.utc)
+    stale_started_at = now - timedelta(
+        seconds=DECISION_SUPPORT_RUNNING_LEASE_SECONDS + 1
+    )
+    key, stale = running_record(
+        service,
+        run_id="ODR-stale-running",
+        started_at=stale_started_at,
+    )
+    assert service._reserve_run(key=key, run=stale, now=stale_started_at) is False
+
+    _brief, trace = service.materialize(
+        identity=IDENTITY,
+        actor_role=DecisionBriefRole.PROCESS_MANAGER,
+        risk_status="critical",
+        trigger="ui_manual_regeneration",
+        now=now,
+    )
+
+    assert trace.stale_recovered is True
+    runs = service.workflow_runs(
+        project_id=PARAMS["project_id"],
+        asset_id=ASSET_ID,
+        status=None,
+        limit=10,
+    )
+    assert [run["status"] for run in runs] == ["completed", "failed"]
+    assert runs[1]["reason"] == "stale_running_lease_expired"
+
+
+def test_api_maps_active_running_reservation_to_conflict(api_client) -> None:
+    client, service = api_client
+    login(client, "manager@ontology.local", "Manager!2026")
+    now = datetime.now(timezone.utc)
+    key, active = running_record(
+        service,
+        run_id="ODR-active-running",
+        started_at=now,
+    )
+    assert service._reserve_run(key=key, run=active, now=now) is False
+
+    response = client.post(
+        f"/api/objects/{ASSET_ID}/decision-support-brief",
+        params={**PARAMS, "trigger": "ui_manual_regeneration"},
+        headers=csrf(client),
+    )
+
+    assert response.status_code == 409
+    assert "decision_support_materialization_in_progress" in response.json()["detail"]
 
 
 def test_scope_and_future_timestamp_are_rejected(api_client) -> None:

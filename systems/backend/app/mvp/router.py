@@ -37,7 +37,10 @@ from .contracts import DecisionRequest, FollowUpRequest, LayoutRequest, NoteRequ
 from .service import EventNotFound, ManufacturingPredictiveMaintenanceService
 from .operational_context_contract import OperationalRequestIdentity
 from .operational_decision_brief import DecisionBriefRole
-from .operational_decision_support_service import OperationalDecisionSupportService
+from .operational_decision_support_service import (
+    DecisionSupportMaterializationInProgress,
+    OperationalDecisionSupportService,
+)
 
 router = APIRouter(prefix="/api", tags=["manufacturing-domain-pack"])
 AGENT_REVIEW_SUMMARY_MATERIALIZE_RATE = RateLimitRule(limit=12, window_seconds=60)
@@ -334,7 +337,7 @@ def create_decision_support_brief(
             risk_status=risk_status,
             trigger=trigger,
         )
-    except ValueError as exc:
+    except (ValueError, DecisionSupportMaterializationInProgress) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {
         "brief": brief.model_dump(mode="json"),

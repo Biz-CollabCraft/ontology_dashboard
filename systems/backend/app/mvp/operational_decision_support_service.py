@@ -6,7 +6,7 @@ import json
 import sqlite3
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -37,6 +37,13 @@ from app.mvp.operational_impact_simulation import (
 )
 
 
+DECISION_SUPPORT_RUNNING_LEASE_SECONDS = 120
+
+
+class DecisionSupportMaterializationInProgress(RuntimeError):
+    """Raised when the same immutable decision context already has an active run."""
+
+
 @dataclass(frozen=True)
 class DecisionSupportTrace:
     status: str
@@ -45,6 +52,7 @@ class DecisionSupportTrace:
     workflow_run_id: str | None
     context_version_set: dict[str, str]
     temporal_validation: str
+    stale_recovered: bool = False
     trajectory: tuple[dict[str, Any], ...] = ()
 
 
@@ -54,6 +62,7 @@ class OperationalDecisionSupportService:
     database_path: Path | None = None
     _snapshots: dict[str, OperationalBriefSnapshot] = field(default_factory=dict)
     _runs: list[dict[str, Any]] = field(default_factory=list)
+    _active_runs: dict[str, dict[str, Any]] = field(default_factory=dict)
     _lock: Lock = field(default_factory=Lock)
 
     def __post_init__(self) -> None:
@@ -71,15 +80,44 @@ class OperationalDecisionSupportService:
                     workflow_run_id TEXT PRIMARY KEY,
                     project_id TEXT NOT NULL,
                     asset_id TEXT NOT NULL,
+                    cache_key TEXT NOT NULL DEFAULT '',
                     status TEXT NOT NULL,
                     reason TEXT,
                     run_json TEXT NOT NULL,
+                    started_at TEXT NOT NULL DEFAULT '',
+                    completed_at TEXT,
+                    updated_at TEXT NOT NULL DEFAULT '',
                     recorded_at TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS operational_decision_runs_lookup_idx
                 ON operational_decision_workflow_runs (
                     project_id, asset_id, status, recorded_at DESC
                 );
+                """
+            )
+            columns = {
+                str(row[1])
+                for row in connection.execute(
+                    "PRAGMA table_info(operational_decision_workflow_runs)"
+                ).fetchall()
+            }
+            for name, definition in (
+                ("cache_key", "TEXT NOT NULL DEFAULT ''"),
+                ("started_at", "TEXT NOT NULL DEFAULT ''"),
+                ("completed_at", "TEXT"),
+                ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+            ):
+                if name not in columns:
+                    connection.execute(
+                        f"ALTER TABLE operational_decision_workflow_runs "
+                        f"ADD COLUMN {name} {definition}"
+                    )
+            connection.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                    uq_operational_decision_workflow_runs_running_key
+                ON operational_decision_workflow_runs (cache_key)
+                WHERE status = 'running'
                 """
             )
 
@@ -138,6 +176,23 @@ class OperationalDecisionSupportService:
             risk_status=risk_status,
         )
         run_id = f"ODR-{uuid.uuid4().hex[:16]}"
+        run = {
+            "workflow_run_id": run_id,
+            "asset_id": identity.asset_id,
+            "project_id": identity.project_id,
+            "cache_key": key,
+            "status": "running",
+            "reason": None,
+            "context_version_set": {},
+            "temporal_validation": "not_measured",
+            "stale_recovered": False,
+            "trajectory": [],
+            "started_at": now.isoformat(),
+            "completed_at": None,
+            "updated_at": now.isoformat(),
+            "recorded_at": now.isoformat(),
+        }
+        stale_recovered = self._reserve_run(key=key, run=run, now=now)
         try:
             result = self._agent(identity).run(
                 request=request,
@@ -165,35 +220,31 @@ class OperationalDecisionSupportService:
                     if result.temporal_validation.get("valid") is True
                     else "failed"
                 ),
+                stale_recovered=stale_recovered,
                 trajectory=trajectory,
             )
-            run = {
-                "workflow_run_id": run_id,
-                "asset_id": identity.asset_id,
-                "project_id": identity.project_id,
-                "status": trace.status,
-                "reason": trace.reason,
-                "context_version_set": trace.context_version_set,
-                "temporal_validation": trace.temporal_validation,
-                "trajectory": list(trajectory),
-                "recorded_at": now.isoformat(),
-            }
-            self._store_snapshot_and_run(key=key, snapshot=snapshot, run=run)
+            run.update(
+                status=trace.status,
+                reason=trace.reason,
+                context_version_set=trace.context_version_set,
+                temporal_validation=trace.temporal_validation,
+                stale_recovered=stale_recovered,
+                trajectory=list(trajectory),
+                completed_at=now.isoformat(),
+                updated_at=now.isoformat(),
+            )
+            self._store_snapshot_and_finish_run(key=key, snapshot=snapshot, run=run)
             return brief, trace
         except (ValueError, RuntimeError, TimeoutError) as exc:
-            self._store_run(
-                {
-                    "workflow_run_id": run_id,
-                    "asset_id": identity.asset_id,
-                    "project_id": identity.project_id,
-                    "status": "failed",
-                    "reason": type(exc).__name__,
-                    "context_version_set": {},
-                    "temporal_validation": "failed",
-                    "trajectory": [],
-                    "recorded_at": now.isoformat(),
-                }
+            run.update(
+                status="failed",
+                reason=type(exc).__name__,
+                temporal_validation="failed",
+                stale_recovered=stale_recovered,
+                completed_at=now.isoformat(),
+                updated_at=now.isoformat(),
             )
+            self._finish_run(run)
             raise
 
     def workflow_runs(
@@ -251,7 +302,60 @@ class OperationalDecisionSupportService:
             else None
         )
 
-    def _store_snapshot_and_run(
+    def _reserve_run(
+        self,
+        *,
+        key: str,
+        run: dict[str, Any],
+        now: datetime,
+    ) -> bool:
+        cutoff = now - timedelta(seconds=DECISION_SUPPORT_RUNNING_LEASE_SECONDS)
+        if self.database_path is None:
+            with self._lock:
+                active = self._active_runs.get(key)
+                if active is not None:
+                    started_at = datetime.fromisoformat(str(active["started_at"]))
+                    if started_at > cutoff:
+                        raise DecisionSupportMaterializationInProgress(
+                            f"decision_support_materialization_in_progress:{key}"
+                        )
+                    self._expire_run_payload(active, now=now)
+                    self._active_runs.pop(key, None)
+                    stale_recovered = True
+                else:
+                    stale_recovered = False
+                run["stale_recovered"] = stale_recovered
+                self._runs.append(run)
+                self._active_runs[key] = run
+                return stale_recovered
+
+        with sqlite3.connect(self.database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT workflow_run_id, run_json, started_at
+                FROM operational_decision_workflow_runs
+                WHERE cache_key = ? AND status = 'running'
+                LIMIT 1
+                """,
+                (key,),
+            ).fetchone()
+            stale_recovered = False
+            if row is not None:
+                started_at = datetime.fromisoformat(str(row[2]))
+                if started_at > cutoff:
+                    raise DecisionSupportMaterializationInProgress(
+                        f"decision_support_materialization_in_progress:{key}"
+                    )
+                stale = json.loads(str(row[1]))
+                self._expire_run_payload(stale, now=now)
+                self._update_run(connection, stale)
+                stale_recovered = True
+            run["stale_recovered"] = stale_recovered
+            self._insert_run(connection, run)
+        return stale_recovered
+
+    def _store_snapshot_and_finish_run(
         self,
         *,
         key: str,
@@ -261,7 +365,7 @@ class OperationalDecisionSupportService:
         if self.database_path is None:
             with self._lock:
                 self._snapshots[key] = snapshot
-                self._runs.append(run)
+                self._active_runs.pop(key, None)
             return
         with sqlite3.connect(self.database_path) as connection:
             connection.execute(
@@ -272,15 +376,25 @@ class OperationalDecisionSupportService:
                 """,
                 (key, snapshot.model_dump_json(), snapshot.stored_at.isoformat()),
             )
-            self._insert_run(connection, run)
+            self._update_run(connection, run)
 
-    def _store_run(self, run: dict[str, Any]) -> None:
+    def _finish_run(self, run: dict[str, Any]) -> None:
         if self.database_path is None:
             with self._lock:
-                self._runs.append(run)
+                self._active_runs.pop(str(run["cache_key"]), None)
             return
         with sqlite3.connect(self.database_path) as connection:
-            self._insert_run(connection, run)
+            self._update_run(connection, run)
+
+    @staticmethod
+    def _expire_run_payload(run: dict[str, Any], *, now: datetime) -> None:
+        run.update(
+            status="failed",
+            reason="stale_running_lease_expired",
+            temporal_validation="failed",
+            completed_at=now.isoformat(),
+            updated_at=now.isoformat(),
+        )
 
     @staticmethod
     def _insert_run(
@@ -290,20 +404,47 @@ class OperationalDecisionSupportService:
         connection.execute(
             """
             INSERT INTO operational_decision_workflow_runs (
-                workflow_run_id, project_id, asset_id, status, reason,
-                run_json, recorded_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                workflow_run_id, project_id, asset_id, cache_key, status, reason,
+                run_json, started_at, completed_at, updated_at, recorded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run["workflow_run_id"],
                 run["project_id"],
                 run["asset_id"],
+                run["cache_key"],
                 run["status"],
                 run["reason"],
                 json.dumps(run, ensure_ascii=False, sort_keys=True),
+                run["started_at"],
+                run["completed_at"],
+                run["updated_at"],
                 run["recorded_at"],
             ),
         )
+
+    @staticmethod
+    def _update_run(
+        connection: sqlite3.Connection,
+        run: dict[str, Any],
+    ) -> None:
+        cursor = connection.execute(
+            """
+            UPDATE operational_decision_workflow_runs
+            SET status = ?, reason = ?, run_json = ?, completed_at = ?, updated_at = ?
+            WHERE workflow_run_id = ?
+            """,
+            (
+                run["status"],
+                run["reason"],
+                json.dumps(run, ensure_ascii=False, sort_keys=True),
+                run["completed_at"],
+                run["updated_at"],
+                run["workflow_run_id"],
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise RuntimeError("operational_decision_workflow_run_not_found")
 
     def _agent(
         self, identity: OperationalRequestIdentity
