@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   acceptInspectionWorkOrder,
@@ -60,6 +60,16 @@ export function postMaintenancePollingFailure(
       : null,
     stop: false,
   };
+}
+
+export function postMaintenancePollingDelay(
+  resultAvailable: boolean,
+  consecutiveFailures: number,
+): number {
+  if (consecutiveFailures > 0) {
+    return Math.min(1_500 * (2 ** consecutiveFailures), 10_000);
+  }
+  return resultAvailable ? 5_000 : 1_500;
 }
 
 export type MaintenanceWorkflowDisplayStatus =
@@ -141,6 +151,8 @@ export function MaintenanceWorkflowActionPanel({
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [pollingError, setPollingError] = useState<string | null>(null);
   const [postMaintenancePrediction, setPostMaintenancePrediction] = useState<PostMaintenancePredictionSummary | null>(null);
+  const postMaintenancePredictionRef = useRef<PostMaintenancePredictionSummary | null>(null);
+  const activeMaintenanceEventIdRef = useRef<string | null>(null);
   const [actionCandidates, setActionCandidates] = useState<MaintenanceActionCandidateReadModel[]>([]);
   const [selectedActionCandidateId, setSelectedActionCandidateId] = useState("");
   const [inspectionOutcome, setInspectionOutcome] = useState<InspectionOutcome>("maintenance_recommended");
@@ -206,6 +218,14 @@ export function MaintenanceWorkflowActionPanel({
   }, [actionCandidates, lineage, selectedActionCandidateId]);
 
   useEffect(() => {
+    const maintenanceEventId = state.maintenanceEvent?.maintenance_event_id ?? null;
+    if (activeMaintenanceEventIdRef.current === maintenanceEventId) return;
+    activeMaintenanceEventIdRef.current = maintenanceEventId;
+    postMaintenancePredictionRef.current = null;
+    setPostMaintenancePrediction(null);
+  }, [state.maintenanceEvent?.maintenance_event_id]);
+
+  useEffect(() => {
     const inspectionResultId = state.inspectionResult?.inspection_result_id;
     if (
       role !== "process_manager"
@@ -255,7 +275,7 @@ export function MaintenanceWorkflowActionPanel({
 
   useEffect(() => {
     const maintenanceEventId = state.maintenanceEvent?.maintenance_event_id;
-    if (!maintenanceEventId || !state.action?.restart_at || postMaintenancePrediction) return;
+    if (!maintenanceEventId || !state.action?.restart_at) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
@@ -263,6 +283,7 @@ export function MaintenanceWorkflowActionPanel({
     setPollingError(null);
 
     const poll = async () => {
+      let resultAvailable = false;
       try {
         const result = await getPostMaintenanceProductResults(
           projectId,
@@ -274,16 +295,24 @@ export function MaintenanceWorkflowActionPanel({
         consecutiveFailures = 0;
         setPollingError(null);
         if (result) {
+          resultAvailable = true;
           const prediction: PostMaintenancePredictionSummary = {
             failureProbability: result.failure_probability,
             statusGrade: result.status_grade,
             observedAt: result.observed_at,
           };
-          setPostMaintenancePrediction(prediction);
-          onPostMaintenancePrediction?.(prediction);
-          onStatusChanged?.("ready_for_reprediction");
-          setMessage({ tone: "success", text: "정비 후 관측과 예측 처리가 완료됐습니다." });
-          return;
+          const previous = postMaintenancePredictionRef.current;
+          if (
+            previous?.failureProbability !== prediction.failureProbability
+            || previous.statusGrade !== prediction.statusGrade
+            || previous.observedAt !== prediction.observedAt
+          ) {
+            postMaintenancePredictionRef.current = prediction;
+            setPostMaintenancePrediction(prediction);
+            onPostMaintenancePrediction?.(prediction);
+            onStatusChanged?.("ready_for_reprediction");
+            setMessage({ tone: "success", text: "정비 후 관측과 예측 처리가 완료됐습니다." });
+          }
         }
       } catch (reason) {
         if (controller.signal.aborted) return;
@@ -293,9 +322,7 @@ export function MaintenanceWorkflowActionPanel({
         if (failure.stop) return;
       }
       if (!stopped) {
-        const retryDelay = consecutiveFailures > 0
-          ? Math.min(1_500 * (2 ** consecutiveFailures), 10_000)
-          : 1_500;
+        const retryDelay = postMaintenancePollingDelay(resultAvailable, consecutiveFailures);
         timer = setTimeout(() => void poll(), retryDelay);
       }
     };
@@ -311,7 +338,6 @@ export function MaintenanceWorkflowActionPanel({
     assetId,
     onPostMaintenancePrediction,
     onStatusChanged,
-    postMaintenancePrediction,
     projectId,
     state.action?.restart_at,
     state.maintenanceEvent?.maintenance_event_id,

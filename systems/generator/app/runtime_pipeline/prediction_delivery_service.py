@@ -91,6 +91,8 @@ class PredictionDeliveryService:
         self.outbox_dir = Path(outbox_dir) if outbox_dir else PATHS.notification_outbox_root
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
         self.timeout = timeout
+        self._maintenance_signal_lock = threading.Lock()
+        self._pending_maintenance_event_ids: set[str] = set()
 
     @staticmethod
     def _endpoint_with_scope(endpoint_url: str, *, project_id: str, workspace_id: str) -> str:
@@ -114,6 +116,11 @@ class PredictionDeliveryService:
                     f.flush()
                     os.fsync(f.fileno())
                 _replace_with_retry(temp_path, dest_path)
+                if item.status in {"pending", "retry_wait", "failed"}:
+                    maintenance_event_id = self.maintenance_event_id(item)
+                    if maintenance_event_id is not None:
+                        with self._maintenance_signal_lock:
+                            self._pending_maintenance_event_ids.add(maintenance_event_id)
                 return dest_path
             finally:
                 if temp_path.exists():
@@ -121,6 +128,25 @@ class PredictionDeliveryService:
                         temp_path.unlink()
                     except OSError:
                         pass
+
+    @staticmethod
+    def maintenance_event_id(item: PredictionOutboxItem) -> Optional[str]:
+        """Return the replay lineage key used for operational prioritization."""
+        source_context = item.payload.source_context
+        if source_context.source_kind != "maintenance_replay_overlay":
+            return None
+        maintenance_event_id = source_context.lineage.maintenance_event_id
+        if maintenance_event_id is None:
+            return None
+        normalized = str(maintenance_event_id).strip()
+        return normalized or None
+
+    def consume_pending_maintenance_event_ids(self) -> set[str]:
+        """Atomically consume replay events registered since the last scan."""
+        with self._maintenance_signal_lock:
+            event_ids = set(self._pending_maintenance_event_ids)
+            self._pending_maintenance_event_ids.clear()
+            return event_ids
 
     def get_outbox_item(self, event_id: str) -> Optional[PredictionOutboxItem]:
         """Load single outbox item by event_id."""

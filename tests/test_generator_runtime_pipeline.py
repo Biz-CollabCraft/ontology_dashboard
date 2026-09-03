@@ -12,6 +12,8 @@ def create_test_batch_payload(
     batch_id: str = "batch-001",
     model_set_id: str = "model-set-v1",
     model_set_version: str = "1.0.0",
+    source_kind: str = "live_sensor",
+    maintenance_event_id: str | None = None,
 ) -> PredictionResultBatchPayload:
     from datetime import datetime, timezone
     from systems.generator.app.runtime_pipeline.pipeline_schema import (
@@ -37,12 +39,33 @@ def create_test_batch_payload(
     f_sha = "1" * 64
     h_sha = "2" * 64
     l_sha = "3" * 64
+    if source_kind == "maintenance_replay_overlay" and not maintenance_event_id:
+        raise ValueError("maintenance_event_id is required for a maintenance replay test payload")
+    lineage = (
+        {
+            "simulation_session_id": "sim-priority-test",
+            "overlay_branch_id": f"overlay-{maintenance_event_id}",
+            "history_segment_id": f"history-{maintenance_event_id}",
+            "maintenance_event_id": maintenance_event_id,
+            "maintenance_action_id": f"action-{maintenance_event_id}",
+            "state_version": 1,
+        }
+        if source_kind == "maintenance_replay_overlay"
+        else {
+            "simulation_session_id": None,
+            "overlay_branch_id": None,
+            "history_segment_id": None,
+            "maintenance_event_id": None,
+            "maintenance_action_id": None,
+            "state_version": None,
+        }
+    )
 
     item_dict = {
         "event_id": event_id,
         "asset_id": asset_id,
         "observed_at": obs_dt,
-        "source_kind": "live_sensor",
+        "source_kind": source_kind,
         "source_ref": {"uri": "test.jsonl", "sha256": "a" * 64},
         "output_status": output_status,
         "score": score if output_status == "predicted" else None,
@@ -55,14 +78,7 @@ def create_test_batch_payload(
         "feature_schema_sha256": f_sha,
         "history_requirement_sha256": h_sha,
         "label_schema_sha256": l_sha,
-        "lineage": {
-            "simulation_session_id": None,
-            "overlay_branch_id": None,
-            "history_segment_id": None,
-            "maintenance_event_id": None,
-            "maintenance_action_id": None,
-            "state_version": None,
-        },
+        "lineage": lineage,
         "failure_reason": None if output_status == "predicted" else "failure reason",
     }
 
@@ -72,7 +88,7 @@ def create_test_batch_payload(
         event_id=event_id,
         asset_id=asset_id,
         observed_at=obs_dt,
-        source_kind="live_sensor",
+        source_kind=source_kind,
         source_ref=PredictionResultSourceRef(uri="test.jsonl", sha256="a" * 64),
         payload_sha256=item_sha,
         output_status=output_status,
@@ -86,7 +102,7 @@ def create_test_batch_payload(
         feature_schema_sha256=f_sha,
         history_requirement_sha256=h_sha,
         label_schema_sha256=l_sha,
-        lineage=PredictionResultLineage(),
+        lineage=PredictionResultLineage.model_validate(lineage),
         failure_reason=None if output_status == "predicted" else "failure reason",
     )
 
@@ -108,11 +124,11 @@ def create_test_batch_payload(
         dataset_version="v1.0",
         source_uri="test.jsonl",
         source_checksum="a" * 64,
-        source_kind="live_sensor",
+        source_kind=source_kind,
         source_contract_version="observation-source-v1",
         source_schema_version="sensor-record-v2",
         pipeline_contract_version="generator-prediction-result-v1",
-        lineage=PredictionResultLineage(),
+        lineage=PredictionResultLineage.model_validate(lineage),
     )
 
     producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
@@ -677,6 +693,156 @@ def test_delivery_worker_decoupled_retry_and_backoff(isolated_runtime_env, monke
     sent_item = notif_service.get_outbox_item(success_item.event_id)
     assert sent_item.status == "sent"
     assert sent_item.attempt == 1
+
+
+def test_queue_promotes_only_first_replay_for_each_maintenance_event(tmp_path):
+    queue = PipelineQueue(db_path=tmp_path / "queue.db")
+
+    def enqueue(job_id: str, source_kind: str, maintenance_event_id: str | None = None) -> None:
+        source_file = tmp_path / f"{job_id}.jsonl"
+        source_file.write_text(json.dumps({"job_id": job_id}) + "\n", encoding="utf-8")
+        lineage = None
+        if source_kind == "maintenance_replay_overlay":
+            lineage = {
+                "simulation_session_id": "sim-priority-test",
+                "overlay_branch_id": f"overlay-{maintenance_event_id}",
+                "history_segment_id": f"history-{maintenance_event_id}",
+                "maintenance_event_id": maintenance_event_id,
+                "maintenance_action_id": f"action-{maintenance_event_id}",
+                "state_version": 1,
+            }
+        queue.enqueue(
+            job_id=job_id,
+            runtime_input=create_test_runtime_input_identity(
+                source_uri=str(source_file),
+                source_checksum=compute_file_sha256(source_file),
+                source_kind=source_kind,
+                lineage=lineage,
+            ),
+        )
+
+    enqueue("live-first", "live_sensor")
+    enqueue("live-second", "live_sensor")
+    enqueue("replay-a-first", "maintenance_replay_overlay", "maintenance-a")
+    enqueue("replay-a-second", "maintenance_replay_overlay", "maintenance-a")
+    enqueue("replay-b-first", "maintenance_replay_overlay", "maintenance-b")
+
+    first = queue.claim_next()
+    assert first is not None
+    assert first.job_id == "replay-a-first"
+    queue.mark_succeeded(first.job_id)
+
+    second = queue.claim_next()
+    assert second is not None
+    assert second.job_id == "replay-b-first"
+    queue.mark_succeeded(second.job_id)
+
+    third = queue.claim_next()
+    assert third is not None
+    assert third.job_id == "live-first"
+
+
+def test_delivery_promotes_one_replay_per_event_then_returns_to_fifo(
+    isolated_runtime_env,
+    monkeypatch,
+):
+    service = isolated_runtime_env["notif_service"]
+    worker = isolated_runtime_env["notif_worker"]
+    delivered: list[str] = []
+
+    def register(payload: PredictionResultBatchPayload, created_at: str) -> None:
+        item = service.create_outbox_record(payload)
+        item.created_at = created_at
+        service.save_outbox_item(item)
+
+    register(
+        create_test_batch_payload(event_id="evt-live-old", batch_id="batch-live-old"),
+        "2026-08-25T10:00:00+00:00",
+    )
+    register(
+        create_test_batch_payload(
+            event_id="evt-replay-a-first",
+            batch_id="batch-replay-a-first",
+            source_kind="maintenance_replay_overlay",
+            maintenance_event_id="maintenance-a",
+        ),
+        "2026-08-25T10:01:00+00:00",
+    )
+    register(
+        create_test_batch_payload(
+            event_id="evt-replay-a-second",
+            batch_id="batch-replay-a-second",
+            source_kind="maintenance_replay_overlay",
+            maintenance_event_id="maintenance-a",
+        ),
+        "2026-08-25T10:02:00+00:00",
+    )
+    register(
+        create_test_batch_payload(
+            event_id="evt-replay-b-first",
+            batch_id="batch-replay-b-first",
+            source_kind="maintenance_replay_overlay",
+            maintenance_event_id="maintenance-b",
+        ),
+        "2026-08-25T10:03:00+00:00",
+    )
+
+    def record_delivery(payload: PredictionResultBatchPayload):
+        delivered.append(payload.batch_id)
+        return {"delivered": True, "status_code": 200}
+
+    monkeypatch.setattr(service, "send_once", record_delivery)
+
+    assert worker.process_pending() == 4
+    assert delivered == [
+        "batch-replay-a-first",
+        "batch-replay-b-first",
+        "batch-live-old",
+        "batch-replay-a-second",
+    ]
+
+
+def test_new_replay_interrupts_stale_live_delivery_snapshot(
+    isolated_runtime_env,
+    monkeypatch,
+):
+    service = isolated_runtime_env["notif_service"]
+    worker = isolated_runtime_env["notif_worker"]
+    delivered: list[str] = []
+
+    for index in range(3):
+        payload = create_test_batch_payload(
+            event_id=f"evt-live-{index}",
+            batch_id=f"batch-live-{index}",
+        )
+        item = service.create_outbox_record(payload)
+        item.created_at = f"2026-08-25T10:0{index}:00+00:00"
+        service.save_outbox_item(item)
+
+    def register_replay_during_first_live_delivery(payload: PredictionResultBatchPayload):
+        delivered.append(payload.batch_id)
+        if payload.batch_id == "batch-live-0":
+            replay = create_test_batch_payload(
+                event_id="evt-replay-new",
+                batch_id="batch-replay-new",
+                source_kind="maintenance_replay_overlay",
+                maintenance_event_id="maintenance-new",
+            )
+            service.create_outbox_record(replay)
+        return {"delivered": True, "status_code": 200}
+
+    monkeypatch.setattr(service, "send_once", register_replay_during_first_live_delivery)
+
+    assert worker.process_pending() == 1
+    assert delivered == ["batch-live-0"]
+
+    assert worker.process_pending() == 3
+    assert delivered == [
+        "batch-live-0",
+        "batch-replay-new",
+        "batch-live-1",
+        "batch-live-2",
+    ]
 
 
 # =====================================================================

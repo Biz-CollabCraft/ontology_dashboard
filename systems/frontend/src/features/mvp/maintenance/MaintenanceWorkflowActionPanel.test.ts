@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../../api";
-import { postMaintenancePollingFailure } from "./MaintenanceWorkflowActionPanel";
+import {
+  postMaintenancePollingDelay,
+  postMaintenancePollingFailure,
+} from "./MaintenanceWorkflowActionPanel";
 
 describe("post-maintenance result polling", () => {
   it("surfaces authorization and contract failures immediately", () => {
@@ -22,5 +25,11 @@ describe("post-maintenance result polling", () => {
       message: "정비 후 결과 조회가 3회 연속 실패했습니다: connection reset",
       stop: false,
     });
+  });
+
+  it("polls quickly until the first result and keeps refreshing Backend truth afterwards", () => {
+    expect(postMaintenancePollingDelay(false, 0)).toBe(1_500);
+    expect(postMaintenancePollingDelay(true, 0)).toBe(5_000);
+    expect(postMaintenancePollingDelay(true, 3)).toBe(10_000);
   });
 });
