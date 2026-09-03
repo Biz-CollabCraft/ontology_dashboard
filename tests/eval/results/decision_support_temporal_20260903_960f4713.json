@@ -1,0 +1,5046 @@
+{
+  "run_id": "decision-support-final-20260903-960f4713",
+  "candidate_sha": "960f4713",
+  "status": "measured",
+  "execution_kind": "deterministic_temporal_fault_simulation",
+  "case_count": 8,
+  "scenario_count": 4,
+  "sample_size": 96,
+  "rows": [
+    {
+      "fixture_id": "GS-001",
+      "arm": "B1",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "normal",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B2",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "normal",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B3",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "normal",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B1",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "normal",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B2",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "normal",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B3",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "normal",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B1",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B2",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B3",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B1",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B2",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-001",
+      "arm": "B3",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S01-L01-01",
+        "event_id": "EVT-GS-001",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B1",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B2",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B3",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B1",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B2",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B3",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B1",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B2",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B3",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B1",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B2",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-002",
+      "arm": "B3",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B1",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B2",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B3",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B1",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B2",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B3",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B1",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B2",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B3",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B1",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B2",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-003",
+      "arm": "B3",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S01-L04-03",
+        "event_id": "EVT-GS-003",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B1",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "critical",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B2",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "critical",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B3",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "critical",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B1",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "critical",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B2",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "critical",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B3",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "critical",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B1",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B2",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B3",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B1",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B2",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-004",
+      "arm": "B3",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L02-03",
+        "event_id": "EVT-GS-004",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B1",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B2",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B3",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B1",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B2",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B3",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B1",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B2",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B3",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B1",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B2",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-005",
+      "arm": "B3",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S03-L01-03",
+        "event_id": "EVT-GS-005",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B1",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "attention",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B2",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "attention",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B3",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "attention",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B1",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "attention",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B2",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "attention",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B3",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "attention",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B1",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B2",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B3",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B1",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B2",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-006",
+      "arm": "B3",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S02-L02-02",
+        "event_id": "EVT-GS-006",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B1",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": null,
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B2",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": null,
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B3",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": null,
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B1",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": null,
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B2",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": null,
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B3",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": null,
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B1",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B2",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B3",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B1",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B2",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-007",
+      "arm": "B3",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L05-01",
+        "event_id": "EVT-GS-007",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B1",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B2",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B3",
+      "scenario": "risk_escalation",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_escalation",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_escalation",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "critical"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B1",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B2",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B3",
+      "scenario": "risk_recovery",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#risk_recovery",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "risk_recovery",
+        "decision_relevance_changed": true,
+        "from": "warning",
+        "to": "normal"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B1",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B2",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B3",
+      "scenario": "artifact_replacement",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "artifact_replacement",
+        "decision_relevance_changed": true,
+        "from": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "to": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#artifact_replacement"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B1",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B2",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": false,
+      "snapshot_mismatch_detected": false,
+      "detected_mismatch_fields": [],
+      "projection_read_count": 0,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": true,
+      "stale_output_blocked": false,
+      "simulated_side_effect_allowed": true,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    },
+    {
+      "fixture_id": "GS-008",
+      "arm": "B3",
+      "scenario": "evidence_history_update",
+      "t0_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "t1_snapshot_basis": {
+        "artifact_id": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "evidence_payload_reference": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#T1#evidence_history_update",
+        "asset_id": "CNC-S04-L04-02",
+        "event_id": "EVT-GS-008",
+        "observed_at": "2026-09-02T14:30:00+09:00",
+        "model_version": "fixture-heuristic-v1",
+        "dataset_version": "fixture-compatibility",
+        "source_sha256": null
+      },
+      "transition": {
+        "scenario": "evidence_history_update",
+        "decision_relevance_changed": true,
+        "from": "no_new_maintenance_evidence",
+        "to": "new_maintenance_evidence"
+      },
+      "decision_relevance_changed": true,
+      "production_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "snapshot_guard_applied": true,
+      "snapshot_mismatch_detected": true,
+      "detected_mismatch_fields": [
+        "artifact_id",
+        "evidence_payload_reference",
+        "observed_at"
+      ],
+      "projection_read_count": 2,
+      "stale_candidate_generated": true,
+      "stale_candidate_accepted": false,
+      "stale_output_blocked": true,
+      "simulated_side_effect_allowed": false,
+      "temporal_gold_at_accept": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "existing gold answers are point-in-time fixture rubrics, not T1 transition rubrics"
+      }
+    }
+  ],
+  "aggregate": {
+    "by_arm": {
+      "B1": {
+        "runs": 32,
+        "stale_candidate_generated_rate": 1.0,
+        "stale_candidate_accepted_rate": 1.0,
+        "snapshot_mismatch_detection_rate": 0.0,
+        "stale_output_block_rate": 0.0,
+        "simulated_stale_side_effect_allow_rate": 1.0,
+        "production_snapshot_guard_applied_rate": 0.0
+      },
+      "B2": {
+        "runs": 32,
+        "stale_candidate_generated_rate": 1.0,
+        "stale_candidate_accepted_rate": 1.0,
+        "snapshot_mismatch_detection_rate": 0.0,
+        "stale_output_block_rate": 0.0,
+        "simulated_stale_side_effect_allow_rate": 1.0,
+        "production_snapshot_guard_applied_rate": 0.0
+      },
+      "B3": {
+        "runs": 32,
+        "stale_candidate_generated_rate": 1.0,
+        "stale_candidate_accepted_rate": 0.0,
+        "snapshot_mismatch_detection_rate": 1.0,
+        "stale_output_block_rate": 1.0,
+        "simulated_stale_side_effect_allow_rate": 0.0,
+        "production_snapshot_guard_applied_rate": 1.0
+      }
+    },
+    "comparison_order": [
+      "B3-B1",
+      "B2-B1",
+      "B3-B2"
+    ],
+    "interpretation_boundary": "B1/B2 side-effect allowance is simulated at the acceptance boundary. B3 mismatch detection/requery uses MaintenanceLoopService production snapshot logic."
+  },
+  "recovery": {
+    "sample_size": 8,
+    "rows": [
+      {
+        "fixture_id": "GS-001",
+        "arm": "B3",
+        "accepted_after_requery": true,
+        "terminal_mismatch_fields": [],
+        "projection_read_count": 2,
+        "recovered_fresh_state": true
+      },
+      {
+        "fixture_id": "GS-002",
+        "arm": "B3",
+        "accepted_after_requery": true,
+        "terminal_mismatch_fields": [],
+        "projection_read_count": 2,
+        "recovered_fresh_state": true
+      },
+      {
+        "fixture_id": "GS-003",
+        "arm": "B3",
+        "accepted_after_requery": true,
+        "terminal_mismatch_fields": [],
+        "projection_read_count": 2,
+        "recovered_fresh_state": true
+      },
+      {
+        "fixture_id": "GS-004",
+        "arm": "B3",
+        "accepted_after_requery": true,
+        "terminal_mismatch_fields": [],
+        "projection_read_count": 2,
+        "recovered_fresh_state": true
+      },
+      {
+        "fixture_id": "GS-005",
+        "arm": "B3",
+        "accepted_after_requery": true,
+        "terminal_mismatch_fields": [],
+        "projection_read_count": 2,
+        "recovered_fresh_state": true
+      },
+      {
+        "fixture_id": "GS-006",
+        "arm": "B3",
+        "accepted_after_requery": true,
+        "terminal_mismatch_fields": [],
+        "projection_read_count": 2,
+        "recovered_fresh_state": true
+      },
+      {
+        "fixture_id": "GS-007",
+        "arm": "B3",
+        "accepted_after_requery": true,
+        "terminal_mismatch_fields": [],
+        "projection_read_count": 2,
+        "recovered_fresh_state": true
+      },
+      {
+        "fixture_id": "GS-008",
+        "arm": "B3",
+        "accepted_after_requery": true,
+        "terminal_mismatch_fields": [],
+        "projection_read_count": 2,
+        "recovered_fresh_state": true
+      }
+    ],
+    "fresh_state_recovery_rate": 1.0
+  }
+}
