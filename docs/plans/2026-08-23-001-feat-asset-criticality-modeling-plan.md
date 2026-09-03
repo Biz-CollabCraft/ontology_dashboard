@@ -388,30 +388,36 @@ Design decision:
   reference after scope validation, but must not create, parse, or infer it.
 
 Current MVP boundary:
-- The caller passes a replay session selector.
-- Diagnosis Runtime validates organization/project/workspace scope, session
-  state, Dataset binding, and target equipment inclusion through a public query.
-- Diagnosis Runtime returns a validated canonical `simulation_session_id` as an
+- Live callers do not create or pass a new Replay Cursor when approving a
+  Maintenance WorkOrder.
+- The live ingestion boundary records the active `gen_data`
+  `simulation_session_id` in Product Result lineage.
+- Diagnosis Runtime validates the authorized Product Result scope and target
+  equipment, then returns its canonical source `simulation_session_id` as an
   opaque reference.
-- Maintenance stores that reference only; it does not interpret session state,
-  Dataset IDs, replay timing, or target eligibility.
+- Historical replay clients may still pass an explicit Replay Session selector
+  through the compatibility request field only when their Product Result predates
+  source-session lineage. It cannot override lineage present on a live result.
+- Maintenance stores the validated reference only; it does not interpret
+  session state, Dataset IDs, replay timing, or target eligibility.
 
-Future event-resolution boundary:
-- Product Result/Event to Replay Session canonical mapping must exist before an
-  event-based resolver can be authoritative.
-- Only after that mapping exists should Diagnosis Runtime expose a query like:
+Implemented source-resolution boundary:
+- Live Product Result to Source Simulation Session mapping is preserved in
+  immutable runtime lineage before Maintenance authorization.
+- Diagnosis Runtime exposes the Product Result-based query:
 
 ```text
-resolve_replay_session_for_event(
+resolve_maintenance_source_session(
   organization_id,
   project_id,
   workspace_id,
-  source_event_id
+  source_product_result_id,
+  equipment_id
 ) -> simulation_session_id | unavailable
 ```
 
-The query must use `source_event_id` or `diagnosis_event_id` naming to avoid
-confusing it with closed-loop integration event IDs.
+Product Result identity is used explicitly to avoid confusing diagnosis lineage
+with closed-loop integration event IDs or UI Replay Cursor IDs.
 
 ---
 

@@ -295,6 +295,10 @@ def build_live_predictive_maintenance_service(
         diagnosis=LiveDiagnosisApplicationAdapter(
             snapshot_root=runtime_pipeline_input_root,
             enqueue_client=enqueue_client,
+            simulation_session_id=(
+                os.getenv("ONTOLOGY_DASHBOARD_SIMULATION_SESSION_ID", "").strip()
+                or None
+            ),
         ),
         maintenance=LiveMaintenanceOverlayAdapter(
             snapshot_root=runtime_pipeline_input_root,

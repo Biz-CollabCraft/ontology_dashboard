@@ -94,6 +94,16 @@ class MaintenanceReplaySessionValidationPort(Protocol):
         equipment_id: str,
     ) -> dict[str, Any]: ...
 
+    def resolve_maintenance_source_session(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        source_product_result_id: str,
+        equipment_id: str,
+    ) -> dict[str, Any] | None: ...
+
 
 class MaintenanceCostBasisProvider(Protocol):
     """Versioned economic inputs owned behind the Backend boundary."""

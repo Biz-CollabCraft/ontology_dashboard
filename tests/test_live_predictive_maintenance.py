@@ -145,6 +145,57 @@ def test_live_diagnosis_adapter_enqueues_ready_snapshot(tmp_path, monkeypatch):
     assert client.payload["lineage"] == {}
 
 
+def test_live_diagnosis_adapter_preserves_source_simulation_session(
+    tmp_path, monkeypatch
+):
+    rows = [
+        {
+            "contract_version": "gen-data-sensor-observation-v2",
+            "schema_version": "2",
+            "source_kind": "live_sensor",
+            "asset_id": "CNC-1",
+            "asset_type": "cnc",
+            "observed_at": "2026-08-18T05:30:00+00:00",
+            "tool_wear_min": 10.0,
+        }
+    ]
+    monkeypatch.setattr(
+        live_runtime,
+        "_live_pipeline_observation_rows",
+        lambda *_args, **_kwargs: (rows, {"CNC-1": 36}),
+    )
+
+    class EnqueueClient:
+        def __init__(self):
+            self.payload = None
+
+        def enqueue(self, payload):
+            self.payload = payload
+            return {"job_id": payload["job_id"], "status": "queued"}
+
+    client = EnqueueClient()
+    adapter = LiveDiagnosisApplicationAdapter(
+        snapshot_root=tmp_path,
+        enqueue_client=client,
+        simulation_session_id="local-realtime-20260903T010203Z",
+    )
+
+    adapter.materialize_live_results(
+        {
+            "database_url": "postgresql://backend/live",
+            "dataset_id": "dataset-1",
+            "dataset_version_id": "version-1",
+            "active_overlay_assets": set(),
+        }
+    )
+
+    assert client.payload["lineage"] == {
+        "simulation_session_id": "local-realtime-20260903T010203Z"
+    }
+    assert client.payload["job_id"].startswith("live-sensor-")
+    assert "-session-" in client.payload["job_id"]
+
+
 def test_read_complete_ticks_ignores_half_written_cross_line_tick(tmp_path):
     first = "2026-08-18T05:30:00+00:00"
     second = "2026-08-18T05:40:00+00:00"

@@ -4234,6 +4234,156 @@ def test_model_inference_out_of_bounds_score_raises_pipeline_model_prediction_fa
     assert "out of bounds" in str(exc_info.value)
 
 
+@pytest.mark.parametrize(
+    ("selected_model", "non_applicable_model"),
+    [
+        ("lightgbm", "compressor"),
+        ("compressor", "lightgbm"),
+    ],
+)
+def test_prediction_service_runs_only_models_selected_for_the_input_family(
+    isolated_runtime_env,
+    monkeypatch,
+    selected_model,
+    non_applicable_model,
+):
+    """A required model for another asset family must not block a scoped prediction."""
+    import pytest
+
+    from systems.generator.app.runtime_pipeline.pipeline_exception import (
+        PipelineModelPredictionFailedError,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ActiveModelConfig,
+        ActiveModelSet,
+        now_utc_iso,
+    )
+
+    svc = isolated_runtime_env["service"].prediction_service
+    artifact = svc.load_active_artifact("lightgbm")
+    active_set = ActiveModelSet(
+        model_set_id="family-scoped-model-set",
+        model_set_version="1.0.0",
+        updated_at=now_utc_iso(),
+        models={
+            non_applicable_model: ActiveModelConfig(
+                model_version="non-applicable-v1",
+                required=True,
+            ),
+            selected_model: ActiveModelConfig(
+                model_version=artifact.model_version,
+                required=True,
+            ),
+        },
+    )
+    loaded_models: list[str] = []
+
+    def load_selected(base_model: str, target_version=None):
+        loaded_models.append(base_model)
+        if base_model == non_applicable_model:
+            raise AssertionError("non-applicable family model was loaded")
+        return artifact
+
+    monkeypatch.setattr(svc, "load_active_artifact", load_selected)
+
+    with pytest.raises(PipelineModelPredictionFailedError, match=selected_model):
+        svc.predict_for_models(
+            base_models=[selected_model],
+            model_feature_refs={},
+            active_model_set=active_set,
+        )
+
+    assert loaded_models == [selected_model]
+
+
+def test_concurrent_outbox_saves_use_independent_temp_files(isolated_runtime_env):
+    """Concurrent status writers must leave one valid outbox record and no temp files."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    service = isolated_runtime_env["notif_service"]
+    payload = create_test_batch_payload(
+        event_id="evt-concurrent-outbox",
+        asset_id="Asset-Concurrent",
+        batch_id="batch-concurrent-outbox",
+    )
+    original = service.create_outbox_record(payload, run_id="run-concurrent-outbox")
+
+    def save(attempt: int):
+        item = original.model_copy(deep=True)
+        item.attempt = attempt
+        item.status = "retry_wait" if attempt % 2 else "sending"
+        return service.save_outbox_item(item)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        paths = list(pool.map(save, range(1, 17)))
+
+    assert len(set(paths)) == 1
+    persisted = service.get_outbox_item(original.event_id)
+    assert persisted is not None
+    assert persisted.event_id == original.event_id
+    assert not list(service.outbox_dir.glob(".tmp_*.json"))
+
+
+def test_concurrent_prediction_event_updates_do_not_lose_each_other(isolated_runtime_env):
+    """Repository read-modify-write updates are serialized across delivery workers."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ArtifactReference,
+        PipelineRunState,
+        PredictionDeliveryEventState,
+        now_utc_iso,
+    )
+
+    repository = isolated_runtime_env["repository"]
+    event_ids = ["evt-concurrent-a", "evt-concurrent-b"]
+    repository.save_run_state(
+        PipelineRunState(
+            run_id="run-concurrent-events",
+            job_id="job-concurrent-events",
+            status="succeeded",
+            current_stage=None,
+            source_ref=ArtifactReference(
+                uri="data/concurrent.jsonl",
+                sha256="0" * 64,
+                role="source_observation_protocol",
+            ),
+            stages={},
+            prediction_results=[],
+            prediction_delivery_status="pending",
+            prediction_event_ids=event_ids,
+            prediction_events=[
+                PredictionDeliveryEventState(
+                    event_id=event_id,
+                    asset_id=f"Asset-{index}",
+                    status="pending",
+                    attempt=0,
+                    max_attempts=5,
+                    updated_at=now_utc_iso(),
+                )
+                for index, event_id in enumerate(event_ids)
+            ],
+        )
+    )
+
+    def mark_sent(index: int):
+        return repository.update_prediction_event(
+            run_id="run-concurrent-events",
+            event_id=event_ids[index],
+            asset_id=f"Asset-{index}",
+            status="sent",
+            attempt=1,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(mark_sent, range(2)))
+
+    persisted = repository.get_run_state("run-concurrent-events")
+    assert persisted is not None
+    assert persisted.prediction_delivery_status == "sent"
+    assert {event.event_id for event in persisted.prediction_events if event.status == "sent"} == set(event_ids)
+
+
 # =====================================================================
 # 60. Delivery Contract and Endpoint URL Configuration Tests
 # =====================================================================

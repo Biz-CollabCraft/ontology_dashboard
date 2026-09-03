@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -27,6 +30,20 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
 )
 
 logger = logging.getLogger(__name__)
+_OUTBOX_FILE_LOCK = threading.RLock()
+
+
+def _replace_with_retry(temp_path: Path, target_path: Path) -> None:
+    """Replace a file atomically, tolerating transient Windows sharing violations."""
+    delays = (0.01, 0.05, 0.1)
+    for attempt in range(len(delays) + 1):
+        try:
+            os.replace(temp_path, target_path)
+            return
+        except PermissionError:
+            if attempt == len(delays):
+                raise
+            time.sleep(delays[attempt])
 
 
 class PredictionDeliveryService:
@@ -87,15 +104,23 @@ class PredictionDeliveryService:
 
     def save_outbox_item(self, item: PredictionOutboxItem) -> Path:
         """Atomic save of outbox item to outbox_dir/{event_id}.json."""
-        dest_path = self.outbox_dir / f"{item.event_id}.json"
-        temp_path = self.outbox_dir / f".tmp_{item.event_id}.json"
-        item.updated_at = now_utc_iso()
-        with open(temp_path, "w", encoding="utf-8") as f:
-            f.write(item.model_dump_json(indent=2))
-            f.flush()
-            os.fsync(f.fileno())
-        temp_path.replace(dest_path)
-        return dest_path
+        with _OUTBOX_FILE_LOCK:
+            dest_path = self.outbox_dir / f"{item.event_id}.json"
+            temp_path = self.outbox_dir / f".tmp_{uuid.uuid4().hex}_{item.event_id}.json"
+            item.updated_at = now_utc_iso()
+            try:
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    f.write(item.model_dump_json(indent=2))
+                    f.flush()
+                    os.fsync(f.fileno())
+                _replace_with_retry(temp_path, dest_path)
+                return dest_path
+            finally:
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except OSError:
+                        pass
 
     def get_outbox_item(self, event_id: str) -> Optional[PredictionOutboxItem]:
         """Load single outbox item by event_id."""

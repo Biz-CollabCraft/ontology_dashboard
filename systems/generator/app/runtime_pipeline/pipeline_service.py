@@ -872,6 +872,7 @@ class PipelineService:
 
         manager.start_stage("runtime_feature", input_refs=[dataset_ref, plan_ref] if plan_ref else [dataset_ref])
 
+        applicable_model_names: list[str] = []
         try:
             for base_model in active_model_names:
                 model_id = self.prediction_service.resolve_model_id(base_model)
@@ -887,6 +888,7 @@ class PipelineService:
                         (artifact.manifest.get("compatibility") or {}).get("observation_family"),
                     )
                     continue
+                applicable_model_names.append(base_model)
 
                 # Verify snapshot & feature schema match
                 active_snap_entry = current_snapshot.get(model_id, {})
@@ -1024,7 +1026,7 @@ class PipelineService:
             manager.start_stage("prediction", input_refs=list(model_feature_refs.values()))
             try:
                 model_results = self.prediction_service.predict_for_models(
-                    base_models=list(active_model_names),
+                    base_models=applicable_model_names,
                     model_feature_refs=model_feature_refs,
                     model_feature_bundles=model_feature_bundles,
                     model_feature_errors=model_feature_errors,

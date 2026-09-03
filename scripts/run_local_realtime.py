@@ -23,6 +23,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GEN_DATA_ROOT = ROOT.parent / "gen_data"
+LIVE_SOURCE_VERSION = "gen-data-wall-clock-live-v2"
+OBSERVATION_INTERVAL_MINUTES = 10
+INITIAL_HISTORY_ROWS = 36
 
 
 def _wait(url: str, *, seconds: int = 90) -> None:
@@ -37,6 +40,48 @@ def _wait(url: str, *, seconds: int = 90) -> None:
             last_error = exc
         time.sleep(1)
     raise RuntimeError(f"service did not become ready: {url} ({last_error})")
+
+
+def _wait_database(database_url: str, *, seconds: int = 90) -> None:
+    """Wait until PostgreSQL accepts queries before running migrations."""
+    import psycopg
+
+    deadline = time.monotonic() + seconds
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            with psycopg.connect(database_url, connect_timeout=2) as connection:
+                connection.execute("SELECT 1")
+            return
+        except psycopg.Error as exc:
+            last_error = exc
+        time.sleep(1)
+    raise RuntimeError(f"database did not become ready: {database_url} ({last_error})")
+
+
+def _bootstrap_database(*, python: str, database_url: str, base_env: dict[str, str]) -> None:
+    """Create schema and demo scope before Canonical package ingestion."""
+    _wait_database(database_url)
+    subprocess.run(
+        [python, "-m", "app.migrate"],
+        cwd=ROOT / "systems" / "backend",
+        env=base_env,
+        check=True,
+    )
+    subprocess.run(
+        [
+            python,
+            "-c",
+            (
+                "from app.dependencies import get_identity_service; "
+                "get_identity_service(); "
+                "print('[database] reference scope and demo accounts ready')"
+            ),
+        ],
+        cwd=ROOT / "systems" / "backend",
+        env=base_env,
+        check=True,
+    )
 
 
 def _post_json(url: str, payload: dict) -> dict:
@@ -80,11 +125,43 @@ def _latest_live_observed_at(database_url: str) -> datetime | None:
         )
         row = connection.execute(
             """
-            SELECT GREATEST(
-              (SELECT MAX(observed_at) FROM pm_cnc_observations),
-              (SELECT MAX(observed_at) FROM pm_compressor_observations)
-            )
-            """
+            SELECT MAX(live_observation.observed_at)
+            FROM (
+              SELECT observation.observed_at
+              FROM pm_cnc_observations observation
+              JOIN dataset_versions version
+                ON version.id=observation.dataset_version_id
+               AND version.organization_id=observation.organization_id
+               AND version.project_id=observation.project_id
+               AND version.workspace_id=observation.workspace_id
+              WHERE observation.organization_id=%s
+                AND observation.project_id=%s
+                AND observation.workspace_id=%s
+                AND version.source_version=%s
+              UNION ALL
+              SELECT observation.observed_at
+              FROM pm_compressor_observations observation
+              JOIN dataset_versions version
+                ON version.id=observation.dataset_version_id
+               AND version.organization_id=observation.organization_id
+               AND version.project_id=observation.project_id
+               AND version.workspace_id=observation.workspace_id
+              WHERE observation.organization_id=%s
+                AND observation.project_id=%s
+                AND observation.workspace_id=%s
+                AND version.source_version=%s
+            ) live_observation
+            """,
+            (
+                "org-ontology-demo",
+                "manufacturing-demo-project",
+                "manufacturing-demo",
+                LIVE_SOURCE_VERSION,
+                "org-ontology-demo",
+                "manufacturing-demo-project",
+                "manufacturing-demo",
+                LIVE_SOURCE_VERSION,
+            ),
         ).fetchone()
     return None if row is None else row[0]
 
@@ -100,6 +177,43 @@ def _simulation_start_at(
     if latest_observed_at is not None:
         return latest_observed_at + timedelta(minutes=interval_minutes)
     return now - timedelta(hours=initial_history_hours)
+
+
+def _initial_fast_forward_target_hours(
+    *,
+    latest_observed_at: datetime | None,
+    interval_minutes: int = OBSERVATION_INTERVAL_MINUTES,
+    history_rows: int = INITIAL_HISTORY_ROWS,
+) -> int | None:
+    """Return the one-time warm-up target for a genuinely new live stream."""
+    if latest_observed_at is not None:
+        return None
+    total_minutes = interval_minutes * history_rows
+    hours, remainder = divmod(total_minutes, 60)
+    if remainder:
+        raise ValueError("initial history duration must resolve to whole hours")
+    return hours
+
+
+def _fast_forward_initial_history(
+    *,
+    gen_data_port: int,
+    run_id: str,
+    latest_observed_at: datetime | None,
+) -> dict | None:
+    """Warm up the original Run without replacing its session identity."""
+    target_hours = _initial_fast_forward_target_hours(
+        latest_observed_at=latest_observed_at,
+    )
+    if target_hours is None:
+        return None
+    return _post_json(
+        (
+            f"http://127.0.0.1:{gen_data_port}/api/runs/"
+            f"{run_id}/simulation/fast-forward"
+        ),
+        {"target_elapsed_hours": target_hours},
+    )
 
 
 def _select_live_dataset_for_project_users(
@@ -254,7 +368,7 @@ def main() -> int:
     parser.add_argument("--gen-data-port", type=int, default=8300)
     parser.add_argument("--web-port", type=int, default=3100)
     parser.add_argument("--postgres-port", type=int, default=5432)
-    parser.add_argument("--speed", type=float, default=120.0)
+    parser.add_argument("--speed", type=float, default=60.0)
     parser.add_argument("--simulation-hours", type=int, default=72)
     parser.add_argument(
         "--models-store",
@@ -277,6 +391,7 @@ def main() -> int:
     args.web_port = _next_free_port(args.web_port)
 
     session_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    simulation_session_id = f"local-realtime-{session_id}"
     runtime_root = ROOT / "data_preprocessed" / "local-realtime"
     session_root = runtime_root / "sessions" / session_id
     stream_root = session_root / "gen-data-runtime"
@@ -302,6 +417,11 @@ def main() -> int:
         )
 
     base_env = _base_env(database_url)
+    _bootstrap_database(
+        python=python,
+        database_url=database_url,
+        base_env=base_env,
+    )
     if not args.skip_bootstrap:
         subprocess.run(
             [
@@ -400,6 +520,7 @@ def main() -> int:
         worker_env.update(
             {
                 "GEN_DATA_RUNTIME_OUTPUT_ROOT": str(stream_root.resolve()),
+                "ONTOLOGY_DASHBOARD_SIMULATION_SESSION_ID": simulation_session_id,
                 "ONTOLOGY_DASHBOARD_RUNTIME_PIPELINE_INPUT_ROOT": str(snapshot_root.resolve()),
                 "ONTOLOGY_DASHBOARD_GENERATOR_RUNTIME_ENQUEUE_URL": f"http://127.0.0.1:{args.generator_port}/internal/runtime-pipeline/enqueue",
                 "LIVE_PM_POLL_SECONDS": "5",
@@ -442,28 +563,44 @@ def main() -> int:
         )
         _wait(f"http://127.0.0.1:{args.web_port}/")
 
+        latest_live_observed_at = _latest_live_observed_at(database_url)
         start_at = _simulation_start_at(
             now=datetime.now(timezone.utc),
-            latest_observed_at=_latest_live_observed_at(database_url),
+            latest_observed_at=latest_live_observed_at,
+            interval_minutes=OBSERVATION_INTERVAL_MINUTES,
+            initial_history_hours=(
+                OBSERVATION_INTERVAL_MINUTES * INITIAL_HISTORY_ROWS // 60
+            ),
         )
         run = _post_json(
             f"http://127.0.0.1:{args.gen_data_port}/api/runs",
             {
-                "run_id": f"local-realtime-{session_id}",
-                "simulation_session_id": f"local-realtime-{session_id}",
+                "run_id": simulation_session_id,
+                "simulation_session_id": simulation_session_id,
                 "seed": 42,
                 "start_at": start_at.isoformat(),
                 "duration_hours": args.simulation_hours,
-                "interval_minutes": 10,
+                "interval_minutes": OBSERVATION_INTERVAL_MINUTES,
                 "product_cycle_minutes": 20,
                 "rate_profile": "balanced_demo",
                 "speed": args.speed,
                 "continuous": True,
                 "publish_opcua": False,
                 "source_kind": "simulation",
-                "runtime_overlay_fast_forward_rows": 36,
+                "runtime_overlay_fast_forward_rows": INITIAL_HISTORY_ROWS,
             },
         )
+        initial_fast_forward = _fast_forward_initial_history(
+            gen_data_port=args.gen_data_port,
+            run_id=str(run["run_id"]),
+            latest_observed_at=latest_live_observed_at,
+        )
+        if initial_fast_forward is not None:
+            print(
+                "[simulation] initial history ready: "
+                f"{INITIAL_HISTORY_ROWS} ticks, "
+                f"{initial_fast_forward['generated_records']} records"
+            )
         processes.assert_running()
         print("\nLocal real-time predictive-maintenance runtime is ready")
         print(f"  Web:       http://127.0.0.1:{args.web_port}/login")

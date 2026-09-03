@@ -168,7 +168,7 @@ class PredictionService:
         asset_ids: Optional[list[str]] = None,
         active_model_set: Optional[ActiveModelSet] = None,
     ) -> list[InternalModelPredictionResult]:
-        """Run pure model inference for each equipment over all active models without thresholding."""
+        """Run pure inference for the applicable models pinned by the Active Model Set."""
         from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelSet
         results: list[InternalModelPredictionResult] = []
 
@@ -184,7 +184,20 @@ class PredictionService:
         if active_model_set:
             model_set_id = active_model_set.model_set_id
             model_set_version = active_model_set.model_set_version
-            for bm, cfg in active_model_set.models.items():
+            for bm in base_models:
+                cfg = active_model_set.models.get(bm)
+                if cfg is None:
+                    raise PipelineModelPredictionFailedError(
+                        f"요청된 모델 '{bm}'이 Active Model Set에 포함되어 있지 않습니다.",
+                        details=[
+                            {
+                                "base_model": bm,
+                                "model_set_id": model_set_id,
+                                "model_set_version": model_set_version,
+                            }
+                        ],
+                        retryable=False,
+                    )
                 model_items.append((bm, cfg.model_version, cfg.required))
         else:
             raise PipelineModelPredictionFailedError(

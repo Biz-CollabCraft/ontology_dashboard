@@ -437,13 +437,12 @@ export function MaintenanceWorkflowActionPanel({
       });
     } else if (state.maintenanceWorkOrder?.status === "requested") {
       label = "정비 WorkOrder 승인";
-      helper = "Runtime Replay session을 만든 뒤 정비 Action을 계획합니다.";
+      helper = "승인된 진단의 실시간 Simulation 계보로 정비 Action을 계획합니다.";
       enabled = canManage;
       command = () => approveMaintenanceWorkOrder({
         projectId,
         workspaceId,
         workOrderId: state.maintenanceWorkOrder!.work_order_id,
-        datasetVersionId,
         idempotencyKey: commandKey(eventId, "maintenance-approve", state.maintenanceWorkOrder!.work_order_id),
       });
     }
