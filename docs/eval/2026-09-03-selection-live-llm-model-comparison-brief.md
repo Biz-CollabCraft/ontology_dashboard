@@ -11,6 +11,54 @@
 
 This brief records the post-selection candidate results. It does not claim actual MES, CMMS, WMS, or QMS connectivity, production workload reliability, or field cost reduction.
 
+## Evaluation structure
+
+The evaluation has two layers. They should not be described as one identical
+120-run comparison across all models.
+
+### Layer 1. Same-condition model smoke gate
+
+Purpose: check whether an alternate model is operationally compatible with the
+current Agent Review Summary contract before spending a full 120-run budget.
+
+Shared conditions:
+
+- Same candidate SHA
+- Same 8 gold Agent Review Packet cases
+- Same prompt payload profile: `compact-editable-v1`
+- Same output schema and deterministic validator
+- Same gold answer rubric
+- Same live OpenAI-compatible provider adapter
+- Same client-side concurrency: 1
+- Same iteration count for smoke: 1 per case
+
+Gate:
+
+- A model must produce accepted structured summaries without fallback spikes.
+- A model must avoid forbidden read-only boundary phrases.
+- A model should preserve the operational required points that the gold rubric
+  checks, especially risk status, failure probability, production impact, loss
+  quantity, component focus, role-specific wording, and no-action boundary.
+
+### Layer 2. Selected-model 120-run release gate
+
+Purpose: prove that the selected model remains stable over repeated live calls
+for the frozen candidate.
+
+The 120-run gate was executed only for `gpt-4o-mini` because it passed the smoke
+gate with perfect contract and gold results. Alternate models were not promoted
+to this layer after smoke because `gpt-5.6-luna` showed repeated required-point
+omissions and `gpt-5-mini` failed the smoke gate.
+
+This means the defensible claim is:
+
+> Same-condition smoke selected `gpt-4o-mini`; the selected model then passed a
+> 120-run live release gate.
+
+The non-defensible claim is:
+
+> All three models were compared with identical 120-run live evaluations.
+
 ## 120-run evidence proof
 
 The selected model run is not a verbal claim only. The result artifact records a fixed candidate SHA, run id, case count, iterations per case, sample size, and one row per model output attempt.
@@ -64,11 +112,21 @@ Before promoting any alternate model to a full 120-run, the same candidate was c
 | `gpt-5.6-luna` | 8-case smoke | 8 / 8 | 0 | 0.773727 | 0.979167 | 1.0 | 0.9375 | 87,832.02 ms |
 | `gpt-5-mini` | 8-case smoke | 0 / 8 | 8 | not measured | not measured | not measured | not measured | 162,928.125 ms |
 
+Follow-up diagnosis kept the prompt/schema unchanged and varied only the model
+or timeout condition:
+
+| Model | Diagnosis scope | Accepted | Fallback | Contract errors | Gold accuracy | Main observation |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| `gpt-5.6-luna` | 8 cases x 3 iterations | 21 / 24 | 3 | 2 | 0.787037 | Repeated omissions of production impact, loss quantity, and some component labels. |
+| `gpt-5-mini` | 8-case smoke, 60s timeout | 3 / 8 | 5 | 5 | 0.83642 on accepted rows | Timeout improved, but read-only boundary validation still failed often. |
+
 Decision:
 
 - Keep `gpt-4o-mini` as the current default for the Agent Review Summary path.
 - Do not promote `gpt-5.6-luna` to another 120-run for this candidate because its smoke accuracy was lower than the selected model while latency was higher.
 - Do not promote `gpt-5-mini` because it failed the smoke gate with 8 fallback rows.
+- Treat the follow-up diagnosis as root-cause evidence, not as a model-specific
+  prompt optimization result.
 
 ## Related candidate checks
 
