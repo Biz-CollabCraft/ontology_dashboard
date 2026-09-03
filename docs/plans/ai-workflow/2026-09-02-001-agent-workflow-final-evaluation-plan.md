@@ -48,7 +48,7 @@ metadata와 measurement 표현만 공유하고, 최종 리포트가 각 평가 a
 | 시간 정합성 | UI, AI brief, handoff가 같은 Evidence Snapshot과 context version/as-of를 보는가? | temporal validation pass, stale/snapshot mismatch 차단 |
 | 책임분리 | AI/Agent가 설명과 brief를 넘어 recommendation, WorkOrder, command mutation을 만들지 않는가? | mutation attempt count, generated recommendation count, side-effect delta |
 | 확장성 | 생산/WIP, 정비창, 부품/기술자, 품질/납기 context가 붙어도 같은 read-only port/resolver/brief 구조가 유지되는가? | scenario coverage, relation source/version/as-of completeness, gap/conflict handling |
-| 외부 API fallback | LLM/provider 또는 외부 context API 실패가 정상 판단처럼 보이지 않고 fallback/gap/failed 상태로 격리되는가? | fallback isolation, fallback reason coverage, retry exhausted, invalid candidate not persisted |
+| 장애 격리 | LLM/provider, 외부 context API, schema 검증 실패가 정상 판단처럼 보이지 않고 fallback/gap/failed 상태로 격리되는가? | fallback isolation, fallback reason coverage, retry exhausted, invalid candidate not persisted, external API fallback 처리 |
 
 확장 구현 candidate의 deterministic synthetic smoke에서 관측한 `temporal validation 3/3`,
 `mutation attempts 0`, `generated recommendations 0`, `3 scenarios`, `154 passed, 0 failed`는
@@ -311,7 +311,7 @@ runner 구현 자체는 확장 구현과 병행할 수 있다. 그러나 확장 
 4. B1/B2/B3 비교 결과
 5. 서비스·DB 안정성 결과
 6. 시간 정합성, 책임분리, 확장성 안정성 결과
-7. 외부 API fallback과 장애별 containment 검증
+7. 장애 격리와 외부 API fallback 처리 검증
 8. side-effect 검증
 9. latency/token/cost 및 measurement basis
 10. 사람 검토 결과
@@ -350,7 +350,7 @@ runner 구현 자체는 확장 구현과 병행할 수 있다. 그러나 확장 
 | AI는 설명을 돕지만 작업 생성 권한을 갖지 않는다. 근거 불일치는 작업 생성이나 상태 변경으로 번지지 않아야 한다. | 작업 생성 차단 | ____ / ____ |
 | 복잡한 운영 데이터는 사람이 다시 해석하기보다 판단 가능한 관계 view로 투영되어야 한다. | 관계 source/version/as-of 완전성 | ____ / ____ |
 | 생산, 정비, 부품, 품질, 납기가 붙어도 누락값을 정상값으로 합성하면 안 된다. | gap/conflict 보존률 | ____ / ____ |
-| 외부 API가 실패해도 AI 설명이 정상 운영 사실처럼 오염되면 안 된다. | 외부 API fallback 격리율 | ____ / ____ |
+| 외부 API가 실패해도 AI 설명이 정상 운영 사실처럼 오염되면 안 된다. | 장애 격리 내 외부 API fallback 처리율 | ____ / ____ |
 
 ### 확장 구현 전
 
