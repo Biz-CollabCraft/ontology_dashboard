@@ -2201,7 +2201,7 @@ function MapReportFeatureSeries({
     : currentNumericValue !== null && currentObservedAt
       ? [{ observedAt: currentObservedAt, value: currentNumericValue, qualityStatus: "good" as const }]
       : [];
-  const numericPoints = visiblePoints.filter((point): point is SeriesDatum & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
+  const numericPoints = visiblePoints.filter((point): point is ChartSeriesDatum & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
   if (!visiblePoints.length || !numericPoints.length) {
     return (
       <section className="asset-series-block">
@@ -2262,6 +2262,16 @@ function MapReportFeatureSeries({
   const crossingLabelWidth = crossingText ? Math.min(260, Math.max(150, crossingText.length * 6.6 + 18)) : 0;
   const crossingLabelX = crossing && crossingText ? clamp(crossing.x - crossingLabelWidth / 2, frame.left + 6, frame.right - crossingLabelWidth - 6) : null;
   const crossingLabelY = crossing && typeof crossing.y === "number" ? frame.bottom - 10 : null;
+  const extremaCoords = coords
+    .filter((point): point is typeof point & { y: number; value: number } => typeof point.value === "number" && typeof point.y === "number");
+  const highest = extremaCoords.reduce<typeof extremaCoords[number] | null>((best, point) => {
+    if (!best) return point;
+    return (point.bucketMax ?? point.value) > (best.bucketMax ?? best.value) ? point : best;
+  }, null);
+  const lowest = extremaCoords.reduce<typeof extremaCoords[number] | null>((best, point) => {
+    if (!best) return point;
+    return (point.bucketMin ?? point.value) < (best.bucketMin ?? best.value) ? point : best;
+  }, null);
   const latestHistory = [...coords].reverse().find((point) => typeof point.value === "number" && typeof point.y === "number");
   const currentTimeLabel = currentObservedAt ? formatSeriesTime(currentObservedAt) : "현재 시간 없음";
   const currentPoint = currentNumericValue === null || !currentObservedAt ? null : { x: xAt(visiblePoints.length), y: yAt(currentNumericValue), value: currentNumericValue };
@@ -2309,7 +2319,7 @@ function MapReportFeatureSeries({
     <section className={[primary ? "asset-series-block is-primary" : "asset-series-block", liveDemo ? "is-live-chart" : ""].filter(Boolean).join(" ")}>
       <header className="asset-series-heading">
         <div><RotateCcw size={17} /><strong>{title}</strong></div>
-        <span className="asset-baseline-key"><i style={{ background: color }} />{liveDemo ? "10분 요약 · NOW 실시간 · 호버 고/저점" : seriesRangeLabel(visiblePoints, windowId, window)}</span>
+        <span className="asset-baseline-key"><i style={{ background: color }} />{liveDemo ? "10분 요약 라인 · crosshair 정확값 · NOW 실시간" : seriesRangeLabel(visiblePoints, windowId, window)}</span>
       </header>
       <svg className="asset-series-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${title} 관측 흐름`}>
         <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
@@ -2322,19 +2332,23 @@ function MapReportFeatureSeries({
         })}
         <rect className="asset-baseline-band" x={frame.left} y={bandY} width={width} height={bandHeight} style={{ fill: color }} />
         <line className="asset-baseline-mean" x1={frame.left} x2={frame.right} y1={yAt((scale.bandLower + scale.bandUpper) / 2)} y2={yAt((scale.bandLower + scale.bandUpper) / 2)} />
-        {liveDemo ? coords.map((point, index) => {
-          if (typeof point.bucketMin !== "number" || typeof point.bucketMax !== "number" || typeof point.y !== "number") return null;
-          const highY = yAt(point.bucketMax);
-          const lowY = yAt(point.bucketMin);
-          return (
-            <g key={`${point.observedAt}-bucket-range-${index}`}>
-              <line className="asset-bucket-range" x1={point.x} x2={point.x} y1={highY} y2={lowY} style={{ stroke: color }} />
-              <circle className="asset-bucket-range-dot" cx={point.x} cy={highY} r="2.4" style={{ fill: color }} />
-              <circle className="asset-bucket-range-dot" cx={point.x} cy={lowY} r="2.4" style={{ fill: color }} />
-            </g>
-          );
-        }) : null}
         {segments.map((segment, index) => <polyline key={`${title}-segment-${index}`} className="asset-series-line" points={segment.map((point) => `${point.x},${point.y}`).join(" ")} style={{ stroke: color }} />)}
+        {liveDemo && highest ? (
+          <g className="asset-extrema-label">
+            <circle cx={highest.x} cy={yAt(highest.bucketMax ?? highest.value)} r="3.8" style={{ fill: color }} />
+            <text x={clamp(highest.x - 30, frame.left, frame.right - 68)} y={clamp(yAt(highest.bucketMax ?? highest.value) - 10, frame.top + 12, frame.bottom - 6)}>
+              최고 {(highest.bucketMax ?? highest.value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}{unit ? ` ${unit}` : ""}
+            </text>
+          </g>
+        ) : null}
+        {liveDemo && lowest && lowest !== highest ? (
+          <g className="asset-extrema-label">
+            <circle cx={lowest.x} cy={yAt(lowest.bucketMin ?? lowest.value)} r="3.8" style={{ fill: color }} />
+            <text x={clamp(lowest.x - 30, frame.left, frame.right - 68)} y={clamp(yAt(lowest.bucketMin ?? lowest.value) + 18, frame.top + 18, frame.bottom - 4)}>
+              최저 {(lowest.bucketMin ?? lowest.value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}{unit ? ` ${unit}` : ""}
+            </text>
+          </g>
+        ) : null}
         {forecastBandPath ? <path className="asset-forecast-band" d={forecastBandPath} /> : null}
         {forecastLinePoints ? <polyline className="asset-forecast-line" points={forecastLinePoints} style={{ stroke: color }} /> : null}
         {forecastPoints.length ? <text className="asset-forecast-label" x={forecastRight} y={frame.bottom - 8} textAnchor="end">단기 추세 범위</text> : null}
@@ -2385,8 +2399,16 @@ function MapReportFeatureSeries({
           const tooltipHeight = point.bucketCount ? 52 : 33;
           const tooltipX = clamp(point.x - tooltipWidth / 2, frame.left + 4, frame.right - tooltipWidth - 4);
           const tooltipY = clamp(point.y - tooltipHeight - 9, frame.top + 4, frame.bottom - tooltipHeight - 4);
+          const readoutWidth = 126;
+          const readoutX = clamp(point.x - readoutWidth / 2, frame.left + 4, frame.right - readoutWidth - 4);
           return (
             <g key={`${point.observedAt}-hit-${index}`} className="asset-chart-hover-point">
+              <line className="asset-hover-crosshair" x1={point.x} x2={point.x} y1={frame.top} y2={frame.bottom} />
+              <g className="asset-chart-floating-readout" transform={`translate(${readoutX} ${frame.top + 3})`}>
+                <rect width={readoutWidth} height="36" rx="7" />
+                <text x={readoutWidth / 2} y="13" textAnchor="middle">{timeLabel}</text>
+                <text className="is-value" x={readoutWidth / 2} y="28" textAnchor="middle">{valueLabel}</text>
+              </g>
               <circle
                 className="asset-chart-hit-target"
                 cx={point.x}

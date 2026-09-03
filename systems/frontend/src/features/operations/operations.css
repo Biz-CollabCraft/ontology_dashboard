@@ -742,14 +742,24 @@
 .operations-side-map-report .asset-gap-marker { fill: transparent; stroke: #efc57f; stroke-width: 2; stroke-dasharray: 2 2; }
 .operations-side-map-report .asset-baseline-band { fill-opacity: .13; stroke: rgba(118,214,167,.34); stroke-width: 1; }
 .operations-side-map-report .asset-baseline-mean { stroke: #76d6a7; stroke-width: 1.2; stroke-dasharray: 3 4; opacity: .72; }
-.operations-side-map-report .asset-bucket-range { stroke-width: 3.2; stroke-linecap: round; opacity: .34; }
-.operations-side-map-report .asset-bucket-range-dot { opacity: .62; stroke: #121922; stroke-width: 1.4; }
 .operations-side-map-report .asset-crossing-line { stroke-width: 1.3; stroke-dasharray: 4 4; opacity: .75; }
 .operations-side-map-report .asset-crossing-marker { stroke: #121922; stroke-width: 2.2; }
 .operations-side-map-report .asset-chart-label-bg { fill: rgba(18,25,34,.92); stroke: rgba(181,196,214,.18); }
+.operations-side-map-report .asset-extrema-label text { fill: #8994a1; font-size: 10px; font-weight: 900; letter-spacing: 0; }
+.operations-side-map-report .asset-extrema-label circle { opacity: .82; stroke: #121922; stroke-width: 1.8; }
+.asset-hover-crosshair,
+.asset-chart-floating-readout { opacity: 0; pointer-events: none; transition: opacity .12s ease; }
+.asset-hover-crosshair { stroke: rgba(137,148,161,.8); stroke-width: 1.4; }
+.asset-chart-floating-readout rect { fill: rgba(18,25,34,.88); stroke: rgba(181,196,214,.22); stroke-width: 1; }
+.asset-chart-floating-readout text { fill: #aeb8c5; font-size: 9px; font-weight: 850; }
+.asset-chart-floating-readout text.is-value { fill: #f4f8fb; font-size: 12px; font-weight: 950; }
 .asset-chart-hit-target { fill: transparent; stroke: transparent; pointer-events: all; cursor: crosshair; }
 .asset-chart-hit-target:focus { outline: none; stroke: currentColor; stroke-width: 1; opacity: .35; }
 .asset-chart-tooltip { opacity: 0; pointer-events: none; transition: opacity .12s ease; }
+.asset-chart-hover-point:hover .asset-hover-crosshair,
+.asset-chart-hover-point:focus-within .asset-hover-crosshair,
+.asset-chart-hover-point:hover .asset-chart-floating-readout,
+.asset-chart-hover-point:focus-within .asset-chart-floating-readout,
 .asset-chart-hover-point:hover .asset-chart-tooltip,
 .asset-chart-hover-point:focus-within .asset-chart-tooltip { opacity: 1; }
 .asset-chart-tooltip rect { fill: rgba(12,18,26,.94); stroke: rgba(181,196,214,.28); stroke-width: 1; }
