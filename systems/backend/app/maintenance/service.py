@@ -493,14 +493,22 @@ class MaintenanceLoopService:
         )
         if work_order.work_type is not WorkOrderType.INSPECTION:
             raise ValueError("work order is not an inspection")
+        transition_time = transitioned_at or datetime.now(timezone.utc)
+        updates: dict[str, Any] = {
+            "status": transition_work_order(work_order.status, target)
+        }
+        if target is WorkOrderStatus.APPROVED:
+            updates.update(assigned_to=actor_id, assigned_at=transition_time)
+        elif work_order.assigned_to != actor_id:
+            raise PermissionError("only the assigned field operator can start this inspection")
         transitioned = work_order.model_copy(
-            update={"status": transition_work_order(work_order.status, target)}
+            update=updates
         )
         return self.repository.transition_inspection_work_order(
             work_order=transitioned,
             actor_id=actor_id,
             actor_display_name=actor_display_name,
-            transitioned_at=transitioned_at or datetime.now(timezone.utc),
+            transitioned_at=transition_time,
             request_idempotency_key=idempotency_key,
             request_fingerprint=self._fingerprint(
                 f"inspection.{target.value}",
@@ -511,6 +519,27 @@ class MaintenanceLoopService:
                 },
             ),
         )
+
+    def list_open_inspection_work_orders(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+    ) -> dict[str, Any]:
+        work_orders = self.repository.list_open_inspection_work_orders(
+            workspace_id=workspace_id,
+        )
+        for work_order in work_orders:
+            self._require_scope(
+                work_order,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+            )
+        return {
+            "items": [item.model_dump(mode="json") for item in work_orders]
+        }
 
     def complete_inspection(
         self,
@@ -537,6 +566,8 @@ class MaintenanceLoopService:
             project_id=project_id,
             workspace_id=workspace_id,
         )
+        if work_order.assigned_to != actor_id:
+            raise PermissionError("only the assigned field operator can complete this inspection")
         completed_at = recorded_at or datetime.now(timezone.utc)
         completed = work_order.model_copy(
             update={

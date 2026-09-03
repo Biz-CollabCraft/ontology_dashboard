@@ -62,6 +62,7 @@ interface RoleComposedWorkspaceProps {
   detail: OperationsEventDetailModel | null;
   companyContext: OperationsCompanyContext | null;
   role: OperationsRoleLens;
+  currentUserId: string;
   canManageWorkflow: boolean;
   canExecuteFieldWorkflow: boolean;
   canMaterializeAgentSummary: boolean;
@@ -1620,6 +1621,7 @@ function WorkflowActionsBlock({
         assetId={asset.assetId}
         assetType={asset.assetType}
         role={props.role}
+        currentUserId={props.currentUserId}
         snapshotBasis={props.detail?.snapshotBasis ?? null}
         canManage={props.canManageWorkflow}
         canFieldExecute={props.canExecuteFieldWorkflow}

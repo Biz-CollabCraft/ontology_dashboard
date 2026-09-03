@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -27,6 +30,20 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
 )
 
 logger = logging.getLogger(__name__)
+_OUTBOX_FILE_LOCK = threading.RLock()
+
+
+def _replace_with_retry(temp_path: Path, target_path: Path) -> None:
+    """Replace a file atomically, tolerating transient Windows sharing violations."""
+    delays = (0.01, 0.05, 0.1)
+    for attempt in range(len(delays) + 1):
+        try:
+            os.replace(temp_path, target_path)
+            return
+        except PermissionError:
+            if attempt == len(delays):
+                raise
+            time.sleep(delays[attempt])
 
 
 class PredictionDeliveryService:
@@ -74,6 +91,8 @@ class PredictionDeliveryService:
         self.outbox_dir = Path(outbox_dir) if outbox_dir else PATHS.notification_outbox_root
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
         self.timeout = timeout
+        self._maintenance_signal_lock = threading.Lock()
+        self._pending_maintenance_event_ids: set[str] = set()
 
     @staticmethod
     def _endpoint_with_scope(endpoint_url: str, *, project_id: str, workspace_id: str) -> str:
@@ -87,15 +106,47 @@ class PredictionDeliveryService:
 
     def save_outbox_item(self, item: PredictionOutboxItem) -> Path:
         """Atomic save of outbox item to outbox_dir/{event_id}.json."""
-        dest_path = self.outbox_dir / f"{item.event_id}.json"
-        temp_path = self.outbox_dir / f".tmp_{item.event_id}.json"
-        item.updated_at = now_utc_iso()
-        with open(temp_path, "w", encoding="utf-8") as f:
-            f.write(item.model_dump_json(indent=2))
-            f.flush()
-            os.fsync(f.fileno())
-        temp_path.replace(dest_path)
-        return dest_path
+        with _OUTBOX_FILE_LOCK:
+            dest_path = self.outbox_dir / f"{item.event_id}.json"
+            temp_path = self.outbox_dir / f".tmp_{uuid.uuid4().hex}_{item.event_id}.json"
+            item.updated_at = now_utc_iso()
+            try:
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    f.write(item.model_dump_json(indent=2))
+                    f.flush()
+                    os.fsync(f.fileno())
+                _replace_with_retry(temp_path, dest_path)
+                if item.status in {"pending", "retry_wait", "failed"}:
+                    maintenance_event_id = self.maintenance_event_id(item)
+                    if maintenance_event_id is not None:
+                        with self._maintenance_signal_lock:
+                            self._pending_maintenance_event_ids.add(maintenance_event_id)
+                return dest_path
+            finally:
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except OSError:
+                        pass
+
+    @staticmethod
+    def maintenance_event_id(item: PredictionOutboxItem) -> Optional[str]:
+        """Return the replay lineage key used for operational prioritization."""
+        source_context = item.payload.source_context
+        if source_context.source_kind != "maintenance_replay_overlay":
+            return None
+        maintenance_event_id = source_context.lineage.maintenance_event_id
+        if maintenance_event_id is None:
+            return None
+        normalized = str(maintenance_event_id).strip()
+        return normalized or None
+
+    def consume_pending_maintenance_event_ids(self) -> set[str]:
+        """Atomically consume replay events registered since the last scan."""
+        with self._maintenance_signal_lock:
+            event_ids = set(self._pending_maintenance_event_ids)
+            self._pending_maintenance_event_ids.clear()
+            return event_ids
 
     def get_outbox_item(self, event_id: str) -> Optional[PredictionOutboxItem]:
         """Load single outbox item by event_id."""

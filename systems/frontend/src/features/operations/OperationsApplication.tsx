@@ -432,7 +432,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       detail={`선택한 Decision Case ${selection.eventId}의 immutable Result Artifact를 복원하지 못했습니다. 최신 Event로 자동 대체하지 않습니다. 다른 Case를 명시적으로 선택해 주세요.`}
     />;
   } else if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
-    content = <OperationsOverviewPage model={model} role={authorizedRole} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <OperationsOverviewPage model={model} role={authorizedRole} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   } else if (useReliabilityPreview && selection.view !== "system") {
     content = <RoleComposedWorkspace
       experienceKind={experienceKind}
@@ -443,6 +443,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       detail={detail}
       companyContext={companyContext}
       role={authorizedRole}
+      currentUserId={user?.user_id ?? ""}
       canManageWorkflow={canDecide}
       canExecuteFieldWorkflow={canExecuteFieldWorkflow}
       canMaterializeAgentSummary={canMaterializeAgentSummary}
@@ -462,7 +463,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       ? <OperationsSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />
       : <OperationsState kind="error" title="시스템 관리자 권한 필요" detail="AI 요약 처리 로그는 관리자 감사 권한이 있는 사용자만 조회할 수 있습니다." />;
   } else {
-    content = <OperationsOverviewPage model={model} role={authorizedRole} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <OperationsOverviewPage model={model} role={authorizedRole} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
   const body = <>

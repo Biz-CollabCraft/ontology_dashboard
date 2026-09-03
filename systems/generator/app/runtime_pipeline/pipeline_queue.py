@@ -1,4 +1,4 @@
-"""Persistent FIFO Queue implementation for the Generator Runtime Pipeline."""
+"""Persistent priority-FIFO Queue for the Generator Runtime Pipeline."""
 
 from __future__ import annotations
 
@@ -45,7 +45,12 @@ def is_temporary_file(file_path: Path | str) -> bool:
 
 
 class PipelineQueue:
-    """Persistent FIFO queue backed by SQLite with deduplication, crash recovery, and retry re-enqueue."""
+    """Persistent priority-FIFO queue with deduplication and crash recovery.
+
+    The first maintenance replay job for each maintenance event is promoted ahead
+    of ordinary live jobs. Once one replay job for that event succeeds, later
+    replay snapshots return to normal FIFO order so live input cannot starve.
+    """
 
     def __init__(self, db_path: Optional[Path] = None) -> None:
         if db_path is None:
@@ -499,15 +504,55 @@ class PipelineQueue:
                 return new_item
 
     def claim_next(self) -> Optional[PipelineQueueItem]:
-        """Claim the next FIFO queued item and transition state to running."""
+        """Claim the next priority-FIFO item and transition it to running."""
         now = now_utc_iso()
         with self._lock:
             with self._get_connection() as conn:
                 cur = conn.execute(
                     """
-                    SELECT * FROM queue_items
-                    WHERE status = 'queued'
-                    ORDER BY sequence ASC
+                    SELECT * FROM queue_items AS candidate
+                    WHERE candidate.status = 'queued'
+                    ORDER BY
+                        CASE
+                            WHEN candidate.source_kind = 'maintenance_replay_overlay'
+                             AND NULLIF(
+                                    TRIM(
+                                        json_extract(
+                                            CASE
+                                                WHEN json_valid(candidate.lineage_json)
+                                                THEN candidate.lineage_json
+                                                ELSE '{}'
+                                            END,
+                                            '$.maintenance_event_id'
+                                        )
+                                    ),
+                                    ''
+                                 ) IS NOT NULL
+                             AND NOT EXISTS (
+                                    SELECT 1
+                                    FROM queue_items AS completed
+                                    WHERE completed.source_kind = 'maintenance_replay_overlay'
+                                      AND completed.status = 'succeeded'
+                                      AND json_extract(
+                                            CASE
+                                                WHEN json_valid(completed.lineage_json)
+                                                THEN completed.lineage_json
+                                                ELSE '{}'
+                                            END,
+                                            '$.maintenance_event_id'
+                                          ) = json_extract(
+                                            CASE
+                                                WHEN json_valid(candidate.lineage_json)
+                                                THEN candidate.lineage_json
+                                                ELSE '{}'
+                                            END,
+                                            '$.maintenance_event_id'
+                                          )
+                                 )
+                            THEN 0
+                            ELSE 1
+                        END ASC,
+                        candidate.sequence ASC
                     LIMIT 1
                     """
                 )
