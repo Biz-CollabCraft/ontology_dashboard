@@ -893,7 +893,7 @@ function withRealtimeCurrentValues(
 ): SensorSeriesSnapshot[] {
   if (!liveDemo) return sensors;
   const liveFactors = new Map(liveDemo.factors.map((factor) => [factor.id, factor]));
-  return sensors.map((sensor) => {
+  const merged = sensors.map((sensor) => {
     const factor = liveFactors.get(sensor.id);
     if (!factor || typeof factor.value !== "number" || !Number.isFinite(factor.value)) {
       return sensor;
@@ -902,9 +902,24 @@ function withRealtimeCurrentValues(
       ...sensor,
       currentValue: factor.value,
       currentObservedAt: liveDemo.nowAt,
-      currentQuality: "good",
+      currentQuality: "good" as const,
     };
   });
+  const existingIds = new Set(merged.map((sensor) => sensor.id));
+  liveDemo.factors.forEach((factor) => {
+    if (existingIds.has(factor.id) || typeof factor.value !== "number" || !Number.isFinite(factor.value)) return;
+    merged.push({
+      id: factor.id,
+      label: factor.label,
+      unit: factor.unit,
+      currentValue: factor.value,
+      currentObservedAt: liveDemo.nowAt,
+      currentQuality: "good" as const,
+      window: null,
+      points: [],
+    });
+  });
+  return merged;
 }
 
 function productionImpactLevelLabel(summary: LineImpactSummary, detail: OperationsEventDetailModel | null): string {
@@ -1686,6 +1701,7 @@ export function OperationsWorkflowOverviewPage({
     if (model.context.projectId !== "manufacturing-demo-project" || model.context.workspaceId !== "manufacturing-demo") return;
     if (!liveDemo.eventId) return;
     if (selectedAsset?.assetId === liveDemo.assetId && selectedEvent?.eventId === liveDemo.eventId) return;
+    setFactorySlotPreview(null);
     onPreviewAsset(liveDemo.assetId, liveDemo.eventId);
   }, [
     liveDemo.assetId,
