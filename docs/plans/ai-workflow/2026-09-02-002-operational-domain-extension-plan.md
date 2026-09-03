@@ -1172,3 +1172,4 @@ Backend는 domain-first 구조를 유지한다. 각 도메인의 서비스와 �
 - `docs/plans/2026-08-26-001-runtime-simulation-closed-loop-plan.md`
 - `docs/plans/ai-workflow/2026-08-29-001-ai-context-orchestration-adapter-plan.md`
 - `docs/plans/ai-workflow/2026-09-02-001-agent-workflow-final-evaluation-plan.md`
+- `docs/plans/ai-workflow/2026-09-03-005-ontology-aware-context-resolution-evidence-selection-plan.md`
