@@ -930,6 +930,41 @@ def _merge_runtime_detail_supplemental(
 
     merged = dict(canonical)
     merged["operation_context"] = supplemental.get("operation_context")
+    supplemental_features = {
+        str(feature.get("key") or ""): feature
+        for feature in supplemental.get("features") or []
+        if isinstance(feature, dict) and feature.get("key")
+    }
+    if supplemental_features:
+        merged_features: list[dict[str, Any]] = []
+        seen_feature_keys: set[str] = set()
+        for feature in merged.get("features") or []:
+            if not isinstance(feature, dict):
+                continue
+            key = str(feature.get("key") or "")
+            seen_feature_keys.add(key)
+            supplemental_feature = supplemental_features.get(key)
+            canonical_history = (feature.get("history") or {}) if isinstance(feature.get("history"), dict) else {}
+            supplemental_history = (
+                supplemental_feature.get("history") or {}
+                if isinstance(supplemental_feature, dict) and isinstance(supplemental_feature.get("history"), dict)
+                else {}
+            )
+            canonical_points = canonical_history.get("points") or []
+            supplemental_points = supplemental_history.get("points") or []
+            if len(supplemental_points) > len(canonical_points):
+                merged_features.append({**feature, "history": supplemental_history})
+            else:
+                merged_features.append(feature)
+        for key, supplemental_feature in supplemental_features.items():
+            if key not in seen_feature_keys:
+                merged_features.append(supplemental_feature)
+        if merged_features:
+            merged["features"] = merged_features
+    supplemental_risk_series = supplemental.get("risk_series") or []
+    canonical_risk_series = merged.get("risk_series") or []
+    if len(supplemental_risk_series) > len(canonical_risk_series):
+        merged["risk_series"] = supplemental_risk_series
     if not merged.get("inspection_targets") and supplemental.get("inspection_targets"):
         merged["inspection_targets"] = supplemental["inspection_targets"]
     if not merged.get("review_priority") and supplemental.get("review_priority"):
