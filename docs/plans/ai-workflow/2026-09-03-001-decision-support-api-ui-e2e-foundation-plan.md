@@ -1,7 +1,7 @@
 ---
 title: Operational Decision Support API UI E2E Foundation Plan
 type: feat
-status: planned
+status: foundation-implemented
 date: 2026-09-03
 ---
 
@@ -545,3 +545,22 @@ npx playwright test e2e/mvp-decision-support.spec.ts --project=chromium
 
 U5까지는 본 계획 소유 범위의 안정성을 판정할 수 있다. U6이 미완료이면 U7은
 `blocked_by_integration`으로 기록하며, 이를 Decision Support 구현 실패로 간주하지 않는다.
+
+## Foundation Implementation Evidence
+
+- API facade candidate: `d862d1c7`
+- UI consumer candidate: `aad2f46f`
+- targeted Playwright candidate: `cea76e8d`
+- SQLite persistence candidate: `0404e327`
+- backend regression: 145 passed
+- frontend unit: 89 passed
+- frontend lint/build: passed
+- targeted Playwright: 3 passed
+- evidence artifact:
+  `tests/eval/results/operational_decision_e2e_20260903_0404e327.json`
+
+현재 Evidence State는 `partially_verified`다. FastAPI TestClient + 격리 SQLite API 통합과
+Playwright route-isolated UI E2E는 각각 검증했지만, 한 Playwright 실행에서 실제 Brief API를 통과하는
+unmocked browser-to-API-to-SQLite-to-UI 경로는 아직 `not_measured`다. WorkOrder,
+MaintenanceAction, command delta도 targeted Playwright에서는 측정하지 않았으므로 0으로 주장하지 않는다.
+따라서 U1~U3 기반 구현은 완료했지만 U5 최종 안정성 평가와 U7 전체 통합 E2E는 완료 상태가 아니다.
