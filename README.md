@@ -162,20 +162,38 @@ CNC/Compressor Model Artifact를 발행하므로 몇 분이 걸릴 수 있으며
 기본 로컬 데모는 과거 7일(168시간)의 Observation을 같은 Simulation Run에서
 먼저 생성한 뒤 현재 시각까지 fast-forward하고, 전체 Run horizon은 14일
 (336시간)로 잡아 정비 전 이력과 정비 후 재관측 시간을 모두 확보합니다. 72시간은
-데이터 계약의 상한이 아니며 필요하면 다음처럼 조정할 수 있습니다.
+데이터 계약의 상한이 아니라 예전 local runner의 demo 기본값이었습니다. 현재
+gen_data `balanced_demo`, seed 42의 첫 failure schedule은 72시간 horizon에서 3건,
+180시간에서 19건, 336시간에서 34건이 포함되므로 72시간은 Closed-loop 데모 후보를
+지나치게 줄입니다. 또한 `continuous=true`도 무한 실행이 아니라 지정한
+`duration_hours` 끝에서 종료하므로 충분한 post-maintenance runtime window를
+명시해야 합니다.
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_local_realtime.py `
-  --initial-history-hours 168 `
+  --history-hours 168 `
   --simulation-hours 336 `
   --speed 60
 ```
 
-`--initial-history-hours`는 모델의 최소 6시간(36개 10분 Tick)보다 길어야 하고,
-`--simulation-hours`는 정비 후 Observation/Prediction이 같은 Run lineage에서 계속
-생성될 수 있도록 초기 이력보다 크게 설정해야 합니다. 정비 후 Overlay 자체의 모델
-warm-up은 계속 36 Tick을 사용하므로, 과거 이력을 7일로 늘렸다고 해서 모든 정비
-Replay가 7일치를 다시 생성하지는 않습니다.
+`--history-hours`는 발표 화면에서 볼 수 있는 과거 Observation backfill 기간입니다.
+이전 이름인 `--initial-history-hours`도 호환되지만, 모델 warm-up과 혼동하지 않도록
+새 실행에서는 `--history-hours`를 사용합니다. 모델 자체의 최소 이력은 6시간
+(36개 10분 Tick)이고, 정비 후 Overlay replay도 36 Tick branch-local warm-up만
+사용합니다. 따라서 과거 이력을 7일 또는 1년으로 늘려도 모든 정비 Replay가 그만큼
+다시 생성되지는 않습니다. 로컬 runner에는 별도의 72시간 DB retention 또는 UI
+history query 상한을 두지 않습니다.
+
+1년치 10분 단위 과거 관측과 정비 이력을 준비해야 하는 경우에는 같은 옵션을 더 크게
+잡을 수 있습니다. 이 경우 약 52,560 Tick의 backfill이 발생하므로 Team DB에 바로
+적재하기 전에는 로컬/스테이징에서 소요 시간과 row 수를 먼저 확인합니다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_local_realtime.py `
+  --history-hours 8760 `
+  --simulation-hours 9000 `
+  --speed 60
+```
 
 이 실행은 `Backend 직접 추론` 우회 경로를 사용하지 않습니다. Canonical/Live와
 정비 후 Overlay Observation 모두 불변 snapshot으로 Generator에 전달되고,

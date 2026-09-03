@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+pytest.importorskip("lightgbm")
+
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineRuntimeFeatureFailedError,
 )

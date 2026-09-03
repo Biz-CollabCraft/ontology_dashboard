@@ -26,7 +26,13 @@ GEN_DATA_ROOT = ROOT.parent / "gen_data"
 LIVE_SOURCE_VERSION = "gen-data-wall-clock-live-v2"
 OBSERVATION_INTERVAL_MINUTES = 10
 MODEL_MINIMUM_HISTORY_ROWS = 36
-DEFAULT_INITIAL_HISTORY_HOURS = 168
+MODEL_MINIMUM_HISTORY_HOURS = (
+    MODEL_MINIMUM_HISTORY_ROWS * OBSERVATION_INTERVAL_MINUTES // 60
+)
+DEFAULT_HISTORY_BACKFILL_HOURS = 168
+# Backward-compatible import name for older local demo helpers.  The value is
+# historical backfill, not the model warm-up requirement.
+DEFAULT_INITIAL_HISTORY_HOURS = DEFAULT_HISTORY_BACKFILL_HOURS
 DEFAULT_SIMULATION_HOURS = 336
 
 
@@ -173,25 +179,25 @@ def _simulation_start_at(
     now: datetime,
     latest_observed_at: datetime | None,
     interval_minutes: int = 10,
-    initial_history_hours: int = 6,
+    history_backfill_hours: int = MODEL_MINIMUM_HISTORY_HOURS,
 ) -> datetime:
     """Choose a cadence-safe start without mixing histories from prior sessions."""
     if latest_observed_at is not None:
         return latest_observed_at + timedelta(minutes=interval_minutes)
-    return now - timedelta(hours=initial_history_hours)
+    return now - timedelta(hours=history_backfill_hours)
 
 
 def _initial_fast_forward_target_hours(
     *,
     latest_observed_at: datetime | None,
-    initial_history_hours: int = DEFAULT_INITIAL_HISTORY_HOURS,
+    history_backfill_hours: int = DEFAULT_HISTORY_BACKFILL_HOURS,
 ) -> int | None:
-    """Return the one-time historical warm-up target for a new live stream."""
+    """Return the one-time historical backfill target for a new live stream."""
     if latest_observed_at is not None:
         return None
-    if initial_history_hours <= 0:
-        raise ValueError("initial history duration must be positive")
-    return initial_history_hours
+    if history_backfill_hours <= 0:
+        raise ValueError("history backfill duration must be positive")
+    return history_backfill_hours
 
 
 def _fast_forward_initial_history(
@@ -199,12 +205,12 @@ def _fast_forward_initial_history(
     gen_data_port: int,
     run_id: str,
     latest_observed_at: datetime | None,
-    initial_history_hours: int = DEFAULT_INITIAL_HISTORY_HOURS,
+    history_backfill_hours: int = DEFAULT_HISTORY_BACKFILL_HOURS,
 ) -> dict | None:
     """Generate historical observations on the original run without changing lineage."""
     target_hours = _initial_fast_forward_target_hours(
         latest_observed_at=latest_observed_at,
-        initial_history_hours=initial_history_hours,
+        history_backfill_hours=history_backfill_hours,
     )
     if target_hours is None:
         return None
@@ -377,12 +383,15 @@ def main() -> int:
         help="Total simulated horizon. Defaults to 336 hours (14 days).",
     )
     parser.add_argument(
+        "--history-hours",
         "--initial-history-hours",
+        dest="history_hours",
         type=int,
-        default=DEFAULT_INITIAL_HISTORY_HOURS,
+        default=DEFAULT_HISTORY_BACKFILL_HOURS,
         help=(
-            "Historical observations generated before the live demo reaches the "
-            "current-time boundary. Defaults to 168 hours (7 days)."
+            "Historical backfill generated before the live demo reaches the "
+            "current-time boundary. Defaults to 168 hours (7 days). The model "
+            "itself requires only 36 ten-minute rows (6 hours)."
         ),
     )
     parser.add_argument(
@@ -400,17 +409,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    minimum_history_hours = (
-        MODEL_MINIMUM_HISTORY_ROWS * OBSERVATION_INTERVAL_MINUTES // 60
-    )
-    if args.initial_history_hours < minimum_history_hours:
+    if args.history_hours < MODEL_MINIMUM_HISTORY_HOURS:
         parser.error(
-            "--initial-history-hours must provide at least "
-            f"{minimum_history_hours} hours for runtime model history"
+            "--history-hours must provide at least "
+            f"{MODEL_MINIMUM_HISTORY_HOURS} hours for runtime model history"
         )
-    if args.simulation_hours <= args.initial_history_hours:
+    if args.simulation_hours <= args.history_hours:
         parser.error(
-            "--simulation-hours must be greater than --initial-history-hours so "
+            "--simulation-hours must be greater than --history-hours so "
             "the same run can continue into post-maintenance observations"
         )
 
@@ -581,7 +587,7 @@ def main() -> int:
             now=datetime.now(timezone.utc),
             latest_observed_at=latest_live_observed_at,
             interval_minutes=OBSERVATION_INTERVAL_MINUTES,
-            initial_history_hours=args.initial_history_hours,
+            history_backfill_hours=args.history_hours,
         )
         run = _post_json(
             f"http://127.0.0.1:{args.gen_data_port}/api/runs",
@@ -605,16 +611,21 @@ def main() -> int:
             gen_data_port=args.gen_data_port,
             run_id=str(run["run_id"]),
             latest_observed_at=latest_live_observed_at,
-            initial_history_hours=args.initial_history_hours,
+            history_backfill_hours=args.history_hours,
         )
         if initial_fast_forward is not None:
             initial_history_rows = (
-                args.initial_history_hours * 60 // OBSERVATION_INTERVAL_MINUTES
+                args.history_hours * 60 // OBSERVATION_INTERVAL_MINUTES
             )
             print(
-                "[simulation] initial history ready: "
-                f"{initial_history_rows} ticks / {args.initial_history_hours}h, "
+                "[history] backfill ready: "
+                f"{initial_history_rows} ticks / {args.history_hours}h, "
                 f"{initial_fast_forward['generated_records']} records"
+            )
+            print(
+                "[model] minimum history: "
+                f"{MODEL_MINIMUM_HISTORY_ROWS} ticks / {MODEL_MINIMUM_HISTORY_HOURS}h; "
+                "maintenance replay uses the same 36-row branch-local warm-up"
             )
 
         # Only after the first live Dataset exists do we bind demo users to it.
