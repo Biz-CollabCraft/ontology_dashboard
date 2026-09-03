@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,9 +51,37 @@ class DecisionSupportTrace:
 @dataclass
 class OperationalDecisionSupportService:
     root: Path
+    database_path: Path | None = None
     _snapshots: dict[str, OperationalBriefSnapshot] = field(default_factory=dict)
     _runs: list[dict[str, Any]] = field(default_factory=list)
     _lock: Lock = field(default_factory=Lock)
+
+    def __post_init__(self) -> None:
+        if self.database_path is None:
+            return
+        with sqlite3.connect(self.database_path) as connection:
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS operational_decision_briefs (
+                    cache_key TEXT PRIMARY KEY,
+                    snapshot_json TEXT NOT NULL,
+                    stored_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS operational_decision_workflow_runs (
+                    workflow_run_id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    asset_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    reason TEXT,
+                    run_json TEXT NOT NULL,
+                    recorded_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS operational_decision_runs_lookup_idx
+                ON operational_decision_workflow_runs (
+                    project_id, asset_id, status, recorded_at DESC
+                );
+                """
+            )
 
     def cached_brief(
         self,
@@ -60,8 +90,7 @@ class OperationalDecisionSupportService:
         actor_role: DecisionBriefRole,
     ) -> tuple[OperationalDecisionBrief | None, DecisionSupportTrace]:
         key = self._cache_key(identity=identity, actor_role=actor_role)
-        with self._lock:
-            snapshot = self._snapshots.get(key)
+        snapshot = self._load_snapshot(key)
         if snapshot is None:
             return None, DecisionSupportTrace(
                 status="pending",
@@ -91,9 +120,8 @@ class OperationalDecisionSupportService:
     ) -> tuple[OperationalDecisionBrief, DecisionSupportTrace]:
         now = now or datetime.now(timezone.utc)
         key = self._cache_key(identity=identity, actor_role=actor_role)
-        with self._lock:
-            existing = self._snapshots.get(key)
-            if existing is not None and trigger == "manual_materialization":
+        existing = self._load_snapshot(key)
+        if existing is not None and trigger == "manual_materialization":
                 return existing.brief, DecisionSupportTrace(
                     status="completed",
                     reason=None,
@@ -109,7 +137,7 @@ class OperationalDecisionSupportService:
             intent=OperationalAgentIntent.MAINTENANCE_TIMING_DECISION,
             risk_status=risk_status,
         )
-        run_id = f"ODR-{len(self._runs) + 1:06d}"
+        run_id = f"ODR-{uuid.uuid4().hex[:16]}"
         try:
             result = self._agent(identity).run(
                 request=request,
@@ -139,37 +167,33 @@ class OperationalDecisionSupportService:
                 ),
                 trajectory=trajectory,
             )
-            with self._lock:
-                self._snapshots[key] = snapshot
-                self._runs.append(
-                    {
-                        "workflow_run_id": run_id,
-                        "asset_id": identity.asset_id,
-                        "project_id": identity.project_id,
-                        "status": trace.status,
-                        "reason": trace.reason,
-                        "context_version_set": trace.context_version_set,
-                        "temporal_validation": trace.temporal_validation,
-                        "trajectory": list(trajectory),
-                        "recorded_at": now.isoformat(),
-                    }
-                )
+            run = {
+                "workflow_run_id": run_id,
+                "asset_id": identity.asset_id,
+                "project_id": identity.project_id,
+                "status": trace.status,
+                "reason": trace.reason,
+                "context_version_set": trace.context_version_set,
+                "temporal_validation": trace.temporal_validation,
+                "trajectory": list(trajectory),
+                "recorded_at": now.isoformat(),
+            }
+            self._store_snapshot_and_run(key=key, snapshot=snapshot, run=run)
             return brief, trace
         except (ValueError, RuntimeError, TimeoutError) as exc:
-            with self._lock:
-                self._runs.append(
-                    {
-                        "workflow_run_id": run_id,
-                        "asset_id": identity.asset_id,
-                        "project_id": identity.project_id,
-                        "status": "failed",
-                        "reason": type(exc).__name__,
-                        "context_version_set": {},
-                        "temporal_validation": "failed",
-                        "trajectory": [],
-                        "recorded_at": now.isoformat(),
-                    }
-                )
+            self._store_run(
+                {
+                    "workflow_run_id": run_id,
+                    "asset_id": identity.asset_id,
+                    "project_id": identity.project_id,
+                    "status": "failed",
+                    "reason": type(exc).__name__,
+                    "context_version_set": {},
+                    "temporal_validation": "failed",
+                    "trajectory": [],
+                    "recorded_at": now.isoformat(),
+                }
+            )
             raise
 
     def workflow_runs(
@@ -180,6 +204,28 @@ class OperationalDecisionSupportService:
         status: str | None,
         limit: int,
     ) -> list[dict[str, Any]]:
+        if self.database_path is not None:
+            clauses = ["project_id = ?"]
+            values: list[Any] = [project_id]
+            if asset_id is not None:
+                clauses.append("asset_id = ?")
+                values.append(asset_id)
+            if status is not None:
+                clauses.append("status = ?")
+                values.append(status)
+            values.append(limit)
+            with sqlite3.connect(self.database_path) as connection:
+                rows = connection.execute(
+                    f"""
+                    SELECT run_json
+                    FROM operational_decision_workflow_runs
+                    WHERE {' AND '.join(clauses)}
+                    ORDER BY recorded_at DESC
+                    LIMIT ?
+                    """,
+                    values,
+                ).fetchall()
+            return [json.loads(row[0]) for row in rows]
         with self._lock:
             rows = list(reversed(self._runs))
         return [
@@ -189,6 +235,75 @@ class OperationalDecisionSupportService:
             and (asset_id is None or row["asset_id"] == asset_id)
             and (status is None or row["status"] == status)
         ][:limit]
+
+    def _load_snapshot(self, key: str) -> OperationalBriefSnapshot | None:
+        if self.database_path is None:
+            with self._lock:
+                return self._snapshots.get(key)
+        with sqlite3.connect(self.database_path) as connection:
+            row = connection.execute(
+                "SELECT snapshot_json FROM operational_decision_briefs WHERE cache_key = ?",
+                (key,),
+            ).fetchone()
+        return (
+            OperationalBriefSnapshot.model_validate_json(row[0])
+            if row is not None
+            else None
+        )
+
+    def _store_snapshot_and_run(
+        self,
+        *,
+        key: str,
+        snapshot: OperationalBriefSnapshot,
+        run: dict[str, Any],
+    ) -> None:
+        if self.database_path is None:
+            with self._lock:
+                self._snapshots[key] = snapshot
+                self._runs.append(run)
+            return
+        with sqlite3.connect(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT OR REPLACE INTO operational_decision_briefs (
+                    cache_key, snapshot_json, stored_at
+                ) VALUES (?, ?, ?)
+                """,
+                (key, snapshot.model_dump_json(), snapshot.stored_at.isoformat()),
+            )
+            self._insert_run(connection, run)
+
+    def _store_run(self, run: dict[str, Any]) -> None:
+        if self.database_path is None:
+            with self._lock:
+                self._runs.append(run)
+            return
+        with sqlite3.connect(self.database_path) as connection:
+            self._insert_run(connection, run)
+
+    @staticmethod
+    def _insert_run(
+        connection: sqlite3.Connection,
+        run: dict[str, Any],
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO operational_decision_workflow_runs (
+                workflow_run_id, project_id, asset_id, status, reason,
+                run_json, recorded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run["workflow_run_id"],
+                run["project_id"],
+                run["asset_id"],
+                run["status"],
+                run["reason"],
+                json.dumps(run, ensure_ascii=False, sort_keys=True),
+                run["recorded_at"],
+            ),
+        )
 
     def _agent(
         self, identity: OperationalRequestIdentity

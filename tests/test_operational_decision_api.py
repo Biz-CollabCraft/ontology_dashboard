@@ -39,7 +39,7 @@ def api_client(tmp_path: Path):
         seed_demo=True,
     )
     service = build_manufacturing_service(database_path, root=ROOT)
-    decision_support = OperationalDecisionSupportService(ROOT)
+    decision_support = OperationalDecisionSupportService(ROOT, database_path)
     app.dependency_overrides[get_service] = lambda: service
     app.dependency_overrides[get_identity_service] = lambda: identity
     app.dependency_overrides[get_operational_decision_support_service] = (
@@ -91,6 +91,13 @@ def test_get_is_cache_only_then_manager_materializes_and_reuses(api_client) -> N
     assert reused.status_code == 200
     assert reused.json()["trace"]["reused"] is True
     assert len(decision_support.workflow_runs(
+        project_id="manufacturing-demo-project",
+        asset_id=ASSET_ID,
+        status=None,
+        limit=20,
+    )) == 1
+    restarted = OperationalDecisionSupportService(ROOT, decision_support.database_path)
+    assert len(restarted.workflow_runs(
         project_id="manufacturing-demo-project",
         asset_id=ASSET_ID,
         status=None,

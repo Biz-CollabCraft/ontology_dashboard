@@ -204,7 +204,11 @@ def get_service() -> ManufacturingPredictiveMaintenanceService:
 
 @lru_cache(maxsize=1)
 def get_operational_decision_support_service() -> OperationalDecisionSupportService:
-    return OperationalDecisionSupportService(ROOT)
+    target = database_target()
+    if is_postgresql(target):
+        # The current Decision Support vertical slice is intentionally SQLite-only.
+        return OperationalDecisionSupportService(ROOT)
+    return OperationalDecisionSupportService(ROOT, Path(target))
 
 
 def _password_hasher() -> PasswordHasher:
