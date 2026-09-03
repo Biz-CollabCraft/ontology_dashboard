@@ -69,7 +69,7 @@
 .auth-resource-context .auth-role-story > div > span { display: flex; flex-direction: column; gap: 4px; padding: 11px 12px; border-left: 2px solid #5f83b6; background: rgba(255,255,255,.42); }
 .auth-role-story strong { color: #243247; font-size: 11px; }
 .auth-role-story small { color: #6f8095; font-size: 10px; }
-.auth-resource-context > footer { display: flex; flex-direction: column; gap: 4px; margin-top: auto; padding-top: 30px; color: #6d7f94; }
+.auth-resource-context > footer { display: flex; flex-direction: column; gap: 4px; margin-top: 32px; padding-top: 0; color: #6d7f94; }
 .auth-resource-context > footer span { color: #71849c; font-size: 9px; font-weight: 900; letter-spacing: .12em; }
 .auth-resource-context > footer strong { color: #2a3a4f; font-size: 12px; }
 .auth-resource-context > footer small { color: #75879c; font-size: 10px; }
@@ -84,7 +84,7 @@
 .auth-card .auth-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 22px 26px 8px; }
 .auth-card .auth-form > label { display: flex; flex-direction: column; gap: 7px; color: var(--fd-text-secondary); font-size: 11px; font-weight: 800; }
 .auth-card .auth-form label small { color: #8694a7; font-weight: 500; }
-.auth-card .auth-form input { min-height: 44px; border: 1px solid var(--fd-border-strong); border-radius: 9px; padding: 0 12px; color: var(--fd-text); background: var(--fd-surface); font-size: 13px; outline: none; }
+.auth-card .auth-form input { min-height: 46px; border: 1px solid var(--fd-border-strong); border-radius: 9px; padding: 0 12px; color: var(--fd-text); background: var(--fd-surface); font-size: 13px; outline: none; }
 .auth-card .auth-form input:focus { border-color: #6a97e9; box-shadow: 0 0 0 3px rgba(47,111,237,.1); }
 .auth-card .auth-submit { grid-column: 1 / -1; min-height: 46px; margin-top: 2px; border-radius: 9px; font-size: 13px; font-weight: 900; }
 .auth-card > footer { display: flex; align-items: center; gap: 7px; border-top: 1px solid var(--fd-border); padding: 12px 26px; color: var(--fd-text-muted); background: var(--fd-surface-subtle); font-size: 9px; line-height: 1.45; }
@@ -120,16 +120,14 @@
 .auth-story-lineage i { color: var(--fd-text-muted); font-size: 9px; font-style: normal; }.auth-story-lineage strong { font-size: 11px; }
 .auth-story-report { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 16px; align-self: center; border: 1px solid var(--fd-border); border-radius: 14px; padding: 22px; background: var(--fd-surface-raised); }
 .auth-story-report > svg { color: var(--fd-accent); }.auth-story-report > div { display: flex; flex-direction: column; gap: 5px; }.auth-story-report > div strong { font-size: 16px; }.auth-story-report > div span { color: var(--fd-text-muted); font-size: 10px; }.auth-story-report em { border-radius: 999px; padding: 5px 8px; color: var(--fd-success); background: color-mix(in srgb, var(--fd-success), transparent 90%); font-size: 8px; font-style: normal; font-weight: 900; }
-.auth-value-strip { display: grid !important; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px !important; margin-top: auto; padding-top: 28px !important; }
+.auth-value-strip { display: grid !important; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px !important; margin-top: clamp(24px, 4vh, 40px); padding-top: 0 !important; }
 .auth-value-strip > span { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 2px 8px; border-left: 2px solid var(--fd-accent); padding: 8px 10px; background: color-mix(in srgb, var(--fd-surface-raised), transparent 25%); }
 .auth-value-strip svg { grid-row: 1 / span 2; color: var(--fd-accent); }.auth-value-strip strong { font-size: 10px; }.auth-value-strip small { color: var(--fd-text-muted); font-size: 9px; }
 
 @media (max-width: 1120px) {
-  .auth-control-plane { grid-template-columns: 1fr; }
-  .auth-resource-context { min-height: 470px; padding: 32px 38px; }
-  .auth-product-story { min-height: 330px; grid-template-columns: minmax(0,1fr) minmax(300px,.7fr); grid-template-rows: 1fr auto; align-items: center; }
-  .auth-product-story > :nth-child(2) { min-width: 0; }.auth-story-controls { grid-column: 1 / -1; }
-  .auth-panel { padding: 32px 20px; }
+  .auth-control-plane { display: block; }
+  .auth-resource-context { display: none; }
+  .auth-panel { min-height: calc(100vh - 54px); place-items: start center; padding: 16px 20px 32px; }
 }
 @media (max-width: 720px) {
   .auth-page { grid-template-rows: auto minmax(0,1fr); }
@@ -150,4 +148,38 @@
   .auth-story-roles { grid-template-columns: 1fr; }.auth-story-roles article { min-height: 58px; display: grid; grid-template-columns: auto 1fr; align-items: center; }.auth-story-roles article span { display: block; grid-column: 2; }
   .auth-card-heading { grid-template-columns: 38px minmax(0,1fr); padding: 18px; }.auth-card-heading > span { width: 36px; height: 36px; }.auth-card-heading h2 { font-size: 20px; }
   .auth-card > .auth-description, .auth-card .auth-form { padding-inline: 18px; }
+}
+
+
+/* Login display-QA contract: presets may scale the product surface, but the
+   display popover itself stays stable and atomic labels do not split. */
+.auth-page .od-display-popover {
+  width: min(380px, calc(100vw - 20px));
+  font-size: 13px;
+}
+.auth-page .od-display-popover :where(strong,small,legend,summary,p,button) {
+  font-size: revert-layer;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+.auth-page .od-display-presets button {
+  display: grid;
+  grid-template-columns: minmax(92px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 10px;
+}
+.auth-page .od-display-presets button strong,
+.auth-page .od-display-options button,
+.auth-page .demo-account-card strong {
+  white-space: nowrap;
+}
+.auth-page .auth-card input,
+.auth-page .auth-card .auth-submit,
+.auth-page .demo-account-card {
+  min-height: max(46px, var(--od-control-height));
+}
+:root[data-density="comfortable"] .auth-page .auth-card input,
+:root[data-density="comfortable"] .auth-page .auth-card .auth-submit,
+:root[data-density="comfortable"] .auth-page .demo-account-card {
+  min-height: 48px;
 }

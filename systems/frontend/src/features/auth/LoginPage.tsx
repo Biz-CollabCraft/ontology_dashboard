@@ -1,6 +1,10 @@
 import { FormEvent, useState } from "react";
 import { ApiError } from "../../api";
-import { navigate, operationsProjectPath, safeApplicationReturnPath } from "../../routing";
+import {
+  navigate,
+  operationsProjectPath,
+  safeApplicationReturnPath,
+} from "../../routing";
 import type { AuthUser } from "../../types";
 import { useAuth } from "./AuthContext";
 import { AuthShell } from "./AuthShell";
@@ -9,20 +13,29 @@ import { Info } from "lucide-react";
 
 const DEMO_ACCOUNTS = [
   {
-    label: { ko: "운영 관리", en: "Operations" },
-    description: { ko: "판단 대기 · 생산 영향 · 정비 승인 · 보고 초안", en: "Pending decisions · production impact · maintenance approval · report draft" },
-    email: "manager@ontology.local",
-    password: "Manager!2026",
-  },
-  {
     label: { ko: "엔지니어", en: "Engineer" },
-    description: { ko: "설비 상태 · 센서 피쳐 · 점검 · 정비 이력 · 현장 메모", en: "Factory status · sensor features · inspection · maintenance history · field notes" },
+    description: {
+      ko: "설비 상태 · 센서 피쳐 · 점검 · 정비 이력 · 현장 메모",
+      en: "Factory status · sensor features · inspection · maintenance history · field notes",
+    },
     email: "engineer@ontology.local",
     password: "Engineer!2026",
   },
   {
+    label: { ko: "운영 관리", en: "Operations" },
+    description: {
+      ko: "판단 대기 · 생산 영향 · 정비 승인 · 보고 초안",
+      en: "Pending decisions · production impact · maintenance approval · report draft",
+    },
+    email: "manager@ontology.local",
+    password: "Manager!2026",
+  },
+  {
     label: { ko: "경영진", en: "Executive" },
-    description: { ko: "Executive Brief · 운영 리스크 · KPI · 의사결정 병목", en: "Executive Brief · operational risk · KPI · decision bottlenecks" },
+    description: {
+      ko: "Executive Brief · 운영 리스크 · KPI · 의사결정 병목",
+      en: "Executive Brief · operational risk · KPI · decision bottlenecks",
+    },
     email: "executive@ontology.local",
     password: "Executive!2026",
   },
@@ -38,14 +51,19 @@ function shouldShowDemoAccounts() {
   const explicitFlag = import.meta.env.VITE_ENABLE_DEMO_ACCOUNTS;
   if (explicitFlag === "1" || explicitFlag === "true") return true;
   if (import.meta.env.DEV) return true;
-  return typeof window !== "undefined" && PUBLIC_DEMO_HOSTS.has(window.location.hostname);
+  return (
+    typeof window !== "undefined" &&
+    PUBLIC_DEMO_HOSTS.has(window.location.hostname)
+  );
 }
 
 function roleAwareLandingPath(user: AuthUser): string {
   if (user.is_admin) return user.default_path;
   const projectId = user.active_project_id ?? user.project_scopes[0] ?? null;
   if (!projectId) return user.default_path;
-  const roles = user.active_project_roles.length ? user.active_project_roles : user.roles;
+  const roles = user.active_project_roles.length
+    ? user.active_project_roles
+    : user.roles;
   const params = new URLSearchParams({ dashboard: "workflow" });
   if (roles.includes("executive_viewer")) {
     params.set("view", "reports");
@@ -80,14 +98,22 @@ export function LoginPage() {
     setError("");
     try {
       const user = await login(email, password);
-      const returnTo = safeApplicationReturnPath(new URLSearchParams(window.location.search).get("returnTo"));
+      const returnTo = safeApplicationReturnPath(
+        new URLSearchParams(window.location.search).get("returnTo"),
+      );
       navigate(returnTo ?? roleAwareLandingPath(user), { replace: true });
     } catch (reason) {
       if (reason instanceof ApiError && reason.code === "pending_approval") {
         navigate(`/pending?email=${encodeURIComponent(email)}`);
         return;
       }
-      setError(reason instanceof Error ? reason.message : (english ? "Unable to sign in." : "로그인하지 못했습니다."));
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : english
+            ? "Unable to sign in."
+            : "로그인하지 못했습니다.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -104,10 +130,16 @@ export function LoginPage() {
   return (
     <AuthShell
       eyebrow="HANBIT TECH · RELIABILITY OPERATIONS"
-      title={english ? "From live equipment status to operational decisions and executive reporting" : "실시간 설비 현황에서 운영 판단과 경영 보고까지"}
-      description={english
-        ? "Connect the same equipment event and evidence across engineering investigation, operational decisions, and executive reporting."
-        : "같은 설비 이상 사건과 근거를 엔지니어의 조사, 운영 관리자의 판단, 경영진의 보고 언어로 연결합니다."}
+      title={
+        english
+          ? "From live equipment status to operational decisions and executive reporting"
+          : "실시간 설비 현황에서 운영 판단과 경영 보고까지"
+      }
+      description={
+        english
+          ? "Connect the same equipment event and evidence across engineering investigation, operational decisions, and executive reporting."
+          : "같은 설비 이상 사건과 근거를 엔지니어의 조사, 운영 관리자의 판단, 경영진의 보고 언어로 연결합니다."
+      }
     >
       <form className="auth-form" onSubmit={submit}>
         <label>
@@ -132,39 +164,85 @@ export function LoginPage() {
             required
           />
         </label>
-        {error ? <div className="auth-error" role="alert">{error}</div> : null}
-        <button className="primary auth-submit" type="submit" disabled={submitting}>
-          {submitting ? (english ? "Signing in…" : "로그인 중…") : (english ? "Sign in" : "로그인")}
+        {error ? (
+          <div className="auth-error" role="alert">
+            {error}
+          </div>
+        ) : null}
+        <button
+          className="primary auth-submit"
+          type="submit"
+          disabled={submitting}
+        >
+          {submitting
+            ? english
+              ? "Signing in…"
+              : "로그인 중…"
+            : english
+              ? "Sign in"
+              : "로그인"}
         </button>
       </form>
 
       {shouldShowDemoAccounts() ? (
-        <section className="demo-account-picker" aria-label={english ? "Role-based Reliability Operations accounts" : "역할별 Reliability Operations 계정"}>
+        <section
+          className="demo-account-picker"
+          aria-label={
+            english
+              ? "Role-based Reliability Operations accounts"
+              : "역할별 Reliability Operations 계정"
+          }
+        >
           <header>{english ? "Choose a role" : "역할 선택"}</header>
-          <div className="demo-account-grid" role="group" aria-label={english ? "Role accounts" : "역할별 계정"}>
+          <div
+            className="demo-account-grid"
+            role="group"
+            aria-label={english ? "Role accounts" : "역할별 계정"}
+          >
             {DEMO_ACCOUNTS.map((account) => (
-              <div className={`demo-account-option ${email === account.email ? "is-selected" : ""}`} key={account.email}>
+              <div
+                className={`demo-account-option ${email === account.email ? "is-selected" : ""}`}
+                key={account.email}
+              >
                 <button
                   className="demo-account-card"
                   type="button"
                   onClick={() => selectDemo(account.email)}
                 >
-                  <strong>{english ? account.label.en : account.label.ko}</strong>
+                  <strong>
+                    {english ? account.label.en : account.label.ko}
+                  </strong>
                 </button>
-                <div className={`demo-account-info ${openInfo === account.email ? "is-open" : ""}`}>
+                <div
+                  className={`demo-account-info ${openInfo === account.email ? "is-open" : ""}`}
+                >
                   <button
                     type="button"
                     className="demo-account-info-trigger"
-                    aria-label={english ? `${account.label.en} details` : `${account.label.ko} 상세 정보`}
+                    aria-label={
+                      english
+                        ? `${account.label.en} details`
+                        : `${account.label.ko} 상세 정보`
+                    }
                     aria-expanded={openInfo === account.email}
                     title={english ? "Role details" : "역할 상세"}
-                    onClick={() => setOpenInfo((current) => current === account.email ? null : account.email)}
+                    onClick={() =>
+                      setOpenInfo((current) =>
+                        current === account.email ? null : account.email,
+                      )
+                    }
                   >
                     <Info size={13} />
                   </button>
                   <div className="demo-account-popover">
-                    <strong>{english ? account.label.en : account.label.ko}</strong>
-                    <p>{english ? account.description.en : account.description.ko}</p>
+                    <strong>
+                      {english ? account.label.en : account.label.ko}
+                    </strong>
+                    <p>
+                      {english
+                        ? account.description.en
+                        : account.description.ko}
+                    </p>
                     <small>{account.email}</small>
                   </div>
                 </div>
@@ -175,7 +253,14 @@ export function LoginPage() {
       ) : null}
 
       <p className="auth-footer-copy">
-        {english ? "Need an account? " : "계정이 없나요? "}<button className="link-button" type="button" onClick={() => navigate("/register")}>{english ? "Create account" : "회원가입"}</button>
+        {english ? "Need an account? " : "계정이 없나요? "}
+        <button
+          className="link-button"
+          type="button"
+          onClick={() => navigate("/register")}
+        >
+          {english ? "Create account" : "회원가입"}
+        </button>
       </p>
     </AuthShell>
   );
