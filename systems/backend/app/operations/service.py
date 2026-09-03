@@ -790,12 +790,13 @@ class ManufacturingPredictiveMaintenanceService:
             locale=request.locale,
             use_llm=request.use_llm,
             provider_available=fixture["runtime"]["llm_available"],
+            report_type=request.report_type,
         )
         self._audit(
             event_id,
             "report.generated",
             evidence["model"]["model_version"],
-            {"report_id": report.report_id, "role": request.role, "locale": request.locale, **trace},
+            {"report_id": report.report_id, "role": request.role, "report_type": report.report_type, "locale": request.locale, **trace},
         )
         return report, trace
 

@@ -4,20 +4,26 @@ const PROJECT = "manufacturing-demo-project";
 const PATH = `/app/projects/${PROJECT}/operations?view=overview&dashboard=workflow&role=process_manager&workspace_id=manufacturing-demo&workspace_shell=reliability`;
 const REPORT_PATH = `/app/projects/${PROJECT}/operations/report-draft?view=reports&dashboard=workflow&role=process_manager&workspace_id=manufacturing-demo&workspace_shell=reliability`;
 
+const authCookies = new Map<string, Awaited<ReturnType<Page["context"]>["cookies"]>>();
+
 async function login(page: Page) {
-  await page.goto(`/login?returnTo=${encodeURIComponent(PATH)}`);
-  await page.getByLabel(/이메일|Email/).fill("manager@ontology.local");
-  await page.getByLabel(/비밀번호|Password/).fill("Manager!2026");
-  await page.getByRole("button", { name: /로그인|Sign in/, exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/app/projects/${PROJECT}/operations`), { timeout: 10_000 });
+  await loginAs(page, "manager@ontology.local", "Manager!2026", PATH);
 }
 
 async function loginAs(page: Page, email: string, password: string, returnTo = PATH) {
+  const cached = authCookies.get(email);
+  if (cached?.length) {
+    await page.context().addCookies(cached);
+    await page.goto(returnTo);
+    await expect(page).toHaveURL(new RegExp(`/app/projects/${PROJECT}/operations`), { timeout: 10_000 });
+    return;
+  }
   await page.goto(`/login?returnTo=${encodeURIComponent(returnTo)}`);
   await page.getByLabel(/이메일|Email/).fill(email);
   await page.getByLabel(/비밀번호|Password/).fill(password);
   await page.getByRole("button", { name: /로그인|Sign in/, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/app/projects/${PROJECT}/operations`), { timeout: 10_000 });
+  authCookies.set(email, await page.context().cookies());
 }
 
 test("uses a light Korean placeholder before the reliability workspace is ready", async ({ page }) => {
@@ -241,7 +247,7 @@ test("uses wall-clock assets and renders connected observation history", async (
   const featureMonitor = drawer.locator(".operations-live-feature-monitor");
   await expect(featureMonitor).not.toContainText("센서 이력 로딩 중", { timeout: 15_000 });
   const featureSeriesCount = await featureMonitor.locator(".asset-series-line").count();
-  if (featureSeriesCount === 0) await expect(featureMonitor).toContainText("센서 이력 없음");
+  if (featureSeriesCount === 0) await expect(featureMonitor).toContainText("관측 이력 없음");
   else expect(featureSeriesCount).toBeGreaterThan(0);
   await expect(drawer).not.toContainText("pressure_raw_6h_max_abs");
   await expect(drawer).not.toContainText("vibration_raw_6h_max_abs");
@@ -406,6 +412,27 @@ test("uses grouped manager IA, exception-first factory map, persistent case anch
   await expect(shell.locator(".rw-composition-reason")).toContainText(/현재 운영 상태에 따라 중요한 블록/);
 });
 
+test("keeps an explicitly selected Decision Case stable across reload", async ({ page }) => {
+  await login(page);
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+  const factoryMap = shell.locator(".operations-factory-map-panel");
+  const abnormal = factoryMap.locator(".operations-factory-asset-node:not(.normal):not(.slot)").first();
+  await abnormal.click();
+  await expect(page.getByRole("dialog", { name: "선택 설비 상세" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  const anchor = shell.locator(".rw-preview-selection-anchor");
+  await expect(anchor).toBeVisible();
+  const before = new URL(page.url()).searchParams.get("event_id");
+  expect(before).toBeTruthy();
+  await expect(anchor).toContainText(before!);
+
+  await page.reload();
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+  await expect(page).toHaveURL(new RegExp(`event_id=${encodeURIComponent(before!)}`));
+  await expect(shell.locator(".rw-preview-selection-anchor")).toContainText(before!);
+});
+
 test("separates executive primary decisions from evidence and detail", async ({ page }) => {
   await loginAs(page, "executive@ontology.local", "Executive!2026");
   const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
@@ -423,6 +450,13 @@ test("separates executive primary decisions from evidence and detail", async ({ 
   for (const label of ["정비 효과", "개선 과제", "설비 상태 근거"]) {
     await expect(evidence).toContainText(label);
   }
+
+  await primary.locator("button").filter({ hasText: "의사결정 병목" }).click();
+  const bottleneck = shell.locator('[data-surface="decision-bottleneck"]');
+  await expect(bottleneck).toBeVisible();
+  await expect(bottleneck).toHaveAttribute("data-composition", /^decision-bottleneck,workflow-lifecycle,production-exposure/);
+  await expect(bottleneck.getByText("대기시간 기준", { exact: true })).toBeVisible();
+  await expect(bottleneck).toContainText("승인된 Decision SLA 계약이 없어 SLA 초과 여부를 임의 계산하지 않습니다");
 });
 
 test("organizes engineering navigation by work intent instead of duplicated data types", async ({ page }) => {
@@ -437,6 +471,137 @@ test("organizes engineering navigation by work intent instead of duplicated data
   await expect(rail.locator("nav button").filter({ hasText: "점검 · 정비 이력" })).toHaveCount(0);
   for (const group of ["OBSERVE · 감지", "DIAGNOSE · 진단", "LEARN · 이력"]) {
     await expect(rail.getByText(group, { exact: true })).toBeVisible();
+  }
+
+  await rail.locator("nav button").filter({ hasText: "점검" }).click();
+  const inspection = shell.locator('[data-surface="inspection"]');
+  await expect(inspection).toBeVisible();
+  await expect(inspection).toHaveAttribute("data-composition", /^inspection-targets,workflow-actions,workflow-lifecycle/);
+  await expect(inspection.getByText(/운영 관리자 점검 요청 대기|점검 시작|점검 결과 기록·완료/).first()).toBeVisible();
+});
+
+test("changes executive report artifacts when the report type changes", async ({ page }) => {
+  await loginAs(page, "executive@ontology.local", "Executive!2026");
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+  await expect(shell).toHaveAttribute("data-active-view", "reports");
+  await expect(page).toHaveURL(/event_id=/, { timeout: 15_000 });
+  const report = shell.locator('[data-surface="executive-brief"]');
+  await expect(report).toBeVisible({ timeout: 15_000 });
+  const select = report.getByLabel("보고 유형");
+  await expect(select).toBeVisible();
+  const meta = report.locator(".rw-report-artifact-meta");
+  await expect(meta).toContainText("executive-brief", { timeout: 15_000 });
+  const initialArtifact = await meta.locator("small").filter({ hasText: "artifact" }).textContent();
+
+  await select.selectOption("operations-decision");
+  await expect(meta).toContainText("operations-decision", { timeout: 15_000 });
+  const decisionArtifact = await meta.locator("small").filter({ hasText: "artifact" }).textContent();
+  expect(decisionArtifact).not.toBe(initialArtifact);
+
+  await select.selectOption("inspection-summary");
+  await expect(meta).toContainText("inspection-summary", { timeout: 15_000 });
+  const inspectionArtifact = await meta.locator("small").filter({ hasText: "artifact" }).textContent();
+  expect(inspectionArtifact).not.toBe(decisionArtifact);
+});
+
+test("keeps standard workspace copy readable and exposes active-navigation semantics", async ({ page }) => {
+  await login(page);
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+  const activeNav = shell.locator(".rw-preview-left nav button.is-active");
+  await expect(activeNav).toHaveAttribute("aria-current", "page");
+
+  await shell.locator(".operations-factory-asset-node:not(.normal):not(.slot)").first().click();
+  await expect(page.getByRole("dialog", { name: "선택 설비 상세" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await shell.locator(".rw-preview-left nav button").filter({ hasText: "Decision Case" }).click();
+  const composed = shell.locator('[data-surface="decision-case"]');
+  await expect(composed).toBeVisible();
+  const typography = await composed.evaluate((element) => {
+    const body = element.querySelector<HTMLElement>(".rw-composed-list strong, .rw-composed-kv strong, .rw-composed-lifecycle p");
+    const metadata = element.querySelector<HTMLElement>(".rw-composed-list small, .rw-composed-kv span, .rw-kpi-data-notice");
+    const button = element.querySelector<HTMLElement>("button");
+    return {
+      body: body ? parseFloat(getComputedStyle(body).fontSize) : 0,
+      metadata: metadata ? parseFloat(getComputedStyle(metadata).fontSize) : 0,
+      button: button ? parseFloat(getComputedStyle(button).fontSize) : 0,
+      buttonHeight: button?.getBoundingClientRect().height ?? 0,
+    };
+  });
+  expect(typography.body).toBeGreaterThanOrEqual(13);
+  expect(typography.metadata).toBeGreaterThanOrEqual(11);
+  expect(typography.button).toBeGreaterThanOrEqual(13);
+  expect(typography.buttonHeight).toBeGreaterThanOrEqual(40);
+
+  const main = shell.locator(".rw-preview-main");
+  await main.evaluate((element) => { element.scrollTop = Math.min(800, element.scrollHeight); });
+  expect(await main.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await shell.locator(".rw-preview-left nav button").filter({ hasText: "생산 영향" }).click();
+  await expect.poll(() => main.evaluate((element) => element.scrollTop)).toBe(0);
+});
+
+test("gives the mobile assistant an opaque conversation-first layout", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+  await shell.getByRole("button", { name: /Assistant/ }).click();
+  const assistant = page.getByRole("dialog", { name: "Reliability Assistant" });
+  await expect(assistant).toBeVisible();
+  await expect(assistant.locator(".rw-context-assistant__prompts")).toBeHidden();
+  const metrics = await assistant.evaluate((element) => {
+    const thread = element.querySelector<HTMLElement>(".rw-context-assistant__thread");
+    const composer = element.querySelector<HTMLElement>(".rw-context-assistant__composer");
+    const close = element.querySelector<HTMLElement>(".rw-context-assistant__close");
+    const background = getComputedStyle(element).backgroundColor;
+    return {
+      threadHeight: thread?.getBoundingClientRect().height ?? 0,
+      threadFont: thread ? parseFloat(getComputedStyle(thread).fontSize) : 0,
+      composerHeight: composer?.getBoundingClientRect().height ?? 0,
+      closeHeight: close?.getBoundingClientRect().height ?? 0,
+      background,
+    };
+  });
+  expect(metrics.threadHeight).toBeGreaterThanOrEqual(844 * .45 - 2);
+  expect(metrics.composerHeight).toBeGreaterThanOrEqual(44);
+  expect(metrics.closeHeight).toBeGreaterThanOrEqual(44);
+  expect(metrics.background).not.toContain("rgba(0, 0, 0, 0)");
+});
+
+test("stays within the viewport across the nine reliability QA sizes", async ({ page }) => {
+  await login(page);
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+  const viewports = [
+    { width: 1920, height: 1080 },
+    { width: 1440, height: 900 },
+    { width: 1280, height: 720 },
+    { width: 1024, height: 800 },
+    { width: 900, height: 700 },
+    { width: 768, height: 1024 },
+    { width: 430, height: 932 },
+    { width: 390, height: 844 },
+    { width: 360, height: 640 },
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(80);
+    const geometry = await shell.evaluate((element) => {
+      const main = element.querySelector<HTMLElement>(".rw-preview-main");
+      return {
+        viewportWidth: document.documentElement.clientWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        shellWidth: element.getBoundingClientRect().width,
+        mainWidth: main?.clientWidth ?? 0,
+        mainScrollWidth: main?.scrollWidth ?? 0,
+      };
+    });
+    expect(geometry.documentWidth, `${viewport.width}x${viewport.height} document overflow`).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+    expect(geometry.shellWidth, `${viewport.width}x${viewport.height} shell width`).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+    expect(geometry.mainWidth, `${viewport.width}x${viewport.height} main width`).toBeGreaterThan(0);
+    expect(geometry.mainScrollWidth, `${viewport.width}x${viewport.height} main overflow`).toBeLessThanOrEqual(geometry.mainWidth + 1);
   }
 });
 

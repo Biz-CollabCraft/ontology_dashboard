@@ -1532,6 +1532,38 @@ class PredictiveMaintenanceRuntimeService:
     def _dashboard_event_id(result: GovernedProductResult) -> str:
         return result.artifact_id or result.provenance.prediction_id
 
+    def _historical_selected_result(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        selected_event_id: str,
+        context: DatasetVersionRuntimeContext,
+    ) -> GovernedProductResult | None:
+        """Resolve a frozen historical Result Artifact for an explicit Case.
+
+        Latest-result collections intentionally advance with new observations.
+        A Decision Case must instead retain the exact Result Artifact selected
+        by the user, while remaining scoped to the active Project/Workspace and
+        Dataset Version.
+        """
+        selected_row = self.repository.result_artifact_row(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            artifact_id=selected_event_id,
+        )
+        if selected_row is None:
+            return None
+        if str(selected_row.get("dataset_version_id")) != context.dataset_version_id:
+            return None
+        return self._product_result(
+            context=context,
+            row=selected_row,
+            source_contract="result_artifact",
+        )
+
     def event_evidence_projection(
         self,
         *,
@@ -1615,6 +1647,7 @@ class PredictiveMaintenanceRuntimeService:
         equipment: DashboardEquipment,
         maintenance: list[dict[str, Any]],
         role: str,
+        report_type: str | None = None,
         intent: str,
         locale: AppLocale,
         view: Literal["legacy", "canonical"] = "legacy",
@@ -1701,10 +1734,14 @@ class PredictiveMaintenanceRuntimeService:
         )
         evidence = canonical_evidence if view == "canonical" else legacy_evidence
         factors = legacy_evidence["top_factors"]
+        resolved_report_type = report_type or (
+            "executive-brief" if role == "executive" else "inspection-summary" if role == "engineer" else "operations-decision"
+        )
         report = {
-            "report_id": f"pm-report:{event_id}:{role}:{locale}",
+            "report_id": f"pm-report:{event_id}:{role}:{resolved_report_type}:{locale}",
             "event_id": event_id,
             "role": role,
+            "report_type": resolved_report_type,
             "locale": locale,
             "mode": "deterministic_result_artifact",
             "headline": (
@@ -1786,6 +1823,44 @@ class PredictiveMaintenanceRuntimeService:
             ),
             "generated_at": result.observed_at.isoformat(),
         }
+        if role == "executive":
+            risk_text = f"{result.failure_probability * 100:.1f}%"
+            if resolved_report_type == "operations-decision":
+                report["headline"] = f"{result.asset_id} · 경영 의사결정 요청"
+                report["summary"] = f"현재 위험도 {risk_text}, 상태 {status_label}입니다. 현재 요청된 판단은 '{action_label}'이며 자동 실행되지 않습니다."
+                report["sections"] = [
+                    {"section_id": "decision-request", "title": "의사결정 요청", "body": action_label, "evidence_field_ids": ["recommended_decision"]},
+                    {"section_id": "operational-exposure", "title": "운영 노출", "body": f"설비 중요도 {equipment.criticality} · 예상 정지 노출 {equipment.estimated_downtime_minutes}분", "evidence_field_ids": ["equipment.criticality", "equipment.estimated_downtime_minutes"]},
+                ]
+            elif resolved_report_type == "inspection-summary":
+                report["headline"] = f"{result.asset_id} · 현장 확인 필요"
+                report["summary"] = f"현재 위험도 {risk_text}입니다. 예측 결과는 고장 확정이 아니며 '{action_label}'을 통해 현장 확인이 필요합니다."
+                report["sections"] = [
+                    {"section_id": "inspection-request", "title": "확인 요청", "body": action_label, "evidence_field_ids": ["recommended_decision"]},
+                    {"section_id": "inspection-limit", "title": "판단 경계", "body": "현장 점검 전에는 원인과 정비 필요성을 확정하지 않습니다.", "evidence_field_ids": ["status"]},
+                ]
+            elif resolved_report_type == "maintenance-effect":
+                report["headline"] = f"{result.asset_id} · 정비 효과 확인 대기"
+                report["summary"] = "이 Event에 직접 연결된 Maintenance Event와 정비 후 관측이 확인되기 전에는 정비 효과를 현재 Case의 Outcome으로 표시하지 않습니다."
+                report["sections"] = [
+                    {"section_id": "maintenance-state", "title": "현재 상태", "body": "정비 완료와 후속 관측의 인과 연결을 확인해야 합니다.", "evidence_field_ids": ["status"]},
+                ]
+            elif resolved_report_type == "weekly-risk":
+                report["headline"] = f"주간 리스크 참고 · {result.asset_id}"
+                report["summary"] = f"선택 Case snapshot의 위험도는 {risk_text}, 상태는 {status_label}입니다. 전체 주간 포트폴리오 집계와는 구분합니다."
+                report["sections"] = [
+                    {"section_id": "case-risk", "title": "선택 Case", "body": report["summary"], "evidence_field_ids": ["status", "failure_probability"]},
+                ]
+            else:
+                report["headline"] = f"Executive Brief · {result.asset_id}"
+                report["summary"] = f"현재 위험도 {risk_text}, 상태 {status_label}입니다. 고장 유형은 현장 확인 전 가설이며 현재 경영 판단 요청은 '{action_label}'입니다."
+                report["sections"] = [
+                    {"section_id": "executive-status", "title": "경영 판단 요약", "body": report["summary"], "evidence_field_ids": ["status", "failure_probability", "recommended_decision"]},
+                    {"section_id": "executive-exposure", "title": "운영 노출", "body": f"예상 정지 노출 {equipment.estimated_downtime_minutes}분 · 설비 중요도 {equipment.criticality}", "evidence_field_ids": ["equipment.estimated_downtime_minutes", "equipment.criticality"]},
+                ]
+            # Raw feature identifiers and release provenance remain available
+            # through Evidence details, not the normal executive narrative.
+            report["citations"] = ["status", "failure_probability", "recommended_decision", "equipment.estimated_downtime_minutes"]
         block_types = [
             "StatusSummary",
             "RiskKpi",
@@ -1837,6 +1912,7 @@ class PredictiveMaintenanceRuntimeService:
         dataset_version_id: str | None,
         selected_event_id: str | None,
         role: str,
+        report_type: str | None = None,
         intent: str,
         locale: AppLocale = "ko-KR",
         view: Literal["legacy", "canonical"] = "legacy",
@@ -1903,6 +1979,51 @@ class PredictiveMaintenanceRuntimeService:
             )
             equipment_by_event[event_id] = equipment
             result_by_event[event_id] = result
+
+        # A Decision Case is a frozen prediction snapshot, not an alias for the
+        # latest prediction of the same asset.  The latest-results collection
+        # intentionally advances as new observations arrive, so explicitly
+        # requested historical Result Artifacts have to be re-hydrated from the
+        # artifact repository instead of silently falling forward to a newer
+        # event.
+        if selected_event_id and selected_event_id not in result_by_event:
+            selected_result = self._historical_selected_result(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                selected_event_id=selected_event_id,
+                context=context,
+            )
+            if selected_result is not None:
+                selected_maintenance = [
+                    item
+                    for item in maintenance_by_asset.get(selected_result.asset_id, [])
+                    if item.get("completed_at") is not None
+                    and item["completed_at"] <= selected_result.observed_at
+                ]
+                selected_equipment = self._dashboard_equipment(selected_result, selected_maintenance)
+                canonical_selected_id = self._dashboard_event_id(selected_result)
+                events.append(
+                    DashboardEventSummary(
+                        event_id=canonical_selected_id,
+                        scenario_id=f"{selected_result.asset_type}:{selected_result.site_id}:{selected_result.cell_id}",
+                        ontology_object_id=ontology_by_asset.get(selected_result.asset_id),
+                        equipment=selected_equipment,
+                        status=selected_result.status_grade,
+                        failure_probability=selected_result.failure_probability,
+                        confidence=f"{selected_result.confidence * 100:.1f}% · calibrated",
+                        predicted_failure_type=selected_result.predicted_failure_type,
+                        recommended_decision=(
+                            selected_result.recommended_action.action
+                            if selected_result.recommended_action
+                            else "Review governed prediction"
+                        ),
+                        observed_at=selected_result.observed_at,
+                        dataset_version_id=context.dataset_version_id,
+                    )
+                )
+                equipment_by_event[canonical_selected_id] = selected_equipment
+                result_by_event[canonical_selected_id] = selected_result
         events.sort(
             key=lambda item: (
                 {"critical": 0, "warning": 1, "attention": 2, "normal": 3}.get(
@@ -1913,7 +2034,9 @@ class PredictiveMaintenanceRuntimeService:
         )
         selected_id = (
             selected_event_id
-            if selected_event_id in result_by_event
+            if selected_event_id and selected_event_id in result_by_event
+            else None
+            if selected_event_id
             else events[0].event_id
             if events
             else None
@@ -1940,6 +2063,7 @@ class PredictiveMaintenanceRuntimeService:
                     equipment=equipment_by_event[selected_id],
                     maintenance=selected_maintenance,
                     role=role,
+                    report_type=report_type,
                     intent=intent,
                     locale=locale,
                     view=view,

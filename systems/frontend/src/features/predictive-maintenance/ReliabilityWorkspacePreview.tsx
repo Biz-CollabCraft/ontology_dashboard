@@ -57,6 +57,27 @@ function probability(value: number | null) {
   return value === null ? "—" : `${Math.round(value * 100)}%`;
 }
 
+function displayDateTime(value: string | null | undefined, english: boolean) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString(english ? "en-US" : "ko-KR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function shouldShowOperationalFocus(surfaceId: string, hasSelectedEvent: boolean) {
+  if (hasSelectedEvent) return false;
+  return new Set([
+    "decision-case",
+    "production-impact",
+    "maintenance-approval",
+    "assets",
+    "sensor-features",
+    "inspection",
+    "maintenance-history",
+    "work-targets",
+  ]).has(surfaceId);
+}
+
 const LIFECYCLE_LABELS: Record<OperationsClosedLoopLifecycleStep, [string, string]> = {
   prediction: ["예측", "Prediction"],
   evidence: ["근거 확인", "Evidence review"],
@@ -259,6 +280,7 @@ export function ReliabilityWorkspacePreview({
   activeSurface,
   user,
   selectedEvent,
+  latestEventForSelectedAsset,
   detail,
   onNavigate,
   onRefresh,
@@ -266,6 +288,7 @@ export function ReliabilityWorkspacePreview({
   onLogout,
   searchEntities = [],
   onSearchSelect,
+  onFollowLatestEvent,
   backupMode = false,
   children,
 }: {
@@ -274,6 +297,7 @@ export function ReliabilityWorkspacePreview({
   activeSurface: string | null;
   user: AuthUser;
   selectedEvent: OperationsEvent | null;
+  latestEventForSelectedAsset?: OperationsEvent | null;
   detail: OperationsEventDetailModel | null;
   onNavigate: (surfaceId: string, view: OperationsView) => void;
   onRefresh: () => void;
@@ -281,6 +305,7 @@ export function ReliabilityWorkspacePreview({
   onLogout: () => void | Promise<void>;
   searchEntities?: ReliabilitySearchEntity[];
   onSearchSelect?: (entity: ReliabilitySearchEntity) => void;
+  onFollowLatestEvent?: () => void;
   backupMode?: boolean;
   children: ReactNode;
 }) {
@@ -302,6 +327,7 @@ export function ReliabilityWorkspacePreview({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const settingsRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const [messages, setMessages] = useState<ReliabilityAssistantMessage[]>([]);
   const [agentPacket, setAgentPacket] = useState<OperationsAgentReviewPacket | null>(null);
   const [agentSummaryResponse, setAgentSummaryResponse] = useState<OperationsAgentReviewSummaryResponse | null>(null);
@@ -316,6 +342,10 @@ export function ReliabilityWorkspacePreview({
     window.addEventListener("resize", syncRailForViewport);
     return () => window.removeEventListener("resize", syncRailForViewport);
   }, []);
+
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeNav.id]);
 
   useEffect(() => {
     if (experience.kind !== "engineering" && preferences.showTechnicalMetadata) {
@@ -524,16 +554,7 @@ export function ReliabilityWorkspacePreview({
     roleDetail: english ? experience.operationalFocusHint.en : experience.operationalFocusHint.ko,
     english,
   });
-  const showOperationalFocus = new Set([
-    "decision-case",
-    "production-impact",
-    "maintenance-approval",
-    "assets",
-    "sensor-features",
-    "inspection",
-    "maintenance-history",
-    "work-targets",
-  ]).has(activeNav.id);
+  const showOperationalFocus = shouldShowOperationalFocus(activeNav.id, Boolean(selectedEvent));
   const lifecycleMode = activeNav.id === "decision-case" ? "full" : selectedEvent ? "compact" : "idle";
   const selectionTarget = experience.kind === "operations"
     ? { id: "decision-case", view: "operations" as const, label: english ? "Open Decision Case" : "Decision Case 열기" }
@@ -607,7 +628,7 @@ export function ReliabilityWorkspacePreview({
   }
 
   return (
-    <main className={`rw-preview-shell role-${experience.kind} ${leftOpen ? "left-open" : "left-collapsed"} ${assistantOpen ? "assistant-open" : "assistant-closed"}`} data-primary-surface={experience.primarySurface} data-active-surface={activeNav.id}>
+    <main className={`rw-preview-shell role-${experience.kind} ${leftOpen ? "left-open" : "left-collapsed"} ${assistantOpen ? "assistant-open" : "assistant-closed"}`} data-primary-surface={experience.primarySurface} data-active-surface={activeNav.id} data-active-view={activeView}>
       <header className="rw-preview-topbar">
         <div className="rw-preview-topbar-left">
           <button type="button" className="rw-preview-icon-button" onClick={() => setLeftOpen((value) => !value)} aria-label={leftOpen ? "Collapse navigation" : "Open navigation"}>{leftOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}</button>
@@ -616,7 +637,7 @@ export function ReliabilityWorkspacePreview({
         </div>
         <div className="rw-preview-topbar-right">
           <button type="button" className="rw-preview-search" onClick={() => { setSettingsOpen(false); setSearchOpen(true); }} aria-label={english ? "Search Reliability Operations" : "Reliability Operations 검색"}><Search size={14} /><span>{english ? "Search" : "검색"}</span><kbd>⌘K</kbd></button>
-          <button type="button" className={`rw-preview-assistant-toggle ${assistantOpen ? "is-active" : ""}`} onClick={() => { setSettingsOpen(false); setAssistantOpen((value) => !value); }}>{assistantOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}<span>Assistant</span></button>
+          <button type="button" className={`rw-preview-assistant-toggle ${assistantOpen ? "is-active" : ""}`} aria-label={english ? "Reliability Assistant" : "Reliability Assistant 열기"} aria-expanded={assistantOpen} aria-pressed={assistantOpen} onClick={() => { setSettingsOpen(false); setAssistantOpen((value) => !value); }}>{assistantOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}<span>Assistant</span></button>
           <div className="rw-preview-user"><span><UserRound size={13} /></span><div><strong>{user.display_name}</strong><small>{english ? experience.label.en : experience.label.ko}</small></div></div>
         </div>
       </header>
@@ -630,7 +651,7 @@ export function ReliabilityWorkspacePreview({
                 <header>{english ? group.label.en : group.label.ko}</header>
                 <div>
                   {group.surfaces.map((item) => (
-                    <button type="button" key={item.id} className={activeNav.id === item.id ? "is-active" : ""} onClick={() => { setSettingsOpen(false); if (window.innerWidth <= 860) setLeftOpen(false); onNavigate(item.id, item.view); }} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
+                    <button type="button" key={item.id} className={activeNav.id === item.id ? "is-active" : ""} aria-label={english ? item.label.en : item.label.ko} aria-current={activeNav.id === item.id ? "page" : undefined} onClick={() => { setSettingsOpen(false); if (window.innerWidth <= 860) setLeftOpen(false); onNavigate(item.id, item.view); }} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
                       <span aria-hidden="true">•</span>
                       <div><strong>{english ? item.label.en : item.label.ko}</strong><small>{english ? item.detail.en : item.detail.ko}</small></div>
                     </button>
@@ -641,7 +662,7 @@ export function ReliabilityWorkspacePreview({
           </nav>
           <section className="rw-preview-scope"><span>{english ? "SCOPE" : "현재 범위"}</span><strong>{context.workspaceName}</strong><small>{context.sourceStatus}</small></section>
           <section ref={settingsRef} className={`rw-preview-settings ${settingsOpen ? "is-open" : ""}`}>
-            <button type="button" className="rw-preview-settings-trigger" onClick={() => { if (!leftOpen) setLeftOpen(true); setSettingsOpen((value) => !value); }}><Settings2 size={14} /><span>{english ? "Settings" : "환경설정"}</span></button>
+            <button type="button" className="rw-preview-settings-trigger" aria-label={english ? "Workspace settings" : "환경설정"} aria-expanded={settingsOpen && leftOpen} onClick={() => { if (!leftOpen) setLeftOpen(true); setSettingsOpen((value) => !value); }}><Settings2 size={14} /><span>{english ? "Settings" : "환경설정"}</span></button>
             {settingsOpen && leftOpen ? <div className="rw-preview-settings-panel">
               <header><strong>{english ? "Workspace settings" : "사용자 환경"}</strong><small>{user.display_name}</small></header>
               <div className="rw-preview-settings-group"><span>{english ? "Language" : "언어"}</span><div className="rw-preview-segmented two"><button type="button" className={!english ? "is-active" : ""} onClick={() => setReliabilityLocale("ko-KR")}>한국어</button><button type="button" className={english ? "is-active" : ""} onClick={() => setReliabilityLocale("en-US")}>English</button></div></div>
@@ -653,10 +674,10 @@ export function ReliabilityWorkspacePreview({
               <button type="button" className="rw-preview-settings-action is-danger" onClick={() => void onLogout()}><span><LogOut size={12} />{english ? "Switch account" : "계정 전환"}</span></button>
             </div> : null}
           </section>
-          <button type="button" className="rw-preview-collapse" onClick={() => setLeftOpen((value) => !value)}>{leftOpen ? <><ChevronsLeft size={13} /><span>{english ? "Collapse" : "접기"}</span></> : <ChevronsRight size={13} />}</button>
+          <button type="button" className="rw-preview-collapse" aria-label={leftOpen ? (english ? "Collapse navigation" : "탐색 메뉴 접기") : (english ? "Expand navigation" : "탐색 메뉴 펼치기")} aria-expanded={leftOpen} onClick={() => setLeftOpen((value) => !value)}>{leftOpen ? <><ChevronsLeft size={13} /><span>{english ? "Collapse" : "접기"}</span></> : <ChevronsRight size={13} />}</button>
         </aside>
 
-        <section className="rw-preview-main">
+        <section className="rw-preview-main" ref={mainRef}>
           {context.warnings.length ? <details className="rw-preview-warning"><summary>{english ? `${context.warnings.length} data notice(s)` : `데이터 참고사항 ${context.warnings.length}건`}</summary><ul>{context.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details> : null}
           <header className="rw-preview-page-heading"><span>{eyebrow}</span><h1>{title}</h1><p>{detailCopy}</p></header>
           {selectedEvent ? <section className={`rw-preview-selection-anchor tone-${riskTone(selectedEvent.status)}`} aria-label={english ? "Selected case context" : "현재 선택 Case 문맥"}>
@@ -670,6 +691,11 @@ export function ReliabilityWorkspacePreview({
               <em>{riskStatusLabel(selectedEvent.status, english)}</em>
             </div>
             <button type="button" onClick={() => onNavigate(selectionTarget.id, selectionTarget.view)}>{selectionTarget.label}</button>
+          </section> : null}
+          {selectedEvent && latestEventForSelectedAsset ? <section className="rw-preview-new-observation" role="status" aria-label={english ? "New observation available" : "새 관측 도착"}>
+            <div><strong>{english ? "New observation available" : "새 관측 도착"}</strong><span>{english ? "The selected Decision Case stays frozen until you explicitly follow the latest Event." : "현재 Decision Case는 선택 당시 근거로 고정됩니다. 최신 Event는 명시적으로 전환할 때만 열립니다."}</span></div>
+            <small>{displayDateTime(latestEventForSelectedAsset.observedAt, english)} · {probability(latestEventForSelectedAsset.failureProbability)}</small>
+            <button type="button" onClick={onFollowLatestEvent}>{english ? "Open latest Event" : "최신 Event 열기"}</button>
           </section> : null}
           {showOperationalFocus ? <div className="rw-preview-operational-focus">
             <OperationalFocus

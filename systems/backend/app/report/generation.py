@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .report_schema import AppLocale, GroundedReport, ReportAction, ReportSection, Role
+from .report_schema import AppLocale, GroundedReport, ReportAction, ReportSection, ReportType, Role
 
 STATUS_LABELS: dict[AppLocale, dict[str, str]] = {
     "ko-KR": {
@@ -175,7 +175,11 @@ def render_report(
     *,
     locale: AppLocale = "ko-KR",
     mode: str = "deterministic",
+    report_type: ReportType | None = None,
 ) -> GroundedReport:
+    resolved_report_type: ReportType = report_type or (
+        "executive-brief" if role == "executive" else "inspection-summary" if role == "engineer" else "operations-decision"
+    )
     equipment = evidence["equipment"]
     equipment_name = _equipment_name(str(equipment["display_name"]), locale)
     status = evidence["status"]
@@ -228,6 +232,51 @@ def render_report(
                 evidence_field_ids=["recommended_decision"],
             ),
         ]
+    elif role == "executive":
+        if locale == "ko-KR":
+            if resolved_report_type == "inspection-summary":
+                headline = f"{equipment_name} · 현장 확인 필요"
+                summary = f"현재 위험도는 {_probability_text(evidence, locale)}이며 {failure_label} 가능성이 있습니다. 현장 점검으로 원인을 확인하기 전 고장으로 확정하지 않습니다."
+                sections = [
+                    ReportSection(section_id="executive-inspection", title="확인이 필요한 사항", body=decision_label, evidence_field_ids=["recommended_decision"]),
+                    ReportSection(section_id="executive-inspection-impact", title="운영 영향", body=f"예상 정지 노출은 {equipment['estimated_downtime_minutes']}분입니다.", evidence_field_ids=["equipment.estimated_downtime_minutes"]),
+                ]
+            elif resolved_report_type == "maintenance-effect":
+                headline = f"{equipment_name} · 정비 효과 확인 대기"
+                summary = "현재 Event 근거에는 이 Case와 인과적으로 연결된 완료 정비 후 관측이 포함되지 않았습니다. 정비 완료와 후속 관측이 연결된 뒤 효과를 판단해야 합니다."
+                sections = [
+                    ReportSection(section_id="executive-maintenance-state", title="현재 상태", body="완료 정비 결과가 연결되기 전에는 before/after 성과를 확정하지 않습니다.", evidence_field_ids=["status"]),
+                    ReportSection(section_id="executive-maintenance-next", title="다음 확인", body=decision_label, evidence_field_ids=["recommended_decision"]),
+                ]
+            elif resolved_report_type == "weekly-risk":
+                headline = f"주간 리스크 참고 · {equipment_name}"
+                summary = f"선택 Case 기준 위험도 {_probability_text(evidence, locale)}, 상태 {status_label}, 권장 판단은 '{decision_label}'입니다. 이 보고서는 선택 Case snapshot이며 전체 주간 포트폴리오 집계가 아닙니다."
+                sections = [
+                    ReportSection(section_id="executive-weekly-risk", title="선택 Case 리스크", body=summary, evidence_field_ids=["status", "failure_probability", "recommended_decision"]),
+                    ReportSection(section_id="executive-weekly-limitation", title="집계 범위", body="전체 포트폴리오 추세는 별도 운영 KPI에서 확인해야 합니다.", evidence_field_ids=[]),
+                ]
+            elif resolved_report_type == "operations-decision":
+                headline = f"{equipment_name} · 경영 의사결정 요청"
+                summary = f"현재 {status_label} 상태이며 위험도는 {_probability_text(evidence, locale)}입니다. 예상 정지 노출은 {equipment['estimated_downtime_minutes']}분이고, 현재 요청된 판단은 '{decision_label}'입니다."
+                sections = [
+                    ReportSection(section_id="executive-decision-request", title="의사결정 요청", body=decision_label, evidence_field_ids=["recommended_decision"]),
+                    ReportSection(section_id="executive-decision-impact", title="운영 노출", body=f"예상 정지 노출 {equipment['estimated_downtime_minutes']}분 · 설비 중요도 {equipment['criticality']}", evidence_field_ids=["equipment.estimated_downtime_minutes", "equipment.criticality"]),
+                ]
+            else:
+                headline = f"Executive Brief · {equipment_name}"
+                summary = f"현재 {status_label} 상태이며 위험도는 {_probability_text(evidence, locale)}입니다. {failure_label}은 점검 전 가설이며, 경영 관점의 현재 판단 요청은 '{decision_label}'입니다."
+                sections = [
+                    ReportSection(section_id="executive-status", title="경영 판단 요약", body=summary, evidence_field_ids=["status", "failure_probability", "predicted_failure_type", "recommended_decision"]),
+                    ReportSection(section_id="executive-impact", title="운영 노출", body=f"예상 정지 노출은 {equipment['estimated_downtime_minutes']}분이며 설비 중요도는 {equipment['criticality']}입니다.", evidence_field_ids=["equipment.estimated_downtime_minutes", "equipment.criticality"]),
+                    ReportSection(section_id="executive-request", title="결정 요청", body=decision_label, evidence_field_ids=["recommended_decision"]),
+                ]
+        else:
+            headline = f"Executive Brief · {equipment_name}"
+            summary = f"Current status is {status_label} with {_probability_text(evidence, locale)} estimated risk. The current decision request is '{decision_label}'."
+            sections = [
+                ReportSection(section_id="executive-status", title="Executive assessment", body=summary, evidence_field_ids=["status", "failure_probability", "recommended_decision"]),
+                ReportSection(section_id="executive-impact", title="Operational exposure", body=f"Estimated downtime exposure is {equipment['estimated_downtime_minutes']} minutes.", evidence_field_ids=["equipment.estimated_downtime_minutes"]),
+            ]
     elif role == "manager":
         if locale == "ko-KR":
             headline = f"{equipment_name} · {status_label} · {decision_label}"
@@ -303,9 +352,10 @@ def render_report(
             ]
 
     return GroundedReport(
-        report_id=f"RPT-{evidence['event_id']}-{role}-{locale}",
+        report_id=f"RPT-{evidence['event_id']}-{role}-{resolved_report_type}-{locale}",
         event_id=evidence["event_id"],
         role=role,
+        report_type=resolved_report_type,
         locale=locale,
         mode=mode,  # type: ignore[arg-type]
         headline=headline,

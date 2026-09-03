@@ -156,7 +156,7 @@ export function promoteRuntimeProductResultsToEvents(
   results: GovernedProductResultSummary[],
   events: OperationsEvent[],
 ): OperationsEvent[] {
-  const representedAssets = new Set(events.map((event) => event.assetId));
+  const representedEvents = new Set(events.map((event) => event.eventId));
   const latestResultByAsset = new Map<string, GovernedProductResultSummary>();
   for (const result of results) {
     const current = latestResultByAsset.get(result.asset_id);
@@ -167,11 +167,11 @@ export function promoteRuntimeProductResultsToEvents(
 
   const promoted = [...events];
   for (const result of latestResultByAsset.values()) {
-    if (representedAssets.has(result.asset_id)) continue;
     const event = runtimeEventFromResult(result);
     if (!event) continue;
+    if (representedEvents.has(event.eventId)) continue;
     promoted.push(event);
-    representedAssets.add(result.asset_id);
+    representedEvents.add(event.eventId);
   }
   return sortRisk(promoted);
 }
@@ -384,7 +384,7 @@ export function mergeAssets(results: GovernedProductResultSummary[], events: Ope
       predictedFailureType: result.predicted_failure_type,
       recommendedDecision: related?.recommendedDecision ?? normalizeDecision(result.recommended_action?.action),
       observedAt: result.observed_at,
-      eventId: related?.eventId ?? null,
+      eventId: result.artifact_id ?? related?.eventId ?? null,
       topFactors: result.top_factors.map(adaptResultFactor),
       provenance: {
         datasetId: result.provenance.dataset_id,
@@ -424,10 +424,10 @@ export function computeMetrics(assets: OperationsAsset[], events: OperationsEven
     totalAssets: assets.length,
     ...counts,
     averageRisk: probabilities.length ? probabilities.reduce((sum, value) => sum + value, 0) / probabilities.length : null,
-    estimatedDowntimeMinutes: events.length > 0 && events.every((event) => event.estimatedDowntimeMinutes !== null)
-      ? events.reduce((sum, event) => sum + event.estimatedDowntimeMinutes!, 0)
+    estimatedDowntimeMinutes: assets.length > 0 && assets.every((asset) => asset.estimatedDowntimeMinutes !== null)
+      ? assets.reduce((sum, asset) => sum + asset.estimatedDowntimeMinutes!, 0)
       : null,
-    pendingDecisions: events.filter((event) => event.recommendedDecision !== "continue_monitoring").length,
+    pendingDecisions: assets.filter((asset) => asset.recommendedDecision !== "continue_monitoring").length,
   };
 }
 
@@ -696,6 +696,7 @@ function reportMode(report: Report): OperationsReportModel["mode"] {
 export function adaptReport(report: Report, revision = 0): OperationsReportModel {
   return {
     reportId: report.report_id,
+    reportType: report.report_type,
     snapshotId: null,
     artifactId: null,
     asOf: null,
@@ -724,6 +725,7 @@ export function buildTemplateReport(event: OperationsEvent, metrics?: Operations
     : `현재 실패 위험은 ${probability}이며, 이는 고장 확정이 아닌 운영 우선순위 판단을 위한 모델 결과입니다.`;
   return {
     reportId: `template-${event.eventId}`,
+    reportType: "operations-decision",
     snapshotId: `event:${event.eventId}`,
     artifactId: event.eventId,
     asOf: event.observedAt,

@@ -12,8 +12,9 @@ import {
   recordDecision,
   requestInspectionWorkOrder,
 } from "../../../api";
-import type { Evidence, Report } from "../../../types";
+import type { Evidence, Report, ReportType, Role } from "../../../types";
 import {
+  adaptReport,
   adaptEvent,
   applyAssetDetailViewModel,
   composeEventDetail,
@@ -242,12 +243,12 @@ export async function loadOperationsBootstrap(
   };
 }
 
-async function loadLegacyReport(eventId: string): Promise<{ report: Report | null; warning: string | null }> {
+async function loadLegacyReport(eventId: string, role: Role, reportType?: ReportType): Promise<{ report: Report | null; warning: string | null }> {
   try {
-    return { report: await getReport(eventId, "manager", true, "ko-KR"), warning: null };
+    return { report: await getReport(eventId, role, true, "ko-KR", reportType), warning: null };
   } catch (llmReason) {
     try {
-      const report = await getReport(eventId, "manager", false, "ko-KR");
+      const report = await getReport(eventId, role, false, "ko-KR", reportType);
       return {
         report,
         warning: `자동 보고서 생성 일부 지연, 검증된 기본 보고서 사용: ${warningMessage(llmReason, "unknown error")}`,
@@ -267,15 +268,19 @@ export async function loadOperationsEventDetail(input: {
   datasetVersionId: string;
   event: OperationsEvent;
   role: OperationsRoleLens;
+  reportRole?: Role;
+  reportType?: ReportType;
   historyWindow: OperationsSensorWindowId;
   metrics?: OperationsMetrics;
 }): Promise<OperationsEventDetailModel> {
   const usesRuntimeProductResult = input.event.eventId.startsWith("RESULT#");
+  const reportRole: Role = input.reportRole ?? (input.role === "process_manager" ? "manager" : "engineer");
   const predictivePromise = getPredictiveMaintenanceDashboard(input.projectId, input.workspaceId, {
     dataset_version_id: input.datasetVersionId,
     selected_event_id: input.event.eventId,
-    role: input.role === "process_manager" ? "manager" : "engineer",
-    intent: input.role === "process_manager" ? "summarize-manager" : "detail-engineer",
+    role: reportRole,
+    report_type: input.reportType,
+    intent: reportRole === "executive" ? "summarize-manager" : input.role === "process_manager" ? "summarize-manager" : "detail-engineer",
     locale: "ko-KR",
   });
   const evidencePromise: Promise<Evidence | null> = usesRuntimeProductResult
@@ -283,7 +288,7 @@ export async function loadOperationsEventDetail(input: {
     : getEvidence(input.event.eventId);
   const reportPromise: Promise<{ report: Report | null; warning: string | null }> = usesRuntimeProductResult
     ? Promise.resolve({ report: null, warning: null })
-    : loadLegacyReport(input.event.eventId);
+    : loadLegacyReport(input.event.eventId, reportRole, input.reportType);
   const activityPromise: Promise<unknown | null> = usesRuntimeProductResult
     ? Promise.resolve(null)
     : getEventActivity(input.event.eventId);
@@ -334,6 +339,33 @@ export async function loadOperationsEventDetail(input: {
   return assetDetailState.status === "fulfilled"
     ? applyAssetDetailViewModel(detail, assetDetailState.value)
     : detail;
+}
+
+export async function loadOperationsReportVariant(input: {
+  projectId: string;
+  workspaceId: string;
+  datasetVersionId: string;
+  event: OperationsEvent;
+  role: Role;
+  reportType: ReportType;
+}): Promise<ReturnType<typeof adaptReport>> {
+  if (!input.event.eventId.startsWith("RESULT#")) {
+    const report = await getReport(input.event.eventId, input.role, true, "ko-KR", input.reportType);
+    return adaptReport(report);
+  }
+  const dashboard = await getPredictiveMaintenanceDashboard(input.projectId, input.workspaceId, {
+    dataset_version_id: input.datasetVersionId,
+    selected_event_id: input.event.eventId,
+    role: input.role,
+    report_type: input.reportType,
+    intent: input.role === "engineer" ? "detail-engineer" : "summarize-manager",
+    locale: "ko-KR",
+  });
+  const report = dashboard.selected_event_detail?.report;
+  if (!report || dashboard.selected_event_id !== input.event.eventId) {
+    throw new Error("선택 Case의 보고 artifact를 불러오지 못했습니다.");
+  }
+  return adaptReport(report);
 }
 
 export async function submitOperationsDecision(input: {

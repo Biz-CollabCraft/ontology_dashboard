@@ -207,6 +207,7 @@ export interface OperationsReportSection {
 
 export interface OperationsReportModel {
   reportId: string;
+  reportType: "inspection-summary" | "operations-decision" | "executive-brief" | "maintenance-effect" | "weekly-risk";
   snapshotId: string | null;
   artifactId: string | null;
   asOf: string | null;

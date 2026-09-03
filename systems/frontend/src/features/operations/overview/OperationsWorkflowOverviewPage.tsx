@@ -1316,6 +1316,7 @@ function FactoryMonitoringMapPanel({
                                 type="button"
                                 className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""} ${focusMode === "exceptions" && tone === "normal" && !selected ? "is-deemphasized" : ""}`}
                                 aria-pressed={selected}
+                                aria-label={`${displayFactorySlotName(slot, cell)} · ${asset.assetId} · ${operationsMonitorStatusLabel(currentPrediction?.statusGrade ?? asset.status)} · 위험 ${formatProbability(currentPrediction?.failureProbability ?? asset.failureProbability)}`}
                                 onClick={() => onPreviewAssetSlot(asset, slot, cell)}
                                 title={title}
                               >

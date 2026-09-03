@@ -1,4 +1,5 @@
-export type Role = "manager" | "engineer";
+export type Role = "manager" | "engineer" | "executive";
+export type ReportType = "inspection-summary" | "operations-decision" | "executive-brief" | "maintenance-effect" | "weekly-risk";
 export type AppRole =
   | "tenant_admin"
   | "executive_viewer"
@@ -216,6 +217,7 @@ export interface Report {
   report_id: string;
   event_id: string;
   role: Role;
+  report_type: ReportType;
   locale: "ko-KR" | "en-US";
   mode: string;
   headline: string;

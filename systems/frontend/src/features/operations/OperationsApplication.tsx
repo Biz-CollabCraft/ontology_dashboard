@@ -83,6 +83,9 @@ export default OperationsApplication;
 function OperationsApplicationController({ projectId, backupMode }: { projectId: string; backupMode: boolean }) {
   const { user, logout } = useAuth();
   const { selection, updateSelection } = useOperationsSelection();
+  const authorizedRole = defaultRoleLens(
+    user?.active_project_roles.length ? user.active_project_roles : user?.roles ?? [],
+  );
   const [model, setModel] = useState<OperationsBootstrapModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,16 +100,35 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   const adaptiveLandingResolvedRef = useRef(false);
   const experienceKind = user
     ? resolveReliabilityRoleExperience(user).kind
-    : selection.role === "field_operator"
+    : authorizedRole === "field_operator"
       ? "engineering"
       : "operations";
 
   useEffect(() => {
+    // URL query parameters are navigation hints, not authority. A copied
+    // manager URL must never force an engineer into the manager workflow lens.
+    if (!user || selection.role === authorizedRole) return;
+    updateSelection({ role: authorizedRole }, { replace: true });
+  }, [authorizedRole, selection.role, updateSelection, user]);
+
+  useEffect(() => {
     const surfaces = reliabilitySurfaces(experienceKind, backupMode);
-    if (selection.surface && surfaces.some((item) => item.id === selection.surface)) return;
+    const currentSurface = selection.surface
+      ? surfaces.find((item) => item.id === selection.surface) ?? null
+      : null;
+    if (currentSurface) {
+      // A saved/copied URL may contain a stale legacy `view` alongside a
+      // valid role surface. Surface identity owns the workspace composition,
+      // so keep the view in sync with that surface instead of rendering the
+      // right navigation label with the wrong data-selection behavior.
+      if (selection.view !== currentSurface.view) {
+        updateSelection({ view: currentSurface.view }, { replace: true });
+      }
+      return;
+    }
     const next = defaultReliabilitySurface(experienceKind, backupMode);
     updateSelection({ surface: next.id, view: next.view }, { replace: true });
-  }, [backupMode, experienceKind, selection.surface, updateSelection]);
+  }, [backupMode, experienceKind, selection.surface, selection.view, updateSelection]);
 
   const refresh = useCallback(() => setRefreshVersion((value) => value + 1), []);
   const retryDetail = useCallback(() => setDetailVersion((value) => value + 1), []);
@@ -138,9 +160,8 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
         const selectedAsset = payload.assets.find((item) => item.assetId === selection.assetId) ?? null;
         const patch: Parameters<typeof updateSelection>[0] = {};
         if (!selection.workspaceId) patch.workspaceId = payload.context.workspaceId;
-        if (selection.eventId && !selectedEvent && selectedAsset?.eventId) {
-          patch.eventId = selectedAsset.eventId;
-        }
+        // An explicit Event selection is a frozen Decision Case snapshot.
+        // Never replace it with the asset's newest Event during refresh.
         if (!selection.eventId && selectedAsset?.eventId) patch.eventId = selectedAsset.eventId;
         if (!selection.assetId && selectedEvent) patch.assetId = selectedEvent.assetId;
         if (!selection.assetId && !selection.eventId && payload.events[0] && (selection.view === "operations" || selection.view === "reports")) {
@@ -157,10 +178,29 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
     return () => { cancelled = true; };
   }, [projectId, refreshVersion, selection.workspaceId]);
 
-  const selectedEvent = useMemo(
-    () => model?.events.find((item) => item.eventId === selection.eventId) ?? null,
-    [model, selection.eventId],
-  );
+  const selectedEvent = useMemo(() => {
+    const explicit = model?.events.find((item) => item.eventId === selection.eventId) ?? null;
+    if (explicit) return explicit;
+    if ((selection.view === "operations" || selection.view === "reports") && model?.events[0]) {
+      return model.events[0];
+    }
+    return null;
+  }, [model, selection.eventId, selection.view]);
+
+  useEffect(() => {
+    if (!model || selection.eventId || (selection.view !== "operations" && selection.view !== "reports")) return;
+    const firstEvent = model.events[0];
+    if (!firstEvent) return;
+    updateSelection({ eventId: firstEvent.eventId, assetId: firstEvent.assetId }, { replace: true });
+  }, [model, selection.eventId, selection.view, updateSelection]);
+  const latestEventForSelectedAsset = useMemo(() => {
+    if (!model || !selectedEvent) return null;
+    const asset = model.assets.find((item) => item.assetId === selectedEvent.assetId) ?? null;
+    if (!asset?.eventId || asset.eventId === selectedEvent.eventId) return null;
+    const latest = model.events.find((item) => item.eventId === asset.eventId) ?? null;
+    if (!latest?.observedAt || !selectedEvent.observedAt) return latest;
+    return Date.parse(latest.observedAt) > Date.parse(selectedEvent.observedAt) ? latest : null;
+  }, [model, selectedEvent]);
 
   useEffect(() => {
     if (!model || adaptiveLandingResolvedRef.current || backupMode) return;
@@ -204,7 +244,9 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       workspaceId: model.context.workspaceId,
       datasetVersionId: model.context.datasetVersionId,
       event: selectedEvent,
-      role: selection.role,
+      role: authorizedRole,
+      reportRole: experienceKind === "executive" ? "executive" : experienceKind === "engineering" ? "engineer" : "manager",
+      reportType: experienceKind === "executive" ? "executive-brief" : experienceKind === "engineering" ? "inspection-summary" : "operations-decision",
       historyWindow: sensorWindow,
       metrics: model.metrics,
     })
@@ -216,7 +258,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       })
       .finally(() => !cancelled && setDetailLoading(false));
     return () => { cancelled = true; };
-  }, [detailVersion, refreshVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selection.role, sensorWindow]);
+  }, [authorizedRole, detailVersion, experienceKind, refreshVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, sensorWindow]);
 
   const openView = useCallback((view: OperationsView) => {
     const surface = reliabilitySurfaceForView(experienceKind, view, backupMode);
@@ -276,6 +318,11 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   const selectEvent = useCallback((event: OperationsEvent) => {
     updateSelection({ eventId: event.eventId, assetId: event.assetId });
   }, [updateSelection]);
+
+  const followLatestEvent = useCallback(() => {
+    if (!latestEventForSelectedAsset) return;
+    updateSelection({ eventId: latestEventForSelectedAsset.eventId, assetId: latestEventForSelectedAsset.assetId });
+  }, [latestEventForSelectedAsset, updateSelection]);
 
   const searchEntities = useMemo<ReliabilitySearchEntity[]>(() => {
     if (!model) return [];
@@ -378,7 +425,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   const selectedAssetId = selection.assetId;
   let content;
   if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
-    content = <OperationsOverviewPage model={model} role={selection.role} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <OperationsOverviewPage model={model} role={authorizedRole} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   } else if (useReliabilityPreview && selection.view !== "system") {
     content = <RoleComposedWorkspace
       experienceKind={experienceKind}
@@ -388,7 +435,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       selectedEvent={selectedEvent}
       detail={detail}
       companyContext={companyContext}
-      role={selection.role}
+      role={authorizedRole}
       canManageWorkflow={canDecide}
       canExecuteFieldWorkflow={canExecuteFieldWorkflow}
       canMaterializeAgentSummary={canMaterializeAgentSummary}
@@ -408,7 +455,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       ? <OperationsSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />
       : <OperationsState kind="error" title="시스템 관리자 권한 필요" detail="AI 요약 처리 로그는 관리자 감사 권한이 있는 사용자만 조회할 수 있습니다." />;
   } else {
-    content = <OperationsOverviewPage model={model} role={selection.role} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <OperationsOverviewPage model={model} role={authorizedRole} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
   const body = <>
@@ -427,6 +474,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
         activeSurface={selection.surface}
         user={user}
         selectedEvent={selectedEvent}
+        latestEventForSelectedAsset={latestEventForSelectedAsset}
         detail={detail}
         onNavigate={openSurface}
         onRefresh={refresh}
@@ -434,6 +482,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
         onLogout={signOut}
         searchEntities={searchEntities}
         onSearchSelect={selectSearchEntity}
+        onFollowLatestEvent={followLatestEvent}
         backupMode={backupMode}
       >
         {body}
@@ -445,7 +494,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
     context={model.context}
     activeView={selection.view}
     dashboard={selection.dashboard}
-    role={selection.role}
+    role={authorizedRole}
     onNavigate={openView}
     onRoleChange={(role: OperationsRoleLens) => updateSelection({ role, view: "overview" })}
     onRefresh={refresh}

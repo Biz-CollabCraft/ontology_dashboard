@@ -13,6 +13,7 @@ export type ReliabilityBlockId =
   | "asset-brief"
   | "production-exposure"
   | "decision-queue"
+  | "decision-bottleneck"
   | "workflow-lifecycle"
   | "case-lineage"
   | "workflow-actions"
@@ -66,28 +67,28 @@ const COMPOSITIONS: Record<ReliabilityExperienceKind, Record<Exclude<OperationsV
 };
 
 const SURFACE_COMPOSITIONS: Partial<Record<ReliabilitySurfaceId, ReliabilityBlockId[]>> = {
-  "executive-brief": ["operational-kpis", "report-summary", "production-exposure", "decision-queue", "case-lineage", "business-kpis", "risk-portfolio", "context-evidence"],
-  "operational-risk": ["risk-metrics", "operational-kpis", "risk-portfolio", "line-risk", "risk-queue", "production-exposure"],
-  "executive-kpi": ["operational-kpis", "risk-metrics", "business-kpis", "production-exposure", "decision-history", "line-risk"],
-  "executive-reports": ["report-summary", "operational-kpis", "case-lineage", "business-kpis", "decision-history", "context-evidence"],
-  "decision-bottleneck": ["operational-kpis", "decision-queue", "case-lineage", "workflow-lifecycle", "production-exposure", "context-evidence"],
-  "maintenance-effect": ["maintenance-effect", "maintenance-history", "production-exposure", "risk-portfolio", "material-context", "context-evidence"],
-  roadmap: ["business-kpis", "decision-history", "maintenance-history", "material-context", "context-evidence"],
+  "executive-brief": ["risk-metrics", "production-exposure", "decision-bottleneck", "report-summary", "operational-kpis"],
+  "operational-risk": ["risk-metrics", "risk-portfolio", "production-exposure", "line-risk", "risk-queue"],
+  "executive-kpi": ["operational-kpis", "risk-metrics", "business-kpis", "production-exposure"],
+  "executive-reports": ["report-summary", "decision-bottleneck", "production-exposure", "operational-kpis"],
+  "decision-bottleneck": ["decision-bottleneck", "workflow-lifecycle", "production-exposure", "operational-kpis"],
+  "maintenance-effect": ["maintenance-effect", "maintenance-history", "production-exposure", "risk-portfolio"],
+  roadmap: ["business-kpis", "decision-history", "maintenance-history", "material-context"],
 
   "operations-status": ["risk-metrics", "operational-kpis", "line-risk", "risk-queue", "decision-queue", "production-exposure"],
-  "pending-decisions": ["operational-kpis", "risk-metrics", "decision-queue", "production-exposure", "case-lineage", "workflow-lifecycle", "workflow-actions", "material-context", "context-evidence"],
-  "decision-case": ["asset-brief", "case-lineage", "decision-queue", "production-exposure", "evidence-factors", "workflow-lifecycle", "decision-history", "context-evidence"],
+  "pending-decisions": ["decision-queue", "workflow-lifecycle", "production-exposure", "workflow-actions", "operational-kpis"],
+  "decision-case": ["workflow-lifecycle", "decision-queue", "production-exposure", "workflow-actions", "case-lineage", "evidence-factors"],
   "production-impact": ["production-exposure", "business-kpis", "material-context", "risk-queue", "line-risk"],
   "maintenance-approval": ["case-lineage", "workflow-lifecycle", "workflow-actions", "inspection-targets", "material-context", "maintenance-history", "maintenance-effect"],
-  backlog: ["operational-kpis", "risk-metrics", "decision-queue", "decision-history", "line-risk", "context-evidence"],
-  "report-draft": ["report-summary", "operational-kpis", "case-lineage", "production-exposure", "decision-history", "business-kpis", "context-evidence"],
+  backlog: ["decision-queue", "operational-kpis", "decision-history", "line-risk"],
+  "report-draft": ["report-summary", "case-lineage", "production-exposure", "decision-history"],
 
-  monitoring: ["risk-metrics", "risk-queue", "feature-trend", "sensor-signals", "evidence-factors", "case-lineage"],
-  assets: ["asset-brief", "feature-trend", "sensor-signals", "evidence-factors", "case-lineage", "maintenance-history", "maintenance-effect", "material-context"],
+  monitoring: ["risk-queue", "feature-trend", "sensor-signals", "evidence-factors", "case-lineage"],
+  assets: ["feature-trend", "evidence-factors", "inspection-targets", "sensor-signals", "case-lineage"],
   "sensor-features": ["feature-trend", "sensor-signals", "evidence-factors", "maintenance-history"],
-  inspection: ["inspection-targets", "case-lineage", "workflow-lifecycle", "workflow-actions", "evidence-factors", "maintenance-history"],
-  "maintenance-history": ["maintenance-effect", "maintenance-history", "material-context", "decision-history", "evidence-factors"],
-  "field-notes": ["decision-history", "report-summary", "inspection-targets", "context-evidence"],
+  inspection: ["inspection-targets", "workflow-actions", "workflow-lifecycle", "feature-trend", "evidence-factors", "case-lineage"],
+  "maintenance-history": ["maintenance-history", "maintenance-effect", "decision-history", "evidence-factors"],
+  "field-notes": ["decision-history", "inspection-targets", "report-summary"],
 
   "my-work": ["risk-metrics", "factory-map", "workflow-lifecycle", "workflow-actions", "inspection-targets", "material-context"],
   "work-targets": ["asset-brief", "inspection-targets", "material-context", "feature-trend", "maintenance-history"],
@@ -101,6 +102,12 @@ function promote(blocks: ReliabilityBlockId[], id: ReliabilityBlockId, position 
   return next;
 }
 
+function promoteAfterInvariant(blocks: ReliabilityBlockId[], id: ReliabilityBlockId, invariantCount: number, relativePosition = 0) {
+  const currentIndex = blocks.indexOf(id);
+  if (currentIndex >= 0 && currentIndex < invariantCount) return blocks;
+  return promote(blocks, id, Math.min(blocks.length, invariantCount + relativePosition));
+}
+
 export function resolveReliabilityComposition(
   kind: ReliabilityExperienceKind,
   view: OperationsView,
@@ -110,33 +117,34 @@ export function resolveReliabilityComposition(
   if (view === "system") return [];
   const surfaceBlocks = surfaceId ? SURFACE_COMPOSITIONS[surfaceId as ReliabilitySurfaceId] : null;
   const roleSpecificSurfaceBlocks = kind === "engineering" && surfaceId === "maintenance-effect"
-    ? ["maintenance-effect", "feature-trend", "sensor-signals", "maintenance-history", "evidence-factors", "context-evidence"] satisfies ReliabilityBlockId[]
+    ? ["maintenance-effect", "feature-trend", "sensor-signals", "maintenance-history", "evidence-factors"] satisfies ReliabilityBlockId[]
     : null;
   let blocks = [...(roleSpecificSurfaceBlocks ?? surfaceBlocks ?? COMPOSITIONS[kind][view])];
+  const invariantCount = surfaceBlocks || roleSpecificSurfaceBlocks ? Math.min(3, blocks.length) : 0;
   if (signals.hasDataQualityHold) {
-    blocks = ["data-quality", ...blocks.filter((item) => item !== "data-quality")];
+    blocks = promoteAfterInvariant(blocks, "data-quality", invariantCount, 0);
   }
   if (signals.hasOpenWorkflow) {
-    blocks = promote(blocks, "workflow-lifecycle", signals.hasDataQualityHold ? 1 : 0);
+    blocks = promoteAfterInvariant(blocks, "workflow-lifecycle", invariantCount, signals.hasDataQualityHold ? 1 : 0);
   }
   if (signals.hasDecisionBacklog && kind === "operations") {
-    blocks = promote(blocks, "decision-queue", signals.hasDataQualityHold ? 1 : 0);
+    blocks = promoteAfterInvariant(blocks, "decision-queue", invariantCount, signals.hasDataQualityHold ? 1 : 0);
   }
   if (signals.hasCriticalRisk && kind === "engineering") {
-    blocks = promote(blocks, "feature-trend", signals.hasDataQualityHold ? 1 : 0);
-    blocks = promote(blocks, "evidence-factors", signals.hasDataQualityHold ? 2 : 1);
+    blocks = promoteAfterInvariant(blocks, "feature-trend", invariantCount, signals.hasDataQualityHold ? 1 : 0);
+    blocks = promoteAfterInvariant(blocks, "evidence-factors", invariantCount, signals.hasDataQualityHold ? 2 : 1);
   }
   if (signals.hasHighProductionExposure && kind === "executive") {
-    blocks = promote(blocks, "production-exposure", signals.hasDataQualityHold ? 1 : 0);
+    blocks = promoteAfterInvariant(blocks, "production-exposure", invariantCount, signals.hasDataQualityHold ? 1 : 0);
   }
   if (signals.hasMaintenanceOutcome) {
-    blocks = promote(blocks, "maintenance-effect", Math.min(signals.hasDataQualityHold ? 2 : 1, blocks.length));
+    blocks = promoteAfterInvariant(blocks, "maintenance-effect", invariantCount, signals.hasDataQualityHold ? 2 : 1);
   }
   if (signals.hasMaterialConstraint && (kind === "operations" || kind === "executive" || kind === "maintenance")) {
-    blocks = promote(blocks, "material-context", Math.min(2, blocks.length));
+    blocks = promoteAfterInvariant(blocks, "material-context", invariantCount, 0);
   }
   if (signals.hasCriticalRisk && kind === "executive") {
-    blocks = promote(blocks, "production-exposure", signals.hasDataQualityHold ? 1 : 0);
+    blocks = promoteAfterInvariant(blocks, "production-exposure", invariantCount, signals.hasDataQualityHold ? 1 : 0);
   }
   return blocks;
 }

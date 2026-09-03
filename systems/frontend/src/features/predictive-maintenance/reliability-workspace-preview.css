@@ -242,8 +242,29 @@
 .rw-preview-left > nav::-webkit-scrollbar { width: 5px; }
 .rw-preview-left > nav::-webkit-scrollbar-thumb { border-radius: 999px; background: color-mix(in srgb,var(--rw-muted) 48%,transparent); }
 
+/* Product-QA readability floor: standard workspace copy should be readable
+   without relying on a presentation preset. */
+:root[data-density="standard"] .rw-preview-shell :where(p,li,button,input,textarea,select,dd) { font-size:13px!important; line-height:1.45; }
+:root[data-density="standard"] .rw-preview-shell :where(small,dt,time,em,kbd) { font-size:11px!important; line-height:1.4; }
+:root[data-density="standard"] .rw-preview-shell :where(.rw-preview-brand strong,.rw-preview-user strong,.rw-preview-left nav strong,.rw-preview-selection-anchor__path>strong) { font-size:12px!important; }
+:root[data-density="standard"] .rw-preview-shell :where(.rw-preview-left-heading span,.rw-preview-nav-group>header,.rw-preview-selection-anchor__path>span) { font-size:11px!important; }
+.rw-preview-icon-button,.rw-preview-assistant-toggle,.rw-preview-settings-trigger,.rw-preview-collapse { min-width:40px; min-height:40px; height:40px; }
+.rw-preview-settings-action,.rw-preview-segmented button,.rw-preview-selection-anchor>button { min-height:40px; }
+
+.rw-preview-new-observation { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:12px; margin:0 clamp(18px,2.4vw,34px) 12px; padding:10px 12px; border:1px solid color-mix(in srgb,var(--rw-cyan) 35%,var(--rw-line)); border-radius:9px; background:var(--rw-panel); box-shadow:inset 3px 0 var(--rw-cyan); }
+.rw-preview-new-observation>div { display:grid; gap:3px; }
+.rw-preview-new-observation strong { font-size:12px; }
+.rw-preview-new-observation span,.rw-preview-new-observation small { color:var(--rw-muted); font-size:11px; line-height:1.45; }
+.rw-preview-new-observation button { min-height:40px; padding:0 12px; border:1px solid var(--rw-line-strong); border-radius:7px; color:var(--rw-text); background:var(--rw-surface); font-size:12px; font-weight:800; }
+
 @media (max-width: 860px) {
   .rw-preview-left > nav { overflow-y: auto; }
+}
+
+@media (max-width: 640px) {
+  .rw-preview-new-observation { grid-template-columns:1fr; margin-inline:9px; }
+  .rw-preview-new-observation button { width:100%; }
+  .rw-preview-selection-anchor__facts>span:first-child { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 }
 
 @media print {

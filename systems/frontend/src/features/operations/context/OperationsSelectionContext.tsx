@@ -160,6 +160,11 @@ export function OperationsSelectionProvider({
   ) => {
     const current = readSelection();
     const next: OperationsSelection = { ...current, ...patch, projectId };
+    // Keep React state authoritative immediately. Relying only on the
+    // synthetic popstate below is racy because the application-level router
+    // may process that event first and replace/remount route content before
+    // this provider's popstate listener observes it.
+    setSelection(next);
     window.sessionStorage.setItem(storageKey, JSON.stringify(next));
     const params = new URLSearchParams(selectionSearch(next));
     if (navigationBasePath && next.surface) params.set("surface", next.surface);

@@ -17,7 +17,7 @@ describe("role composed reliability workspace", () => {
     ]);
   });
 
-  it("promotes runtime-critical context without changing the allowed block registry", () => {
+  it("keeps the surface task invariant ahead of runtime promotion", () => {
     const result = resolveReliabilityComposition("executive", "reports", {
       hasCriticalRisk: true,
       hasDataQualityHold: true,
@@ -26,11 +26,38 @@ describe("role composed reliability workspace", () => {
       hasDecisionBacklog: false,
       hasHighProductionExposure: true,
       hasMaintenanceOutcome: false,
-    });
-    expect(result[0]).toBe("data-quality");
-    expect(result[1]).toBe("production-exposure");
+    }, "executive-brief");
+    expect(result.slice(0, 3)).toEqual(["risk-metrics", "production-exposure", "decision-bottleneck"]);
+    expect(result.indexOf("data-quality")).toBeGreaterThanOrEqual(3);
     expect(result).toContain("material-context");
     expect(new Set(result).size).toBe(result.length);
+  });
+
+  it("keeps inspection targets and action ahead of charts on the inspection surface", () => {
+    const result = resolveReliabilityComposition("engineering", "objects", {
+      hasCriticalRisk: true,
+      hasDataQualityHold: true,
+      hasOpenWorkflow: true,
+      hasMaterialConstraint: false,
+      hasDecisionBacklog: false,
+      hasHighProductionExposure: false,
+      hasMaintenanceOutcome: false,
+    }, "inspection");
+    expect(result.slice(0, 3)).toEqual(["inspection-targets", "workflow-actions", "workflow-lifecycle"]);
+    expect(result.indexOf("feature-trend")).toBeGreaterThanOrEqual(3);
+  });
+
+  it("keeps the bottleneck table first on the executive bottleneck surface", () => {
+    const result = resolveReliabilityComposition("executive", "reports", {
+      hasCriticalRisk: true,
+      hasDataQualityHold: false,
+      hasOpenWorkflow: true,
+      hasMaterialConstraint: true,
+      hasDecisionBacklog: true,
+      hasHighProductionExposure: true,
+      hasMaintenanceOutcome: false,
+    }, "decision-bottleneck");
+    expect(result[0]).toBe("decision-bottleneck");
   });
 
   it("promotes role-specific runtime signals without allowing arbitrary UI mutation", () => {

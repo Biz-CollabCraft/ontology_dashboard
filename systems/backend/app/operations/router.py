@@ -1629,10 +1629,10 @@ def create_report(
     identity: IdentityService = Depends(get_identity_service),
 ):
     _require_active_event_project(principal, service, event_id)
-    role = identity.legacy_dashboard_role(principal, request.role)
+    role = identity.report_role(principal, request.role)
     report, trace = service.report(
         event_id,
-        ReportRequest(role=role, locale=request.locale, use_llm=request.use_llm),
+        ReportRequest(role=role, report_type=request.report_type, locale=request.locale, use_llm=request.use_llm),
     )
     return {"report": report.model_dump(mode="json"), "trace": trace}
 

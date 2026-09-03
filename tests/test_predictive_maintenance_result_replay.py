@@ -7,6 +7,7 @@ import json
 import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -212,6 +213,51 @@ def test_cutover_payload_is_not_validated_as_runtime_producer_artifact() -> None
 
     assert PredictiveMaintenanceRuntimeService._stored_producer_artifact(
         {"prediction_result_payload": payload}
+    ) is None
+
+
+def test_historical_selected_result_keeps_explicit_case_scoped_and_frozen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    class Repository:
+        @staticmethod
+        def result_artifact_row(**kwargs):
+            calls.append(kwargs)
+            return {
+                "artifact_id": "RESULT#frozen-case",
+                "dataset_version_id": "dataset-v3",
+            }
+
+    service = PredictiveMaintenanceRuntimeService(Repository())  # type: ignore[arg-type]
+    frozen_result = object()
+    monkeypatch.setattr(service, "_product_result", lambda **_kwargs: frozen_result)
+    context = SimpleNamespace(dataset_version_id="dataset-v3")
+
+    resolved = service._historical_selected_result(
+        organization_id="org-a",
+        project_id="project-a",
+        workspace_id="workspace-a",
+        selected_event_id="RESULT#frozen-case",
+        context=context,  # type: ignore[arg-type]
+    )
+
+    assert resolved is frozen_result
+    assert calls == [{
+        "organization_id": "org-a",
+        "project_id": "project-a",
+        "workspace_id": "workspace-a",
+        "artifact_id": "RESULT#frozen-case",
+    }]
+
+    mismatch_context = SimpleNamespace(dataset_version_id="dataset-v4")
+    assert service._historical_selected_result(
+        organization_id="org-a",
+        project_id="project-a",
+        workspace_id="workspace-a",
+        selected_event_id="RESULT#frozen-case",
+        context=mismatch_context,  # type: ignore[arg-type]
     ) is None
 
 

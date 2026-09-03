@@ -237,7 +237,11 @@ def dashboard_source(
     workspace_id: str,
     dataset_version_id: str | None = Query(default=None, max_length=160),
     selected_event_id: str | None = Query(default=None, max_length=320),
-    role: str = Query(default="manager", pattern="^(manager|engineer)$"),
+    role: str = Query(default="manager", pattern="^(manager|engineer|executive)$"),
+    report_type: str | None = Query(
+        default=None,
+        pattern="^(inspection-summary|operations-decision|executive-brief|maintenance-effect|weekly-risk)$",
+    ),
     intent: str = Query(
         default="overview",
         pattern="^(overview|explain-risk|compare|summarize-manager|detail-engineer|recommend-check|show-model-details)$",
@@ -265,6 +269,7 @@ def dashboard_source(
             dataset_version_id=dataset_version_id,
             selected_event_id=selected_event_id,
             role=role,
+            report_type=report_type,
             intent=intent,
             locale=locale,
             view=view,

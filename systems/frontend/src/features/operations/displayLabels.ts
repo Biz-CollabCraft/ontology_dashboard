@@ -121,6 +121,11 @@ export function displayAssetName(asset: DisplayAssetLike | null | undefined): st
 
 export function displayAssetShortName(asset: DisplayAssetLike | null | undefined): string {
   if (!asset) return "-";
+  const runtime = asset.assetId.match(/^(CNC|CMP)-S\d+-L\d+-(\d+)$/i);
+  if (runtime) {
+    const [, kind, slot] = runtime;
+    return kind.toUpperCase() === "CMP" ? "압축기" : `CNC ${Number(slot)}`;
+  }
   const mappedName = displayAssetName(asset);
   const unitSuffix = mappedName.match(/(\d+)호기$/)?.[1];
   if (unitSuffix) return `${Number(unitSuffix)}호기`;

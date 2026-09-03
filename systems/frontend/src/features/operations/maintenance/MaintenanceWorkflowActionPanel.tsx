@@ -451,7 +451,13 @@ export function MaintenanceWorkflowActionPanel({
       });
     }
   } else {
-    if (state.inspectionWorkOrder?.status === "approved") {
+    if (!state.inspectionWorkOrder) {
+      label = "운영 관리자 점검 요청 대기";
+      helper = "현재 Case의 근거는 준비되어 있습니다. 운영 관리자가 점검 작업요청을 생성·승인하면 이 화면에서 점검을 시작할 수 있습니다.";
+    } else if (state.inspectionWorkOrder?.status === "requested") {
+      label = "점검 승인 대기";
+      helper = "운영 관리자의 점검 작업요청 승인을 기다리고 있습니다.";
+    } else if (state.inspectionWorkOrder?.status === "approved") {
       label = "점검 시작";
       helper = "SOP를 확인한 뒤 현장 점검을 시작합니다.";
       enabled = canFieldExecute;
@@ -524,7 +530,7 @@ export function MaintenanceWorkflowActionPanel({
 
   return (
     <section className="operations-maintenance-workflow-panel" aria-label="Closed-loop 작업 실행">
-      <header><div><span>Closed-loop</span><strong>{role === "process_manager" ? "생산 관리자 작업" : "현장 관리자 작업"}</strong></div><button type="button" className="operations-icon-button" onClick={() => void refresh()} aria-label="작업 상태 새로고침">↻</button></header>
+      <header><div><span>Closed-loop</span><strong>{role === "process_manager" ? "운영 관리자 작업" : "현장 점검 작업"}</strong></div><button type="button" className="operations-icon-button" onClick={() => void refresh()} aria-label="작업 상태 새로고침">↻</button></header>
       <p>{loading ? "작업 상태를 확인하고 있습니다." : helper}</p>
       {role === "process_manager"
         && state.inspectionResult?.outcome === "maintenance_recommended"

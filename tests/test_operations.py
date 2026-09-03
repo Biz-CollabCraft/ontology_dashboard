@@ -184,6 +184,31 @@ def test_role_reports_are_grounded_and_different(service: FactorySignalService) 
     assert all(action.requires_human_approval for action in manager.actions)
 
 
+def test_executive_report_types_are_distinct_grounded_artifacts(service: FactorySignalService) -> None:
+    executive, _ = service.report(
+        "EVT-GS-002",
+        ReportRequest(role="executive", report_type="executive-brief", use_llm=False),
+    )
+    decision, _ = service.report(
+        "EVT-GS-002",
+        ReportRequest(role="executive", report_type="operations-decision", use_llm=False),
+    )
+    inspection, _ = service.report(
+        "EVT-GS-002",
+        ReportRequest(role="executive", report_type="inspection-summary", use_llm=False),
+    )
+
+    assert executive.role == decision.role == inspection.role == "executive"
+    assert executive.report_type == "executive-brief"
+    assert decision.report_type == "operations-decision"
+    assert inspection.report_type == "inspection-summary"
+    assert len({executive.report_id, decision.report_id, inspection.report_id}) == 3
+    assert executive.sections != decision.sections
+    assert decision.sections != inspection.sections
+    assert not any("factor." in section.body for section in executive.sections)
+    assert all(action.requires_human_approval for action in executive.actions)
+
+
 def test_reports_are_generated_as_separate_locale_variants(service: FactorySignalService) -> None:
     korean, _ = service.report(
         "EVT-GS-002",

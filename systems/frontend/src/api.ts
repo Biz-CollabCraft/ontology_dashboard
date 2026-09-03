@@ -731,7 +731,8 @@ export function getPredictiveMaintenanceDashboard(
   input: {
     dataset_version_id?: string;
     selected_event_id?: string;
-    role?: "manager" | "engineer";
+    role?: "manager" | "engineer" | "executive";
+    report_type?: import("./types").ReportType;
     intent?: string;
     locale?: "ko-KR" | "en-US";
   } = {},
@@ -741,6 +742,7 @@ export function getPredictiveMaintenanceDashboard(
   if (input.dataset_version_id) params.set("dataset_version_id", input.dataset_version_id);
   if (input.selected_event_id) params.set("selected_event_id", input.selected_event_id);
   if (input.role) params.set("role", input.role);
+  if (input.report_type) params.set("report_type", input.report_type);
   if (input.intent) params.set("intent", input.intent);
   if (input.locale) params.set("locale", input.locale);
   const query = params.size ? `?${params.toString()}` : "";
@@ -1215,10 +1217,11 @@ export async function getReport(
   role: Role,
   useLlm = true,
   locale: "ko-KR" | "en-US" = "ko-KR",
+  reportType?: import("./types").ReportType,
 ): Promise<Report> {
   const payload = await request<{ report: Report }>(`/api/events/${encodeURIComponent(eventId)}/report`, {
     method: "POST",
-    body: JSON.stringify({ role, locale, use_llm: useLlm }),
+    body: JSON.stringify({ role, report_type: reportType, locale, use_llm: useLlm }),
   });
   return payload.report;
 }
