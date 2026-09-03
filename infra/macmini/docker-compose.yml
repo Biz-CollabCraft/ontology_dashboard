@@ -179,7 +179,7 @@ services:
       MODEL_ARTIFACT_URI: /data/models/artifacts
       LOG_LEVEL: ${GENERATOR_LOG_LEVEL:-INFO}
     volumes:
-      - ${ONTOLOGY_DATA_ROOT}/generator/source:/data/source:ro
+      - ${ONTOLOGY_DATA_ROOT}/generator/source:/data/source
       - ${ONTOLOGY_DATA_ROOT}/generator/data_preprocessed:/data/preprocessed
       - ${ONTOLOGY_DATA_ROOT}/generator/ontology:/data/ontology
       - ${ONTOLOGY_DATA_ROOT}/artifacts:/data/models/artifacts:ro
