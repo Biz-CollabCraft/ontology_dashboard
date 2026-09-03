@@ -43,6 +43,7 @@ from .integration import (
     ToolReplacementStatePatch,
 )
 from .maintenance_domain import (
+    SourceSimulationSessionUnavailable,
     apply_recommendation_decision,
     create_inspection_work_order,
     create_operations_manual_recommendation,
@@ -1116,13 +1117,40 @@ class MaintenanceLoopService:
         if self.replay_session_query is None:
             raise ValueError("Diagnosis replay session validation is unavailable")
 
-        replay_binding = self.replay_session_query.resolve_maintenance_replay_session(
+        recommendation_id = work_order.authorization.recommendation_id
+        if recommendation_id is None:
+            raise ValueError("maintenance work order has no recommendation authorization")
+        recommendation = self.repository.get_recommendation(
+            workspace_id=workspace_id,
+            recommendation_id=recommendation_id,
+        )
+        if recommendation is None or recommendation.action_code is None:
+            raise ValueError("authorized maintenance recommendation is unavailable")
+
+        source_binding = self.replay_session_query.resolve_maintenance_source_session(
             organization_id=organization_id,
             project_id=project_id,
             workspace_id=workspace_id,
-            session_id=payload.simulation_session_id,
+            source_product_result_id=recommendation.source_product_result_id,
             equipment_id=work_order.equipment_id,
         )
+        if source_binding is not None:
+            replay_binding = source_binding
+        elif payload.simulation_session_id is not None:
+            # Historical Product Results may predate source-session lineage.
+            # Compatibility never overrides lineage already recorded by a
+            # current live Product Result.
+            replay_binding = self.replay_session_query.resolve_maintenance_replay_session(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                session_id=payload.simulation_session_id,
+                equipment_id=work_order.equipment_id,
+            )
+        else:
+            raise SourceSimulationSessionUnavailable(
+                "Product Result does not contain source simulation session lineage"
+            )
         if not isinstance(replay_binding, Mapping):
             raise ValueError("Diagnosis returned an invalid replay session binding")
         self._require_row_scope(
@@ -1136,7 +1164,10 @@ class MaintenanceLoopService:
         simulation_session_id = self._required_text(
             replay_binding, "simulation_session_id"
         )
-        if simulation_session_id != payload.simulation_session_id:
+        if (
+            payload.simulation_session_id is not None
+            and simulation_session_id != payload.simulation_session_id
+        ):
             raise ValueError("replay session canonical identity mismatch")
 
         # Build the requested target without trusting caller-supplied lineage.
@@ -1144,15 +1175,6 @@ class MaintenanceLoopService:
         # and handles an identical Idempotency-Key replay before transition
         # validation.
         approved = work_order.model_copy(update={"status": WorkOrderStatus.APPROVED})
-        recommendation_id = work_order.authorization.recommendation_id
-        if recommendation_id is None:
-            raise ValueError("maintenance work order has no recommendation authorization")
-        recommendation = self.repository.get_recommendation(
-            workspace_id=workspace_id,
-            recommendation_id=recommendation_id,
-        )
-        if recommendation is None or recommendation.action_code is None:
-            raise ValueError("authorized maintenance recommendation is unavailable")
         action_code = MaintenanceActionCode(recommendation.action_code)
         action = plan_maintenance_action(
             work_order=approved,

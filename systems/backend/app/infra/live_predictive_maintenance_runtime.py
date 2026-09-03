@@ -2680,10 +2680,14 @@ class LiveDiagnosisApplicationAdapter:
         snapshot_root: str | Path,
         enqueue_client: GeneratorRuntimePipelineClient,
         minimum_history_rows: int = 36,
+        simulation_session_id: str | None = None,
     ) -> None:
         self.snapshot_root = Path(snapshot_root).expanduser().resolve()
         self.enqueue_client = enqueue_client
         self.minimum_history_rows = max(1, int(minimum_history_rows))
+        self.simulation_session_id = (
+            simulation_session_id.strip() if simulation_session_id else None
+        )
 
     def materialize_live_results(self, batch: dict[str, Any]) -> dict[str, Any]:
         rows, counts = _live_pipeline_observation_rows(
@@ -2699,6 +2703,14 @@ class LiveDiagnosisApplicationAdapter:
                 "history_counts": counts,
             }
         snapshot = _materialize_live_pipeline_snapshot(self.snapshot_root, rows)
+        if self.simulation_session_id:
+            session_digest = hashlib.sha256(
+                self.simulation_session_id.encode("utf-8")
+            ).hexdigest()[:12]
+            snapshot = {
+                **snapshot,
+                "job_id": f"{snapshot['job_id']}-session-{session_digest}",
+            }
         queued = self.enqueue_client.enqueue(
             {
                 **snapshot,
@@ -2706,7 +2718,11 @@ class LiveDiagnosisApplicationAdapter:
                 "dataset_version": str(batch["dataset_version_id"]),
                 "pipeline_contract_version": "generator-prediction-result-v1",
                 "source_kind": "live_sensor",
-                "lineage": {},
+                "lineage": (
+                    {"simulation_session_id": self.simulation_session_id}
+                    if self.simulation_session_id
+                    else {}
+                ),
             }
         )
         return {

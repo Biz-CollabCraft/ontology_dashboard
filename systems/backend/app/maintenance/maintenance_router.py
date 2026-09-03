@@ -20,7 +20,11 @@ from .api_schema import (
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
 )
-from .maintenance_domain import IdempotencyConflict, InvalidTransition
+from .maintenance_domain import (
+    IdempotencyConflict,
+    InvalidTransition,
+    SourceSimulationSessionUnavailable,
+)
 from .maintenance_schema import WorkOrderStatus
 from .service import MaintenanceLoopService
 
@@ -58,6 +62,8 @@ def _execute(command: Callable[[], Any]) -> Any:
         return _error(409, "invalid_state_transition", str(exc))
     except PermissionError as exc:
         return _error(403, "work_order_assignment_denied", str(exc))
+    except SourceSimulationSessionUnavailable as exc:
+        return _error(422, "source_simulation_session_unavailable", str(exc))
     except ValueError as exc:
         return _error(422, "contract_validation_failed", str(exc))
 

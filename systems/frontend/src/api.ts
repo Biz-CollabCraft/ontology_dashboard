@@ -1440,15 +1440,26 @@ export async function approveMaintenanceWorkOrder(input: {
   datasetVersionId: string;
   idempotencyKey: string;
 }) {
-  const replay = await startPredictiveMaintenanceReplay(input.projectId, input.workspaceId, {
-    dataset_version_id: input.datasetVersionId,
-    speed_minutes_per_second: 60,
-  });
-  return maintenanceCommand(
-    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
-    { simulation_session_id: replay.cursor.session_id },
-    input.idempotencyKey,
-  );
+  const endpoint = `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-work-orders/${encodeURIComponent(input.workOrderId)}/approve`;
+  try {
+    return await maintenanceCommand(endpoint, {}, input.idempotencyKey);
+  } catch (reason) {
+    if (!(reason instanceof ApiError) || reason.code !== "source_simulation_session_unavailable") {
+      throw reason;
+    }
+    // Historical Product Results can predate source-session provenance. Only
+    // in that compatibility case do we create a replay selector; current live
+    // Results stay bound to the immutable source session resolved server-side.
+    const replay = await startPredictiveMaintenanceReplay(input.projectId, input.workspaceId, {
+      dataset_version_id: input.datasetVersionId,
+      speed_minutes_per_second: 60,
+    });
+    return maintenanceCommand(
+      endpoint,
+      { simulation_session_id: replay.cursor.session_id },
+      input.idempotencyKey,
+    );
+  }
 }
 
 export function startMaintenanceAction(input: {

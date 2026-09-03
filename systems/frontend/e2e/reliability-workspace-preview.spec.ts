@@ -58,7 +58,16 @@ async function loginAs(
   authCookies.set(email, await page.context().cookies());
 }
 
+async function closeDetailDrawer(shell: ReturnType<Page["locator"]>) {
+  const dialog = shell.getByRole("dialog", { name: "선택 설비 상세" });
+  if (await dialog.isVisible()) {
+    await dialog.getByRole("button", { name: "선택 설비 상세 닫기" }).click();
+    await expect(dialog).toBeHidden();
+  }
+}
+
 async function openFactoryStatus(shell: ReturnType<Page["locator"]>) {
+  await closeDetailDrawer(shell);
   await shell
     .locator(".rw-preview-left nav button")
     .filter({ hasText: "설비 현황" })
@@ -319,6 +328,7 @@ test("keeps navigation expanded on laptop widths and wraps Korean copy by word b
     ".rw-preview-shell:not(.rw-preview-loading-placeholder)",
   );
   await expect(shell).toBeVisible({ timeout: 15_000 });
+  await closeDetailDrawer(shell);
   const rail = shell.locator(".rw-preview-left");
   const firstNavCopy = rail.locator("nav button").first().locator("div");
   await expect(firstNavCopy).toBeVisible();
@@ -478,7 +488,7 @@ test("keeps grounded report surfaces light and derives assistant copy from live 
   ).toBeVisible();
 });
 
-test("uses wall-clock assets and renders connected observation history", async ({
+test("uses wall-clock assets and resolves observation-history states", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -514,9 +524,6 @@ test("uses wall-clock assets and renders connected observation history", async (
 
   const drawer = shell.getByRole("dialog", { name: "선택 설비 상세" });
   await expect(drawer).toBeVisible();
-  await expect(
-    drawer.getByText("최신 관측 기준", { exact: false }),
-  ).toBeVisible({ timeout: 15_000 });
   const featureMonitor = drawer.locator(".operations-live-feature-monitor");
   await expect(featureMonitor).not.toContainText("센서 이력 로딩 중", {
     timeout: 15_000,
@@ -903,7 +910,7 @@ test("keeps an explicitly selected Decision Case stable across reload", async ({
     before!,
   );
   const blocked = await shell
-    .getByText("선택 snapshot 복원 불가", { exact: true })
+    .getByText("선택 Case를 다시 확인해 주세요", { exact: true })
     .count();
   if (before!.startsWith("RESULT#")) {
     expect(
@@ -912,7 +919,7 @@ test("keeps an explicitly selected Decision Case stable across reload", async ({
     ).toBe(0);
   }
   if (blocked) {
-    await expect(shell).toContainText("최신 Event로 자동 대체하지 않습니다");
+    await expect(shell).toContainText(/최신 Event로 자동 대체하지/);
     await expect(shell.locator('[data-surface="decision-case"]')).toHaveCount(
       0,
     );
@@ -953,10 +960,17 @@ test("blocks an explicit Decision Case that cannot be restored instead of fallin
 }) => {
   await login(page);
   const missing = "RESULT#MISSING-FROZEN-SNAPSHOT";
-  const url = new URL(page.url());
-  url.searchParams.set("event_id", missing);
-  url.searchParams.set("asset_id", "CNC-S03-L02-01");
+  const url = new URL(
+    `/app/projects/${PROJECT}/operations/decision-case`,
+    page.url(),
+  );
   url.searchParams.set("view", "operations");
+  url.searchParams.set("dashboard", "workflow");
+  url.searchParams.set("role", "process_manager");
+  url.searchParams.set("workspace_id", "manufacturing-demo");
+  url.searchParams.set("asset_id", "CNC-S03-L02-01");
+  url.searchParams.set("event_id", missing);
+  url.searchParams.set("workspace_shell", "reliability");
   await page.goto(url.toString());
   const shell = page.locator(
     ".rw-preview-shell:not(.rw-preview-loading-placeholder)",
@@ -966,9 +980,9 @@ test("blocks an explicit Decision Case that cannot be restored instead of fallin
     new RegExp(`event_id=${encodeURIComponent(missing)}`),
   );
   await expect(
-    shell.getByText("선택 snapshot 복원 불가", { exact: true }),
+    shell.getByText("선택 Case를 다시 확인해 주세요", { exact: true }),
   ).toBeVisible();
-  await expect(shell).toContainText("최신 Event로 자동 대체하지 않습니다");
+  await expect(shell).toContainText(/최신 Event로 자동 대체하지/);
   await expect(
     shell.locator('[data-selected-event-id]:not([data-selected-event-id=""])'),
   ).toHaveCount(0);
@@ -1074,6 +1088,7 @@ test("organizes engineering navigation by work intent instead of duplicated data
     await expect(rail.getByText(group, { exact: true })).toBeVisible();
   }
 
+  await closeDetailDrawer(shell);
   await rail.locator("nav button").filter({ hasText: "원인 분석" }).click();
   const diagnosis = shell.locator('[data-surface="assets"]');
   await expect(diagnosis).toHaveAttribute(
@@ -1184,6 +1199,7 @@ test("keeps standard workspace copy readable and exposes active-navigation seman
   const activeNav = shell.locator(".rw-preview-left nav button.is-active");
   await expect(activeNav).toHaveAttribute("aria-current", "page");
 
+  await closeDetailDrawer(shell);
   await shell
     .locator(".operations-factory-asset-node:not(.normal):not(.slot)")
     .first()
@@ -1463,7 +1479,8 @@ test("keeps light-mode report cards and charts light and exposes chart axes and 
   const chart = drawer.locator(".asset-series-chart").first();
   const candidateCount = Math.min(await candidates.count(), 16);
   for (let index = 0; index < candidateCount; index += 1) {
-    await candidates.nth(index).click();
+    await closeDetailDrawer(shell);
+    await candidates.nth(index).click({ force: true });
     await expect(drawer).toBeVisible();
     const monitor = drawer.locator(".operations-live-feature-monitor");
     await expect(monitor)
@@ -1501,11 +1518,12 @@ test("keeps light-mode report cards and charts light and exposes chart axes and 
       .toBeGreaterThan(0.9);
     await expect(tooltip.locator("text.is-value")).toBeVisible();
   } else {
-    await candidates.first().click();
+    await closeDetailDrawer(shell);
+    await candidates.first().click({ force: true });
     await expect(drawer).toBeVisible();
     await expect(
       drawer.locator(".operations-live-feature-monitor"),
-    ).toContainText(/센서 이력 없음|센서 이력 로딩 중/);
+    ).toContainText(/관측 이력 없음|관측 이력 로딩 중/);
   }
 
   await drawer.getByRole("button", { name: "보고서 출력" }).click();

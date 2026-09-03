@@ -195,13 +195,17 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
     updateSelection({ eventId: firstEvent.eventId, assetId: firstEvent.assetId }, { replace: true });
   }, [model, selection.eventId, selection.view, updateSelection]);
   const latestEventForSelectedAsset = useMemo(() => {
-    if (!model || !selectedEvent) return null;
-    const asset = model.assets.find((item) => item.assetId === selectedEvent.assetId) ?? null;
-    if (!asset?.eventId || asset.eventId === selectedEvent.eventId) return null;
+    if (!model) return null;
+    const assetId = selectedEvent?.assetId ?? selection.assetId;
+    if (!assetId) return null;
+    const asset = model.assets.find((item) => item.assetId === assetId) ?? null;
+    if (!asset?.eventId) return null;
+    if (selectedEvent && asset.eventId === selectedEvent.eventId) return null;
     const latest = model.events.find((item) => item.eventId === asset.eventId) ?? null;
+    if (!selectedEvent) return latest;
     if (!latest?.observedAt || !selectedEvent.observedAt) return latest;
     return Date.parse(latest.observedAt) > Date.parse(selectedEvent.observedAt) ? latest : null;
-  }, [model, selectedEvent]);
+  }, [model, selectedEvent, selection.assetId]);
 
   useEffect(() => {
     if (!model || adaptiveLandingResolvedRef.current || backupMode) return;
@@ -231,7 +235,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   }, [model?.context.workspaceId, projectId]);
 
   useEffect(() => {
-    if (!model || !selectedEvent) {
+    if (!model || !selectedEvent || selectedSnapshotUnavailable) {
       setDetail(null);
       setDetailError(null);
       setDetailLoading(false);
@@ -259,7 +263,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       })
       .finally(() => !cancelled && setDetailLoading(false));
     return () => { cancelled = true; };
-  }, [authorizedRole, detailVersion, experienceKind, refreshVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, sensorWindow]);
+  }, [authorizedRole, detailVersion, experienceKind, refreshVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selectedSnapshotUnavailable, sensorWindow]);
 
   const openView = useCallback((view: OperationsView) => {
     const surface = reliabilitySurfaceForView(experienceKind, view, backupMode);
@@ -425,7 +429,18 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   const canReadSystemLogs = canReadOperationsSystemLogs(user?.permissions);
   const selectedAssetId = selection.assetId;
   let content;
-  if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
+  if (
+    useReliabilityPreview
+    && selectedSnapshotUnavailable
+    && selection.surface !== "factory-status"
+    && selection.view !== "system"
+  ) {
+    content = <div className="operations-route-state"><OperationsState
+      kind="empty"
+      title="선택 Case 본문을 표시하지 않습니다"
+      detail="immutable Result Artifact를 복원하기 전에는 Evidence, Action, Outcome, Report 본문을 표시하지 않습니다. 설비 현황에서 새 Case를 선택하거나 현재 설비의 최신 Case로 이동하세요."
+    /></div>;
+  } else if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
     content = <OperationsOverviewPage model={model} role={authorizedRole} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   } else if (useReliabilityPreview && selection.view !== "system") {
     content = <RoleComposedWorkspace
@@ -468,7 +483,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
         <strong>선택 Case를 다시 확인해 주세요</strong>
         <span>
           URL의 기존 Decision Case {selection.eventId}를 현재 immutable Result Artifact에서 찾지 못했습니다.
-          최신 Event로 자동 대체하지는 않지만, 아래 화면에서 새 Case를 직접 선택할 수 있습니다.
+          최신 Event로 자동 대체하지는 않으며, 복원되지 않은 Case의 Evidence·Action·Report 본문도 표시하지 않습니다.
         </span>
         {latestEventForSelectedAsset ? (
           <button type="button" onClick={followLatestEvent}>현재 설비 최신 Case 보기</button>

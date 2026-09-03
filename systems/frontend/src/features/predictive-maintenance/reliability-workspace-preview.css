@@ -50,6 +50,7 @@
 .rw-preview-operational-focus{padding:0 clamp(18px,2.4vw,34px) 16px}
 .rw-preview-content{padding-top:0}
 .rw-preview-shell .operations-detail-drawer{top:48px;height:calc(100vh - 118px)}
+.rw-preview-shell .operations-detail-drawer-close{top:58px;right:14px}
 .rw-preview-shell .operations-detail-drawer .operations-assignment-popover{inset:48px 0 70px auto;height:auto}
 .rw-preview-bottom{padding:5px 6px 6px}
 .rw-preview-bottom .lifecycle-instrument{border-color:var(--rw-line-strong);background:color-mix(in srgb,var(--rw-panel) 97%,transparent);box-shadow:0 -14px 38px rgba(0,0,0,.16)}

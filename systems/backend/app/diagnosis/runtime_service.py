@@ -2489,6 +2489,51 @@ class PredictiveMaintenanceRuntimeService:
             "simulation_session_id": record.id,
         }
 
+    def resolve_maintenance_source_session(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        source_product_result_id: str,
+        equipment_id: str,
+    ) -> dict[str, str] | None:
+        """Resolve the source simulation session recorded by a Product Result."""
+
+        row = self.repository.result_artifact_row(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            artifact_id=source_product_result_id,
+        )
+        if row is None:
+            raise KeyError(source_product_result_id)
+        context = self.context(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=str(row["dataset_version_id"]),
+        )
+        result = self._product_result(
+            context=context,
+            row=row,
+            source_contract="result_artifact",
+        )
+        if result.artifact_id != source_product_result_id:
+            raise ValueError("Product Result canonical identity does not match the selector")
+        if result.asset_id != equipment_id:
+            raise ValueError("Product Result equipment identity mismatch")
+        simulation_session_id = result.provenance.simulation_session_id
+        if simulation_session_id is None or not simulation_session_id.strip():
+            return None
+        return {
+            "organization_id": organization_id,
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+            "equipment_id": equipment_id,
+            "simulation_session_id": simulation_session_id,
+        }
+
     def control_replay(
         self,
         *,

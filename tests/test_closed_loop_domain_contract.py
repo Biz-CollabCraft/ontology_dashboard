@@ -419,7 +419,12 @@ def test_action_and_event_require_approved_completed_matching_lineage() -> None:
         idempotency_key="inspection-create-001",
     )
     inspection_approved = WorkOrder.model_validate(
-        {**inspection.model_dump(), "status": WorkOrderStatus.APPROVED}
+        {
+            **inspection.model_dump(),
+            "status": WorkOrderStatus.APPROVED,
+            "assigned_to": "engineer-1",
+            "assigned_at": datetime.now(timezone.utc),
+        }
     )
     with pytest.raises(ValueError, match="maintenance work order"):
         plan_maintenance_action(

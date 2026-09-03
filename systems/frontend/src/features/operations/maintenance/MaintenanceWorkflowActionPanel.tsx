@@ -437,7 +437,7 @@ export function MaintenanceWorkflowActionPanel({
       });
     } else if (state.maintenanceWorkOrder?.status === "requested") {
       label = "정비 WorkOrder 승인";
-      helper = "Runtime Replay session을 만든 뒤 정비 Action을 계획합니다.";
+      helper = "승인된 Product Result의 source runtime lineage를 이어 정비 Action을 계획합니다.";
       enabled = canManage;
       command = () => approveMaintenanceWorkOrder({
         projectId,
