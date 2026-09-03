@@ -297,6 +297,10 @@ const WORK_QUEUE_COLUMNS: Array<{ id: WorkQueueColumnId; label: string; detail: 
 ];
 
 const SENSOR_WINDOW_OPTIONS: Array<{ id: OperationsSensorWindowId; label: string; hours: number }> = [
+  { id: "1h", label: "1시간", hours: 1 },
+  { id: "3h", label: "3시간", hours: 3 },
+  { id: "6h", label: "6시간", hours: 6 },
+  { id: "12h", label: "12시간", hours: 12 },
   { id: "24h", label: "24시간", hours: 24 },
   { id: "7d", label: "7일", hours: 24 * 7 },
   { id: "30d", label: "30일", hours: 24 * 30 },
@@ -316,7 +320,7 @@ const LIVE_FEATURE_CHART_LIMIT = 3;
 
 function isDerivedFeatureKey(key: string): boolean {
   return DERIVED_FEATURE_KEYS.has(key)
-    || /_(?:1h|6h|12h|24h|7d|30d)_(?:change|mean|std|max_abs|abs_mean|max|min|last)$/.test(key)
+    || /_(?:1h|3h|6h|12h|24h|7d|30d)_(?:change|mean|std|max_abs|abs_mean|max|min|last)$/.test(key)
     || /_(?:current|abs_current)$/.test(key);
 }
 const PRIMARY_FIELD_SENSOR_KEYS = new Set(["torque_nm", "tool_wear_min", "rotational_speed_rpm"]);
@@ -2240,8 +2244,8 @@ function MapReportFeatureSeries({
   const max = rawMaximum + rawSpan * 0.08;
   const range = max - min || Number.EPSILON;
   const chartWidth = 720;
-  const chartHeight = 282;
-  const frame = { left: 64, right: liveDemo ? 638 : 690, top: 22, bottom: 226 };
+  const chartHeight = 292;
+  const frame = { left: 64, right: liveDemo ? 638 : 690, top: liveDemo ? 38 : 22, bottom: liveDemo ? 222 : 226 };
   const forecastRight = liveDemo ? 690 : frame.right;
   const width = frame.right - frame.left;
   const totalSlots = visiblePoints.length + (currentObservedAt ? 1 : 0);
@@ -2294,8 +2298,9 @@ function MapReportFeatureSeries({
   const liveValue = livePoint && typeof livePoint.value === "number" ? livePoint.value : currentNumericValue;
   const liveValueLabel = liveValue === null ? "값 없음" : `${liveValue.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${unit ? ` ${unit}` : ""}`;
   const livePillWidth = Math.min(188, Math.max(86, liveValueLabel.length * 7.2 + 48));
-  const livePillX = livePoint ? clamp(livePoint.x + 10, frame.left + 8, forecastRight - livePillWidth - 8) : forecastRight - livePillWidth - 8;
-  const livePillY = livePoint && typeof livePoint.y === "number" ? clamp(livePoint.y - 14, frame.top + 8, frame.bottom - 28) : frame.top + 10;
+  const livePillX = forecastRight - livePillWidth - 4;
+  const livePillUsesBottomLane = Boolean(livePoint && typeof livePoint.y === "number" && livePoint.y < (frame.top + frame.bottom) / 2);
+  const livePillY = livePillUsesBottomLane ? frame.bottom + 8 : 6;
   const recentNumericPoints = numericPoints.slice(-4);
   const recentFirst = recentNumericPoints[0];
   const recentLast = recentNumericPoints.at(-1);
@@ -2387,11 +2392,11 @@ function MapReportFeatureSeries({
             <line className="asset-live-cursor" x1={livePoint.x} x2={livePoint.x} y1={frame.top} y2={frame.bottom} />
             <circle className="asset-live-ring" cx={livePoint.x} cy={livePoint.y} r="9" style={{ stroke: color }} />
             <circle className="asset-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.8" style={{ fill: color }} />
-            <g className="asset-live-value-pill" transform={`translate(${livePillX} ${livePillY})`}>
+            <g className={`asset-live-value-pill ${livePillUsesBottomLane ? "is-bottom" : "is-top"}`} transform={`translate(${livePillX} ${livePillY})`}>
               <rect width={livePillWidth} height="28" rx="7" />
               <text x="9" y="18">LIVE {liveValueLabel}</text>
             </g>
-            <text className="asset-live-now-label" x={frame.right} y={frame.top + 16} textAnchor="end">LIVE</text>
+            <text className="asset-live-now-label" x={frame.right + 3} y={livePillUsesBottomLane ? frame.bottom + 4 : frame.top - 5} textAnchor="start">NOW</text>
           </g>
         ) : null}
         {coords.map((point, index) => point.qualityStatus === "bad" || point.qualityStatus === "unknown"
@@ -2461,11 +2466,11 @@ function MapReportFeatureSeries({
             </g>
           </g>
         ) : null}
-        <text className="asset-chart-axis" x={frame.left} y="252" textAnchor="start">{formatSeriesTime(visiblePoints[0].observedAt)}</text>
-        {middlePoint && visiblePoints.length > 2 ? <text className="asset-chart-axis" x={xAt(middleIndex)} y="252" textAnchor="middle">{formatSeriesTime(middlePoint.observedAt)}</text> : null}
-        {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y="252" textAnchor="end">{liveDemo ? "NOW" : `현재 ${currentTimeLabel}`}</text> : endHistoryPoint ? <text className="asset-chart-axis" x={frame.right} y="252" textAnchor="end">{formatSeriesTime(endHistoryPoint.observedAt)}</text> : null}
-        {liveDemo ? <text className="asset-chart-axis" x={forecastRight} y="252" textAnchor="end">+30s</text> : null}
-        <text className="asset-chart-axis-title" x="376" y="270" textAnchor="middle">시간</text>
+        <text className="asset-chart-axis" x={frame.left} y="262" textAnchor="start">{formatSeriesTime(visiblePoints[0].observedAt)}</text>
+        {middlePoint && visiblePoints.length > 2 ? <text className="asset-chart-axis" x={xAt(middleIndex)} y="262" textAnchor="middle">{formatSeriesTime(middlePoint.observedAt)}</text> : null}
+        {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y="262" textAnchor="end">{liveDemo ? "NOW" : `현재 ${currentTimeLabel}`}</text> : endHistoryPoint ? <text className="asset-chart-axis" x={frame.right} y="262" textAnchor="end">{formatSeriesTime(endHistoryPoint.observedAt)}</text> : null}
+        {liveDemo ? <text className="asset-chart-axis" x={forecastRight} y="262" textAnchor="end">+30s</text> : null}
+        <text className="asset-chart-axis-title" x="376" y="280" textAnchor="middle">시간</text>
       </svg>
     </section>
   );

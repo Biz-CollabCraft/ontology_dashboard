@@ -16,7 +16,7 @@ export type OperationsDecision =
 
 export type OperationsSourceMode =
   "canonical-runtime" | "gold-fixture-fallback";
-export type OperationsSensorWindowId = "24h" | "7d" | "30d";
+export type OperationsSensorWindowId = "1h" | "3h" | "6h" | "12h" | "24h" | "7d" | "30d";
 export type OperationsSensorWindowCoverage =
   "complete" | "partial" | "empty" | "unknown";
 

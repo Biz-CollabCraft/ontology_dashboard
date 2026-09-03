@@ -668,9 +668,10 @@
 .operations-live-signal-factors b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4c90f0, #f0a23a, #ec5b62); }
 .operations-live-feature-note { margin: 0; color: var(--operations-dim); font-size: 10px; line-height: 1.5; }
 .operations-live-feature-monitor .operations-feature-series-collection { gap: 6px; min-width: 0; }
-.operations-live-feature-monitor .operations-feature-series-collection > header { min-height: 28px; }
+.operations-live-feature-monitor .operations-feature-series-collection > header { min-height: 28px; align-items: flex-start; flex-wrap: wrap; }
 .operations-live-feature-monitor .operations-feature-series-collection > header strong { font-size: 11px; }
-.operations-live-feature-monitor .asset-window-control button { min-width: 38px; min-height: 22px; font-size: 9px; }
+.operations-live-feature-monitor .asset-window-control { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; max-width: min(100%, 430px); }
+.operations-live-feature-monitor .asset-window-control button { min-width: 40px; min-height: 22px; padding: 0 7px; font-size: 9px; }
 .operations-mini-feature-chart { display: grid; gap: 8px; }
 .operations-mini-feature-chart header { display: flex; align-items: center; gap: 7px; color: var(--operations-muted); }
 .operations-mini-feature-chart header strong { color: var(--operations-text); font-size: 12px; }
@@ -737,6 +738,8 @@
 .operations-side-map-report .asset-live-ring { fill: transparent; stroke-width: 2.2; transform-box: fill-box; transform-origin: center; animation: asset-live-ring-pulse 1.35s ease-in-out infinite; }
 .operations-side-map-report .asset-live-dot { stroke: #121922; stroke-width: 2.3; filter: drop-shadow(0 0 6px rgba(156,197,250,.66)); }
 .operations-side-map-report .asset-live-value-pill rect { fill: rgba(18,25,34,.96); stroke: rgba(156,197,250,.58); stroke-width: 1.2; animation: asset-live-pill-flash 1.4s ease-in-out infinite; }
+.operations-side-map-report .asset-live-value-pill.is-top rect { filter: drop-shadow(0 7px 12px rgba(0,0,0,.22)); }
+.operations-side-map-report .asset-live-value-pill.is-bottom rect { filter: drop-shadow(0 -7px 12px rgba(0,0,0,.18)); }
 .operations-side-map-report .asset-live-value-pill text { fill: #d8e8ff; font-size: 11px; font-weight: 950; letter-spacing: .01em; }
 .operations-side-map-report .asset-live-now-label { fill: #9cc5fa; font-size: 10px; font-weight: 950; letter-spacing: .08em; }
 .operations-side-map-report .asset-quality-marker { stroke: #efc57f; stroke-width: 2.2; }

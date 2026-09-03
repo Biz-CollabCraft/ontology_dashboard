@@ -100,12 +100,17 @@ async function getAssetDetailViewModel(
   datasetVersionId: string,
   historyWindow: OperationsSensorWindowId,
 ): Promise<AssetDetailViewModel> {
+  const backendHistoryWindow = historyWindow === "30d"
+    ? "30d"
+    : historyWindow === "7d"
+      ? "7d"
+      : "24h";
   const params = new URLSearchParams({
     project_id: projectId,
     workspace_id: workspaceId,
     event_id: eventId,
     dataset_version_id: datasetVersionId,
-    history_window: historyWindow,
+    history_window: backendHistoryWindow,
   });
   const response = await fetch(
     `${API_BASE}/api/objects/${encodeURIComponent(assetId)}/detail-view?${params.toString()}`,
