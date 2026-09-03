@@ -112,6 +112,7 @@ from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
 from app.mvp.context_providers import default_agent_review_context_registry
 from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.mvp.service import ManufacturingPredictiveMaintenanceService
+from app.mvp.operational_decision_support_service import OperationalDecisionSupportService
 
 
 ROOT = project_root()
@@ -199,6 +200,11 @@ def build_manufacturing_service(
 @lru_cache(maxsize=1)
 def get_service() -> ManufacturingPredictiveMaintenanceService:
     return build_manufacturing_service(database_target())
+
+
+@lru_cache(maxsize=1)
+def get_operational_decision_support_service() -> OperationalDecisionSupportService:
+    return OperationalDecisionSupportService(ROOT)
 
 
 def _password_hasher() -> PasswordHasher:
