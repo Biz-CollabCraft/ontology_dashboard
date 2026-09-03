@@ -79,6 +79,12 @@ def test_runtime_product_result_materialization_never_deletes_history() -> None:
         assert f"DELETE FROM {table}" not in implementation
 
 
+def test_live_pipeline_snapshot_uses_only_cadence_aligned_observations() -> None:
+    implementation = inspect.getsource(live_runtime._live_pipeline_observation_rows)
+
+    assert "MOD(EXTRACT(EPOCH FROM observed_at)::bigint, 600) = 0" in implementation
+
+
 def test_macmini_generator_active_model_set_pins_both_equipment_families() -> None:
     root = Path(__file__).resolve().parents[1]
     payload = json.loads(

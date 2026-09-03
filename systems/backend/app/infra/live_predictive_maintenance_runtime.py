@@ -1084,6 +1084,7 @@ def _live_pipeline_observation_rows(
     producer file and makes worker restart behaviour deterministic.
     """
     psycopg, dict_row, _ = _postgres_modules()
+    cadence_filter = "MOD(EXTRACT(EPOCH FROM observed_at)::bigint, 600) = 0"
     queries = {
         "cnc": """
             SELECT * FROM (
@@ -1091,18 +1092,22 @@ def _live_pipeline_observation_rows(
                      product_type,air_temperature_k,process_temperature_k,
                      rotational_speed_rpm,torque_nm,tool_wear_min,generator_version,
                      ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY observed_at DESC) AS rn
-              FROM pm_cnc_observations WHERE dataset_version_id=%s
+              FROM pm_cnc_observations
+              WHERE dataset_version_id=%s
+                AND {cadence_filter}
             ) ranked WHERE rn <= %s ORDER BY asset_id,observed_at
-        """,
+        """.format(cadence_filter=cadence_filter),
         "compressor": """
             SELECT * FROM (
               SELECT observed_at,asset_id,site_id,cell_id,is_operating,operating_state,
                      voltage_raw,rotation_raw,pressure_raw,vibration_raw,
                      relative_vibration_z,relative_vibration_zone,generator_version,
                      ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY observed_at DESC) AS rn
-              FROM pm_compressor_observations WHERE dataset_version_id=%s
+              FROM pm_compressor_observations
+              WHERE dataset_version_id=%s
+                AND {cadence_filter}
             ) ranked WHERE rn <= %s ORDER BY asset_id,observed_at
-        """,
+        """.format(cadence_filter=cadence_filter),
     }
     selected: list[tuple[str, dict[str, Any]]] = []
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
