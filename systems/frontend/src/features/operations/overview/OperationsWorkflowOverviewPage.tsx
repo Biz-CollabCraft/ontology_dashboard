@@ -1810,12 +1810,6 @@ export function OperationsWorkflowOverviewPage({
           <strong>{liveDemo.isGeneratedResult ? "방금 전" : lastReceived}</strong>
           <small>{liveDemo.sourceLabel} · {formatTimestamp(liveDemo.generatedAt)}</small>
         </article>
-        <article className="operations-plan-impact-card is-live-result-card is-live-pulse">
-          <CircleLiveIcon />
-          <span>새 Result 수신</span>
-          <strong>{liveDemo.assetName}</strong>
-          <small>{formatProbability(liveDemo.risk)} · {formatTimestamp(liveDemo.generatedAt)}</small>
-        </article>
         <article className="operations-plan-impact-card is-live-risk-card is-live-pulse">
           <Gauge className="operations-plan-impact-icon" size={15} aria-hidden="true" />
           <span>LIVE RISK</span>
@@ -1828,6 +1822,12 @@ export function OperationsWorkflowOverviewPage({
           <span>{livePipelineStep.label}</span>
           <strong>{livePipelineStep.title}</strong>
           <small>{livePipelineStep.detail}</small>
+        </article>
+        <article className="operations-plan-impact-card is-live-result-card is-live-pulse">
+          <CircleLiveIcon />
+          <span>새 Result 수신</span>
+          <strong>{liveDemo.assetName}</strong>
+          <small>{formatProbability(liveDemo.risk)} · {formatTimestamp(liveDemo.generatedAt)}</small>
         </article>
       </section>
 
