@@ -69,7 +69,7 @@ import {
   type PostMaintenancePredictionSummary,
 } from "../maintenance/MaintenanceWorkflowActionPanel";
 
-interface WorkOrderCandidate {
+export interface WorkOrderCandidate {
   event: MvpEvent;
   asset: MvpAsset | null;
   suspectedPart: string;
@@ -724,8 +724,8 @@ function latestClosedLoopMaintenanceEvent(closedLoop: MvpClosedLoopSummary | nul
   return [...(closedLoop?.maintenanceEvents ?? [])].sort((left, right) => String(right.completedAt ?? "").localeCompare(String(left.completedAt ?? "")))[0] ?? null;
 }
 
-function workStatusFromLifecycleSummary(summary: MvpClosedLoopLifecycleSummary | null | undefined): WorkStatus | null {
-  switch (summary?.currentStep) {
+export function workStatusFromLifecycleStep(step: MvpClosedLoopLifecycleStep | null | undefined): WorkStatus | null {
+  switch (step) {
     case "prediction":
     case "evidence":
     case "decision":
@@ -733,14 +733,16 @@ function workStatusFromLifecycleSummary(summary: MvpClosedLoopLifecycleSummary |
     case "inspection_requested":
       return "work_requested";
     case "inspection_approved":
+      return "assigned";
+    case "inspection_in_progress":
+      return "inspection_started";
     case "inspection_completed":
     case "recommendation_proposed":
     case "maintenance_requested":
     case "maintenance_approved":
-      return "assigned";
-    case "inspection_in_progress":
+      return "inspection_completed";
     case "maintenance_in_progress":
-      return "inspection_started";
+      return "maintenance_started";
     case "maintenance_completed":
       return "maintenance_completed";
     case "post_maintenance_observation_pending":
@@ -750,6 +752,43 @@ function workStatusFromLifecycleSummary(summary: MvpClosedLoopLifecycleSummary |
     default:
       return null;
   }
+}
+
+function workStatusFromLifecycleSummary(summary: MvpClosedLoopLifecycleSummary | null | undefined): WorkStatus | null {
+  return workStatusFromLifecycleStep(summary?.currentStep);
+}
+
+function workStatusFromInspectionWorkflow(
+  workOrder: OpenInspectionWorkOrderReadModel | null | undefined,
+): WorkStatus | null {
+  if (!workOrder) return null;
+  const lifecycleStatus = workStatusFromLifecycleStep(workOrder.current_step);
+  if (lifecycleStatus) return lifecycleStatus;
+  if (workOrder.status === "requested") return "work_requested";
+  if (workOrder.status === "approved") return "assigned";
+  if (workOrder.status === "in_progress") return "inspection_started";
+  if (workOrder.status === "completed") return "inspection_completed";
+  return null;
+}
+
+export function prioritizeActiveWorkflowCandidates(
+  candidates: WorkOrderCandidate[],
+  workOrders: OpenInspectionWorkOrderReadModel[],
+): WorkOrderCandidate[] {
+  const candidatesByAsset = new Map<string, WorkOrderCandidate>();
+  for (const workOrder of workOrders) {
+    const candidate = candidates.find((item) => item.event.eventId === workOrder.event_id)
+      ?? candidates.find((item) => item.event.assetId === workOrder.asset_id);
+    if (candidate && !candidatesByAsset.has(workOrder.asset_id)) {
+      candidatesByAsset.set(workOrder.asset_id, candidate);
+    }
+  }
+  for (const candidate of candidates) {
+    if (!candidatesByAsset.has(candidate.event.assetId)) {
+      candidatesByAsset.set(candidate.event.assetId, candidate);
+    }
+  }
+  return [...candidatesByAsset.values()];
 }
 
 function workStatusFromClosedLoop(closedLoop: MvpClosedLoopSummary | null | undefined): WorkStatus | null {
@@ -992,13 +1031,8 @@ function WorkStatusQueueBoard({
 }) {
   const items = candidates.map((candidate) => {
     const workOrder = workOrders.find((item) => item.asset_id === candidate.event.assetId) ?? null;
-    const status: WorkStatus = workOrder?.status === "requested"
-      ? "work_requested"
-      : workOrder?.status === "approved"
-        ? "assigned"
-        : workOrder?.status === "in_progress"
-          ? "inspection_started"
-          : workStatusForAsset(candidate.asset, candidate.event);
+    const status: WorkStatus = workStatusFromInspectionWorkflow(workOrder)
+      ?? workStatusForAsset(candidate.asset, candidate.event);
     return { candidate, workOrder, status, column: workQueueColumn(status) };
   });
   return (
@@ -1260,15 +1294,19 @@ export function MvpWorkflowOverviewPage({
     });
     return () => controller.abort();
   }, [model.context.projectId, model.context.refreshedAt, model.context.workspaceId]);
-  const queueCandidates = [...workOrderCandidates];
+  const queueCandidatePool = [...workOrderCandidates];
   for (const workOrder of openInspectionWorkOrders) {
-    if (queueCandidates.some((candidate) => candidate.event.assetId === workOrder.asset_id)) continue;
+    if (queueCandidatePool.some((candidate) => candidate.event.eventId === workOrder.event_id)) continue;
     const event = model.events.find((item) => item.eventId === workOrder.event_id)
       ?? model.events.find((item) => item.assetId === workOrder.asset_id);
     if (!event) continue;
     const asset = model.assets.find((item) => item.assetId === workOrder.asset_id) ?? null;
-    queueCandidates.push({ event, asset, suspectedPart: suspectedPartLabel(event, asset) });
+    queueCandidatePool.push({ event, asset, suspectedPart: suspectedPartLabel(event, asset) });
   }
+  const queueCandidates = prioritizeActiveWorkflowCandidates(
+    queueCandidatePool,
+    openInspectionWorkOrders,
+  );
   const lineImpactSummaries = buildLineImpactSummaries(model.assets);
   const factoryCells = buildFactoryCellLayout(model.assets, lineImpactSummaries);
   const selectedAsset = model.assets.find((asset) => asset.assetId === selectedAssetId)
@@ -1360,13 +1398,7 @@ export function MvpWorkflowOverviewPage({
     && drawerDetailEventId !== drawerOpenInspectionWorkOrder.event_id
     ? null
     : drawerDetail?.closedLoop ?? null;
-  const drawerClosedLoopStatus = (drawerOpenInspectionWorkOrder?.status === "requested"
-      ? "work_requested"
-      : drawerOpenInspectionWorkOrder?.status === "approved"
-        ? "assigned"
-        : drawerOpenInspectionWorkOrder?.status === "in_progress"
-          ? "inspection_started"
-          : null)
+  const drawerClosedLoopStatus = workStatusFromInspectionWorkflow(drawerOpenInspectionWorkOrder)
     ?? workStatusFromClosedLoop(drawerClosedLoop);
   const drawerLifecycleSummary = drawerClosedLoop?.lifecycleSummary ?? null;
   const drawerClosedLoopAction = primaryClosedLoopAction(drawerClosedLoop, drawerClosedLoopStatus);

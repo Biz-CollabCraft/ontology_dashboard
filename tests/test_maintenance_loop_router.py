@@ -304,11 +304,11 @@ def test_manager_approves_maintenance_but_cannot_execute_it() -> None:
 
     missing_idempotency = client.post(
         f"{BASE}/maintenance-work-orders/MAINTENANCE-WO-1/approve",
-        json={"simulation_session_id": "SIMULATION-SESSION-001"},
+        json={},
     )
     approved = client.post(
         f"{BASE}/maintenance-work-orders/MAINTENANCE-WO-1/approve",
-        json={"simulation_session_id": "SIMULATION-SESSION-001"},
+        json={},
         headers={"Idempotency-Key": "maintenance-approve-001"},
     )
     denied = client.post(

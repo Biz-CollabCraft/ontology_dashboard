@@ -64,12 +64,15 @@ class ProjectionQuery:
         *,
         replay_binding: dict | None = None,
         replay_error: ValueError | None = None,
+        source_binding: dict | None = None,
     ) -> None:
         self.projection = projection if projection is not None else canonical_projection()
         self.calls: list[dict] = []
         self.replay_binding = replay_binding
         self.replay_error = replay_error
+        self.source_binding = source_binding
         self.replay_calls: list[dict] = []
+        self.source_session_calls: list[dict] = []
 
     def event_evidence_projection(self, **scope):
         self.calls.append(scope)
@@ -88,6 +91,12 @@ class ProjectionQuery:
             "workspace_id": values["workspace_id"],
             "equipment_id": values["equipment_id"],
         }
+
+    def resolve_maintenance_source_session(self, **values):
+        self.source_session_calls.append(values)
+        if self.replay_error is not None:
+            raise self.replay_error
+        return self.source_binding
 
 
 class SequencedProjectionQuery(ProjectionQuery):
@@ -410,6 +419,66 @@ def run_requested_maintenance(loop: MaintenanceLoopService) -> str:
     return decided["work_order_id"]
 
 
+def test_completed_inspection_requiring_maintenance_stays_in_active_queue(tmp_path) -> None:
+    loop = service(tmp_path)
+    work_order_id, _inspection_result_id = run_completed_inspection(loop)
+
+    queue = loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    assert queue["items"] == [
+        {
+            **loop.repository.get_work_order(
+                workspace_id="workspace-1",
+                work_order_id=work_order_id,
+            ).model_dump(mode="json"),
+            "inspection_outcome": "maintenance_recommended",
+            "current_step": "inspection_completed",
+        }
+    ]
+
+
+def test_completed_inspection_without_maintenance_leaves_active_queue(tmp_path) -> None:
+    loop = service(tmp_path)
+    run_completed_inspection(loop, outcome="no_action_required")
+
+    queue = loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    assert queue == {"items": []}
+
+
+def test_active_inspection_queue_reports_downstream_recommendation_step(tmp_path) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(loop)
+    loop.create_manual_recommendation(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=OperationsManualRecommendationCreateRequest(
+            basis=("field engineer confirmed tool wear",)
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="manual-recommendation-active-queue-001",
+    )
+
+    queue = loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    assert queue["items"][0]["current_step"] == "recommendation_proposed"
+
+
 def test_field_operator_accepts_assignment_and_only_assignee_can_execute(tmp_path) -> None:
     loop = service(tmp_path)
     requested = loop.request_inspection(
@@ -683,6 +752,106 @@ def test_maintenance_execution_uses_persisted_lineage_and_emits_replay_events(tm
         "maintenance.replay_requested": 3,
     }
     assert all("SIMULATION-SESSION-001" in row["payload_json"] for row in outbox)
+
+
+def test_live_maintenance_approval_uses_authorized_product_result_source_session(
+    tmp_path,
+) -> None:
+    diagnosis = ProjectionQuery(
+        source_binding={
+            "simulation_session_id": "SOURCE-SIMULATION-SESSION-001",
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "equipment_id": "CNC-001",
+        }
+    )
+    loop = service(tmp_path, query=diagnosis)
+    work_order_id = run_requested_maintenance(loop)
+
+    approved = loop.approve_maintenance_work_order(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        work_order_id=work_order_id,
+        payload=MaintenanceWorkOrderApproveRequest(),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="maintenance-source-session-approve-001",
+    )
+
+    assert approved["maintenance_action_status"] == "planned"
+    assert diagnosis.replay_calls == []
+    assert diagnosis.source_session_calls == [
+        {
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "source_product_result_id": "RESULT-001",
+            "equipment_id": "CNC-001",
+        }
+    ]
+    lineage = loop.event_lineage(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        event_id="EVT-RESULT-001",
+    )
+    assert lineage["maintenance_actions"][0]["simulation_session_id"] == (
+        "SOURCE-SIMULATION-SESSION-001"
+    )
+
+
+def test_live_maintenance_approval_rejects_caller_session_override(tmp_path) -> None:
+    diagnosis = ProjectionQuery(
+        source_binding={
+            "simulation_session_id": "SOURCE-SIMULATION-SESSION-001",
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "equipment_id": "CNC-001",
+        }
+    )
+    loop = service(tmp_path, query=diagnosis)
+    work_order_id = run_requested_maintenance(loop)
+
+    with pytest.raises(ValueError, match="canonical identity mismatch"):
+        loop.approve_maintenance_work_order(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=MaintenanceWorkOrderApproveRequest(
+                simulation_session_id="pm-replay-forged"
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="maintenance-source-session-forged-001",
+        )
+
+    assert diagnosis.replay_calls == []
+    assert loop.repository.operational_side_effect_counts()["maintenance_actions"] == 0
+
+
+def test_live_maintenance_approval_fails_without_source_session_lineage(tmp_path) -> None:
+    diagnosis = ProjectionQuery()
+    loop = service(tmp_path, query=diagnosis)
+    work_order_id = run_requested_maintenance(loop)
+
+    with pytest.raises(ValueError, match="source simulation session lineage"):
+        loop.approve_maintenance_work_order(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=MaintenanceWorkOrderApproveRequest(),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="maintenance-source-session-missing-001",
+        )
+
+    assert diagnosis.replay_calls == []
+    assert loop.repository.operational_side_effect_counts()["maintenance_actions"] == 0
 
 
 def test_maintenance_approval_fails_closed_when_diagnosis_rejects_replay(tmp_path) -> None:
