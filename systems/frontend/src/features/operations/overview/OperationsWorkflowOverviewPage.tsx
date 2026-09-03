@@ -14,7 +14,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createOperationsAgentReviewSummary,
   createPredictiveMaintenanceRealtimeDemoTick,
@@ -1707,6 +1707,7 @@ export function OperationsWorkflowOverviewPage({
   const [factoryFocusMode, setFactoryFocusMode] = useState<"all" | "exceptions">("exceptions");
   const [postMaintenancePredictions, setPostMaintenancePredictions] = useState<Record<string, PostMaintenancePredictionSummary>>({});
   const [liveTickError, setLiveTickError] = useState<string | null>(null);
+  const autoOpenedDrawerKeyRef = useRef<string | null>(null);
   const handlePostMaintenancePrediction = useCallback((assetId: string, prediction: PostMaintenancePredictionSummary) => {
     setPostMaintenancePredictions((current) => {
       const previous = current[assetId];
@@ -1749,6 +1750,20 @@ export function OperationsWorkflowOverviewPage({
       window.clearInterval(timer);
     };
   }, [model.context.datasetVersionId, model.context.projectId, model.context.workspaceId, onRefresh]);
+  useEffect(() => {
+    if (!selectedAsset || detailDrawerOpen) return;
+    const params = new URLSearchParams(window.location.search);
+    const requestedAssetId = params.get("asset_id");
+    const requestedEventId = params.get("event_id");
+    const selectedEventId = selectedEvent?.eventId ?? selectedAsset.eventId ?? "";
+    if (requestedAssetId !== selectedAsset.assetId && requestedEventId !== selectedEventId) return;
+    const drawerKey = `${selectedAsset.assetId}:${selectedEventId}`;
+    if (autoOpenedDrawerKeyRef.current === drawerKey) return;
+    autoOpenedDrawerKeyRef.current = drawerKey;
+    setFactorySlotPreview(null);
+    setDetailDrawerOpen(true);
+    setDetailDrawerTab("status");
+  }, [detailDrawerOpen, selectedAsset, selectedEvent?.eventId]);
   useEffect(() => {
     if (model.context.projectId !== "manufacturing-demo-project" || model.context.workspaceId !== "manufacturing-demo") return;
     if (!liveDemo.eventId) return;
