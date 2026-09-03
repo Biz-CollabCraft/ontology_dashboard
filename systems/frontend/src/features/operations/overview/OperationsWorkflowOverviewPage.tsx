@@ -2355,7 +2355,7 @@ function AssetPreviewPanel({
                 sensors={liveFeatureSnapshots}
                 windowId={sensorWindow}
                 onWindowChange={onSensorWindowChange}
-                emptyTitle={detailLoading ? "센서 이력 로딩 중" : "센서 이력 없음"}
+                emptyTitle="관측 이력 없음"
                 emptyDetail={detailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
               />
               <p className="operations-live-feature-note">

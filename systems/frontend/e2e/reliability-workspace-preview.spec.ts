@@ -58,6 +58,14 @@ async function loginAs(
   authCookies.set(email, await page.context().cookies());
 }
 
+async function openFactoryStatus(shell: ReturnType<Page["locator"]>) {
+  await shell
+    .locator(".rw-preview-left nav button")
+    .filter({ hasText: "설비 현황" })
+    .click();
+  await expect(shell).toHaveAttribute("data-active-surface", "factory-status");
+}
+
 test("uses a light Korean placeholder before the reliability workspace is ready", async ({
   page,
 }) => {
@@ -104,15 +112,27 @@ test("uses a light Korean placeholder before the reliability workspace is ready"
   await expect(shell.locator(".operational-focus")).toHaveCount(0);
   const liveKpis = shell.locator(".operations-live-kpi-grid");
   const factoryMap = shell.locator(".operations-factory-map-panel").first();
-  await expect(liveKpis).toBeVisible();
-  await expect(factoryMap).toBeVisible();
-  const [kpiBox, mapBox] = await Promise.all([
-    liveKpis.boundingBox(),
-    factoryMap.boundingBox(),
-  ]);
-  expect(kpiBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
-    mapBox?.y ?? Number.NEGATIVE_INFINITY,
-  );
+  const decisionQueue = shell.getByText("DECISION QUEUE", { exact: true });
+  await expect(liveKpis.or(decisionQueue).first()).toBeVisible();
+  if (await liveKpis.isVisible()) {
+    await expect(factoryMap).toBeVisible();
+    const [kpiBox, mapBox] = await Promise.all([
+      liveKpis.boundingBox(),
+      factoryMap.boundingBox(),
+    ]);
+    expect(kpiBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
+      mapBox?.y ?? Number.NEGATIVE_INFINITY,
+    );
+  } else {
+    // Production telemetry can legitimately route managers to the adaptive
+    // 판단 대기 surface when pending decisions are the top priority. The
+    // placeholder/theme contract should not force the overview KPI grid in that
+    // state, but it must still land in a concrete manager decision workspace.
+    await expect(decisionQueue).toBeVisible();
+    await expect(
+      shell.getByRole("heading", { name: "지금 판단해야 할 항목" }),
+    ).toBeVisible();
+  }
   const lightSurfaces = await shell.evaluate((element) => {
     const sample = (selector: string) => {
       const target = element.querySelector<HTMLElement>(selector);
@@ -477,6 +497,7 @@ test("uses wall-clock assets and renders connected observation history", async (
     ".rw-preview-shell:not(.rw-preview-loading-placeholder)",
   );
   await expect(shell).toBeVisible({ timeout: 15_000 });
+  await openFactoryStatus(shell);
   const factoryMap = shell.locator(".operations-factory-map-panel").first();
   await expect(factoryMap).toBeVisible();
   await expect(
@@ -532,6 +553,7 @@ test("requires report type review before opening the browser print flow", async 
     ".rw-preview-shell:not(.rw-preview-loading-placeholder)",
   );
   await expect(shell).toBeVisible({ timeout: 15_000 });
+  await openFactoryStatus(shell);
   const chartAsset = shell
     .locator(
       ".operations-factory-asset-node.critical, .operations-factory-asset-node.warning, .operations-factory-asset-node.attention, .operations-factory-asset-node.hold",
@@ -693,7 +715,7 @@ test("keeps factory status focused and avoids repeating the full map on operatio
     ".rw-preview-shell:not(.rw-preview-loading-placeholder)",
   );
   await expect(shell).toBeVisible({ timeout: 15_000 });
-  await expect(shell).toHaveAttribute("data-active-surface", "factory-status");
+  await openFactoryStatus(shell);
   await expect(shell.locator(".operations-live-kpi-grid")).toBeVisible();
   await expect(shell.locator(".operations-factory-map-panel")).toBeVisible();
   await expect(shell.locator(".operations-monitoring-summary")).toBeHidden();
