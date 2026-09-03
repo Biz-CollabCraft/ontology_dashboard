@@ -682,10 +682,16 @@ def main() -> None:
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--seed", type=int, default=20260902)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--run-id")
+    parser.add_argument("--candidate-sha")
     args = parser.parse_args()
+    if args.mode == "live" and (not args.run_id or not args.candidate_sha):
+        raise SystemExit("live evaluation requires --run-id and --candidate-sha")
     provider: JsonProvider = MockJsonProvider() if args.mode == "mock" else configured_provider()
     started = time.perf_counter()
     result = run_suite(provider=provider, iterations=args.iterations, seed=args.seed)
+    result["run_id"] = args.run_id or "unversioned"
+    result["candidate_sha"] = args.candidate_sha or "unversioned"
     result["mode"] = args.mode
     result["status"] = "fixture_verified" if args.mode == "mock" else "measured"
     result["evidence_level"] = "contract_and_mock_only" if args.mode == "mock" else "live_provider"
@@ -696,7 +702,7 @@ def main() -> None:
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({k: result[k] for k in ("status", "mode", "sample_size", "aggregate")}, ensure_ascii=False))
+    print(json.dumps({k: result[k] for k in ("run_id", "candidate_sha", "status", "mode", "sample_size", "aggregate")}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

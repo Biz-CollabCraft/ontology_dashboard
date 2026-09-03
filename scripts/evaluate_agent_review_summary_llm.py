@@ -37,7 +37,11 @@ def main() -> None:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--progress-every", type=int, default=0)
+    parser.add_argument("--run-id")
+    parser.add_argument("--candidate-sha")
     args = parser.parse_args()
+    if args.mode == "live" and (not args.run_id or not args.candidate_sha):
+        raise SystemExit("live evaluation requires --run-id and --candidate-sha")
     if args.concurrency < 1:
         raise SystemExit("--concurrency must be >= 1")
     if args.mode == "live":
@@ -83,8 +87,10 @@ def main() -> None:
 
     artifact = {
         "result_id": f"agent-summary-llm-eval-{args.mode}-c{args.concurrency}-{_today_id()}",
+        "run_id": args.run_id or "unversioned",
+        "candidate_sha": args.candidate_sha or "unversioned",
         "recorded_at": datetime.now(UTC).isoformat(),
-        "scope": f"8x15 {args.mode} Agent Review Summary LLM evaluation",
+        "scope": f"8x{args.iterations} {args.mode} Agent Review Summary LLM evaluation",
         "eval_set_id": manifest["eval_set_id"],
         "mode": args.mode,
         "provider": provider_name,
@@ -122,6 +128,8 @@ def main() -> None:
     output.write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({
         "output": _display_path(output),
+        "run_id": artifact["run_id"],
+        "candidate_sha": artifact["candidate_sha"],
         "sample_size": artifact["sample_size"],
         "concurrency": artifact["concurrency"],
         "batch_wall_clock_ms": artifact["batch_wall_clock_ms"],

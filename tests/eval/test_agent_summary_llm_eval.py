@@ -117,6 +117,10 @@ def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:
             str(SCRIPT_PATH),
             "--iterations",
             "15",
+            "--run-id",
+            "quality-test-run",
+            "--candidate-sha",
+            "quality-test-sha",
             "--output",
             str(output),
         ],
@@ -131,6 +135,8 @@ def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:
 
     assert summary["sample_size"] == 120
     assert summary["accepted_llm_candidates"] == 120
+    assert artifact["run_id"] == summary["run_id"] == "quality-test-run"
+    assert artifact["candidate_sha"] == summary["candidate_sha"] == "quality-test-sha"
     assert artifact["sample_size"] == 120
     assert artifact["case_count"] == 8
     assert artifact["iterations_per_case"] == 15

@@ -157,10 +157,10 @@ malformed output, provider timeout, snapshot mismatch simulation을 포함한다
 
 ## Runner 3: Service/DB Workflow Reliability Evaluation
 
-### Required Runner
+### Implemented Runner
 
-- 예정: `scripts/evaluate_agent_workflow_reliability.py`
-- 예정: `tests/eval/test_agent_workflow_reliability.py`
+- 구현: `scripts/evaluate_agent_workflow_reliability.py`
+- 검증: `tests/eval/test_agent_workflow_reliability.py`
 - 결과: `tests/eval/results/agent_workflow_reliability_<run-id>.json`
 
 `SimulationState`가 아니라 실제 Agent Review materialization service와 격리된 SQLite repository를
@@ -288,13 +288,19 @@ runner 구현 자체는 확장 구현과 병행할 수 있다. 그러나 확장 
 
 ### Phase 5. Produce Final Integrated Report
 
-예정 문서:
+구현된 통합기:
+
+- `scripts/build_agent_workflow_final_report.py`
+- `tests/eval/test_agent_workflow_final_report.py`
+
+생성 대상:
 
 - `docs/plans/ai-workflow/<date>-agent-workflow-final-evaluation-report.md`
 - `tests/eval/results/agent_workflow_final_summary_<run-id>.json`
 
-최종 리포트는 원본 row를 복제하지 않고 세 실행기의 artifact path, run ID, candidate SHA와 aggregate를
-참조한다. 품질, workflow 가치, reliability, safety를 별도 section으로 유지한다.
+통합기는 네 실행 artifact의 동일한 run ID와 candidate SHA를 강제하고, 원본 row를 복제하지 않은 채
+artifact path와 aggregate만 참조한다. 품질, workflow 가치, reliability, safety, 사람 검토를 서로
+독립된 gate로 유지하며 사람 검토 전에는 자동 평가가 통과해도 `pending_human_review`로 판정한다.
 
 ### Phase 6. Decide Next Architecture Step
 

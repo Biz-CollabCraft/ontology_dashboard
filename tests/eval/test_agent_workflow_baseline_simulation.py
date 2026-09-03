@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "evaluate_agent_workflow_baseline.py"
@@ -206,3 +209,31 @@ def test_b1_uses_raw_projection_and_b2_uses_evidence_payload() -> None:
         item["quote"] not in json.dumps(evidence["baseline_editable_fields"], ensure_ascii=False)
         for item in baseline["role_summaries"]
     )
+
+
+def test_cli_records_common_run_identity(tmp_path: Path) -> None:
+    output = tmp_path / "baseline.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mode",
+            "mock",
+            "--iterations",
+            "1",
+            "--run-id",
+            "workflow-test-run",
+            "--candidate-sha",
+            "workflow-test-sha",
+            "--output",
+            str(output),
+        ],
+        cwd=ROOT,
+        env={**os.environ, "PYTHONPATH": "systems/backend"},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    artifact = json.loads(output.read_text(encoding="utf-8"))
+    assert artifact["run_id"] == "workflow-test-run"
+    assert artifact["candidate_sha"] == "workflow-test-sha"

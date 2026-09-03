@@ -283,9 +283,11 @@ def _load(name: str) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidate-sha", required=True)
+    parser.add_argument("--run-id", required=True)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     result = evaluate(args.candidate_sha)
+    result["run_id"] = args.run_id
     rendered = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
