@@ -263,7 +263,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       })
       .finally(() => !cancelled && setDetailLoading(false));
     return () => { cancelled = true; };
-  }, [authorizedRole, detailVersion, experienceKind, refreshVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selectedSnapshotUnavailable, sensorWindow]);
+  }, [authorizedRole, detailVersion, experienceKind, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selectedSnapshotUnavailable, sensorWindow]);
 
   const openView = useCallback((view: OperationsView) => {
     const surface = reliabilitySurfaceForView(experienceKind, view, backupMode);

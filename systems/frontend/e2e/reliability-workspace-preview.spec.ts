@@ -525,7 +525,7 @@ test("uses wall-clock assets and resolves observation-history states", async ({
   const drawer = shell.getByRole("dialog", { name: "선택 설비 상세" });
   await expect(drawer).toBeVisible();
   const featureMonitor = drawer.locator(".operations-live-feature-monitor");
-  await expect(featureMonitor).not.toContainText("센서 이력 로딩 중", {
+  await expect(featureMonitor).not.toContainText("관측 이력 로딩 중", {
     timeout: 15_000,
   });
   const featureSeriesCount = await featureMonitor
