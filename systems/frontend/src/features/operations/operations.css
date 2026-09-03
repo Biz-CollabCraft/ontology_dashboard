@@ -753,6 +753,7 @@
 .asset-chart-floating-readout rect { fill: rgba(18,25,34,.88); stroke: rgba(181,196,214,.22); stroke-width: 1; }
 .asset-chart-floating-readout text { fill: #aeb8c5; font-size: 9px; font-weight: 850; }
 .asset-chart-floating-readout text.is-value { fill: #f4f8fb; font-size: 12px; font-weight: 950; }
+.asset-chart-hit-band { fill: transparent; stroke: transparent; pointer-events: all; cursor: crosshair; }
 .asset-chart-hit-target { fill: transparent; stroke: transparent; pointer-events: all; cursor: crosshair; }
 .asset-chart-hit-target:focus { outline: none; stroke: currentColor; stroke-width: 1; opacity: .35; }
 .asset-chart-tooltip { opacity: 0; pointer-events: none; transition: opacity .12s ease; }

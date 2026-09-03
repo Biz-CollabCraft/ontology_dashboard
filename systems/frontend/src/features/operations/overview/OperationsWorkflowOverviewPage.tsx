@@ -2255,7 +2255,7 @@ function MapReportFeatureSeries({
   const bandUpper = clamp(scale.bandUpper, min, max);
   const bandY = yAt(bandUpper);
   const bandHeight = Math.max(2, yAt(bandLower) - yAt(bandUpper));
-  const crossing = coords.find((point) => typeof point.value === "number" && typeof point.y === "number" && (point.value < scale.bandLower || point.value > scale.bandUpper));
+  const crossing = liveDemo ? null : coords.find((point) => typeof point.value === "number" && typeof point.y === "number" && (point.value < scale.bandLower || point.value > scale.bandUpper));
   const crossingText = crossing && typeof crossing.value === "number"
     ? `최근 분포 대비 이탈 ${formatSeriesTime(crossing.bucketMaxObservedAt ?? crossing.observedAt)} · ${(crossing.bucketMax ?? crossing.value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${unit ? ` ${unit}` : ""}`
     : null;
@@ -2315,11 +2315,12 @@ function MapReportFeatureSeries({
   const middleIndex = Math.floor((visiblePoints.length - 1) / 2);
   const middlePoint = visiblePoints[middleIndex] ?? null;
   const endHistoryPoint = visiblePoints.at(-1) ?? null;
+  const hitBandWidth = Math.max(12, width / Math.max(1, coords.length));
   return (
     <section className={[primary ? "asset-series-block is-primary" : "asset-series-block", liveDemo ? "is-live-chart" : ""].filter(Boolean).join(" ")}>
       <header className="asset-series-heading">
         <div><RotateCcw size={17} /><strong>{title}</strong></div>
-        <span className="asset-baseline-key"><i style={{ background: color }} />{liveDemo ? "10분 요약 라인 · crosshair 정확값 · NOW 실시간" : seriesRangeLabel(visiblePoints, windowId, window)}</span>
+        <span className="asset-baseline-key"><i style={{ background: color }} />{liveDemo ? "10분 요약 라인 · 터치/호버 정확값 · NOW 실시간" : seriesRangeLabel(visiblePoints, windowId, window)}</span>
       </header>
       <svg className="asset-series-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${title} 관측 흐름`}>
         <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
@@ -2401,8 +2402,10 @@ function MapReportFeatureSeries({
           const tooltipY = clamp(point.y - tooltipHeight - 9, frame.top + 4, frame.bottom - tooltipHeight - 4);
           const readoutWidth = 126;
           const readoutX = clamp(point.x - readoutWidth / 2, frame.left + 4, frame.right - readoutWidth - 4);
+          const hitBandX = clamp(point.x - hitBandWidth / 2, frame.left, frame.right - hitBandWidth);
           return (
             <g key={`${point.observedAt}-hit-${index}`} className="asset-chart-hover-point">
+              <rect className="asset-chart-hit-band" x={hitBandX} y={frame.top} width={hitBandWidth} height={height} />
               <line className="asset-hover-crosshair" x1={point.x} x2={point.x} y1={frame.top} y2={frame.bottom} />
               <g className="asset-chart-floating-readout" transform={`translate(${readoutX} ${frame.top + 3})`}>
                 <rect width={readoutWidth} height="36" rx="7" />
