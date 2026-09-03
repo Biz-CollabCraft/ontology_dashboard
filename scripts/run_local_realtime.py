@@ -368,7 +368,7 @@ def main() -> int:
     parser.add_argument("--gen-data-port", type=int, default=8300)
     parser.add_argument("--web-port", type=int, default=3100)
     parser.add_argument("--postgres-port", type=int, default=5432)
-    parser.add_argument("--speed", type=float, default=120.0)
+    parser.add_argument("--speed", type=float, default=60.0)
     parser.add_argument("--simulation-hours", type=int, default=72)
     parser.add_argument(
         "--models-store",
