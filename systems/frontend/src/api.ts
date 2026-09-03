@@ -13,6 +13,8 @@ import type {
   EvidenceSnapshotBasisWire,
   MvpAgentReviewPacket,
   MvpAgentReviewSummaryResponse,
+  MvpDecisionBriefRole,
+  MvpDecisionSupportResponse,
   MvpAgentReviewWorkflowRunsResponse,
 } from "./features/mvp/api/mvpContracts";
 import type {
@@ -1028,6 +1030,50 @@ export function createMvpAgentReviewSummary(input: {
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
   return request<MvpAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
+    { method: "POST" },
+  );
+}
+
+export function getMvpDecisionSupportBrief(input: {
+  assetId: string;
+  projectId: string;
+  workspaceId: string;
+  evidenceSnapshotId: string;
+  decisionAsOf: string;
+  role: MvpDecisionBriefRole;
+}): Promise<MvpDecisionSupportResponse> {
+  const params = new URLSearchParams({
+    project_id: input.projectId,
+    workspace_id: input.workspaceId,
+    evidence_snapshot_id: input.evidenceSnapshotId,
+    decision_as_of: input.decisionAsOf,
+    role: input.role,
+  });
+  return request<MvpDecisionSupportResponse>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/decision-support-brief?${params.toString()}`,
+  );
+}
+
+export function createMvpDecisionSupportBrief(input: {
+  assetId: string;
+  projectId: string;
+  workspaceId: string;
+  evidenceSnapshotId: string;
+  decisionAsOf: string;
+  role: MvpDecisionBriefRole;
+  riskStatus: string;
+}): Promise<MvpDecisionSupportResponse> {
+  const params = new URLSearchParams({
+    project_id: input.projectId,
+    workspace_id: input.workspaceId,
+    evidence_snapshot_id: input.evidenceSnapshotId,
+    decision_as_of: input.decisionAsOf,
+    role: input.role,
+    risk_status: input.riskStatus,
+    trigger: "ui_manual_regeneration",
+  });
+  return request<MvpDecisionSupportResponse>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/decision-support-brief?${params.toString()}`,
     { method: "POST" },
   );
 }

@@ -63,6 +63,7 @@ import {
   fieldFailureLabel,
 } from "../displayLabels";
 import { MaintenanceCostDecisionPanel } from "../maintenance/MaintenanceCostDecisionPanel";
+import { OperationalDecisionSupportPanel } from "./OperationalDecisionSupportPanel";
 import {
   MaintenanceWorkflowActionPanel,
   type MaintenanceWorkflowDisplayStatus,
@@ -2221,6 +2222,16 @@ function AssetPreviewPanel({
                 </dl>
                 <p>합성 용량 모델 기반 계획 영향 추정 · 고장확률, 위험도, 점검 근거, 권고 판단을 변경하지 않습니다.</p>
               </section>
+              <OperationalDecisionSupportPanel
+                assetId={asset.assetId}
+                projectId={projectId}
+                workspaceId={workspaceId}
+                evidenceSnapshotId={detail?.snapshotBasis?.artifactId ?? null}
+                decisionAsOf={detail?.snapshotBasis?.observedAt ?? asset.observedAt}
+                riskStatus={asset.status}
+                role="process_manager"
+                canMaterialize={canMaterializeAgentSummary}
+              />
               {lineSummary ? (
                 <section className="mvp-line-asset-list" aria-label="라인 위험 설비 목록">
                   <header><ClipboardList size={14} /><strong>{lineSummary.line} 위험 설비</strong><span>{lineSummary.assets.length}대</span></header>
