@@ -89,6 +89,29 @@ test("keeps the login lifecycle loader available as a persistent preview route",
   await expect(page).toHaveURL(/\/loader$/);
 });
 
+test("keeps login role choices compact and prioritizes the auth panel on mobile", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "운영 관리", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "엔지니어", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "경영진", exact: true })).toBeVisible();
+  await expect(page.getByText("판단 대기 · 생산 영향 · 정비 승인 · 보고 초안", { exact: true })).toBeHidden();
+
+  const managerInfo = page.getByLabel("운영 관리 상세 정보");
+  await managerInfo.hover();
+  await expect(page.getByText("판단 대기 · 생산 영향 · 정비 승인 · 보고 초안", { exact: true })).toBeVisible();
+  await expect(page.getByText("manager@ontology.local", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "운영 관리", exact: true }).click();
+  await expect(page.getByLabel(/이메일|Email/)).toHaveValue("manager@ontology.local");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/login");
+  await expect(page.locator(".auth-resource-context")).toBeHidden();
+  await expect(page.locator(".auth-panel")).toBeVisible();
+  const panelBox = await page.locator(".auth-panel").boundingBox();
+  expect(panelBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(52);
+});
+
 test("keeps navigation expanded on laptop widths and wraps Korean copy by word boundary", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 800 });
   await login(page);

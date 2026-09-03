@@ -5,16 +5,17 @@ import type { AuthUser } from "../../types";
 import { useAuth } from "./AuthContext";
 import { AuthShell } from "./AuthShell";
 import { useI18n } from "../../ui/i18n/I18nProvider";
+import { Info } from "lucide-react";
 
 const DEMO_ACCOUNTS = [
   {
-    label: { ko: "운영 관리자", en: "Operations Manager" },
+    label: { ko: "운영 관리", en: "Operations" },
     description: { ko: "판단 대기 · 생산 영향 · 정비 승인 · 보고 초안", en: "Pending decisions · production impact · maintenance approval · report draft" },
     email: "manager@ontology.local",
     password: "Manager!2026",
   },
   {
-    label: { ko: "설비/공정 엔지니어", en: "Equipment / Process Engineer" },
+    label: { ko: "엔지니어", en: "Engineer" },
     description: { ko: "설비 상태 · 센서 피쳐 · 점검 · 정비 이력 · 현장 메모", en: "Factory status · sensor features · inspection · maintenance history · field notes" },
     email: "engineer@ontology.local",
     password: "Engineer!2026",
@@ -71,6 +72,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [openInfo, setOpenInfo] = useState<string | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -96,6 +98,7 @@ export function LoginPage() {
     if (!account) return;
     setEmail(account.email);
     setPassword(account.password);
+    setOpenInfo(null);
   }
 
   return (
@@ -136,26 +139,39 @@ export function LoginPage() {
       </form>
 
       {shouldShowDemoAccounts() ? (
-        <details className="demo-account-picker" open>
-          <summary>{english ? "Role-based Reliability Operations accounts" : "역할별 Reliability Operations 계정"}</summary>
+        <section className="demo-account-picker" aria-label={english ? "Role-based Reliability Operations accounts" : "역할별 Reliability Operations 계정"}>
+          <header>{english ? "Choose a role" : "역할 선택"}</header>
           <div className="demo-account-grid" role="group" aria-label={english ? "Role accounts" : "역할별 계정"}>
             {DEMO_ACCOUNTS.map((account) => (
-              <button
-                key={account.email}
-                className={`demo-account-card ${email === account.email ? "is-selected" : ""}`}
-                type="button"
-                onClick={() => selectDemo(account.email)}
-              >
-                <strong>{english ? account.label.en : account.label.ko}</strong>
-                <span>{english ? account.description.en : account.description.ko}</span>
-                <small>{account.email}</small>
-              </button>
+              <div className={`demo-account-option ${email === account.email ? "is-selected" : ""}`} key={account.email}>
+                <button
+                  className="demo-account-card"
+                  type="button"
+                  onClick={() => selectDemo(account.email)}
+                >
+                  <strong>{english ? account.label.en : account.label.ko}</strong>
+                </button>
+                <div className={`demo-account-info ${openInfo === account.email ? "is-open" : ""}`}>
+                  <button
+                    type="button"
+                    className="demo-account-info-trigger"
+                    aria-label={english ? `${account.label.en} details` : `${account.label.ko} 상세 정보`}
+                    aria-expanded={openInfo === account.email}
+                    title={english ? "Role details" : "역할 상세"}
+                    onClick={() => setOpenInfo((current) => current === account.email ? null : account.email)}
+                  >
+                    <Info size={13} />
+                  </button>
+                  <div className="demo-account-popover">
+                    <strong>{english ? account.label.en : account.label.ko}</strong>
+                    <p>{english ? account.description.en : account.description.ko}</p>
+                    <small>{account.email}</small>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
-          <small>{english
-            ? "The operational data is shared, while menus, KPI, actions, Assistant questions, and reporting flows adapt to each role."
-            : "데이터는 하나지만 메뉴, KPI, 액션, Assistant 질문과 보고 흐름은 역할에 따라 달라집니다."}</small>
-        </details>
+        </section>
       ) : null}
 
       <p className="auth-footer-copy">

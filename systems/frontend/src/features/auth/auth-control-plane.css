@@ -136,15 +136,9 @@
   .auth-platform-bar { padding: 0 12px; }
   .auth-platform-bar { min-height: 50px; }.auth-brand small { display: none; }
   .auth-platform-bar > div span:not(:first-child) { display: none; }
-  .auth-control-plane { grid-template-columns: 1fr; }
-  .auth-resource-context { display: flex; min-height: auto; padding: 24px 18px 18px; }
-  .auth-resource-context > header { padding-bottom: 22px; }.auth-resource-context > header > span { width: 40px; height: 40px; }.auth-resource-context > header { grid-template-columns: 42px minmax(0,1fr); }.auth-resource-context > header strong { font-size: 14px; }
-  .auth-product-story { min-height: 390px; grid-template-columns: 1fr; grid-template-rows: auto auto auto; gap: 18px; }
-  .auth-story-copy h1 { font-size: clamp(27px,9vw,38px); }.auth-story-copy p { font-size: 12px; line-height: 1.6; }
-  .auth-story-factory section > div span { min-height: 30px; }.auth-story-roles { grid-template-columns: 1fr 1fr 1fr; }.auth-story-roles article { min-height: 92px; padding: 10px; }.auth-story-roles article span { display: none; }
-  .auth-story-lineage { overflow-x: auto; grid-template-columns: repeat(5,110px); padding-bottom: 4px; }.auth-story-lineage span { min-height: 70px; }
-  .auth-value-strip { display: none !important; }
-  .auth-panel { padding: 16px 12px; }
+  .auth-control-plane { display: block; }
+  .auth-resource-context { display: none; }
+  .auth-panel { min-height: calc(100vh - 50px); place-items: start center; padding: 16px 12px 28px; }
   .auth-card { border-radius: 12px; }
   .auth-card .auth-form { grid-template-columns: 1fr; }
   .auth-card .auth-submit, .auth-error { grid-column: 1; }
