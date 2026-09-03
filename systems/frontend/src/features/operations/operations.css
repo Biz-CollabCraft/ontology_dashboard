@@ -415,13 +415,14 @@
 .operations-plan-impact-card.is-live { border-color: rgba(69,184,128,.26); background: linear-gradient(145deg, rgba(69,184,128,.12), rgba(255,255,255,.018)); }
 .operations-plan-impact-card.is-attention { border-color: rgba(240,162,58,.3); background: linear-gradient(145deg, rgba(240,162,58,.12), rgba(255,255,255,.018)); }
 .operations-plan-impact-card.is-live-pulse { animation: operations-live-card-pulse 2.4s ease-in-out infinite; }
-.operations-plan-impact-card.is-live-result-card { border-color: rgba(76,144,240,.34); background: linear-gradient(145deg, rgba(76,144,240,.16), rgba(69,184,128,.08)); }
+.operations-plan-impact-card.is-live-result-card { grid-column: span 2; border-color: rgba(76,144,240,.34); background: linear-gradient(145deg, rgba(76,144,240,.16), rgba(69,184,128,.08)); }
 .operations-plan-impact-card.is-live-result-card strong { font-size: clamp(13px, .95vw, 16px); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.operations-live-result-time { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--operations-dim); font-size: 10px; font-style: normal; font-weight: 850; }
 .operations-plan-impact-card.is-live-risk-card { position: relative; overflow: hidden; border-color: rgba(236,74,91,.34); background: linear-gradient(145deg, rgba(236,74,91,.14), rgba(240,162,58,.08)); }
 .operations-plan-impact-card.is-live-risk-card strong { color: var(--operations-danger); font-size: clamp(24px, 2.2vw, 34px); line-height: .95; }
 .operations-live-risk-meter { display: block; width: 100%; height: 6px; margin-top: 2px; overflow: hidden; border-radius: 999px; background: rgba(181,196,214,.12); }
 .operations-live-risk-meter b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--operations-success), var(--operations-warning), var(--operations-danger)); transition: width .3s ease; }
-.operations-plan-impact-card.is-live-stage-card { grid-column: span 3; border-color: rgba(76,144,240,.28); background: linear-gradient(145deg, rgba(76,144,240,.12), rgba(255,255,255,.018)); }
+.operations-plan-impact-card.is-live-stage-card { grid-column: span 2; border-color: rgba(76,144,240,.28); background: linear-gradient(145deg, rgba(76,144,240,.12), rgba(255,255,255,.018)); }
 .operations-plan-impact-card.is-live-stage-card strong { font-size: clamp(15px, 1.15vw, 20px); line-height: 1.18; }
 .operations-plan-impact-card.is-live-stage-card small,
 .operations-plan-impact-card.is-live-result-card small,
@@ -2088,7 +2089,8 @@
   .operations-kpi-grid.operations-overview-kpis { grid-template-columns: repeat(3,minmax(150px,1fr)); }
   .operations-overview-topline { grid-template-columns: repeat(3,minmax(190px,1fr)); }
   .operations-live-kpi-grid { grid-template-columns: repeat(5,minmax(0,1fr)); }
-  .operations-plan-impact-card.is-live-stage-card { grid-column: span 3; }
+  .operations-plan-impact-card.is-live-stage-card,
+  .operations-plan-impact-card.is-live-result-card { grid-column: span 2; }
   .operations-overview-status-strip { grid-column: 1 / -1; }
   .operations-event-inbox { grid-template-columns: 1fr; }
   .operations-header-context { grid-template-columns: .7fr .7fr 1.2fr; }
@@ -2762,7 +2764,8 @@
 .rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card { min-height: 68px; padding: 8px 9px; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card strong { font-size: 18px; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card.is-live-risk-card strong { font-size: 28px; }
-.rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card.is-live-stage-card { grid-column: span 3; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card.is-live-stage-card,
+.rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card.is-live-result-card { grid-column: span 2; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card.is-live-stage-card strong { font-size: 16px; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-map-panel .operations-panel-body { gap: 6px; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-note { padding-block: 5px; }
@@ -2840,7 +2843,8 @@
 
 @media (min-width: 761px) and (max-width: 1180px) {
   .rw-preview-shell[data-active-surface="factory-status"] .operations-live-kpi-grid { grid-template-columns: repeat(5,minmax(0,1fr)); }
-  .rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card.is-live-stage-card { grid-column: span 3; }
+  .rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card.is-live-stage-card,
+  .rw-preview-shell[data-active-surface="factory-status"] .operations-plan-impact-card.is-live-result-card { grid-column: span 2; }
   .rw-preview-shell .operations-factory-map-toolbar { align-items: stretch; flex-wrap: wrap; }
   .rw-preview-shell .operations-factory-stream-indicator { flex: 1 1 260px; }
 }

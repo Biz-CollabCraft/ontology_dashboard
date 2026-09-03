@@ -1503,11 +1503,6 @@ function FactoryMonitoringMapPanel({
               <button type="button" className={focusMode === "all" ? "is-active" : ""} onClick={() => onFocusModeChange("all")}>전체 설비</button>
               <button type="button" className={focusMode === "exceptions" ? "is-active" : ""} onClick={() => onFocusModeChange("exceptions")}>이상만 강조</button>
             </div>
-            <div className="operations-factory-stream-indicator" aria-label="최근 수신 Result">
-              <span><i aria-hidden="true" />{liveDemo.sourceLabel}</span>
-              <strong>{liveDemo.assetName}</strong>
-              <small>{liveTickError ? `생성 tick 지연 · ${liveTickError}` : `${formatProbability(liveDemo.risk)} · ${formatTimestamp(liveDemo.generatedAt)}`}</small>
-            </div>
             <div className="operations-factory-map-legend" aria-label="설비 상태 범례">
               <i className="normal">정상</i><i className="attention">주의</i><i className="critical">긴급</i><i className="warning">점검 중</i><i className="hold">완료 확인 필요</i><i className="slot">미연결</i>
             </div>
@@ -1891,7 +1886,8 @@ export function OperationsWorkflowOverviewPage({
           <CircleLiveIcon />
           <span>새 Result 수신</span>
           <strong>{liveDemo.assetName}</strong>
-          <small>{formatProbability(liveDemo.risk)} · {formatTimestamp(liveDemo.generatedAt)}</small>
+          <small>{formatProbability(liveDemo.risk)} · {liveDemo.signal}</small>
+          <em className="operations-live-result-time">{formatTimestamp(liveDemo.generatedAt)}</em>
         </article>
       </section>
 
@@ -2132,6 +2128,7 @@ function MapReportFeatureSeries({
   currentObservedAt,
   primary,
   liveDemo,
+  loading,
 }: {
   title: string;
   unit: string | null;
@@ -2144,6 +2141,7 @@ function MapReportFeatureSeries({
   currentObservedAt?: string | null;
   primary?: boolean;
   liveDemo?: RealtimeDemoSnapshot | null;
+  loading?: boolean;
 }) {
   const color = title.includes("진동") || title.includes("토크") ? "#a7630c" : "#285fcb";
   const filteredPoints = filterSeriesPoints(points, currentObservedAt, windowId);
@@ -2155,9 +2153,11 @@ function MapReportFeatureSeries({
       <section className="asset-series-block">
         <header className="asset-series-heading">
           <div><LineChart size={17} /><strong>{title}</strong></div>
-          <span>관측 이력 없음</span>
+          <span>{loading ? "관측 이력 로딩 중" : "관측 이력 없음"}</span>
         </header>
-        <div className="asset-chart-empty"><strong>{emptyTitle}</strong><span>{emptyDetail}</span></div>
+        {loading
+          ? <OperationsState kind="loading" title="관측 이력 로딩 중" detail={`${title} 그래프를 불러오는 중입니다.`} />
+          : <div className="asset-chart-empty"><strong>{emptyTitle}</strong><span>{emptyDetail}</span></div>}
       </section>
     );
   }
@@ -2323,6 +2323,7 @@ function FeatureSeriesCollection({
   emptyTitle,
   emptyDetail,
   liveDemo,
+  loading,
 }: {
   title: string;
   sensors: ReturnType<typeof sensorSeries>;
@@ -2331,6 +2332,7 @@ function FeatureSeriesCollection({
   emptyTitle: string;
   emptyDetail: string;
   liveDemo?: RealtimeDemoSnapshot | null;
+  loading?: boolean;
 }) {
   const visibleSensors = sensors;
   return (
@@ -2366,12 +2368,13 @@ function FeatureSeriesCollection({
               currentObservedAt={sensor.currentObservedAt}
               primary={PRIMARY_FIELD_SENSOR_KEYS.has(sensor.id)}
               liveDemo={liveDemo}
+              loading={loading}
               emptyTitle="관측 이력 없음"
               emptyDetail={`${sensor.label} 관측 이력이 비어 있어 임의 그래프를 표시하지 않습니다.`}
             />
           ))}
         </>
-      ) : <OperationsState kind="empty" title={emptyTitle} detail={emptyDetail} />}
+      ) : loading ? <OperationsState kind="loading" title="관측 이력 로딩 중" detail="선택 설비의 센서 그래프를 불러오는 중입니다." /> : <OperationsState kind="empty" title={emptyTitle} detail={emptyDetail} />}
     </section>
   );
 }
@@ -2762,6 +2765,7 @@ function AssetPreviewPanel({
                 windowId={sensorWindow}
                 onWindowChange={onSensorWindowChange}
                 liveDemo={isLiveAsset ? liveDemo : null}
+                loading={detailLoading}
                 emptyTitle="관측 이력 없음"
                 emptyDetail={detailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
               />
@@ -3040,6 +3044,7 @@ function AssetPreviewPanel({
                   sensors={directFeatureSnapshots}
                   windowId={sensorWindow}
                   onWindowChange={onSensorWindowChange}
+                  loading={detailLoading}
                   emptyTitle="센서 이력 없음"
                   emptyDetail="현재 화면 데이터에는 표시할 센서 관측 이력이 없습니다."
                 />
