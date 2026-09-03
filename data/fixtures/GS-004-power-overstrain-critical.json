@@ -50,9 +50,6 @@
     "activities": [
       {"activity_id": "ACT-GS-004-001", "activity_type": "work_order.requested", "work_type": "inspection", "actor_display_name": "윤하린", "before_status": null, "after_status": "requested", "created_at": "2026-08-01T00:05:00+09:00", "work_order_id": "WO-INS-GS-004-001", "maintenance_action_id": null, "maintenance_event_id": null}
     ],
-    "available_actions": [
-      {"action_id": "approve_inspection_work_order", "target_type": "work_order", "target_id": "WO-INS-GS-004-001", "label": "점검 승인", "disabled_reason": "데모 ViewModel은 읽기 전용입니다. 실제 승인은 Closed-loop mutation API 연결 후 처리합니다."}
-    ],
     "runtime_status": null
   },
   "expected": {"risk_band": "critical", "recommended_decision": "review_shutdown", "confidence": "high", "predicted_failure_type": "power_or_overstrain_failure"}

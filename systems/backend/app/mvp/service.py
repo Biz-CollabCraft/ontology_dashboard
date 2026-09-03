@@ -116,18 +116,19 @@ class ManufacturingPredictiveMaintenanceService:
         self,
         fixture: dict[str, Any],
     ) -> dict[str, Any] | None:
+        fixture_context = _closed_loop_context_from_fixture(fixture)
         event_id = str(fixture.get("event_id") or "")
         if not event_id or self.maintenance_lineage_query is None:
-            return fixture.get("closed_loop")
+            return fixture_context
         try:
             lineage = self.maintenance_lineage_query.event_lineage(
                 workspace_id=self.workspace_id,
                 event_id=event_id,
             )
         except Exception:
-            return fixture.get("closed_loop")
+            return fixture_context
         context = _closed_loop_context_from_lineage(lineage)
-        return context if _has_closed_loop_records(context) else fixture.get("closed_loop")
+        return context if _has_closed_loop_records(context) else fixture_context
 
     def _fixture(self, event_id: str) -> dict[str, Any]:
         try:
@@ -1032,6 +1033,19 @@ def _production_impact(estimated_downtime_minutes: Any) -> str | None:
     if estimated_downtime_minutes > 0:
         return "low"
     return "none"
+
+
+def _closed_loop_context_from_fixture(
+    fixture: dict[str, Any],
+) -> dict[str, Any] | None:
+    raw_context = fixture.get("closed_loop")
+    if not isinstance(raw_context, dict):
+        return None
+    context = dict(raw_context)
+    context["available_actions"] = _available_closed_loop_actions(
+        list(context.get("work_orders") or [])
+    )
+    return context
 
 
 def _closed_loop_context_from_lineage(lineage: dict[str, Any]) -> dict[str, Any]:
