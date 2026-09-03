@@ -425,13 +425,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   const canReadSystemLogs = canReadOperationsSystemLogs(user?.permissions);
   const selectedAssetId = selection.assetId;
   let content;
-  if (useReliabilityPreview && selectedSnapshotUnavailable) {
-    content = <OperationsState
-      kind="error"
-      title="선택 snapshot 복원 불가"
-      detail={`선택한 Decision Case ${selection.eventId}의 immutable Result Artifact를 복원하지 못했습니다. 최신 Event로 자동 대체하지 않습니다. 다른 Case를 명시적으로 선택해 주세요.`}
-    />;
-  } else if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
+  if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
     content = <OperationsOverviewPage model={model} role={authorizedRole} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   } else if (useReliabilityPreview && selection.view !== "system") {
     content = <RoleComposedWorkspace
@@ -468,6 +462,18 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
 
   const body = <>
     {error ? <div className="operations-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}
+    {selectedSnapshotUnavailable ? (
+      <div className="operations-inline-warning is-selection-restore-warning" role="status">
+        <strong>선택 Case를 다시 확인해 주세요</strong>
+        <span>
+          URL의 기존 Decision Case {selection.eventId}를 현재 immutable Result Artifact에서 찾지 못했습니다.
+          최신 Event로 자동 대체하지는 않지만, 아래 화면에서 새 Case를 직접 선택할 수 있습니다.
+        </span>
+        {latestEventForSelectedAsset ? (
+          <button type="button" onClick={followLatestEvent}>현재 설비 최신 Case 보기</button>
+        ) : null}
+      </div>
+    ) : null}
     {detailError && useReliabilityPreview ? <div className="operations-inline-warning" role="alert"><strong>상세 근거 조회 지연</strong><span>{detailError}</span></div> : null}
     {companyContextError && useReliabilityPreview ? <div className="operations-inline-warning" role="alert"><strong>회사 문맥 조회 지연</strong><span>{companyContextError}</span></div> : null}
     {detailLoading && useReliabilityPreview ? <div className="rw-composed-detail-loading">선택 설비 근거를 최신 상태로 동기화하고 있습니다.</div> : null}

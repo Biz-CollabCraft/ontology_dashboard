@@ -47,19 +47,19 @@
 .rw-factory-map button.status-attention { border-color: rgba(234,179,8,.25); }
 .rw-factory-map button.status-data_quality_hold { border-style: dashed; }
 .rw-factory-map button.is-selected { outline: 2px solid rgba(59,130,246,.5); outline-offset: 1px; }
-.rw-feature-trends { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
-.rw-feature-trends article { overflow: hidden; border: 1px solid rgba(148,163,184,.12); border-radius: 7px; padding: 8px; }
+.rw-feature-trends { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.rw-feature-trends article { overflow: hidden; border: 1px solid rgba(148,163,184,.12); border-radius: 9px; padding: 10px 11px; }
 .rw-feature-trends article > header { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
 .rw-feature-trends article > header div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .rw-feature-trends article > header strong { font-size: 10px; }
 .rw-feature-trends article > header span, .rw-feature-trends article > small { color: var(--rw-muted, #8ea0b3); font-size: 8px; }
 .rw-feature-trends article > header b { font-size: 10px; }
-.rw-feature-trends svg { display: block; width: 100%; height: 96px; margin: 6px 0 4px; overflow: visible; }
+.rw-feature-trends svg { display: block; width: 100%; height: auto; aspect-ratio: 900 / 164; margin: 7px 0 5px; overflow: hidden; }
 .rw-feature-trends svg path { fill: none; stroke: currentColor; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
 .rw-feature-chart-frame { fill: rgba(148,163,184,.025); stroke: rgba(148,163,184,.14); stroke-width: 1; }
 .rw-feature-chart-grid { stroke: rgba(148,163,184,.13); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .rw-feature-chart-axis,.rw-feature-chart-axis-title { fill: var(--rw-muted,#8ea0b3); font-size: 7px; font-weight: 800; }
-.rw-feature-point { fill: currentColor; }
+.rw-feature-point { fill: currentColor; vector-effect: non-scaling-stroke; }
 .rw-feature-hit { fill: transparent; stroke: transparent; pointer-events: all; cursor: crosshair; animation: none; }
 .rw-feature-hit:focus { outline: none; stroke: currentColor; stroke-width: 1; opacity: .45; }
 @keyframes rw-feature-pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }

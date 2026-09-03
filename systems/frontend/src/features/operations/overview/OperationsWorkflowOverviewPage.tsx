@@ -2243,10 +2243,10 @@ function MapReportFeatureSeries({
   const min = rawMinimum - rawSpan * 0.08;
   const max = rawMaximum + rawSpan * 0.08;
   const range = max - min || Number.EPSILON;
-  const chartWidth = 720;
-  const chartHeight = 292;
-  const frame = { left: 64, right: liveDemo ? 638 : 690, top: liveDemo ? 38 : 22, bottom: liveDemo ? 222 : 226 };
-  const forecastRight = liveDemo ? 690 : frame.right;
+  const chartWidth = liveDemo ? 1040 : 900;
+  const chartHeight = 260;
+  const frame = { left: 48, right: liveDemo ? 934 : 858, top: liveDemo ? 34 : 22, bottom: 204 };
+  const forecastRight = liveDemo ? 1002 : frame.right;
   const width = frame.right - frame.left;
   const totalSlots = visiblePoints.length + (currentObservedAt ? 1 : 0);
   const height = frame.bottom - frame.top;
@@ -2297,9 +2297,13 @@ function MapReportFeatureSeries({
   const livePoint = currentPoint ?? latestHistory ?? null;
   const liveValue = livePoint && typeof livePoint.value === "number" ? livePoint.value : currentNumericValue;
   const liveValueLabel = liveValue === null ? "값 없음" : `${liveValue.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${unit ? ` ${unit}` : ""}`;
-  const livePillWidth = Math.min(188, Math.max(86, liveValueLabel.length * 7.2 + 48));
-  const livePillX = forecastRight - livePillWidth - 4;
-  const livePillY = 6;
+  const livePillWidth = Math.min(132, Math.max(56, liveValueLabel.length * 7.2 + 20));
+  const livePillX = livePoint
+    ? clamp(livePoint.x - livePillWidth / 2, frame.left + 4, forecastRight - livePillWidth - 4)
+    : forecastRight - livePillWidth - 4;
+  const livePillY = livePoint && typeof livePoint.y === "number"
+    ? clamp(livePoint.y - 38, frame.top + 3, frame.bottom - 36)
+    : frame.top + 3;
   const recentNumericPoints = numericPoints.slice(-4);
   const recentFirst = recentNumericPoints[0];
   const recentLast = recentNumericPoints.at(-1);
@@ -2335,6 +2339,8 @@ function MapReportFeatureSeries({
   const middlePoint = visiblePoints[middleIndex] ?? null;
   const endHistoryPoint = visiblePoints.at(-1) ?? null;
   const hitBandWidth = Math.max(12, width / Math.max(1, coords.length));
+  const xAxisY = chartHeight - 30;
+  const xAxisTitleY = chartHeight - 10;
   return (
     <section className={[primary ? "asset-series-block is-primary" : "asset-series-block", liveDemo ? "is-live-chart" : ""].filter(Boolean).join(" ")}>
       <header className="asset-series-heading">
@@ -2371,7 +2377,7 @@ function MapReportFeatureSeries({
         ) : null}
         {forecastBandPath ? <path className="asset-forecast-band" d={forecastBandPath} /> : null}
         {forecastLinePoints ? <polyline className="asset-forecast-line" points={forecastLinePoints} style={{ stroke: color }} /> : null}
-        {forecastPoints.length ? <text className="asset-forecast-label" x={forecastRight} y={frame.bottom - 8} textAnchor="end">단기 추세 범위</text> : null}
+        {forecastPoints.length ? <text className="asset-forecast-label" x={forecastRight} y={frame.bottom - 9} textAnchor="end">단기 추세 범위</text> : null}
         {crossing && crossingText && typeof crossing.y === "number" && crossingLabelX !== null && crossingLabelY !== null ? (
           <g>
             <line className="asset-crossing-line" x1={crossing.x} x2={crossing.x} y1={crossing.y} y2={frame.bottom} style={{ stroke: color }} />
@@ -2392,10 +2398,9 @@ function MapReportFeatureSeries({
             <circle className="asset-live-ring" cx={livePoint.x} cy={livePoint.y} r="9" style={{ stroke: color }} />
             <circle className="asset-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.8" style={{ fill: color }} />
             <g className="asset-live-value-pill is-top" transform={`translate(${livePillX} ${livePillY})`}>
-              <rect width={livePillWidth} height="28" rx="7" />
-              <text x="9" y="18">LIVE {liveValueLabel}</text>
+              <rect width={livePillWidth} height="26" rx="7" />
+              <text x={livePillWidth / 2} y="17" textAnchor="middle">{liveValueLabel}</text>
             </g>
-            <text className="asset-live-now-label" x={frame.right + 3} y={frame.top - 5} textAnchor="start">NOW</text>
           </g>
         ) : null}
         {coords.map((point, index) => point.qualityStatus === "bad" || point.qualityStatus === "unknown"
@@ -2465,11 +2470,11 @@ function MapReportFeatureSeries({
             </g>
           </g>
         ) : null}
-        <text className="asset-chart-axis" x={frame.left} y="262" textAnchor="start">{formatSeriesTime(visiblePoints[0].observedAt)}</text>
-        {middlePoint && visiblePoints.length > 2 ? <text className="asset-chart-axis" x={xAt(middleIndex)} y="262" textAnchor="middle">{formatSeriesTime(middlePoint.observedAt)}</text> : null}
-        {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y="262" textAnchor="end">{liveDemo ? "NOW" : `현재 ${currentTimeLabel}`}</text> : endHistoryPoint ? <text className="asset-chart-axis" x={frame.right} y="262" textAnchor="end">{formatSeriesTime(endHistoryPoint.observedAt)}</text> : null}
-        {liveDemo ? <text className="asset-chart-axis" x={forecastRight} y="262" textAnchor="end">+30s</text> : null}
-        <text className="asset-chart-axis-title" x="376" y="280" textAnchor="middle">시간</text>
+        <text className="asset-chart-axis" x={frame.left} y={xAxisY} textAnchor="start">{formatSeriesTime(visiblePoints[0].observedAt)}</text>
+        {middlePoint && visiblePoints.length > 2 ? <text className="asset-chart-axis" x={xAt(middleIndex)} y={xAxisY} textAnchor="middle">{formatSeriesTime(middlePoint.observedAt)}</text> : null}
+        {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y={xAxisY} textAnchor="middle">{liveDemo ? "실시간" : `현재 ${currentTimeLabel}`}</text> : endHistoryPoint ? <text className="asset-chart-axis" x={frame.right} y={xAxisY} textAnchor="end">{formatSeriesTime(endHistoryPoint.observedAt)}</text> : null}
+        {liveDemo ? <text className="asset-chart-axis" x={forecastRight} y={xAxisY} textAnchor="end">+30s</text> : null}
+        <text className="asset-chart-axis-title" x={chartWidth / 2} y={xAxisTitleY} textAnchor="middle">시간</text>
       </svg>
     </section>
   );

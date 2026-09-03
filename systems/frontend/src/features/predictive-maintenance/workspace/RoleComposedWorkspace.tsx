@@ -409,6 +409,25 @@ function shortTime(value: string | null | undefined) {
       });
 }
 
+function clampChart(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function sampleTrendPoints<T>(points: T[], maxPoints = 150): T[] {
+  if (points.length <= maxPoints) return points;
+  const sampled: T[] = [];
+  const seen = new Set<number>();
+  const lastIndex = points.length - 1;
+  for (let index = 0; index < maxPoints; index += 1) {
+    const sourceIndex = Math.round((index / Math.max(1, maxPoints - 1)) * lastIndex);
+    if (seen.has(sourceIndex)) continue;
+    seen.add(sourceIndex);
+    sampled.push(points[sourceIndex]);
+  }
+  if (sampled.at(-1) !== points[lastIndex]) sampled.push(points[lastIndex]);
+  return sampled;
+}
+
 function CompactRiskTrend({
   detail,
 }: {
@@ -436,6 +455,7 @@ function CompactRiskTrend({
           : detail.event.status,
     });
   }
+  const plottedSeries = sampleTrendPoints(series, 150);
   const values = series.map((point) => point.failureProbability);
   const anchors =
     typeof detail.threshold === "number"
@@ -444,13 +464,15 @@ function CompactRiskTrend({
   const min = Math.max(0, Math.min(...anchors) - 0.05);
   const max = Math.min(1, Math.max(...anchors) + 0.05);
   const range = max - min || 1;
-  const frame = { left: 38, right: 272, top: 8, bottom: 69 };
+  const chartWidth = 900;
+  const chartHeight = 164;
+  const frame = { left: 56, right: 862, top: 14, bottom: 120 };
   const xAt = (index: number) =>
     frame.left +
-    (index / Math.max(1, series.length - 1)) * (frame.right - frame.left);
+    (index / Math.max(1, plottedSeries.length - 1)) * (frame.right - frame.left);
   const yAt = (value: number) =>
     frame.bottom - ((value - min) / range) * (frame.bottom - frame.top);
-  const coords = series.map((point, index) => ({
+  const coords = plottedSeries.map((point, index) => ({
     ...point,
     x: xAt(index),
     y: yAt(point.failureProbability),
@@ -463,6 +485,7 @@ function CompactRiskTrend({
     .join(" ");
   const safeIndex = Math.min(activeIndex, coords.length - 1);
   const activePoint = coords[safeIndex];
+  const markerIndexes = new Set([0, safeIndex, coords.length - 1]);
   const move = (delta: number) =>
     setActiveIndex((index) =>
       Math.max(0, Math.min(coords.length - 1, index + delta)),
@@ -484,7 +507,7 @@ function CompactRiskTrend({
         <b>{probability(detail.event.failureProbability)}</b>
       </header>
       <svg
-        viewBox="0 0 280 96"
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
         role="img"
         tabIndex={0}
         aria-label={`고장 위험 추세와 판단 임계값. 좌우 방향키로 ${coords.length}개 관측을 탐색합니다.`}
@@ -503,7 +526,6 @@ function CompactRiskTrend({
             setActiveIndex(coords.length - 1);
           }
         }}
-        preserveAspectRatio="none"
       >
         <rect
           className="rw-feature-chart-frame"
@@ -539,7 +561,7 @@ function CompactRiskTrend({
           </>
         ) : null}
         <path d={path} />
-        {coords.map((point, index) => (
+        {coords.map((point, index) => markerIndexes.has(index) || point.status !== "normal" ? (
           <g key={`${point.observedAt}-${index}`}>
             <circle
               className={`rw-feature-point quality-${point.status ?? "unknown"}`}
@@ -556,30 +578,22 @@ function CompactRiskTrend({
               <title>{`${dateTime(point.observedAt)} · 위험도 ${probability(point.failureProbability)} · ${riskLabel(point.status as OperationsEvent["status"] | null)}`}</title>
             </circle>
           </g>
-        ))}
+        ) : null)}
         <text
           className="rw-feature-chart-axis"
           x={frame.left}
-          y="86"
+          y={chartHeight - 22}
           textAnchor="start"
         >
-          {shortTime(series[0]?.observedAt)}
+          {shortTime(plottedSeries[0]?.observedAt)}
         </text>
         <text
           className="rw-feature-chart-axis"
           x={frame.right}
-          y="86"
+          y={chartHeight - 22}
           textAnchor="end"
         >
-          {shortTime(series.at(-1)?.observedAt)}
-        </text>
-        <text
-          className="rw-feature-chart-axis-title"
-          x="155"
-          y="95"
-          textAnchor="middle"
-        >
-          시간
+          {shortTime(plottedSeries.at(-1)?.observedAt)}
         </text>
       </svg>
       <span className="rw-chart-keyboard-value" aria-live="polite">
@@ -626,14 +640,17 @@ function SensorTrendChart({
   const minimum = Math.min(...values);
   const maximum = Math.max(...values);
   const range = maximum - minimum || 1;
-  const frame = { left: 38, right: 272, top: 8, bottom: 69 };
+  const plottedPoints = sampleTrendPoints(numericPoints, 150);
+  const chartWidth = 900;
+  const chartHeight = 164;
+  const frame = { left: 56, right: 862, top: 14, bottom: 120 };
   const xAt = (index: number) =>
     frame.left +
-    (index / Math.max(1, numericPoints.length - 1)) *
+    (index / Math.max(1, plottedPoints.length - 1)) *
       (frame.right - frame.left);
   const yAt = (value: number) =>
     frame.bottom - ((value - minimum) / range) * (frame.bottom - frame.top);
-  const coords = numericPoints.map((point, index) => ({
+  const coords = plottedPoints.map((point, index) => ({
     ...point,
     x: xAt(index),
     y: yAt(point.value),
@@ -645,10 +662,11 @@ function SensorTrendChart({
     )
     .join(" ");
   const yTicks = [maximum, (minimum + maximum) / 2, minimum];
-  const middleIndex = Math.floor((numericPoints.length - 1) / 2);
+  const middleIndex = Math.floor((plottedPoints.length - 1) / 2);
   const coverage = sensor.historyWindow?.coverageStatus;
   const safeIndex = Math.min(activeIndex, coords.length - 1);
   const activePoint = coords[safeIndex];
+  const markerIndexes = new Set([0, safeIndex, coords.length - 1]);
   const activeLabel = `${dateTime(activePoint.observedAt)} · ${activePoint.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${sensor.unit ? ` ${sensor.unit}` : ""} · 품질 ${activePoint.qualityStatus === "bad" ? "불량" : activePoint.qualityStatus === "good" ? "정상" : "미확인"}`;
   const move = (delta: number) =>
     setActiveIndex((index) =>
@@ -680,7 +698,7 @@ function SensorTrendChart({
         </b>
       </header>
       <svg
-        viewBox="0 0 280 96"
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
         role="img"
         tabIndex={0}
         aria-label={`${sensor.label} 최근 추세. 좌우 방향키로 ${coords.length}개 관측을 탐색합니다.`}
@@ -699,7 +717,6 @@ function SensorTrendChart({
             setActiveIndex(coords.length - 1);
           }
         }}
-        preserveAspectRatio="none"
       >
         <rect
           className="rw-feature-chart-frame"
@@ -719,23 +736,16 @@ function SensorTrendChart({
             />
             <text
               className="rw-feature-chart-axis"
-              x="33"
-              y={yAt(tick) + 3}
+              x="48"
+              y={clampChart(yAt(tick) + 3, frame.top + 8, frame.bottom + 2)}
               textAnchor="end"
             >
               {tick.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}
             </text>
           </g>
         ))}
-        <text
-          className="rw-feature-chart-axis-title"
-          transform="translate(10 40) rotate(-90)"
-          textAnchor="middle"
-        >
-          {sensor.unit || "값"}
-        </text>
         <path d={path} />
-        {coords.map((point, index) => (
+        {coords.map((point, index) => markerIndexes.has(index) || point.qualityStatus !== "good" ? (
           <g key={`${sensor.id}-${point.observedAt}-${index}`}>
             <circle
               className={`rw-feature-point quality-${point.qualityStatus}`}
@@ -760,45 +770,37 @@ function SensorTrendChart({
               <title>{`${dateTime(point.observedAt)} · ${point.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${sensor.unit ? ` ${sensor.unit}` : ""} · 품질 ${point.qualityStatus === "bad" ? "불량" : point.qualityStatus === "good" ? "정상" : "미확인"}`}</title>
             </circle>
           </g>
-        ))}
-        {numericPoints[0] ? (
+        ) : null)}
+        {plottedPoints[0] ? (
           <text
             className="rw-feature-chart-axis"
             x={frame.left}
-            y="86"
+            y={chartHeight - 22}
             textAnchor="start"
           >
-            {shortTime(numericPoints[0].observedAt)}
+            {shortTime(plottedPoints[0].observedAt)}
           </text>
         ) : null}
-        {numericPoints.length > 2 ? (
+        {plottedPoints.length > 2 ? (
           <text
             className="rw-feature-chart-axis"
             x={xAt(middleIndex)}
-            y="86"
+            y={chartHeight - 22}
             textAnchor="middle"
           >
-            {shortTime(numericPoints[middleIndex].observedAt)}
+            {shortTime(plottedPoints[middleIndex].observedAt)}
           </text>
         ) : null}
-        {numericPoints.at(-1) ? (
+        {plottedPoints.at(-1) ? (
           <text
             className="rw-feature-chart-axis"
             x={frame.right}
-            y="86"
+            y={chartHeight - 22}
             textAnchor="end"
           >
-            {shortTime(numericPoints.at(-1)?.observedAt)}
+            {shortTime(plottedPoints.at(-1)?.observedAt)}
           </text>
         ) : null}
-        <text
-          className="rw-feature-chart-axis-title"
-          x="155"
-          y="95"
-          textAnchor="middle"
-        >
-          시간
-        </text>
       </svg>
       <span className="rw-chart-keyboard-value" aria-live="polite">
         선택 관측 · {activeLabel}

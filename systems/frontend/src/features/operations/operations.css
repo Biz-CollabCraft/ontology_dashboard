@@ -266,6 +266,11 @@
 
 .operations-inline-warning,
 .operations-action-message { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border: 1px solid rgba(240,162,58,.35); border-radius: 7px; background: rgba(240,162,58,.08); color: #f0c888; font-size: 11px; }
+.operations-inline-warning.is-selection-restore-warning { align-items: center; flex-wrap: wrap; }
+.operations-inline-warning.is-selection-restore-warning span { flex: 1 1 360px; color: var(--operations-muted); line-height: 1.45; }
+.operations-inline-warning.is-selection-restore-warning button { flex: 0 0 auto; min-height: 30px; border: 1px solid rgba(76,144,240,.34); border-radius: 7px; padding: 5px 10px; color: #d8e8ff; background: rgba(76,144,240,.16); font-size: 10px; font-weight: 900; cursor: pointer; }
+.operations-inline-warning.is-selection-restore-warning button:hover,
+.operations-inline-warning.is-selection-restore-warning button:focus-visible { border-color: rgba(156,197,250,.7); outline: none; background: rgba(76,144,240,.24); }
 .operations-inline-warning ul { margin: 0; padding-left: 18px; color: var(--operations-muted); }
 .operations-action-message.is-success { border-color: rgba(69,184,128,.38); background: rgba(69,184,128,.1); color: #86d9b1; }
 .operations-action-message.is-error { border-color: rgba(236,91,98,.4); background: rgba(236,91,98,.09); color: #f2a1a5; }
@@ -714,36 +719,36 @@
 .operations-side-map-report .asset-window-control button { min-width: 42px; min-height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--operations-dim); font-size: 10px; font-weight: 900; cursor: pointer; }
 .operations-side-map-report .asset-window-control button:hover,
 .operations-side-map-report .asset-window-control button.is-active { background: rgba(76,144,240,.16); color: var(--operations-text); }
-.operations-side-map-report .asset-series-chart { display: block; width: 100%; height: auto; min-height: 150px; background: #121922; }
-.operations-live-feature-monitor .asset-series-chart { height: 240px; min-height: 240px; }
-.operations-live-feature-monitor .asset-series-block:nth-of-type(n+2) .asset-series-chart { height: 210px; min-height: 210px; }
+.operations-side-map-report .asset-series-chart { display: block; width: 100%; height: auto; min-height: 150px; aspect-ratio: 900 / 260; background: #121922; }
+.operations-live-feature-monitor .asset-series-chart { min-height: 0; aspect-ratio: 1040 / 260; }
+.operations-live-feature-monitor .asset-series-block:nth-of-type(n+2) .asset-series-chart { min-height: 0; aspect-ratio: 1040 / 260; }
 .operations-side-map-report .asset-series-block.is-live-chart .asset-series-chart { background: radial-gradient(circle at 96% 46%, rgba(76,144,240,.16), transparent 26%), #121922; }
 .operations-side-map-report .asset-chart-frame { fill: #151d27; stroke: rgba(181,196,214,.16); }
 .operations-side-map-report .asset-chart-grid { stroke: rgba(181,196,214,.16); stroke-width: 1; }
 .operations-side-map-report .asset-chart-axis { fill: var(--operations-dim); font-size: 10px; font-weight: 800; }
 .operations-side-map-report .asset-current-axis { fill: #d8e8ff; font-weight: 900; }
 .operations-side-map-report .asset-chart-axis-title { fill: var(--operations-dim); font-size: 10px; font-weight: 900; letter-spacing: 0; }
-.operations-side-map-report .asset-series-line { fill: none; stroke-width: 2.8; stroke-linejoin: round; stroke-linecap: round; }
-.operations-side-map-report .asset-current-extension-line { fill: none; stroke-width: 2.8; stroke-linecap: round; opacity: 1; }
-.operations-side-map-report .asset-current-marker { stroke: #121922; stroke-width: 2; }
-.operations-side-map-report .asset-current-value-marker { stroke: #121922; stroke-width: 2.3; }
+.operations-side-map-report .asset-series-line { fill: none; stroke-width: 2.8; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.operations-side-map-report .asset-current-extension-line { fill: none; stroke-width: 2.8; stroke-linecap: round; opacity: 1; vector-effect: non-scaling-stroke; }
+.operations-side-map-report .asset-current-marker { stroke: #121922; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.operations-side-map-report .asset-current-value-marker { stroke: #121922; stroke-width: 2.3; vector-effect: non-scaling-stroke; }
 .operations-side-map-report .asset-series-block.is-live-chart .asset-series-line,
 .operations-side-map-report .asset-series-block.is-live-chart .asset-current-extension-line { filter: drop-shadow(0 0 4px rgba(76,144,240,.38)); }
 .operations-side-map-report .asset-live-sweep { fill: rgba(76,144,240,.035); animation: asset-live-sweep 2.4s ease-in-out infinite; }
 .operations-side-map-report .asset-forecast-lane { fill: rgba(240,162,58,.045); stroke: rgba(240,162,58,.18); stroke-width: 1; stroke-dasharray: 3 4; }
 .operations-side-map-report .asset-forecast-band { fill: rgba(240,162,58,.13); stroke: rgba(240,162,58,.2); stroke-width: 1; }
-.operations-side-map-report .asset-forecast-line { fill: none; stroke-width: 2.1; stroke-dasharray: 5 5; stroke-linecap: round; stroke-linejoin: round; opacity: .82; animation: asset-live-cursor-dash 1.4s linear infinite; }
+.operations-side-map-report .asset-forecast-line { fill: none; stroke-width: 2.1; stroke-dasharray: 5 5; stroke-linecap: round; stroke-linejoin: round; opacity: .82; vector-effect: non-scaling-stroke; animation: asset-live-cursor-dash 1.4s linear infinite; }
 .operations-side-map-report .asset-forecast-label { fill: #f8d08d; font-size: 9px; font-weight: 900; letter-spacing: 0; }
-.operations-side-map-report .asset-live-cursor { stroke: rgba(156,197,250,.78); stroke-width: 1.3; stroke-dasharray: 4 5; animation: asset-live-cursor-dash 1.2s linear infinite; }
-.operations-side-map-report .asset-live-ring { fill: transparent; stroke-width: 2.2; transform-box: fill-box; transform-origin: center; animation: asset-live-ring-pulse 1.35s ease-in-out infinite; }
-.operations-side-map-report .asset-live-dot { stroke: #121922; stroke-width: 2.3; filter: drop-shadow(0 0 6px rgba(156,197,250,.66)); }
+.operations-side-map-report .asset-live-cursor { stroke: rgba(156,197,250,.78); stroke-width: 1.3; stroke-dasharray: 4 5; vector-effect: non-scaling-stroke; animation: asset-live-cursor-dash 1.2s linear infinite; }
+.operations-side-map-report .asset-live-ring { fill: transparent; stroke-width: 2.2; vector-effect: non-scaling-stroke; transform-box: fill-box; transform-origin: center; animation: asset-live-ring-pulse 1.35s ease-in-out infinite; }
+.operations-side-map-report .asset-live-dot { stroke: #121922; stroke-width: 2.3; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 6px rgba(156,197,250,.66)); }
 .operations-side-map-report .asset-live-value-pill rect { fill: rgba(18,25,34,.96); stroke: rgba(156,197,250,.58); stroke-width: 1.2; animation: asset-live-pill-flash 1.4s ease-in-out infinite; }
 .operations-side-map-report .asset-live-value-pill.is-top rect { filter: drop-shadow(0 7px 12px rgba(0,0,0,.22)); }
 .operations-side-map-report .asset-live-value-pill.is-bottom rect { filter: drop-shadow(0 -7px 12px rgba(0,0,0,.18)); }
 .operations-side-map-report .asset-live-value-pill text { fill: #d8e8ff; font-size: 11px; font-weight: 950; letter-spacing: .01em; }
 .operations-side-map-report .asset-live-now-label { fill: #9cc5fa; font-size: 10px; font-weight: 950; letter-spacing: .08em; }
-.operations-side-map-report .asset-quality-marker { stroke: #efc57f; stroke-width: 2.2; }
-.operations-side-map-report .asset-gap-marker { fill: transparent; stroke: #efc57f; stroke-width: 2; stroke-dasharray: 2 2; }
+.operations-side-map-report .asset-quality-marker { stroke: #efc57f; stroke-width: 2.2; vector-effect: non-scaling-stroke; }
+.operations-side-map-report .asset-gap-marker { fill: transparent; stroke: #efc57f; stroke-width: 2; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
 .operations-side-map-report .asset-baseline-band { fill-opacity: .13; stroke: rgba(118,214,167,.34); stroke-width: 1; }
 .operations-side-map-report .asset-baseline-mean { stroke: #76d6a7; stroke-width: 1.2; stroke-dasharray: 3 4; opacity: .72; }
 .operations-side-map-report .asset-crossing-line { stroke-width: 1.3; stroke-dasharray: 4 4; opacity: .75; }
