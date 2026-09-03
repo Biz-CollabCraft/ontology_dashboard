@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "policy_version": "canonical-v3.1-operational-policy-v1",
+  "model_version": "independent-logreg-v3.1",
+  "decision_threshold": 0.5,
+  "minimum_recall_target": 0.8,
+  "severity_rules": {
+    "attention": 0.2,
+    "warning": 0.45,
+    "critical": 0.75
+  },
+  "false_negative_cost": 10.0,
+  "false_positive_cost": 1.0,
+  "criticality_adjustments": {
+    "low": 0.03,
+    "medium": 0.0,
+    "high": -0.03
+  },
+  "decision_mapping": {
+    "normal": "continue_monitoring",
+    "attention": "request_inspection",
+    "warning": "request_inspection",
+    "critical": "review_shutdown"
+  },
+  "notes": [
+    "This policy is scoped to Canonical V3.1 Generator Product Result promotion.",
+    "The Model Artifact selected_threshold remains the binary failure-risk threshold.",
+    "Severity boundaries preserve Canonical V3.1 before/after maintenance comparability.",
+    "Final deployment thresholds require customer-specific cost validation."
+  ]
+}
