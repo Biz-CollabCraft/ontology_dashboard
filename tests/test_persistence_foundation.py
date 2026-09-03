@@ -57,6 +57,7 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
             "0039_cooling_system_restore_cost_analysis",
             "0040_cooling_system_restore_execution",
             "0041_cost_analysis_reference_lineage",
+            "0042_inspection_work_order_assignment",
         ]
     assert second == []
 
