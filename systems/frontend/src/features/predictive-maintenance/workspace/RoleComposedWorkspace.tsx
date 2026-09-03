@@ -15,6 +15,7 @@ import {
   ListChecks,
   PackageSearch,
   RadioTower,
+  RotateCcw,
   ShieldAlert,
   TimerReset,
   TrendingDown,
@@ -480,10 +481,13 @@ function CompactRiskTrend({
   const min = Math.max(0, Math.min(...anchors) - 0.05);
   const max = Math.min(1, Math.max(...anchors) + 0.05);
   const range = max - min || 1;
-  const chartWidth = 900;
-  const chartHeight = 164;
-  const frame = { left: 56, right: 796, top: 14, bottom: 120 };
-  const forecastRight = 862;
+  const color = "#285fcb";
+  const chartWidth = 1040;
+  const chartHeight = 260;
+  const frame = { left: 48, right: 934, top: 34, bottom: 204 };
+  const forecastRight = 1002;
+  const xAxisY = chartHeight - 30;
+  const xAxisTitleY = chartHeight - 10;
   const xAt = (index: number) =>
     frame.left +
     (index / Math.max(1, plottedSeries.length - 1)) * (frame.right - frame.left);
@@ -540,21 +544,18 @@ function CompactRiskTrend({
       ? [`${livePoint.x.toFixed(1)},${livePoint.y.toFixed(1)}`, ...forecastPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)].join(" ")
       : "";
   return (
-    <article className="rw-feature-risk-chart">
-      <header>
-        <div>
-          <strong>고장 위험 추세</strong>
-          <span>
-            {lastHistoryAt &&
-            currentAt &&
-            Date.parse(currentAt) > Date.parse(lastHistoryAt)
-              ? `plot ${shortTime(lastHistoryAt)} · 현재 ${shortTime(currentAt)}`
-              : `마지막 ${shortTime(currentAt ?? lastHistoryAt)}`}
-          </span>
-        </div>
-        <b>{probability(detail.event.failureProbability)}</b>
+    <article className="asset-series-block is-primary is-live-chart rw-feature-risk-chart">
+      <header className="asset-series-heading">
+        <div><RotateCcw size={17} /><strong>고장 위험 추세</strong></div>
+        <span className="asset-baseline-key">
+          <i style={{ background: color }} />
+          10분 요약 라인 · 터치/호버 정확값 · NOW 실시간
+          {" · "}
+          {probability(detail.event.failureProbability)}
+        </span>
       </header>
       <svg
+        className="asset-series-chart"
         viewBox={`0 0 ${chartWidth} ${chartHeight}`}
         role="img"
         tabIndex={0}
@@ -576,28 +577,28 @@ function CompactRiskTrend({
         }}
       >
         <rect
-          className="rw-feature-chart-frame"
+          className="asset-chart-frame"
           x={frame.left}
           y={frame.top}
           width={frame.right - frame.left}
           height={frame.bottom - frame.top}
         />
         <rect
-          className="rw-feature-live-sweep"
+          className="asset-live-sweep"
           x={frame.left}
           y={frame.top}
           width={frame.right - frame.left}
           height={frame.bottom - frame.top}
         />
         <rect
-          className="rw-feature-forecast-lane"
+          className="asset-forecast-lane"
           x={frame.right}
           y={frame.top}
           width={forecastRight - frame.right}
           height={frame.bottom - frame.top}
         />
         <line
-          className="rw-feature-chart-grid"
+          className="asset-chart-grid"
           x1={frame.left}
           x2={frame.right}
           y1={yAt((min + max) / 2)}
@@ -606,7 +607,7 @@ function CompactRiskTrend({
         {typeof detail.threshold === "number" ? (
           <>
             <line
-              className="rw-feature-threshold-line"
+          className="rw-feature-threshold-line"
               x1={frame.left}
               x2={frame.right}
               y1={yAt(detail.threshold)}
@@ -622,33 +623,33 @@ function CompactRiskTrend({
             </text>
           </>
         ) : null}
-        <path d={path} />
-        {forecastBandPath ? <path className="rw-feature-forecast-band" d={forecastBandPath} /> : null}
-        {forecastLinePoints ? <polyline className="rw-feature-forecast-line" points={forecastLinePoints} /> : null}
+        <path className="asset-series-line" d={path} style={{ stroke: color }} />
+        {forecastBandPath ? <path className="asset-forecast-band" d={forecastBandPath} /> : null}
+        {forecastLinePoints ? <polyline className="asset-forecast-line" points={forecastLinePoints} style={{ stroke: color }} /> : null}
         {forecastPoints.length ? (
           <text
-            className="rw-feature-forecast-label"
+            className="asset-forecast-label"
             x={forecastRight}
-            y={frame.bottom - 8}
+            y={frame.bottom - 9}
             textAnchor="end"
           >
-            단기 추세
+            단기 추세 범위
           </text>
         ) : null}
         {livePoint ? (
-          <g className="rw-feature-live-layer">
+          <g className="asset-live-layer">
             <line
-              className="rw-feature-live-cursor"
+              className="asset-live-cursor"
               x1={livePoint.x}
               x2={livePoint.x}
               y1={frame.top}
               y2={frame.bottom}
             />
-            <circle className="rw-feature-live-ring" cx={livePoint.x} cy={livePoint.y} r="8.4" />
-            <circle className="rw-feature-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.2" />
-            <g className="rw-feature-live-pill" transform={`translate(${livePillX} ${livePillY})`}>
-              <rect width={livePillWidth} height="24" rx="7" />
-              <text x={livePillWidth / 2} y="16" textAnchor="middle">
+            <circle className="asset-live-ring" cx={livePoint.x} cy={livePoint.y} r="9" style={{ stroke: color }} />
+            <circle className="asset-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.8" style={{ fill: color }} />
+            <g className="asset-live-value-pill is-top" transform={`translate(${livePillX} ${livePillY})`}>
+              <rect width={livePillWidth} height="26" rx="7" />
+              <text x={livePillWidth / 2} y="17" textAnchor="middle">
                 {liveLabel}
               </text>
             </g>
@@ -673,29 +674,30 @@ function CompactRiskTrend({
           </g>
         ) : null)}
         <text
-          className="rw-feature-chart-axis"
+          className="asset-chart-axis"
           x={frame.left}
-          y={chartHeight - 22}
+          y={xAxisY}
           textAnchor="start"
         >
           {shortTime(plottedSeries[0]?.observedAt)}
         </text>
         <text
-          className="rw-feature-chart-axis"
+          className="asset-chart-axis"
           x={frame.right}
-          y={chartHeight - 22}
+          y={xAxisY}
           textAnchor="end"
         >
           {shortTime(plottedSeries.at(-1)?.observedAt)}
         </text>
         <text
-          className="rw-feature-chart-axis"
+          className="asset-chart-axis"
           x={forecastRight}
-          y={chartHeight - 22}
+          y={xAxisY}
           textAnchor="end"
         >
           +30s
         </text>
+        <text className="asset-chart-axis-title" x={chartWidth / 2} y={xAxisTitleY} textAnchor="middle">시간</text>
       </svg>
       <span className="rw-chart-keyboard-value" aria-live="polite">
         선택 관측 · {activeLabel}
@@ -742,10 +744,13 @@ function SensorTrendChart({
   const maximum = Math.max(...values);
   const range = maximum - minimum || 1;
   const plottedPoints = sampleTrendPoints(numericPoints, 150);
-  const chartWidth = 900;
-  const chartHeight = 164;
-  const frame = { left: 56, right: 796, top: 14, bottom: 120 };
-  const forecastRight = 862;
+  const color = sensor.label.includes("진동") || sensor.label.includes("토크") ? "#a7630c" : "#285fcb";
+  const chartWidth = 1040;
+  const chartHeight = 260;
+  const frame = { left: 48, right: 934, top: 34, bottom: 204 };
+  const forecastRight = 1002;
+  const xAxisY = chartHeight - 30;
+  const xAxisTitleY = chartHeight - 10;
   const xAt = (index: number) =>
     frame.left +
     (index / Math.max(1, plottedPoints.length - 1)) *
@@ -808,31 +813,19 @@ function SensorTrendChart({
       ? [`${livePoint.x.toFixed(1)},${livePoint.y.toFixed(1)}`, ...forecastPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)].join(" ")
       : "";
   return (
-    <article>
-      <header>
-        <div>
-          <strong>{sensor.label}</strong>
-          <span>
-            {sensor.historyWindow?.requested ?? "최근"} ·{" "}
-            {coverage === "partial"
-              ? "일부 구간"
-              : coverage === "complete"
-                ? "전체 구간"
-                : "범위 확인 중"}{" "}
-            · 품질{" "}
-            {sensor.qualityStatus === "bad"
-              ? "불량"
-              : sensor.qualityStatus === "good"
-                ? "정상"
-                : "미확인"}
-          </span>
-        </div>
-        <b>
+    <article className="asset-series-block is-live-chart">
+      <header className="asset-series-heading">
+        <div><RotateCcw size={17} /><strong>{sensor.label}</strong></div>
+        <span className="asset-baseline-key">
+          <i style={{ background: color }} />
+          10분 요약 라인 · 터치/호버 정확값 · NOW 실시간
+          {" · "}
           {String(sensor.value ?? "—")}
           {sensor.unit ? ` ${sensor.unit}` : ""}
-        </b>
+        </span>
       </header>
       <svg
+        className="asset-series-chart"
         viewBox={`0 0 ${chartWidth} ${chartHeight}`}
         role="img"
         tabIndex={0}
@@ -854,21 +847,21 @@ function SensorTrendChart({
         }}
       >
         <rect
-          className="rw-feature-chart-frame"
+          className="asset-chart-frame"
           x={frame.left}
           y={frame.top}
           width={frame.right - frame.left}
           height={frame.bottom - frame.top}
         />
         <rect
-          className="rw-feature-live-sweep"
+          className="asset-live-sweep"
           x={frame.left}
           y={frame.top}
           width={frame.right - frame.left}
           height={frame.bottom - frame.top}
         />
         <rect
-          className="rw-feature-forecast-lane"
+          className="asset-forecast-lane"
           x={frame.right}
           y={frame.top}
           width={forecastRight - frame.right}
@@ -877,14 +870,14 @@ function SensorTrendChart({
         {yTicks.map((tick) => (
           <g key={tick}>
             <line
-              className="rw-feature-chart-grid"
+              className="asset-chart-grid"
               x1={frame.left}
               x2={frame.right}
               y1={yAt(tick)}
               y2={yAt(tick)}
             />
             <text
-              className="rw-feature-chart-axis"
+              className="asset-chart-axis"
               x="48"
               y={clampChart(yAt(tick) + 3, frame.top + 8, frame.bottom + 2)}
               textAnchor="end"
@@ -893,33 +886,33 @@ function SensorTrendChart({
             </text>
           </g>
         ))}
-        <path d={path} />
-        {forecastBandPath ? <path className="rw-feature-forecast-band" d={forecastBandPath} /> : null}
-        {forecastLinePoints ? <polyline className="rw-feature-forecast-line" points={forecastLinePoints} /> : null}
+        <path className="asset-series-line" d={path} style={{ stroke: color }} />
+        {forecastBandPath ? <path className="asset-forecast-band" d={forecastBandPath} /> : null}
+        {forecastLinePoints ? <polyline className="asset-forecast-line" points={forecastLinePoints} style={{ stroke: color }} /> : null}
         {forecastPoints.length ? (
           <text
-            className="rw-feature-forecast-label"
+            className="asset-forecast-label"
             x={forecastRight}
-            y={frame.bottom - 8}
+            y={frame.bottom - 9}
             textAnchor="end"
           >
-            단기 추세
+            단기 추세 범위
           </text>
         ) : null}
         {livePoint ? (
-          <g className="rw-feature-live-layer">
+          <g className="asset-live-layer">
             <line
-              className="rw-feature-live-cursor"
+              className="asset-live-cursor"
               x1={livePoint.x}
               x2={livePoint.x}
               y1={frame.top}
               y2={frame.bottom}
             />
-            <circle className="rw-feature-live-ring" cx={livePoint.x} cy={livePoint.y} r="8.4" />
-            <circle className="rw-feature-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.2" />
-            <g className="rw-feature-live-pill" transform={`translate(${livePillX} ${livePillY})`}>
-              <rect width={livePillWidth} height="24" rx="7" />
-              <text x={livePillWidth / 2} y="16" textAnchor="middle">
+            <circle className="asset-live-ring" cx={livePoint.x} cy={livePoint.y} r="9" style={{ stroke: color }} />
+            <circle className="asset-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.8" style={{ fill: color }} />
+            <g className="asset-live-value-pill is-top" transform={`translate(${livePillX} ${livePillY})`}>
+              <rect width={livePillWidth} height="26" rx="7" />
+              <text x={livePillWidth / 2} y="17" textAnchor="middle">
                 {liveValueLabel}
               </text>
             </g>
@@ -953,9 +946,9 @@ function SensorTrendChart({
         ) : null)}
         {plottedPoints[0] ? (
           <text
-            className="rw-feature-chart-axis"
+            className="asset-chart-axis"
             x={frame.left}
-            y={chartHeight - 22}
+            y={xAxisY}
             textAnchor="start"
           >
             {shortTime(plottedPoints[0].observedAt)}
@@ -963,9 +956,9 @@ function SensorTrendChart({
         ) : null}
         {plottedPoints.length > 2 ? (
           <text
-            className="rw-feature-chart-axis"
+            className="asset-chart-axis"
             x={xAt(middleIndex)}
-            y={chartHeight - 22}
+            y={xAxisY}
             textAnchor="middle"
           >
             {shortTime(plottedPoints[middleIndex].observedAt)}
@@ -973,22 +966,23 @@ function SensorTrendChart({
         ) : null}
         {plottedPoints.at(-1) ? (
           <text
-            className="rw-feature-chart-axis"
+            className="asset-chart-axis"
             x={frame.right}
-            y={chartHeight - 22}
+            y={xAxisY}
             textAnchor="end"
           >
             {shortTime(plottedPoints.at(-1)?.observedAt)}
           </text>
         ) : null}
         <text
-          className="rw-feature-chart-axis"
+          className="asset-chart-axis"
           x={forecastRight}
-          y={chartHeight - 22}
+          y={xAxisY}
           textAnchor="end"
         >
           +30s
         </text>
+        <text className="asset-chart-axis-title" x={chartWidth / 2} y={xAxisTitleY} textAnchor="middle">시간</text>
       </svg>
       <span className="rw-chart-keyboard-value" aria-live="polite">
         선택 관측 · {activeLabel}
@@ -1051,7 +1045,7 @@ function FeatureTrendBlock({
       {loading && !hasChartData ? (
         <FeatureTrendLoadingPlaceholder />
       ) : hasChartData ? (
-        <div className="rw-feature-trends">
+        <div className="rw-feature-trends operations-side-map-report">
           <CompactRiskTrend detail={detail} />
           {sensors.map((sensor) => (
             <SensorTrendChart key={sensor.id} sensor={sensor} />

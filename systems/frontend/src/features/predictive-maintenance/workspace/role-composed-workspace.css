@@ -56,6 +56,12 @@
 .rw-feature-trends article > header b { font-size: 10px; }
 .rw-feature-trends svg { display: block; width: 100%; height: auto; aspect-ratio: 900 / 164; margin: 7px 0 5px; overflow: hidden; }
 .rw-feature-trends svg path { fill: none; stroke: currentColor; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.rw-feature-trends.operations-side-map-report article.asset-series-block { padding: 0; border-radius: 7px; }
+.rw-feature-trends.operations-side-map-report article.asset-series-block > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rw-feature-trends.operations-side-map-report svg.asset-series-chart { margin: 0; aspect-ratio: 1040 / 260; }
+.rw-feature-trends.operations-side-map-report svg path.asset-series-line { fill: none; stroke-width: 2.8; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.rw-feature-trends.operations-side-map-report svg path.asset-forecast-band { fill: rgba(240,162,58,.13); stroke: rgba(240,162,58,.2); stroke-width: 1; }
+.rw-feature-trends.operations-side-map-report svg polyline.asset-forecast-line { fill: none; stroke-width: 2.1; stroke-dasharray: 5 5; stroke-linecap: round; stroke-linejoin: round; opacity: .82; vector-effect: non-scaling-stroke; animation: asset-live-cursor-dash 1.4s linear infinite; }
 .rw-feature-chart-frame { fill: rgba(148,163,184,.025); stroke: rgba(148,163,184,.14); stroke-width: 1; }
 .rw-feature-chart-grid { stroke: rgba(148,163,184,.13); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .rw-feature-chart-axis,.rw-feature-chart-axis-title { fill: var(--rw-muted,#8ea0b3); font-size: 7px; font-weight: 800; }
