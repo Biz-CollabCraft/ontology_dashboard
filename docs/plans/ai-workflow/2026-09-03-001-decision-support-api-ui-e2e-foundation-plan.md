@@ -76,6 +76,7 @@ Operational Context Agent는 이 상태를 읽을 수 있지만 WorkOrder, Maint
 7. API integration test와 Playwright E2E 3개
 8. E2E artifact에 candidate SHA, run ID, 실행 시각 기록
 9. 기존 Agent Review와 PR 160 closed-loop 회귀 검증
+10. 확장 구현과 Decision Support 안정성 평가 완료 후, Closed-loop 연동까지 완료된 후보를 대상으로 하는 최종 통합/E2E 안정성 평가
 
 ### Out of Scope
 
@@ -337,7 +338,61 @@ quality hold 또는 external not-connected fixture
 ```
 
 E2E provider는 제어 가능한 deterministic/fake adapter를 사용한다. 실제 provider 연결 확인은 기존
-별도 live smoke가 소유한다.
+별도 live smoke가 소유한다. 이 세 시나리오는 확장 구현 중 회귀를 막는 targeted E2E 기반이며,
+Closed-loop까지 연결된 최종 통합/E2E 안정성 평가를 대신하지 않는다.
+
+## Final Integration and E2E Stability Evaluation
+
+최종 통합/E2E 안정성 평가는 다음 순서를 모두 충족한 뒤에만 수행한다.
+
+```text
+Operational Decision Support 확장 구현 완료
+  -> 확장 후보의 독립 안정성 평가 완료
+  -> Closed-loop 담당 경계의 연동 완료
+  -> 통합 후보 SHA 고정
+  -> 전체 통합/E2E 안정성 평가
+```
+
+최종 통합 경로는 다음을 검증한다.
+
+```text
+Model Artifact
+  -> Generator Runtime Prediction
+  -> Backend Product Result / Evidence
+  -> Evidence Packet
+  -> AI Brief와 작업 요청 추천
+  -> Human Decision
+  -> Closed-loop Maintenance 실행
+  -> gen_data post-maintenance Overlay
+  -> Generator 재예측
+  -> 새 Product Result / Evidence
+  -> Evidence Packet과 AI Brief 재생성
+```
+
+### 책임 경계
+
+이 최종 평가가 Decision Support 구현자 한 명에게 전체 시스템 구현 책임을 부여하지 않는다.
+
+- 각 도메인 소유자는 자신의 input/output contract, deterministic fixture, failure signal을 제공한다.
+- Decision Support 소유 범위는 Evidence Packet부터 AI Brief와 작업 요청 추천까지다.
+- `gen_data`는 post-maintenance Observation/Overlay 생성, Generator는 feature와 재예측을 소유한다.
+- Closed-loop는 사용자 승인 이후 Maintenance 상태와 orchestration을 소유한다.
+- 통합/E2E 담당은 고정된 후보 SHA와 환경에서 경계를 연결하고 전체 결과를 수집한다.
+- AI는 실제 WorkOrder를 자동 생성하거나 Maintenance를 자동 승인하지 않는다.
+
+### 최종 안정성 시나리오
+
+1. 정상 경로: 최초 예측부터 사람 판단, 정비, 재예측, Evidence/Brief 재생성까지 완료
+2. temporal 경로: Evidence 또는 운영 context version 변경 시 이전 Brief 폐기·재생성
+3. cold-start 경로: 정비 전 history 비혼합, 요구 이력 전 `warming_up`, 충족 후 재예측
+4. failure isolation: source, feature, model, delivery 실패가 무한 관측 대기로 숨지 않음
+5. lineage 경로: `maintenance_event_id`, session, branch, history segment가 최종 Brief까지 보존
+6. 권한 경로: AI 추천 이후 Human Decision 없이 WorkOrder/Maintenance side effect가 발생하지 않음
+7. 복구 경로: worker 재시작과 at-least-once redelivery 후 중복 Result/Brief가 생성되지 않음
+
+Closed-loop 연동 전에는 Model Artifact부터 AI Brief/작업 요청 추천까지의 Decision Support E2E만
+검증 완료로 표시한다. `gen_data -> 재예측 -> Evidence Packet 재생성`을 포함하지 않은 결과를
+전체 Closed-loop 통합 E2E 완료로 주장하지 않는다.
 
 ## E2E Evidence Contract
 
@@ -398,7 +453,29 @@ Playwright trace/screenshot은 실패 시에만 보존하고, token·비용·실
 - final implementation note
 - commit: `docs: record operational decision e2e evidence`
 
-각 단위는 독립 테스트 후 커밋한다.
+### U5. Decision Support stability evaluation
+
+- 확장 구현 후보 SHA 고정
+- API/UI/Agent 반복 안정성, temporal validation, retry/fallback 평가
+- 실제 Closed-loop 미연결 항목은 `not_measured`로 유지
+- commit: `test: evaluate decision support stability`
+
+### U6. Closed-loop integration gate
+
+- Closed-loop 담당 산출물과 `gen_data`/Generator 재예측 경계 연결
+- 진행률·blocked 상태와 post-maintenance lineage 확인
+- 각 소유자의 component/integration test 결과 수집
+- commit은 담당 경계별 저장소와 소유권에 따라 분리
+
+### U7. Final integration/E2E stability evaluation
+
+- 통합 후보 SHA와 외부 저장소 revision 고정
+- 최초 예측부터 정비 후 Evidence Packet/AI Brief 재생성까지 전체 경로 실행
+- 정상, cold-start, failure isolation, lineage, 권한, 재시작 시나리오 평가
+- 결과와 미측정 범위를 최종 evidence artifact에 기록
+- commit: `test: evaluate integrated decision support closed loop`
+
+각 단위는 독립 테스트 후 커밋한다. U7은 U1~U5와 Closed-loop 연동 U6이 완료된 뒤에만 시작한다.
 
 ## Verification Commands
 
@@ -433,6 +510,10 @@ npx playwright test e2e/mvp-decision-support.spec.ts --project=chromium
 - E2E artifact에 run ID와 candidate SHA 존재
 - 실제 external source가 없으면 not-connected/synthetic 표기
 - 실제 LLM, MES/CMMS/WMS/QMS 효과를 E2E 결과로 주장하지 않음
+- Decision Support 확장 구현 및 독립 안정성 평가 완료
+- Closed-loop 연동 완료와 각 소유 경계의 component/integration 증거 존재
+- 최초 예측부터 정비 후 Evidence Packet/AI Brief 재생성까지 최종 통합/E2E 안정성 시나리오 통과
+- Closed-loop 연동 전 결과와 최종 통합 결과를 별도 evidence state로 구분
 
 ## Stop Conditions
 
@@ -445,12 +526,17 @@ npx playwright test e2e/mvp-decision-support.spec.ts --project=chromium
 - E2E 안정화를 위해 실제 provider 호출이 필수가 되는 경우
 - PR 160 realtime lifecycle과 brief materialization lifecycle이 혼합되는 경우
 
-## Follow-up After This Plan
+## Follow-up and Evaluation Order
 
-이 계획 완료 후에만 평가 보강을 진행한다.
+평가와 통합은 다음 순서를 바꾸지 않는다.
 
-1. 현재 8개 Gold fixture의 120-run 1.0과 B3 0.6979 차이 분석
-2. 대표 4개 사례 사람 검토
-3. API/UI/E2E를 포함한 후보 SHA 재고정
-4. 확장 구현이 실제 사용자 가치가 있을 때만 운영 Gold set 추가
-5. 실제 external adapter가 생길 때만 external integration/soak 평가
+1. U1~U4 Operational Decision Support 확장 구현과 targeted E2E 기반 완료
+2. U5에서 현재 8개 Gold fixture의 120-run 1.0과 B3 0.6979 차이 및 대표 4개 사례 검토
+3. U5 Decision Support 독립 안정성 평가 완료와 후보 SHA 고정
+4. U6 Closed-loop 담당 경계 연동 완료
+5. U7 전체 통합/E2E 안정성 평가 수행과 최종 후보 revision 고정
+6. 확장 구현이 실제 사용자 가치가 있을 때만 운영 Gold set 추가
+7. 실제 external adapter가 생길 때만 external integration/soak 평가
+
+U5까지는 본 계획 소유 범위의 안정성을 판정할 수 있다. U6이 미완료이면 U7은
+`blocked_by_integration`으로 기록하며, 이를 Decision Support 구현 실패로 간주하지 않는다.
