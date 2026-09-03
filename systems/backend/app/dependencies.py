@@ -206,8 +206,7 @@ def get_service() -> ManufacturingPredictiveMaintenanceService:
 def get_operational_decision_support_service() -> OperationalDecisionSupportService:
     target = database_target()
     if is_postgresql(target):
-        # The current Decision Support vertical slice is intentionally SQLite-only.
-        return OperationalDecisionSupportService(ROOT)
+        return OperationalDecisionSupportService(ROOT, database_url=str(target))
     return OperationalDecisionSupportService(ROOT, Path(target))
 
 

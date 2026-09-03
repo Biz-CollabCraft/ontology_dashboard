@@ -11,6 +11,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+from app.infra.db.postgresql_compat import postgres_repository_connection
 from app.mvp.operational_context_contract import OperationalRequestIdentity
 from app.mvp.operational_context_ports import (
     FixtureMaintenanceReadinessContextReadPort,
@@ -60,13 +61,14 @@ class DecisionSupportTrace:
 class OperationalDecisionSupportService:
     root: Path
     database_path: Path | None = None
+    database_url: str | None = None
     _snapshots: dict[str, OperationalBriefSnapshot] = field(default_factory=dict)
     _runs: list[dict[str, Any]] = field(default_factory=list)
     _active_runs: dict[str, dict[str, Any]] = field(default_factory=dict)
     _lock: Lock = field(default_factory=Lock)
 
     def __post_init__(self) -> None:
-        if self.database_path is None:
+        if self.database_url is not None or self.database_path is None:
             return
         with sqlite3.connect(self.database_path) as connection:
             connection.executescript(
@@ -128,7 +130,7 @@ class OperationalDecisionSupportService:
         actor_role: DecisionBriefRole,
     ) -> tuple[OperationalDecisionBrief | None, DecisionSupportTrace]:
         key = self._cache_key(identity=identity, actor_role=actor_role)
-        snapshot = self._load_snapshot(key)
+        snapshot = self._load_snapshot(key, identity=identity)
         if snapshot is None:
             return None, DecisionSupportTrace(
                 status="pending",
@@ -158,7 +160,7 @@ class OperationalDecisionSupportService:
     ) -> tuple[OperationalDecisionBrief, DecisionSupportTrace]:
         now = now or datetime.now(timezone.utc)
         key = self._cache_key(identity=identity, actor_role=actor_role)
-        existing = self._load_snapshot(key)
+        existing = self._load_snapshot(key, identity=identity)
         if existing is not None and trigger == "manual_materialization":
                 return existing.brief, DecisionSupportTrace(
                     status="completed",
@@ -179,7 +181,9 @@ class OperationalDecisionSupportService:
         run = {
             "workflow_run_id": run_id,
             "asset_id": identity.asset_id,
+            "organization_id": identity.organization_id,
             "project_id": identity.project_id,
+            "workspace_id": identity.workspace_id,
             "cache_key": key,
             "status": "running",
             "reason": None,
@@ -254,7 +258,33 @@ class OperationalDecisionSupportService:
         asset_id: str | None,
         status: str | None,
         limit: int,
+        organization_id: str = "org-ontology-demo",
     ) -> list[dict[str, Any]]:
+        if self.database_url is not None:
+            clauses = ["project_id = ?"]
+            values: list[Any] = [project_id]
+            if asset_id is not None:
+                clauses.append("asset_id = ?")
+                values.append(asset_id)
+            if status is not None:
+                clauses.append("status = ?")
+                values.append(status)
+            values.append(limit)
+            with self._postgres_connection(
+                organization_id=organization_id,
+                project_id=project_id,
+            ) as connection:
+                rows = connection.execute(
+                    f"""
+                    SELECT run_json
+                    FROM operational_decision_workflow_runs
+                    WHERE {' AND '.join(clauses)}
+                    ORDER BY recorded_at DESC
+                    LIMIT ?
+                    """,
+                    values,
+                ).fetchall()
+            return [json.loads(str(row["run_json"])) for row in rows]
         if self.database_path is not None:
             clauses = ["project_id = ?"]
             values: list[Any] = [project_id]
@@ -282,12 +312,32 @@ class OperationalDecisionSupportService:
         return [
             row
             for row in rows
-            if row["project_id"] == project_id
+            if row["organization_id"] == organization_id
+            and row["project_id"] == project_id
             and (asset_id is None or row["asset_id"] == asset_id)
             and (status is None or row["status"] == status)
         ][:limit]
 
-    def _load_snapshot(self, key: str) -> OperationalBriefSnapshot | None:
+    def _load_snapshot(
+        self,
+        key: str,
+        *,
+        identity: OperationalRequestIdentity,
+    ) -> OperationalBriefSnapshot | None:
+        if self.database_url is not None:
+            with self._postgres_connection(
+                organization_id=identity.organization_id,
+                project_id=identity.project_id,
+            ) as connection:
+                row = connection.execute(
+                    "SELECT snapshot_json FROM operational_decision_briefs WHERE cache_key = ?",
+                    (key,),
+                ).fetchone()
+            return (
+                OperationalBriefSnapshot.model_validate_json(row["snapshot_json"])
+                if row is not None
+                else None
+            )
         if self.database_path is None:
             with self._lock:
                 return self._snapshots.get(key)
@@ -310,6 +360,13 @@ class OperationalDecisionSupportService:
         now: datetime,
     ) -> bool:
         cutoff = now - timedelta(seconds=DECISION_SUPPORT_RUNNING_LEASE_SECONDS)
+        if self.database_url is not None:
+            return self._reserve_postgresql_run(
+                key=key,
+                run=run,
+                now=now,
+                cutoff=cutoff,
+            )
         if self.database_path is None:
             with self._lock:
                 active = self._active_runs.get(key)
@@ -355,6 +412,48 @@ class OperationalDecisionSupportService:
             self._insert_run(connection, run)
         return stale_recovered
 
+    def _reserve_postgresql_run(
+        self,
+        *,
+        key: str,
+        run: dict[str, Any],
+        now: datetime,
+        cutoff: datetime,
+    ) -> bool:
+        try:
+            with self._postgres_connection(
+                organization_id=str(run["organization_id"]),
+                project_id=str(run["project_id"]),
+            ) as connection:
+                row = connection.execute(
+                    """
+                    SELECT workflow_run_id, run_json, started_at
+                    FROM operational_decision_workflow_runs
+                    WHERE cache_key = ? AND status = 'running'
+                    LIMIT 1
+                    FOR UPDATE
+                    """,
+                    (key,),
+                ).fetchone()
+                stale_recovered = False
+                if row is not None:
+                    started_at = datetime.fromisoformat(str(row["started_at"]))
+                    if started_at > cutoff:
+                        raise DecisionSupportMaterializationInProgress(
+                            f"decision_support_materialization_in_progress:{key}"
+                        )
+                    stale = json.loads(str(row["run_json"]))
+                    self._expire_run_payload(stale, now=now)
+                    self._update_run(connection, stale)
+                    stale_recovered = True
+                run["stale_recovered"] = stale_recovered
+                self._insert_postgresql_run(connection, run)
+            return stale_recovered
+        except sqlite3.IntegrityError as exc:
+            raise DecisionSupportMaterializationInProgress(
+                f"decision_support_materialization_in_progress:{key}"
+            ) from exc
+
     def _store_snapshot_and_finish_run(
         self,
         *,
@@ -362,6 +461,33 @@ class OperationalDecisionSupportService:
         snapshot: OperationalBriefSnapshot,
         run: dict[str, Any],
     ) -> None:
+        if self.database_url is not None:
+            with self._postgres_connection(
+                organization_id=str(run["organization_id"]),
+                project_id=str(run["project_id"]),
+            ) as connection:
+                connection.execute(
+                    """
+                    INSERT INTO operational_decision_briefs (
+                        cache_key, organization_id, project_id, workspace_id,
+                        asset_id, snapshot_json, stored_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (cache_key) DO UPDATE SET
+                        snapshot_json = EXCLUDED.snapshot_json,
+                        stored_at = EXCLUDED.stored_at
+                    """,
+                    (
+                        key,
+                        run["organization_id"],
+                        run["project_id"],
+                        run["workspace_id"],
+                        run["asset_id"],
+                        snapshot.model_dump_json(),
+                        snapshot.stored_at,
+                    ),
+                )
+                self._update_run(connection, run)
+            return
         if self.database_path is None:
             with self._lock:
                 self._snapshots[key] = snapshot
@@ -379,6 +505,13 @@ class OperationalDecisionSupportService:
             self._update_run(connection, run)
 
     def _finish_run(self, run: dict[str, Any]) -> None:
+        if self.database_url is not None:
+            with self._postgres_connection(
+                organization_id=str(run["organization_id"]),
+                project_id=str(run["project_id"]),
+            ) as connection:
+                self._update_run(connection, run)
+            return
         if self.database_path is None:
             with self._lock:
                 self._active_runs.pop(str(run["cache_key"]), None)
@@ -424,6 +557,33 @@ class OperationalDecisionSupportService:
         )
 
     @staticmethod
+    def _insert_postgresql_run(connection: Any, run: dict[str, Any]) -> None:
+        connection.execute(
+            """
+            INSERT INTO operational_decision_workflow_runs (
+                workflow_run_id, organization_id, project_id, workspace_id,
+                asset_id, cache_key, status, reason, run_json, started_at,
+                completed_at, updated_at, recorded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run["workflow_run_id"],
+                run["organization_id"],
+                run["project_id"],
+                run["workspace_id"],
+                run["asset_id"],
+                run["cache_key"],
+                run["status"],
+                run["reason"],
+                json.dumps(run, ensure_ascii=False, sort_keys=True),
+                run["started_at"],
+                run["completed_at"],
+                run["updated_at"],
+                run["recorded_at"],
+            ),
+        )
+
+    @staticmethod
     def _update_run(
         connection: sqlite3.Connection,
         run: dict[str, Any],
@@ -445,6 +605,20 @@ class OperationalDecisionSupportService:
         )
         if cursor.rowcount != 1:
             raise RuntimeError("operational_decision_workflow_run_not_found")
+
+    def _postgres_connection(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+    ):
+        if self.database_url is None:
+            raise RuntimeError("operational_decision_postgresql_not_configured")
+        return postgres_repository_connection(
+            self.database_url,
+            organization_id=organization_id,
+            project_id=project_id,
+        )
 
     def _agent(
         self, identity: OperationalRequestIdentity

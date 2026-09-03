@@ -362,6 +362,7 @@ def list_decision_support_workflow_runs(
         raise AuthError(409, "active_project_mismatch", "먼저 요청 Project를 활성화해야 합니다.")
     return {
         "items": decision_support.workflow_runs(
+            organization_id=principal.organization_id,
             project_id=project_id,
             asset_id=asset_id,
             status=status,
