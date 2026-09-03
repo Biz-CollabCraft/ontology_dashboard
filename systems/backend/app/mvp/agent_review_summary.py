@@ -496,6 +496,8 @@ def _confidence_label(packet: dict[str, Any]) -> str:
     risk = packet.get("risk_summary") or {}
     if risk.get("status_grade") is None or risk.get("failure_probability") is None:
         return "data_quality_hold"
+    if risk.get("status_grade") == "critical" and packet.get("evidence_gaps"):
+        return "partial"
     if packet.get("sop_guidance") and packet.get("inspection_targets"):
         return "grounded"
     if packet.get("inspection_targets") or packet.get("evidence_gaps"):
