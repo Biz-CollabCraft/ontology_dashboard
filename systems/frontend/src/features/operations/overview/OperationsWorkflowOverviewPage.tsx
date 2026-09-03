@@ -231,6 +231,7 @@ const WORK_STATUS_ACTION: Record<WorkStatus, { label: string; disabled: boolean 
 
 interface RealtimeDemoSnapshot {
   sequence: number;
+  nowAt: string;
   assetId: string;
   assetName: string;
   eventId: string | null;
@@ -448,6 +449,7 @@ function useRealtimeRoleDemo(
 
   return {
     sequence,
+    nowAt: new Date().toISOString(),
     assetId,
     assetName,
     eventId: event?.eventId ?? asset?.eventId ?? null,
@@ -881,6 +883,28 @@ function sensorSeries(detail: OperationsEventDetailModel | null, asset: Operatio
       qualityStatus: point.qualityStatus,
     })),
   }));
+}
+
+type SensorSeriesSnapshot = ReturnType<typeof sensorSeries>[number];
+
+function withRealtimeCurrentValues(
+  sensors: SensorSeriesSnapshot[],
+  liveDemo: RealtimeDemoSnapshot | null,
+): SensorSeriesSnapshot[] {
+  if (!liveDemo) return sensors;
+  const liveFactors = new Map(liveDemo.factors.map((factor) => [factor.id, factor]));
+  return sensors.map((sensor) => {
+    const factor = liveFactors.get(sensor.id);
+    if (!factor || typeof factor.value !== "number" || !Number.isFinite(factor.value)) {
+      return sensor;
+    }
+    return {
+      ...sensor,
+      currentValue: factor.value,
+      currentObservedAt: liveDemo.nowAt,
+      currentQuality: "good",
+    };
+  });
 }
 
 function productionImpactLevelLabel(summary: LineImpactSummary, detail: OperationsEventDetailModel | null): string {
@@ -1650,14 +1674,28 @@ export function OperationsWorkflowOverviewPage({
         inFlight = false;
       }
     };
-    const first = window.setTimeout(() => { void createTick(); }, 900);
-    const timer = window.setInterval(() => { void createTick(); }, 5_000);
-    return () => {
+  const first = window.setTimeout(() => { void createTick(); }, 900);
+  const timer = window.setInterval(() => { void createTick(); }, 5_000);
+  return () => {
       cancelled = true;
       window.clearTimeout(first);
       window.clearInterval(timer);
     };
   }, [model.context.datasetVersionId, model.context.projectId, model.context.workspaceId, onRefresh]);
+  useEffect(() => {
+    if (model.context.projectId !== "manufacturing-demo-project" || model.context.workspaceId !== "manufacturing-demo") return;
+    if (!liveDemo.eventId) return;
+    if (selectedAsset?.assetId === liveDemo.assetId && selectedEvent?.eventId === liveDemo.eventId) return;
+    onPreviewAsset(liveDemo.assetId, liveDemo.eventId);
+  }, [
+    liveDemo.assetId,
+    liveDemo.eventId,
+    model.context.projectId,
+    model.context.workspaceId,
+    onPreviewAsset,
+    selectedAsset?.assetId,
+    selectedEvent?.eventId,
+  ]);
   const drawerAssetSource = factorySlotPreview?.slot.asset ?? (factorySlotPreview ? null : selectedAsset);
   const drawerPrediction = drawerAssetSource ? postMaintenancePredictions[drawerAssetSource.assetId] : null;
   const drawerAsset = drawerAssetSource && drawerPrediction
@@ -2088,9 +2126,13 @@ function MapReportFeatureSeries({
 }) {
   const color = title.includes("진동") || title.includes("토크") ? "#a7630c" : "#285fcb";
   const filteredPoints = filterSeriesPoints(points, currentObservedAt, windowId);
-  const visiblePoints = filteredPoints;
-  const numericPoints = visiblePoints.filter((point): point is SeriesDatum & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
   const currentNumericValue = typeof currentValue === "number" && Number.isFinite(currentValue) ? currentValue : null;
+  const visiblePoints = filteredPoints.length
+    ? filteredPoints
+    : currentNumericValue !== null && currentObservedAt
+      ? [{ observedAt: currentObservedAt, value: currentNumericValue, qualityStatus: "good" as const }]
+      : [];
+  const numericPoints = visiblePoints.filter((point): point is SeriesDatum & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
   if (!visiblePoints.length || !numericPoints.length) {
     return (
       <section className="asset-series-block">
@@ -2498,7 +2540,9 @@ function AssetPreviewPanel({
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !isDerivedFeatureKey(sensor.id));
   const isLiveAsset = Boolean(asset?.assetId && asset.assetId === liveDemo.assetId);
-  const numericFeatureSnapshots = featureSnapshots.filter((sensor) =>
+  const realtimeDirectFeatureSnapshots = withRealtimeCurrentValues(directFeatureSnapshots, isLiveAsset ? liveDemo : null);
+  const realtimeFeatureSnapshots = withRealtimeCurrentValues(featureSnapshots, isLiveAsset ? liveDemo : null);
+  const numericFeatureSnapshots = realtimeFeatureSnapshots.filter((sensor) =>
     typeof sensor.currentValue === "number"
     || sensor.points.some((point) => typeof point.value === "number" && Number.isFinite(point.value)),
   );
@@ -2511,7 +2555,7 @@ function AssetPreviewPanel({
   // Compressors expose five directly observed operational signals, including
   // relative vibration. Keep all five on the live panel so a meaningful
   // sensor does not disappear simply because it is fifth in the ViewModel.
-  const liveFeatureSnapshots = (isLiveAsset ? orderedLiveFeatureSnapshots : directFeatureSnapshots).slice(0, 5);
+  const liveFeatureSnapshots = (isLiveAsset ? orderedLiveFeatureSnapshots : realtimeDirectFeatureSnapshots).slice(0, 5);
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
     ? detail.inspectionTargets.slice(0, 3).map((target, index) => ({
       target,
@@ -2710,7 +2754,7 @@ function AssetPreviewPanel({
                 <LineChart size={14} />
                 <strong>실시간 피쳐 변화</strong>
                 <span className={`operations-live-feed-status ${isLiveAsset ? "is-hot" : ""}`}>
-                  {isLiveAsset ? "새 Result 수신" : "최신 관측 기준"} · {formatTimestamp(isLiveAsset ? liveDemo.generatedAt : asset.observedAt)}
+                  {isLiveAsset ? "LIVE now" : "최신 관측 기준"} · {formatTimestamp(isLiveAsset ? liveDemo.nowAt : asset.observedAt)}
                 </span>
               </header>
               {isLiveAsset ? (
@@ -2743,10 +2787,10 @@ function AssetPreviewPanel({
               ) : null}
               <FeatureSeriesCollection
                 title="핵심 센서"
-                sensors={liveFeatureSnapshots}
-                windowId={sensorWindow}
-                onWindowChange={onSensorWindowChange}
-                liveDemo={isLiveAsset ? liveDemo : null}
+                  sensors={liveFeatureSnapshots}
+                  windowId={sensorWindow}
+                  onWindowChange={onSensorWindowChange}
+                  liveDemo={isLiveAsset ? liveDemo : null}
                 loading={detailLoading}
                 emptyTitle="관측 이력 없음"
                 emptyDetail={detailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
@@ -3023,14 +3067,15 @@ function AssetPreviewPanel({
                 </div>
                 <FeatureSeriesCollection
                   title="센서 관측 흐름"
-                  sensors={directFeatureSnapshots}
+                  sensors={isLiveAsset ? liveFeatureSnapshots : realtimeDirectFeatureSnapshots}
                   windowId={sensorWindow}
                   onWindowChange={onSensorWindowChange}
+                  liveDemo={isLiveAsset ? liveDemo : null}
                   loading={detailLoading}
                   emptyTitle="센서 이력 없음"
                   emptyDetail="현재 화면 데이터에는 표시할 센서 관측 이력이 없습니다."
                 />
-                <DerivedMetricSlots sensors={featureSnapshots} windowId={sensorWindow} />
+                <DerivedMetricSlots sensors={realtimeFeatureSnapshots} windowId={sensorWindow} />
               </section>
             </>
           ) : null}
