@@ -1,15 +1,15 @@
 ---
-title: Operational Decision API UI E2E Foundation Plan
+title: Operational Decision Support API UI E2E Foundation Plan
 type: feat
 status: planned
 date: 2026-09-03
 ---
 
-# Operational Decision API UI E2E Foundation Plan
+# Operational Decision Support API UI E2E Foundation Plan
 
 ## Summary
 
-이 문서는 이미 구현된 read-only Operational Decision vertical slice를 실제 FastAPI와 기존 MVP UI에
+이 문서는 이미 구현된 read-only Operational Decision Support vertical slice를 실제 FastAPI와 기존 MVP UI에
 최소 연결하고, 브라우저에서 API, service, SQLite materialization, reload/reuse, 권한, 무부작용까지
 검증할 수 있는 E2E 기반을 만드는 실행 계획이다.
 
@@ -18,7 +18,7 @@ date: 2026-09-03
 context를 사용한다.
 
 PR 160 최신 커밋까지 반영된 realtime maintenance closed-loop는 실행 상태의 권위로 유지한다.
-Operational Decision Agent는 이 상태를 읽을 수 있지만 WorkOrder, MaintenanceAction, 설비 제어,
+Operational Context Agent는 이 상태를 읽을 수 있지만 WorkOrder, MaintenanceAction, 설비 제어,
 부품 예약, 담당자 배정을 직접 수행하지 않는다.
 
 ## Goal
@@ -28,7 +28,7 @@ Operational Decision Agent는 이 상태를 읽을 수 있지만 WorkOrder, Main
 ```text
 사용자 로그인과 scope 확정
   -> 설비 상세 선택
-  -> Operational Decision Brief 요청
+  -> Decision Support Brief 요청
   -> FastAPI authorization/CSRF/rate limit
   -> BoundedOperationalDecisionAgent
   -> SQLite operational context read ports
@@ -57,10 +57,10 @@ Operational Decision Agent는 이 상태를 읽을 수 있지만 WorkOrder, Main
 
 ### Not Yet Verified
 
-- Operational Decision Agent의 public HTTP API
-- Operational Decision Brief의 실제 UI consumer
+- Operational Context Agent의 public HTTP API
+- Decision Support Brief의 실제 UI consumer
 - browser -> API -> Agent -> SQLite -> UI 전체 경로
-- 현재 후보 SHA에 대한 Operational Decision Playwright E2E
+- 현재 후보 SHA에 대한 Decision Support Playwright E2E
 - 실제 MES/CMMS/WMS/QMS 연결
 
 ## Scope Decision
@@ -68,9 +68,9 @@ Operational Decision Agent는 이 상태를 읽을 수 있지만 WorkOrder, Main
 ### In Scope
 
 1. 기존 operational request/result/brief/materialization contract 재사용
-2. 기존 MVP router에 read/materialize/run-log API 추가
+2. 기존 MVP router에 read/materialize API와 안정성 평가·감사용 run-log API 추가
 3. composition root에서 현재 SQLite/fixture read ports 주입
-4. 기존 설비 상세 dialog에 compact Operational Decision panel 추가
+4. 기존 설비 상세 dialog에 compact Decision Support panel 추가
 5. manager materialize와 engineer read-only 권한 분리
 6. source classification, freshness, gap, relation, option comparison 표시
 7. API integration test와 Playwright E2E 3개
@@ -88,6 +88,7 @@ Operational Decision Agent는 이 상태를 읽을 수 있지만 WorkOrder, Main
 - E2E에서 실제 유료 LLM 호출
 - 장시간 soak, p99 SLO, production load test
 - 모든 운영 도메인의 CRUD UI
+- `decision-support-workflow-runs`를 일반 사용자용 업무 화면이나 Closed-loop 제어 화면으로 노출
 
 ## Architecture Boundary
 
@@ -101,9 +102,10 @@ Operational Decision Agent는 이 상태를 읽을 수 있지만 WorkOrder, Main
 | Operational Brief | 사실·관계·선택지 설명 | 계산값 변경과 자동 승인 |
 | FastAPI | 인증, scope, CSRF, rate limit, materialization | 도메인 truth 재해석 |
 | UI | 상태·gap·source·비교 표시와 명시적 refresh | 정상값 합성 또는 자동 실행 |
+| Evaluation observability | bounded 실행 trajectory와 안정성 평가 증거 | 업무 Decision·Closed-loop 상태·사용자 Action |
 | Closed-loop | 사용자 승인 뒤 실행 상태 | AI 결과의 무조건 실행 |
 
-PR 160의 realtime maintenance timeline과 Operational Decision timeline을 하나로 합치지 않는다.
+PR 160의 realtime maintenance timeline과 Decision Support materialization timeline을 하나로 합치지 않는다.
 
 - realtime maintenance timeline: 실제 WorkOrder/MaintenanceAction lifecycle
 - operational brief timeline: 읽은 context version과 brief materialization 이력
@@ -117,7 +119,7 @@ UI에서는 같은 설비 상세 안에 표시하되 서로 다른 제목과 sou
 ### GET cached brief
 
 ```http
-GET /api/objects/{asset_id}/operational-decision-brief
+GET /api/objects/{asset_id}/decision-support-brief
   ?project_id={project_id}
   &workspace_id={workspace_id}
   &evidence_snapshot_id={evidence_snapshot_id}
@@ -133,7 +135,7 @@ GET /api/objects/{asset_id}/operational-decision-brief
 ### POST materialize or refresh
 
 ```http
-POST /api/objects/{asset_id}/operational-decision-brief
+POST /api/objects/{asset_id}/decision-support-brief
   ?project_id={project_id}
   &workspace_id={workspace_id}
   &evidence_snapshot_id={evidence_snapshot_id}
@@ -148,18 +150,28 @@ POST /api/objects/{asset_id}/operational-decision-brief
 - 같은 identity/context version/policy version은 기존 brief를 reuse한다.
 - refresh 중 context version이 바뀌면 이전 결과를 저장하지 않는다.
 
-### GET workflow runs
+### GET workflow runs — operational stability evaluation and audit only
 
 ```http
-GET /api/projects/{project_id}/operational-decision-workflow-runs
+GET /api/projects/{project_id}/decision-support-workflow-runs
   ?asset_id={asset_id}
   &status=running|completed|partial|failed
   &limit=20
 ```
 
+이 API는 여러 운영 맥락을 수집해 AI Brief를 생성하는 bounded Operational Workflow가 예상된
+도메인만 조회했는지, 실패를 격리했는지, stale 결과를 차단했는지 평가하는 관측 surface다.
+제품 사용자가 운영 판단이나 정비 상태를 처리하는 API가 아니며 별도 Closed-loop 상태 머신도 아니다.
+
+- primary consumer: stability evaluator, regression test, `tenant_admin` audit tooling
 - permission: `admin.audit.read`
+- 기본 MVP 사용자 화면에는 노출하지 않는다.
+- GET은 새 workflow, context 조회, LLM 호출 또는 materialization을 시작하지 않는다.
 - raw chain-of-thought를 저장하거나 반환하지 않는다.
-- stage, called tool, reason code, source version, retry/fallback, latency만 반환한다.
+- stage, called tool, reason code, source version, retry/fallback, latency, reuse와 temporal validation만 반환한다.
+- RecommendationDecision, WorkOrder, MaintenanceAction, MaintenanceEvent, `available_actions`를 생성·변경·합성하지 않는다.
+- Closed-loop Activity timeline 또는 realtime maintenance lifecycle의 정본으로 사용하지 않는다.
+- 이 API가 없어도 Brief GET/POST와 기존 Closed-loop 업무 흐름은 정상 동작해야 한다.
 
 ### Response Shape
 
@@ -198,9 +210,9 @@ response envelope로 감싼다.
 
 Router가 Agent와 repository를 직접 조립하지 않도록 MVP application service에 다음 facade를 둔다.
 
-- `cached_operational_decision_brief(...)`
-- `operational_decision_brief(...)`
-- `operational_decision_workflow_runs(...)`
+- `cached_decision_support_brief(...)`
+- `decision_support_brief(...)`
+- `decision_support_workflow_runs(...)`
 
 Facade는 기존 Agent, brief composer, materialization 함수를 호출하고 exception을 stable API reason
 code로 변환한다.
@@ -229,7 +241,7 @@ code로 변환한다.
 ## UI Implementation
 
 새 페이지를 만들지 않고 기존 선택 설비 상세 dialog의 AI 검토 영역 아래에
-`운영 판단 맥락` panel을 추가한다.
+`운영 판단 지원` panel을 추가한다.
 
 ### Required Sections
 
@@ -296,7 +308,7 @@ FastAPI `TestClient`와 격리 SQLite를 사용한다.
 ```text
 manager 로그인
   -> 설비 상세
-  -> 운영 판단 맥락 생성
+  -> 운영 판단 지원 요약 생성
   -> API 200과 panel 표시
   -> 새로고침
   -> GET으로 같은 brief reuse
@@ -399,7 +411,7 @@ cd systems/frontend
 npm test -- --run
 npm run lint
 npm run build
-npx playwright test e2e/mvp-operational-decision.spec.ts --project=chromium
+npx playwright test e2e/mvp-decision-support.spec.ts --project=chromium
 ```
 
 최종 후보에서만 전체 `mvp-frontend-convergence.spec.ts`를 한 번 실행한다.
