@@ -38,6 +38,23 @@ metadata와 measurement 표현만 공유하고, 최종 리포트가 각 평가 a
 품질 점수와 안정성 점수를 더한 단일 종합점수는 사용하지 않는다. fallback은 LLM 품질 성공이 아니라
 장애 격리 성공으로만 집계한다.
 
+### 안정성의 주장 범위
+
+이 계획에서 안정성은 운영 uptime이나 실제 비용 절감이 아니라, 예측 결과가 조직 판단으로 전달되는
+흐름의 구조적 안정성을 뜻한다. 최종 리포트는 다음 네 축을 분리해 판정한다.
+
+| 안정성 축 | 확인하려는 질문 | 대표 측정 |
+|---|---|---|
+| 시간 정합성 | UI, AI brief, handoff가 같은 Evidence Snapshot과 context version/as-of를 보는가? | temporal validation pass, stale/snapshot mismatch 차단 |
+| 책임분리 | AI/Agent가 설명과 brief를 넘어 recommendation, WorkOrder, command mutation을 만들지 않는가? | mutation attempt count, generated recommendation count, side-effect delta |
+| 확장성 | 생산/WIP, 정비창, 부품/기술자, 품질/납기 context가 붙어도 같은 read-only port/resolver/brief 구조가 유지되는가? | scenario coverage, relation source/version/as-of completeness, gap/conflict handling |
+| 외부 API fallback | LLM/provider 또는 외부 context API 실패가 정상 판단처럼 보이지 않고 fallback/gap/failed 상태로 격리되는가? | fallback isolation, fallback reason coverage, retry exhausted, invalid candidate not persisted |
+
+확장 구현 candidate의 deterministic synthetic smoke에서 관측한 `temporal validation 3/3`,
+`mutation attempts 0`, `generated recommendations 0`, `3 scenarios`, `154 passed, 0 failed`는
+최종 운영 안정성 수치가 아니라 최종 평가 전 구조적 smoke evidence로만 둔다. 최종 안정성 수치는
+frozen candidate에 대해 Runner 3과 Phase 4를 다시 실행한 결과만 사용한다.
+
 ## Current Evidence State
 
 | 평가 축 | 현재 산출물 | 현재 상태 | 최종 주장 가능 여부 |
@@ -158,6 +175,8 @@ persisted state를 제공하고, 평가 row 조립과 aggregate 계산은 평가
 | stored reuse | 같은 `summary_key` 재조회 | LLM 추가 호출 없음, summary ID/key 유지 |
 | active conflict | 동시 동일 key 요청 | 중복 running run 없음 |
 | provider timeout | provider 예외 | bounded attempt, fallback reason, persisted fallback |
+| external context API timeout | 외부 domain/context API 예외 | retry attempt trace, unavailable/gap envelope, no invented context |
+| external context API malformed response | 외부 API schema/source/version 누락 | invalid response rejection, gap preserved, no normal-value synthesis |
 | invalid output | schema/claim 위반 | invalid candidate 미저장, fallback 또는 terminal state |
 | stale recovery | lease 만료 running 예약 | stale run 종료 후 새 run 진행 |
 | retry exhausted | 최대 시도 초과 | 무한 반복 없음, terminal failed trace |
@@ -170,6 +189,7 @@ persisted state를 제공하고, 평가 row 조립과 aggregate 계산은 평가
 - `reused`, `fallback`, `fallback_reason`
 - `validation_errors`
 - `attempt_count`, `retry_exhausted`
+- `external_api_status`, `external_api_fallback_reason`
 - `running_conflict`, `stale_recovered`
 - `summary_count_before`, `summary_count_after`
 - `work_order_count_before`, `work_order_count_after`
@@ -183,7 +203,12 @@ persisted state를 제공하고, 평가 row 조립과 aggregate 계산은 평가
 - row의 `summary_key`와 `workflow_run_id`가 DB record와 연결된다.
 - active conflict와 stale recovery가 서로 다른 결과로 남는다.
 - fallback과 terminal failure가 서로 다른 분모로 집계된다.
+- 외부 API timeout, schema mismatch, not-connected 응답은 각각 다른 `external_api_fallback_reason`으로
+  남고 정상 context처럼 저장되지 않는다.
 - snapshot mismatch에서 WorkOrder와 command side effect가 증가하지 않는다.
+- 동일 Evidence Snapshot과 context version/as-of가 UI/AI brief/handoff trace에서 일관되게 남는다.
+- 생산/WIP, 정비창, 부품/기술자, 품질/납기 관계의 missing/stale/not-connected 상태가 정상값이나 0으로
+  합성되지 않는다.
 - 측정하지 않은 token/cost/latency는 `not_measured`다.
 
 ## Evaluation Code Ownership
@@ -285,12 +310,14 @@ runner 구현 자체는 확장 구현과 병행할 수 있다. 그러나 확장 
 3. LLM 품질 결과
 4. B1/B2/B3 비교 결과
 5. 서비스·DB 안정성 결과
-6. 장애별 containment와 side-effect 검증
-7. latency/token/cost 및 measurement basis
-8. 사람 검토 결과
-9. 검증된 주장과 검증되지 않은 주장
-10. LangGraph 유지·도입·보류 결정
-11. 후속 운영 검증 범위
+6. 시간 정합성, 책임분리, 확장성 안정성 결과
+7. 외부 API fallback과 장애별 containment 검증
+8. side-effect 검증
+9. latency/token/cost 및 measurement basis
+10. 사람 검토 결과
+11. 검증된 주장과 검증되지 않은 주장
+12. LangGraph 유지·도입·보류 결정
+13. 후속 운영 검증 범위
 
 ## Completion Gates
 
@@ -321,6 +348,9 @@ runner 구현 자체는 확장 구현과 병행할 수 있다. 그러나 확장 
 | AI 설명 실패가 정상 설명처럼 보이면 운영 판단을 흐린다. 외부 호출 실패와 검증 실패는 대체 요약과 사유로 격리한다. | 대체 요약 격리율 | ____ / ____ |
 | 같은 근거에서 매번 새 요약을 만들면 설명이 흔들릴 수 있다. 동일한 근거 기준은 저장 요약 재사용을 우선한다. | 저장 요약 재사용률 | ____ / ____ |
 | AI는 설명을 돕지만 작업 생성 권한을 갖지 않는다. 근거 불일치는 작업 생성이나 상태 변경으로 번지지 않아야 한다. | 작업 생성 차단 | ____ / ____ |
+| 복잡한 운영 데이터는 사람이 다시 해석하기보다 판단 가능한 관계 view로 투영되어야 한다. | 관계 source/version/as-of 완전성 | ____ / ____ |
+| 생산, 정비, 부품, 품질, 납기가 붙어도 누락값을 정상값으로 합성하면 안 된다. | gap/conflict 보존률 | ____ / ____ |
+| 외부 API가 실패해도 AI 설명이 정상 운영 사실처럼 오염되면 안 된다. | 외부 API fallback 격리율 | ____ / ____ |
 
 ### 확장 구현 전
 

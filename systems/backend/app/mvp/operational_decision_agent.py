@@ -160,7 +160,7 @@ class BoundedOperationalDecisionAgent:
                 break
 
             envelope: OperationalContextEnvelope | None = None
-            failure: ValueError | RuntimeError | None = None
+            failure: ValueError | RuntimeError | TimeoutError | None = None
             attempts = 0
             for attempts in range(1, self.policy.max_attempts_per_domain + 1):
                 try:
@@ -170,6 +170,10 @@ class BoundedOperationalDecisionAgent:
                     )
                     failure = None
                     break
+                except TimeoutError as exc:
+                    failure = exc
+                    if attempts >= self.policy.max_attempts_per_domain:
+                        break
                 except ValueError as exc:
                     failure = exc
                     break
@@ -211,9 +215,10 @@ class BoundedOperationalDecisionAgent:
                     "domain": domain,
                     "status": "failed",
                     "reason": type(failure).__name__,
+                    "fallback_reason": _external_api_fallback_reason(failure),
                     "message": str(failure),
                     "attempt_count": attempts,
-                    "retryable": isinstance(failure, RuntimeError),
+                    "retryable": isinstance(failure, (RuntimeError, TimeoutError)),
                 }
             )
             trajectory.append(
@@ -364,13 +369,14 @@ class BoundedOperationalDecisionAgent:
                     identity=request.identity,
                     retrieved_at=validated_at,
                 )
-            except (ValueError, RuntimeError) as exc:
+            except (ValueError, RuntimeError, TimeoutError) as exc:
                 mismatches.append(
                     {
                         "domain": domain,
                         "expected": original.source_version,
                         "actual": None,
                         "reason": type(exc).__name__,
+                        "fallback_reason": _external_api_fallback_reason(exc),
                     }
                 )
                 continue
@@ -475,3 +481,13 @@ def _domain_reason(domain: str) -> str:
         "maintenance_readiness": "MAINTENANCE_OPTION_REQUIRES_READINESS",
         "quality_delivery": "QUALITY_DELIVERY_CONSTRAINT_REQUIRED",
     }.get(domain, "OPERATIONAL_CONTEXT_REQUIRED")
+
+
+def _external_api_fallback_reason(exc: BaseException) -> str:
+    if isinstance(exc, TimeoutError):
+        return "external_api_timeout"
+    if isinstance(exc, ValueError):
+        return "external_api_malformed_response"
+    if isinstance(exc, RuntimeError):
+        return "external_api_retry_exhausted"
+    return "external_api_failed"

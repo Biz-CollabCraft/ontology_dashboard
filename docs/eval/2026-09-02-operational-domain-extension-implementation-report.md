@@ -20,6 +20,7 @@ candidate_sha: 5633f9143baf6b80b73dd14732c769382d69c1fa
 - generated recommendations: **0**
 - role truth consistency: **pass**
 - relationship source/version/as-of completeness: **pass**
+- external API fallback isolation: **pass** (`timeout`, `malformed_response` -> `failed` gap)
 - actual MES/CMMS/WMS/QMS connectivity: **not evaluated / not connected**
 - B1/B2/B3 and live LLM quality: **not run; final evaluation phase**
 
@@ -42,6 +43,7 @@ candidate_sha: 5633f9143baf6b80b73dd14732c769382d69c1fa
 | relationship resolver | typed RDB/flat-ID paths with gaps/conflicts and source metadata | Verified |
 | impact simulation | stop/planned/continue deterministic comparison with no recommendation | Verified |
 | bounded ReAct orchestration | allowlisted reads, step budget, retry, structured trajectory, version revalidation | Verified |
+| external API fallback | timeout/malformed context failures become failed gaps with reason; no domain data is synthesized | Verified for synthetic failure ports |
 | role-specific brief | same truth with role-specific ordering and explicit gaps/limitations | Verified |
 | materialization/handoff | temporal guard, version-keyed immutable brief, human-selected non-command package | Verified |
 | production external systems | MES/APS/CMMS/WMS/QMS/workforce adapters | Not connected |

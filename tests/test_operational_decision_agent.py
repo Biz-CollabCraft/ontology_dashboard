@@ -224,6 +224,76 @@ def test_retryable_port_failure_retries_once_and_records_attempts() -> None:
     assert transient.calls == 3  # two collection attempts plus revalidation
 
 
+@dataclass
+class FailingExternalPort:
+    owner_domain: str
+    exc: BaseException
+    calls: int = 0
+
+    def lookup(self, *, identity, retrieved_at):
+        self.calls += 1
+        raise self.exc
+
+
+def test_external_api_timeout_is_retried_and_preserved_as_fallback_gap() -> None:
+    supplied = ports(clear_quality=True, ready_maintenance=True)
+    failing = FailingExternalPort(
+        owner_domain="production",
+        exc=TimeoutError("external production API timed out"),
+    )
+    supplied["production"] = failing
+
+    result = BoundedOperationalDecisionAgent(
+        ports=supplied,
+        impact_assumptions=ASSUMPTIONS,
+    ).run(
+        request=REQUEST,
+        retrieved_at=RETRIEVED_AT,
+        validated_at=VALIDATED_AT,
+    )
+
+    assert result.terminal_state is AgentTerminalState.PARTIAL_WITH_GAPS
+    assert "production" not in result.contexts
+    production_gap = next(gap for gap in result.gaps if gap["domain"] == "production")
+    assert production_gap["status"] == "failed"
+    assert production_gap["fallback_reason"] == "external_api_timeout"
+    assert production_gap["attempt_count"] == 2
+    assert production_gap["retryable"] is True
+    assert failing.calls == 2
+    assert all(fact["owner_domain"] != "production" for fact in result.facts)
+
+
+def test_external_api_malformed_response_is_not_synthesized_as_context() -> None:
+    supplied = ports(clear_quality=True, ready_maintenance=True)
+    failing = FailingExternalPort(
+        owner_domain="quality_delivery",
+        exc=ValueError("missing source_version"),
+    )
+    supplied["quality_delivery"] = failing
+
+    result = BoundedOperationalDecisionAgent(
+        ports=supplied,
+        impact_assumptions=ASSUMPTIONS,
+    ).run(
+        request=REQUEST,
+        retrieved_at=RETRIEVED_AT,
+        validated_at=VALIDATED_AT,
+    )
+
+    assert result.terminal_state is AgentTerminalState.PARTIAL_WITH_GAPS
+    assert "quality_delivery" not in result.contexts
+    quality_gap = next(
+        gap for gap in result.gaps if gap["domain"] == "quality_delivery"
+    )
+    assert quality_gap["status"] == "failed"
+    assert quality_gap["fallback_reason"] == "external_api_malformed_response"
+    assert quality_gap["attempt_count"] == 1
+    assert quality_gap["retryable"] is False
+    assert all(
+        fact["owner_domain"] != "quality_delivery" for fact in result.facts
+    )
+
+
 def test_step_budget_stops_without_inventing_a_result() -> None:
     result = BoundedOperationalDecisionAgent(
         ports=ports(clear_quality=True, ready_maintenance=True),

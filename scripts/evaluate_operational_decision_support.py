@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,7 @@ def evaluate(candidate_sha: str) -> dict[str, Any]:
         _scenario("part_blocked", maintenance_ready=False, quality_released=True),
         _scenario("quality_hold", maintenance_ready=True, quality_released=False),
     ]
+    external_api_fallback = _external_api_fallback_scenarios()
     role_briefs = _role_briefs()
     truth_fields = [
         "why_now",
@@ -124,6 +126,13 @@ def evaluate(candidate_sha: str) -> dict[str, Any]:
             if option.option is ImpactOption.PLANNED_MAINTENANCE
         ).state.value
         == "not_calculable",
+        "external_api_status": external_api_fallback["external_api_status"],
+        "external_api_fallback_reason": external_api_fallback[
+            "external_api_fallback_reason"
+        ],
+        "external_api_fallback_isolation_pass": external_api_fallback[
+            "fallback_isolation_pass"
+        ],
         "limitations": [
             "Synthetic deterministic smoke; not production effectiveness evidence.",
             "Does not compare B1/B2/B3 live LLM quality.",
@@ -139,6 +148,7 @@ def evaluate(candidate_sha: str) -> dict[str, Any]:
             summary["relation_source_metadata_complete"],
             summary["quality_hold_not_calculable"],
             summary["part_blocked_planned_maintenance_not_calculable"],
+            summary["external_api_fallback_isolation_pass"],
         ]
     )
     return summary
@@ -149,6 +159,7 @@ def _scenario(
     *,
     maintenance_ready: bool,
     quality_released: bool,
+    overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     maintenance = _load("maintenance-readiness-context-v1.json")
     if maintenance_ready:
@@ -172,6 +183,8 @@ def _scenario(
             source_ref="fixture:quality",
         ),
     }
+    if overrides:
+        ports.update(overrides)
     request = OperationalAgentRequest(
         identity=IDENTITY,
         actor_role=DecisionBriefRole.PROCESS_MANAGER.value,
@@ -205,6 +218,62 @@ def _role_briefs():
             )
         )
     return briefs
+
+
+@dataclass
+class FailingExternalContextPort:
+    owner_domain: str
+    exc: BaseException
+
+    def lookup(self, *, identity, retrieved_at):
+        raise self.exc
+
+
+def _external_api_fallback_scenarios() -> dict[str, Any]:
+    cases = {
+        "timeout": (
+            "production",
+            TimeoutError("external production API timed out"),
+            "external_api_timeout",
+        ),
+        "malformed_response": (
+            "quality_delivery",
+            ValueError("missing source_version"),
+            "external_api_malformed_response",
+        ),
+    }
+    statuses: dict[str, str] = {}
+    reasons: dict[str, str] = {}
+    isolated: list[bool] = []
+    for name, (domain, exc, expected_reason) in cases.items():
+        scenario = _scenario(
+            f"external_api_{name}",
+            maintenance_ready=True,
+            quality_released=True,
+            overrides={
+                domain: FailingExternalContextPort(
+                    owner_domain=domain,
+                    exc=exc,
+                )
+            },
+        )
+        result = scenario["result"]
+        gap = next(
+            item for item in result.gaps if item.get("domain") == domain
+        )
+        statuses[name] = str(gap.get("status") or "")
+        reasons[name] = str(gap.get("fallback_reason") or "")
+        isolated.append(
+            statuses[name] == "failed"
+            and reasons[name] == expected_reason
+            and domain not in result.contexts
+            and all(fact["owner_domain"] != domain for fact in result.facts)
+        )
+    return {
+        "external_api_status": statuses,
+        "external_api_fallback_reason": reasons,
+        "fallback_isolation_pass": all(isolated),
+    }
 
 
 def _load(name: str) -> dict[str, Any]:
