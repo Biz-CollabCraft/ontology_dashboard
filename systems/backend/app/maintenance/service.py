@@ -544,6 +544,16 @@ class MaintenanceLoopService:
                 workspace_id=workspace_id,
                 event_id=work_order.event_id,
             )
+            runtime_state = self._post_maintenance_runtime_state(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                lineage=lineage,
+            )
+            lineage["runtime_state"] = runtime_state
+            lineage["runtime_status"] = (
+                runtime_state.get("status") if runtime_state else None
+            )
             if self._post_maintenance_result_exists(
                 organization_id=organization_id,
                 project_id=project_id,
@@ -603,6 +613,44 @@ class MaintenanceLoopService:
             return False
         return result is not None
 
+    def _post_maintenance_runtime_state(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        lineage: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        maintenance_events = list(lineage.get("maintenance_events") or [])
+        if not maintenance_events or self.replay_session_query is None:
+            return None
+        resolver = getattr(
+            self.replay_session_query,
+            "post_maintenance_runtime_status",
+            None,
+        )
+        if not callable(resolver):
+            return None
+        maintenance_event_id = maintenance_events[-1].get("maintenance_event_id")
+        work_orders = list(lineage.get("work_orders") or [])
+        asset_id = next(
+            (
+                item.get("asset_id") or item.get("equipment_id")
+                for item in reversed(work_orders)
+                if item.get("asset_id") or item.get("equipment_id")
+            ),
+            None,
+        )
+        if not maintenance_event_id or not asset_id:
+            return None
+        return resolver(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=str(asset_id),
+            maintenance_event_id=str(maintenance_event_id),
+        )
+
     @staticmethod
     def _inspection_workflow_current_step(
         *,
@@ -617,8 +665,16 @@ class MaintenanceLoopService:
             return "inspection_in_progress"
 
         runtime_status = lineage.get("runtime_status")
-        if runtime_status in {"warming_up", "history_insufficient"}:
+        if runtime_status == "warming_up":
             return "post_maintenance_observation_pending"
+        if runtime_status in {
+            "history_insufficient",
+            "failed_source_unavailable",
+            "failed_model_artifact",
+            "failed_feature_execution",
+            "failed_model_inference",
+        }:
+            return "post_maintenance_prediction_blocked"
         if runtime_status in {"ready", "predicted"}:
             return "ready_for_reprediction"
 
@@ -1611,6 +1667,16 @@ class MaintenanceLoopService:
                 ):
                     if record.get(field) != expected:
                         raise ValueError(f"{field} scope mismatch")
+        runtime_state = self._post_maintenance_runtime_state(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            lineage=lineage,
+        )
+        lineage["runtime_state"] = runtime_state
+        lineage["runtime_status"] = (
+            runtime_state.get("status") if runtime_state else None
+        )
         return lineage
 
 

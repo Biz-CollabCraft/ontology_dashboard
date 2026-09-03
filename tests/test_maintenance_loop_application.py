@@ -65,12 +65,15 @@ class ProjectionQuery:
         replay_binding: dict | None = None,
         replay_error: ValueError | None = None,
         source_binding: dict | None = None,
+        runtime_status: dict | None = None,
     ) -> None:
         self.projection = projection if projection is not None else canonical_projection()
         self.calls: list[dict] = []
         self.replay_binding = replay_binding
         self.replay_error = replay_error
         self.source_binding = source_binding
+        self.runtime_status = runtime_status
+        self.runtime_status_calls: list[dict] = []
         self.replay_calls: list[dict] = []
         self.source_session_calls: list[dict] = []
 
@@ -91,6 +94,10 @@ class ProjectionQuery:
             "workspace_id": values["workspace_id"],
             "equipment_id": values["equipment_id"],
         }
+
+    def post_maintenance_runtime_status(self, **values):
+        self.runtime_status_calls.append(values)
+        return self.runtime_status
 
     def resolve_maintenance_source_session(self, **values):
         self.source_session_calls.append(values)
@@ -644,7 +651,12 @@ def test_two_stage_inspection_to_maintenance_work_order_lineage(tmp_path) -> Non
 
 
 def test_maintenance_execution_uses_persisted_lineage_and_emits_replay_events(tmp_path) -> None:
-    diagnosis = ProjectionQuery()
+    diagnosis = ProjectionQuery(
+        runtime_status={
+            "status": "history_insufficient",
+            "failure_reason": "post-maintenance window is invalid",
+        }
+    )
     loop = service(tmp_path, query=diagnosis)
     work_order_id = run_requested_maintenance(loop)
     started_at = datetime(2026, 8, 24, 9, 0, tzinfo=timezone.utc)
@@ -725,6 +737,19 @@ def test_maintenance_execution_uses_persisted_lineage_and_emits_replay_events(tm
     )
     assert lineage["maintenance_actions"][0]["lifecycle_state_version"] == 3
     assert len(lineage["maintenance_events"]) == 1
+    assert lineage["runtime_status"] == "history_insufficient"
+    assert lineage["runtime_state"]["failure_reason"] == (
+        "post-maintenance window is invalid"
+    )
+    assert diagnosis.runtime_status_calls == [
+        {
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "asset_id": "CNC-001",
+            "maintenance_event_id": completed["maintenance_event_id"],
+        }
+    ]
     assert lineage["maintenance_events"][0]["state_patch"] == {
         "tool_wear_min": {"operation": "reset", "unit": "min", "value": 0}
     }
@@ -1930,3 +1955,23 @@ def test_cooling_vertical_slice_preserves_action_and_typed_overlay_patch(tmp_pat
     assert payloads["maintenance.replay_requested"]["state_patch"] == (
         payloads["maintenance.completed"]["state_patch"]
     )
+
+
+def test_post_maintenance_runtime_failures_are_not_reported_as_observation_pending() -> None:
+    lineage = {"runtime_status": "history_insufficient"}
+    work_order = type("WorkOrder", (), {"status": WorkOrderStatus.COMPLETED})()
+
+    assert MaintenanceLoopService._inspection_workflow_current_step(
+        work_order=work_order,
+        lineage=lineage,
+    ) == "post_maintenance_prediction_blocked"
+
+
+def test_warming_up_remains_a_transient_observation_state() -> None:
+    lineage = {"runtime_status": "warming_up"}
+    work_order = type("WorkOrder", (), {"status": WorkOrderStatus.COMPLETED})()
+
+    assert MaintenanceLoopService._inspection_workflow_current_step(
+        work_order=work_order,
+        lineage=lineage,
+    ) == "post_maintenance_observation_pending"

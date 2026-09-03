@@ -97,6 +97,7 @@ type WorkStatus =
   | "maintenance_started"
   | "maintenance_completed"
   | "observation_pending"
+  | "prediction_blocked"
   | "ready_for_reprediction";
 
 interface PlanningImpactRow {
@@ -212,6 +213,7 @@ const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
   maintenance_started: "정비 중",
   maintenance_completed: "정비 완료",
   observation_pending: "정비 후 관측 대기",
+  prediction_blocked: "정비 후 예측 중단",
   ready_for_reprediction: "정비 후 예측 완료",
 };
 
@@ -224,6 +226,7 @@ const WORK_STATUS_ACTION: Record<WorkStatus, { label: string; disabled: boolean 
   maintenance_started: { label: "정비 완료", disabled: false },
   maintenance_completed: { label: "정비 후 관측 대기", disabled: true },
   observation_pending: { label: "관측 데이터 대기", disabled: true },
+  prediction_blocked: { label: "예측 상태 확인 필요", disabled: true },
   ready_for_reprediction: { label: "정비 효과 확인", disabled: false },
 };
 
@@ -774,6 +777,9 @@ function workStatusFromInspectionWorkflow(
   workOrder: OpenInspectionWorkOrderReadModel | null | undefined,
 ): WorkStatus | null {
   if (!workOrder) return null;
+  if (workOrder.current_step === "post_maintenance_prediction_blocked") {
+    return "prediction_blocked";
+  }
   const lifecycleStatus = workStatusFromLifecycleStep(workOrder.current_step);
   if (lifecycleStatus) return lifecycleStatus;
   if (workOrder.status === "requested") return "work_requested";
@@ -836,6 +842,7 @@ function closedLoopActionForStatus(closedLoop: MvpClosedLoopSummary | null | und
     maintenance_started: ["complete_maintenance_work_order", "complete_maintenance", "complete_work_order"],
     maintenance_completed: [],
     observation_pending: [],
+    prediction_blocked: [],
     ready_for_reprediction: ["view_reprediction", "request_reprediction"],
   };
   const actionIds = actionIdsByStatus[status];
@@ -871,7 +878,11 @@ function workQueueColumn(status: WorkStatus): WorkQueueColumnId {
   if (status === "candidate_recommended") return "candidate";
   if (status === "work_requested" || status === "assigned") return "requested";
   if (status === "inspection_started" || status === "inspection_completed" || status === "maintenance_started") return "inspection";
-  if (status === "maintenance_completed" || status === "observation_pending") return "observe";
+  if (
+    status === "maintenance_completed"
+    || status === "observation_pending"
+    || status === "prediction_blocked"
+  ) return "observe";
   return "repredict";
 }
 
@@ -981,6 +992,7 @@ function WorkStatusTimeline({
     "maintenance_started",
     "maintenance_completed",
     "observation_pending",
+    "prediction_blocked",
     "ready_for_reprediction",
   ];
   const activeIndex = order.indexOf(status);

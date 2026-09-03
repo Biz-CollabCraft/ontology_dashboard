@@ -624,6 +624,26 @@ export interface MaintenanceEventLineageReadModel {
     restart_at?: string | null;
   }>;
   activities?: Array<Record<string, unknown>>;
+  runtime_status?:
+    | "warming_up"
+    | "history_insufficient"
+    | "failed_source_unavailable"
+    | "failed_model_artifact"
+    | "failed_feature_execution"
+    | "failed_model_inference"
+    | "ready"
+    | "predicted"
+    | null;
+  runtime_state?: {
+    status: NonNullable<MaintenanceEventLineageReadModel["runtime_status"]>;
+    failure_reason?: string | null;
+    observed_at?: string | null;
+    model_id?: string | null;
+    model_version?: string | null;
+    lineage?: Record<string, unknown>;
+    received_at?: string | null;
+    updated_at?: string | null;
+  } | null;
 }
 
 export interface OpenInspectionWorkOrderReadModel {
@@ -648,6 +668,7 @@ export interface OpenInspectionWorkOrderReadModel {
     | "maintenance_in_progress"
     | "maintenance_completed"
     | "post_maintenance_observation_pending"
+    | "post_maintenance_prediction_blocked"
     | "ready_for_reprediction";
 }
 

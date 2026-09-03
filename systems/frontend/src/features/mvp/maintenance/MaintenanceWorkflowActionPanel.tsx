@@ -71,6 +71,7 @@ export type MaintenanceWorkflowDisplayStatus =
   | "maintenance_started"
   | "maintenance_completed"
   | "observation_pending"
+  | "prediction_blocked"
   | "ready_for_reprediction";
 
 export interface PostMaintenancePredictionSummary {
@@ -79,10 +80,29 @@ export interface PostMaintenancePredictionSummary {
   observedAt: string;
 }
 
-function displayStatus(
+const BLOCKED_RUNTIME_STATUSES = new Set([
+  "history_insufficient",
+  "failed_source_unavailable",
+  "failed_model_artifact",
+  "failed_feature_execution",
+  "failed_model_inference",
+]);
+
+export function postMaintenanceRuntimeFailure(
+  lineage: MaintenanceEventLineageReadModel,
+): string | null {
+  const runtimeState = lineage.runtime_state;
+  if (!runtimeState || !BLOCKED_RUNTIME_STATUSES.has(runtimeState.status)) return null;
+  return runtimeState.failure_reason
+    ? `정비 후 예측이 중단되었습니다: ${runtimeState.failure_reason}`
+    : `정비 후 예측이 중단되었습니다 (${runtimeState.status}).`;
+}
+
+export function displayStatus(
   lineage: MaintenanceEventLineageReadModel,
   postMaintenancePredictionAvailable = false,
 ): MaintenanceWorkflowDisplayStatus {
+  if (postMaintenanceRuntimeFailure(lineage)) return "prediction_blocked";
   const action = latest(lineage.maintenance_actions ?? []);
   if (action?.status === "completed") {
     if (postMaintenancePredictionAvailable) return "ready_for_reprediction";
@@ -285,6 +305,19 @@ export function MaintenanceWorkflowActionPanel({
           setMessage({ tone: "success", text: "정비 후 관측과 예측 처리가 완료됐습니다." });
           return;
         }
+        const nextLineage = await getMaintenanceEventLineage(
+          projectId,
+          workspaceId,
+          eventId,
+          controller.signal,
+        );
+        setLineage(nextLineage);
+        const runtimeFailure = postMaintenanceRuntimeFailure(nextLineage);
+        if (runtimeFailure) {
+          setPollingError(runtimeFailure);
+          onStatusChanged?.("prediction_blocked");
+          return;
+        }
       } catch (reason) {
         if (controller.signal.aborted) return;
         consecutiveFailures += 1;
@@ -309,6 +342,7 @@ export function MaintenanceWorkflowActionPanel({
     };
   }, [
     assetId,
+    eventId,
     onPostMaintenancePrediction,
     onStatusChanged,
     postMaintenancePrediction,
@@ -513,7 +547,13 @@ export function MaintenanceWorkflowActionPanel({
     }
   }
 
-  if (postMaintenancePrediction) {
+  const runtimeFailure = lineage ? postMaintenanceRuntimeFailure(lineage) : null;
+  if (runtimeFailure) {
+    label = "정비 후 예측 중단";
+    helper = runtimeFailure;
+    enabled = false;
+    command = null;
+  } else if (postMaintenancePrediction) {
     const percent = (postMaintenancePrediction.failureProbability * 100).toFixed(2);
     const isNormal = postMaintenancePrediction.statusGrade === "normal";
     label = isNormal ? "정상 운영 중" : "정비 후 위험 지속";

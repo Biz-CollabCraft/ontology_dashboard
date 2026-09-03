@@ -94,6 +94,16 @@ class MaintenanceReplaySessionValidationPort(Protocol):
         equipment_id: str,
     ) -> dict[str, Any]: ...
 
+    def post_maintenance_runtime_status(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        maintenance_event_id: str,
+    ) -> dict[str, Any] | None: ...
+
     def resolve_maintenance_source_session(
         self,
         *,
