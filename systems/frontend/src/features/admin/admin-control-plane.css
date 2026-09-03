@@ -21,6 +21,7 @@
 }
 .admin-brand { min-height: 42px; border-bottom: 1px solid #344150; padding: 5px; }
 .admin-brand .brand-mark { border-radius: 2px; }
+.admin-brand .brand-mark.hanbit-brand-mark { overflow: hidden; border-color: transparent; background: transparent; box-shadow: none; }
 .admin-nav-section { padding: 8px 7px 3px; color: #7f8c9d; font-size: 7px; font-weight: 900; letter-spacing: .08em; }
 .admin-nav { display: flex; min-height: 0; flex-direction: column; gap: 2px; }
 .admin-nav button { display: flex; min-height: 30px; align-items: center; gap: 7px; border-radius: 2px; padding: 0 7px; color: #b8c4d2; }

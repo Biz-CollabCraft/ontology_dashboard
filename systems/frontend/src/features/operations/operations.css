@@ -73,6 +73,7 @@
   border-radius: 8px;
   color: #8ab8f5;
 }
+.operations-brand-mark.hanbit-brand-mark { overflow: hidden; border-color: transparent; background: transparent; }
 .operations-brand div { min-width: 0; display: grid; gap: 2px; }
 .operations-brand div > span { font-size: 10px; letter-spacing: .12em; color: var(--operations-dim); text-transform: uppercase; }
 .operations-brand strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }

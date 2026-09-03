@@ -24,6 +24,7 @@ import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import { DisplayPreferencesProvider } from "./ui/foundry/displayPreferences";
 import { I18nProvider } from "./ui/i18n/I18nProvider";
 import { WorkbenchState } from "./ui/foundry/WorkbenchState";
+import { HanbitLogo } from "./ui/foundry/HanbitLogo";
 import { featureFlags } from "./featureFlags";
 import {
   isReliabilityPreviewLocation,
@@ -99,9 +100,23 @@ const LAST_VALID_PROJECT_KEY = "ontology-dashboard:last-valid-project";
 const IS_PUBLIC_STORY = import.meta.env.VITE_PUBLIC_STORY === "1";
 
 function RouteLoading({ operation }: { operation: string }) {
+  const sessionBootstrap = operation === "Checking session" || operation === "Loading sign in";
   return (
     <div className="route-loading">
-      <WorkbenchState kind="loading" title={operation} />
+      <div className="route-loading__brand" aria-hidden="true">
+        <span><HanbitLogo /></span>
+        <div><strong>Hanbit Tech</strong><small>Reliability Operations</small></div>
+      </div>
+      <WorkbenchState
+        kind="loading"
+        title={operation}
+        detail={sessionBootstrap ? "Preparing a secure, role-aware operations workspace" : "Preparing governed resources and operational context"}
+        loaderVariant="page"
+        loaderSteps={sessionBootstrap ? ["Session", "Scope", "Workspace"] : ["Data", "Logic", "Action"]}
+      />
+      <div className="route-loading__trust" aria-hidden="true">
+        <span>Live signals</span><i /> <span>Traceable decisions</span><i /> <span>Closed loop</span>
+      </div>
     </div>
   );
 }

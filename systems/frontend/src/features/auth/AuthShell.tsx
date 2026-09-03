@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Activity, ArrowLeft, ArrowRight, BarChart3, ClipboardCheck, FileText, Gauge, LockKeyhole, MapPinned, ShieldCheck, Wrench } from "lucide-react";
 import { DisplayMenu } from "../../ui/foundry/DisplayMenu";
 import { useI18n } from "../../ui/i18n/I18nProvider";
+import { HanbitLogo } from "../../ui/foundry/HanbitLogo";
 
 const PRODUCT_STORIES = [
   {
@@ -85,7 +86,7 @@ export function AuthShell({
   return (
     <main className="auth-page">
       <header className="auth-platform-bar">
-        <button className="auth-brand" onClick={() => navigate("/login")}><span className="brand-mark">HT</span><span><strong>Hanbit Tech</strong><small>Reliability Operations</small></span></button>
+        <button className="auth-brand" onClick={() => navigate("/login")}><span className="brand-mark hanbit-brand-mark"><HanbitLogo /></span><span><strong>Hanbit Tech</strong><small>Reliability Operations</small></span></button>
         <div><DisplayMenu className="auth-display-menu" /><span><Activity size={13} /> {english ? "Monitoring live" : "실시간 모니터링"}</span><span><ShieldCheck size={13} /> {english ? "Decision traceable" : "판단 근거 추적"}</span><span>Asia/Seoul</span></div>
       </header>
       <div className="auth-control-plane">

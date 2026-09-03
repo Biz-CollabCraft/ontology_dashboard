@@ -19,4 +19,17 @@ describe("OntologyLifecycleLoader", () => {
     expect(markup).toContain("Action");
     expect(markup).not.toMatch(/\d+%/);
   });
+
+  it("supports context-specific lifecycle labels", () => {
+    const markup = renderToString(
+      <OntologyLifecycleLoader
+        variant="page"
+        operation="Checking session"
+        steps={["Session", "Scope", "Workspace"]}
+      />,
+    );
+    expect(markup).toContain("Session");
+    expect(markup).toContain("Scope");
+    expect(markup).toContain("Workspace");
+  });
 });
