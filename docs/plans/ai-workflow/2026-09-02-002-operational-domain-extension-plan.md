@@ -32,6 +32,20 @@ Evidence Snapshot
 이 계획의 구현과 candidate freeze가 끝난 뒤에만
 `2026-09-02-001-agent-workflow-final-evaluation-plan.md`의 live 최종 평가를 수행한다.
 
+## Document Ownership
+
+세 문서는 같은 내용을 반복하지 않고 다음 정본 책임을 가진다.
+
+| 문서 | 정본 책임 | 포함하지 않는 내용 |
+|---|---|---|
+| 이 문서 | 운영 도메인, 관계 표현, bounded Agent, Impact Simulation, 구현 순서와 완료 조건 | 최종 평가 수치, 발표 슬라이드 문구 |
+| `2026-09-01-004-feat-agent-workflow-stability-evaluation-plan.md` | 품질·시간 정합성·실행 신뢰성 평가 계약과 주장 기준 | 구현 상세의 중복, 측정 전 성능 주장 |
+| `2026-09-03-002-ai-solution-engineer-presentation-frame-plan.md` | 문제 정의, 개인 역할, 발표 흐름, 그래프·화면과 증거 연결 | 새로운 기술 계약, 수치의 별도 복사본 |
+
+API/UI와 targeted E2E 실행 상세는
+`2026-09-03-001-decision-support-api-ui-e2e-foundation-plan.md`을 이 구현 계획의 하위 계획으로 사용한다.
+실제 측정값의 유일한 출처는 candidate SHA와 artifact reference를 고정한 최종 평가 보고서다.
+
 ## Decision
 
 ### 확장 순서

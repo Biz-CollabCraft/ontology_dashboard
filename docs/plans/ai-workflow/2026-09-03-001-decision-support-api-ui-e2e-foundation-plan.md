@@ -21,6 +21,11 @@ PR 160 최신 커밋까지 반영된 realtime maintenance closed-loop는 실행 
 Operational Context Agent는 이 상태를 읽을 수 있지만 WorkOrder, MaintenanceAction, 설비 제어,
 부품 예약, 담당자 배정을 직접 수행하지 않는다.
 
+이 문서는 `2026-09-02-002-operational-domain-extension-plan.md`의 API/UI와 targeted E2E 실행 하위
+계획이다. 평가 축과 주장 기준은 `2026-09-01-004-feat-agent-workflow-stability-evaluation-plan.md`,
+발표 흐름과 시각 증거는 `2026-09-03-002-ai-solution-engineer-presentation-frame-plan.md`를 따른다.
+실제 수치는 candidate SHA와 artifact가 고정된 최종 평가 보고서만 정본으로 사용한다.
+
 ## Goal
 
 다음 한 경로를 재현 가능한 E2E로 증명한다.

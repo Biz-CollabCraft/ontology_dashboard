@@ -32,6 +32,29 @@ contract 또는 smoke evidence로만 취급한다.
 이 계획은 운영 환경 안정성 검증 완료나 다운타임 절감 효과를 주장하지 않는다. 평가 전에는 수치를
 `TBD`로 두고, 평가 실행 이후 retry/fallback/reuse/stale recovery/blocked side effect 지표를 채운다.
 
+제품 수준의 핵심 문제는 문장 생성 안정성이 아니라, 서로 다른 시스템과 시점의 제조 데이터를 사람이
+판단 가능한 신뢰 가능한 운영 맥락으로 바꾸는 것이다. 안정성은 이 판단 맥락이 반복 실행과 장애에서도
+근거·시간·책임 경계를 잃지 않게 하는 품질 조건으로 둔다.
+
+## Evaluation Axes and Source of Truth
+
+다음 세 축은 서로 다른 질문에 답하므로 하나의 총점으로 합치지 않는다.
+
+| 평가 축 | 핵심 질문 | 대표 지표 |
+|---|---|---|
+| Context / decision quality | 사람이 관계, 제약, 불확실성을 근거에 맞게 이해할 수 있는가 | core judgment agreement, groundedness, required-field completeness, unsupported claim rate |
+| Temporal / evidence consistency | Brief가 동일 identity와 허용된 시점·version의 Evidence/context만 사용하는가 | mismatch rejection, stale save count, version alignment, lineage completeness |
+| Execution reliability | provider·validation·동시성 실패가 잘못된 저장이나 side effect로 번지지 않는가 | schema pass, retry recovery, failure isolation, invalid persistence, unauthorized side effects |
+
+`Evidence Packet -> AI Brief와 작업 요청 추천`이 Decision Support 소유 평가 범위다. 원천 제조 데이터의
+전사 품질, 사람 승인 이후 Closed-loop 실행, 정비 후 `gen_data`와 Generator 재예측은 해당 소유자의
+통합 증거가 있을 때만 전체 E2E로 판정한다. Closed-loop 미연동 상태는
+`blocked_by_integration`이지 Decision Support 구현 실패가 아니다.
+
+실제 수치는 `2026-09-03-agent-workflow-final-evaluation-report.md` 또는 이후 동일 형식의 최종 보고서와
+그 보고서가 가리키는 artifact에서만 인용한다. 서로 다른 candidate SHA, provider/model, fixture,
+rubric version의 72-run·120-run 결과는 같은 비교표에서 직접 차감하거나 합치지 않는다.
+
 ---
 
 ## Requirements
@@ -117,8 +140,8 @@ flowchart TB
 
 ### Deferred to Follow-Up Work
 
-- LLM 내용 정확성, groundedness, acceptance rate 전체 평가는 `docs/plans/ai-workflow/2026-09-01-001-feat-agent-summary-120-run-eval-plan.md`에서 다룬다.
-- 재현성, 시간 정합성, XAI 검증은 `docs/plans/ai-workflow/2026-09-01-003-feat-ai-workflow-stability-reproducibility-evaluation-plan.md`와 XAI 확장 계획에서 다룬다.
+- LLM 내용 정확성, groundedness, acceptance rate의 실행 결과는 `docs/plans/ai-workflow/2026-09-01-001-agent-review-summary-llm-evaluation-report.md`와 최종 평가 보고서에서 다룬다.
+- 재현성·시간 정합성의 최종 실행 순서와 claim gate는 `docs/plans/ai-workflow/2026-09-02-001-agent-workflow-final-evaluation-plan.md`를 따른다.
 - 실제 SHAP, Shapelet, Counterfactual 구현은 안정성 평가 범위가 아니다.
 - circuit breaker, jittered exponential backoff, chaos/fault-injection suite, OpenTelemetry instrumentation 도입은 현재 안정성 평가를 통과한 뒤 운영 요구가 커질 때 별도 계획으로 다룬다.
 
@@ -168,7 +191,7 @@ report에 남는지 확인한다.
 
 - `tests/eval/agent_workflow_eval_gate.json`
 - `tests/eval/results/`
-- `docs/plans/ai-workflow/2026-09-01-001-feat-agent-summary-120-run-eval-plan.md`
+- `docs/plans/ai-workflow/2026-09-02-001-agent-workflow-final-evaluation-plan.md`
 
 **Approach:** case id, iteration, provider mode, summary key, run status, reused 여부, fallback 여부, retry count, stale recovery 여부, validation error, latency/token/cost 측정 상태를 한 row로 남긴다. aggregate report는 total attempts, reused, fallback, failed, stale recovered, blocked side effect를 분리 집계한다.
 
@@ -413,7 +436,7 @@ B2에 reuse가 없는 것은 실패가 아니라 `not_applicable`이다. 나머�
 | Grounded claim rate | TBD | TBD | TBD | TBD | TBD | TBD | planned |
 | Schema validation pass rate | TBD | TBD | TBD | TBD | TBD | TBD | planned |
 | Core judgment agreement | TBD | TBD | TBD | TBD | TBD | TBD | planned |
-| Core judgment agreement | TBD | TBD | TBD | TBD | TBD | TBD | planned |
+| Required-field completeness | TBD | TBD | TBD | TBD | TBD | TBD | planned |
 | Fallback / retry | N/A | N/A | TBD | N/A | TBD | TBD | planned |
 | Summary reuse / trace completeness | N/A | N/A | TBD | N/A | TBD | TBD | planned |
 | Estimated cost / valid output | TBD | TBD | TBD | TBD | TBD | TBD | planned or not_measured |
@@ -444,6 +467,23 @@ B2에 reuse가 없는 것은 실패가 아니라 `not_applicable`이다. 나머�
 - B3가 전 축에서 개선되면: “품질·일관성·실패 격리 개선이 전체 workflow 복잡성을 정당화했습니다.”
 
 ---
+
+## API, UI, and E2E Evaluation Tiers
+
+| Tier | 검증 경로 | 완료 주장 |
+|---|---|---|
+| T1 Contract / component | domain contract, resolver, simulation, temporal guard | 구현 단위 검증 완료 |
+| T2 Decision Support vertical E2E | browser -> API -> Agent -> SQLite -> UI | 개인 소유 범위 E2E 완료 |
+| T3 Cross-owner integrated E2E | Model Artifact -> Brief -> Human -> Closed-loop -> 재예측 -> Brief 재생성 | 전체 통합 E2E 완료 |
+
+T2는 실제 API response를 UI가 소비하고, reload/reuse, partial/stale context, 권한, WorkOrder/command delta 0을
+검증해야 한다. T3는 관련 소유자 산출물과 revision이 고정된 경우에만 수행하며, 미연동이면
+`not_measured` 또는 `blocked_by_integration`으로 남긴다. API/UI 실행 상세와 evidence contract는
+`2026-09-03-001-decision-support-api-ui-e2e-foundation-plan.md`를 따른다.
+
+초기 72-run은 8 Gold fixture × 3 arm × 3회 반복으로 비교 harness와 계층별 차이를 확인하는 최소 실행이다.
+이는 통계적 유의성이나 운영 일반화를 주장하는 표본이 아니다. 120-run 품질 평가는 별도 조건의 보강 증거이며,
+두 실행은 candidate와 rubric이 같다고 확인되지 않는 한 합산하지 않는다.
 
 ## Metrics to Fill After Evaluation
 
@@ -550,8 +590,8 @@ snapshot mismatch blocked count, p95 materialization latency를 채워 안정성
 
 ## Sources and Research
 
-- `docs/plans/ai-workflow/2026-09-01-003-feat-ai-workflow-stability-reproducibility-evaluation-plan.md`
-- `docs/plans/ai-workflow/2026-09-01-001-feat-agent-summary-120-run-eval-plan.md`
+- `docs/plans/ai-workflow/2026-09-02-001-agent-workflow-final-evaluation-plan.md`
+- `docs/plans/ai-workflow/2026-09-01-001-agent-review-summary-llm-evaluation-report.md`
 - `docs/plans/ai-workflow/2026-08-29-003-evidence-snapshot-consistency-guard-plan.md`
 - `docs/contributions/hb-ai-review-evidence.md`
 - `systems/backend/app/mvp/agent_review_summary_materialization.py`
