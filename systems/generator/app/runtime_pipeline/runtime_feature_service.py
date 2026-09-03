@@ -40,6 +40,10 @@ from systems.generator.app.runtime_pipeline.cnc_temporal_features import (
     SUPPORTED_KIND as CNC_TEMPORAL_KIND,
     derive_cnc_temporal_feature_rows,
 )
+from systems.generator.app.runtime_pipeline.compressor_temporal_features import (
+    SUPPORTED_KIND as COMPRESSOR_TEMPORAL_KIND,
+    derive_compressor_temporal_feature_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +295,10 @@ class RuntimeFeatureService:
         # 2. Per-equipment History Requirement evaluation
         engineering = feature_schema_dict.get("feature_engineering") or {}
         min_rows = int(history_requirement_dict.get("minimum_history_rows", 1))
-        if engineering.get("kind") == CNC_TEMPORAL_KIND:
+        if engineering.get("kind") in {
+            CNC_TEMPORAL_KIND,
+            COMPRESSOR_TEMPORAL_KIND,
+        }:
             prior_required = int(
                 (engineering.get("runtime_context") or {}).get(
                     "recent_history_rows_required", 35
@@ -329,15 +336,19 @@ class RuntimeFeatureService:
                 retryable=False,
             )
 
-        if engineering.get("kind") == CNC_TEMPORAL_KIND:
+        temporal_deriver = {
+            CNC_TEMPORAL_KIND: derive_cnc_temporal_feature_rows,
+            COMPRESSOR_TEMPORAL_KIND: derive_compressor_temporal_feature_rows,
+        }.get(engineering.get("kind"))
+        if temporal_deriver is not None:
             if not time_col:
                 raise PipelineTimestampInvalidError(
-                    "CNC temporal Runtime Feature에는 observed_at/timestamp 컬럼이 필수입니다.",
+                    "Temporal Runtime Feature에는 observed_at/timestamp 컬럼이 필수입니다.",
                     retryable=False,
                 )
             try:
                 features_matrix, feature_cols, temporal_metadata = (
-                    derive_cnc_temporal_feature_rows(
+                    temporal_deriver(
                         df_sorted,
                         feature_schema=feature_schema_dict,
                         id_column=id_col,
@@ -346,7 +357,7 @@ class RuntimeFeatureService:
                 )
             except Exception as exc:
                 raise PipelineRuntimeFeatureFailedError(
-                    f"CNC temporal Runtime Feature 계산 실패: {exc}",
+                    f"Temporal Runtime Feature 계산 실패: {exc}",
                     details=[{
                         "model_id": model_id,
                         "model_version": model_version,
@@ -548,13 +559,17 @@ class RuntimeFeatureService:
             df_sorted = df_sorted.sort_values(by=[id_col], kind="stable")
 
         engineering = feature_schema_dict.get("feature_engineering") or {}
-        if engineering.get("kind") == CNC_TEMPORAL_KIND:
+        temporal_deriver = {
+            CNC_TEMPORAL_KIND: derive_cnc_temporal_feature_rows,
+            COMPRESSOR_TEMPORAL_KIND: derive_compressor_temporal_feature_rows,
+        }.get(engineering.get("kind"))
+        if temporal_deriver is not None:
             if not time_col:
                 raise PipelineTimestampInvalidError(
-                    "CNC temporal Runtime Feature에는 observed_at/timestamp 컬럼이 필수입니다.",
+                    "Temporal Runtime Feature에는 observed_at/timestamp 컬럼이 필수입니다.",
                     retryable=False,
                 )
-            _, feature_cols, temporal_metadata = derive_cnc_temporal_feature_rows(
+            _, feature_cols, temporal_metadata = temporal_deriver(
                 df_sorted,
                 feature_schema=feature_schema_dict,
                 id_column=id_col,
@@ -562,7 +577,7 @@ class RuntimeFeatureService:
             )
             if features_matrix.shape[0] != len(temporal_metadata):
                 raise PipelineFeatureMetadataAlignmentError(
-                    "CNC temporal Feature 행렬과 최신 설비 메타데이터 행 수가 일치하지 않습니다.",
+                    "Temporal Feature 행렬과 최신 설비 메타데이터 행 수가 일치하지 않습니다.",
                     details=[{
                         "matrix_rows": int(features_matrix.shape[0]),
                         "metadata_rows": len(temporal_metadata),

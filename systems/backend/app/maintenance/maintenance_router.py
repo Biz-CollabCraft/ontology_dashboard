@@ -36,14 +36,21 @@ def _require_scope(
 
 
 def _require_product_role(principal: Any, project_id: str, role: str) -> None:
+    _require_any_product_role(principal, project_id, role)
+
+
+def _require_any_product_role(
+    principal: Any, project_id: str, *allowed_roles: str
+) -> None:
     roles = set(principal.roles)
     roles.update(principal.project_roles.get(project_id, []))
     if principal.active_project_id == project_id:
         roles.update(principal.active_project_roles)
-    if role not in roles:
+    if not roles.intersection(allowed_roles):
+        role_label = " 또는 ".join(allowed_roles)
         raise AuthError(
             "role_context_denied",
-            f"이 작업은 {role} 역할에서만 수행할 수 있습니다.",
+            f"이 작업은 {role_label} 역할에서만 수행할 수 있습니다.",
         )
 
 
@@ -56,6 +63,8 @@ def _execute(command: Callable[[], Any]) -> Any:
         return _error(409, "idempotency_key_conflict", str(exc))
     except InvalidTransition as exc:
         return _error(409, "invalid_state_transition", str(exc))
+    except PermissionError as exc:
+        return _error(403, "work_order_assignment_denied", str(exc))
     except ValueError as exc:
         return _error(422, "contract_validation_failed", str(exc))
 
@@ -82,6 +91,28 @@ def create_maintenance_router(
     engineer_command = require_permission("field.tasks.update")
     technician_command = require_permission("field.tasks.update")
     events_read = require_permission("events.read")
+
+    @router.get("/inspection-work-orders")
+    def list_open_inspection_work_orders(
+        project_id: str,
+        workspace_id: str,
+        principal: Any = Depends(events_read),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        return _execute(
+            lambda: service.list_open_inspection_work_orders(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+            )
+        )
 
     @router.post("/inspection-work-orders")
     def request_inspection_work_order(
@@ -115,15 +146,15 @@ def create_maintenance_router(
             )
         )
 
-    @router.post("/inspection-work-orders/{work_order_id}/approve")
-    def approve_inspection_work_order(
+    @router.post("/inspection-work-orders/{work_order_id}/accept")
+    def accept_inspection_work_order(
         project_id: str,
         workspace_id: str,
         work_order_id: str,
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(manager_command),
+        principal: Any = Depends(engineer_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -134,7 +165,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "process_manager")
+        _require_product_role(principal, project_id, "process_engineer")
         return _execute(
             lambda: service.transition_inspection(
                 organization_id=principal.organization_id,
@@ -442,7 +473,12 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "maintenance_technician")
+        _require_any_product_role(
+            principal,
+            project_id,
+            "process_engineer",
+            "maintenance_technician",
+        )
         return _execute(
             lambda: service.start_maintenance(
                 organization_id=principal.organization_id,
@@ -476,7 +512,12 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "maintenance_technician")
+        _require_any_product_role(
+            principal,
+            project_id,
+            "process_engineer",
+            "maintenance_technician",
+        )
         return _execute(
             lambda: service.complete_maintenance(
                 organization_id=principal.organization_id,
@@ -510,7 +551,12 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "maintenance_technician")
+        _require_any_product_role(
+            principal,
+            project_id,
+            "process_engineer",
+            "maintenance_technician",
+        )
         return _execute(
             lambda: service.request_maintenance_replay(
                 organization_id=principal.organization_id,

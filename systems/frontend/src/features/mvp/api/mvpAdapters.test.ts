@@ -105,6 +105,8 @@ describe("MVP adapter contract", () => {
 
     expect(assets[0].status).toBe("critical");
     expect(assets[0].criticality).toBeNull();
+    expect(assets[0].line).toBe("CELL-1");
+    expect(assets[0].provenance.datasetLabel).toBe("Canonical V3.1");
   });
 
   it("does not synthesize downtime impact when operational context is missing", () => {
@@ -367,26 +369,26 @@ describe("MVP adapter contract", () => {
           work_order_id: "WO-INS-001",
         }],
         available_actions: [{
-          action_id: "approve_inspection_work_order",
+          action_id: "accept_inspection_work_order",
           target_type: "work_order",
           target_id: "WO-INS-001",
-          label: "점검 승인",
+          label: "요청 수락·내게 배정",
           disabled_reason: null,
         }],
         lifecycle_summary: {
           current_step: "inspection_requested",
-          current_step_label: "점검 승인 대기",
+          current_step_label: "현장 수락·배정 대기",
           completed_steps: ["prediction", "evidence", "decision"],
           next_step: "inspection_approved",
           source: "backend_closed_loop_policy",
         },
         primary_action: {
-          action_id: "approve_inspection_work_order",
+          action_id: "accept_inspection_work_order",
           target_type: "work_order",
           target_id: "WO-INS-001",
-          label: "점검 승인",
-          owner_role: "process_manager",
-          owner_label: "생산 운영 의사결정자",
+          label: "요청 수락·내게 배정",
+          owner_role: "process_engineer",
+          owner_label: "현장 관리자",
           disabled_reason: null,
           requires_input: false,
         },
@@ -450,18 +452,18 @@ describe("MVP adapter contract", () => {
       actorDisplayName: "윤하린",
     }));
     expect(enriched.closedLoop?.availableActions[0]).toEqual(expect.objectContaining({
-      actionId: "approve_inspection_work_order",
+      actionId: "accept_inspection_work_order",
       targetId: "WO-INS-001",
     }));
     expect(enriched.closedLoop?.lifecycleSummary).toEqual(expect.objectContaining({
       currentStep: "inspection_requested",
-      currentStepLabel: "점검 승인 대기",
+      currentStepLabel: "현장 수락·배정 대기",
       nextStep: "inspection_approved",
     }));
     expect(enriched.closedLoop?.primaryAction).toEqual(expect.objectContaining({
-      actionId: "approve_inspection_work_order",
-      ownerRole: "process_manager",
-      ownerLabel: "생산 운영 의사결정자",
+      actionId: "accept_inspection_work_order",
+      ownerRole: "process_engineer",
+      ownerLabel: "현장 관리자",
       requiresInput: false,
     }));
     expect(enriched.closedLoop?.timeline[0]).toEqual(expect.objectContaining({

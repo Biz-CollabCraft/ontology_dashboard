@@ -37,6 +37,13 @@ producer와 Generator/Backend consumer가 별도 Schema로 확정한다.
 - Canonical, 정비 전 Observation, 정비 전 Product Result/Evidence는 immutable하게
   보존한다.
 - 정비 완료 자체를 정상 판정으로 사용하지 않는다.
+- 정비 효과를 비교하는 정비 전 기준 Result와 정비 후 Overlay Result는 동일한
+  `model_id`, immutable `model_version`, Model Artifact manifest checksum 및 판정
+  threshold 정책을 사용한다. 하나라도 다르면 정비 효과 개선으로 비교하지 않고
+  `model_lineage_mismatch`로 처리한다.
+- 활성 Model Artifact가 변경된 경우 정비 후 결과에만 새 모델을 적용하지 않는다.
+  새 모델로 정비 전 Observation을 다시 산출한 별도 baseline과 정비 후 Overlay를
+  함께 평가하거나, 기존에 고정된 Artifact로 해당 정비 비교를 완료한다.
 
 ## 3. 전체 흐름
 

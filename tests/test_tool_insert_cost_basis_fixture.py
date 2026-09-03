@@ -34,6 +34,9 @@ def applicable_context() -> CostBasisResolutionContext:
         execution_mode="in_house",
         spare_part_available=True,
         vendor_dispatch_required=False,
+        source_product_result_id="product-result-demo",
+        source_evidence_id="evidence-demo",
+        source_failure_probability=0.82,
     )
 
 
@@ -116,8 +119,12 @@ def test_demo_policy_values_record_derivation_and_source_kind() -> None:
     }
     probabilities = policy["expected_failure_loss_minor"]["scenario_probabilities"]
     assert probabilities["immediate"]["failure_probability"] == 0.21
-    assert probabilities["no_action_baseline"]["failure_probability"] == 0.82
-    assert probabilities["planned_window"] is None
+    assert probabilities["no_action_baseline"]["source_field"] == (
+        "source_product_result.failure_probability"
+    )
+    assert probabilities["planned_window"]["formula"] == (
+        "(source_product_result.failure_probability + immediate.failure_probability) / 2"
+    )
     assert probabilities["reinspect_after"] is None
     assert all(
         entry["reasoning"]
@@ -192,7 +199,7 @@ def test_backend_provider_calculates_only_governed_probability_scenarios() -> No
     )
 
     assert basis.price_version == "tool-insert-demo-economic-basis-2026-09"
-    assert basis.calculation_policy_version == "maintenance-cost-policy-v2"
+    assert basis.calculation_policy_version == "maintenance-cost-policy-v3"
     assert len(basis.scenarios) == 4
     immediate = next(
         scenario
@@ -239,7 +246,12 @@ def test_backend_provider_calculates_only_governed_probability_scenarios() -> No
         for scenario in basis.scenarios
         if scenario.execution_timing.value == "no_action_baseline"
     )
-    assert planned.expected_failure_loss is None
+    assert planned.expected_failure_loss is not None
+    assert planned.expected_failure_loss.model_dump() == {
+        "low_minor": 34706,
+        "base_minor": 76205,
+        "high_minor": 172180,
+    }
     assert planned.labor_rate_type == "night"
     assert planned.labor_rate_per_minute is not None
     assert planned.labor_rate_per_minute.base_minor_per_minute == 438
@@ -255,6 +267,48 @@ def test_backend_provider_calculates_only_governed_probability_scenarios() -> No
         "base_minor": 121336,
         "high_minor": 274151,
     }
+
+
+def test_backend_provider_uses_source_product_result_probability() -> None:
+    basis = JsonMaintenanceCostBasisProvider(BASIS_PATH).tool_replacement_basis(
+        calculated_at=datetime(2026, 9, 1, 1, 0, tzinfo=UTC),
+        context=applicable_context().model_copy(
+            update={"source_failure_probability": 0.64}
+        ),
+    )
+
+    expected_by_timing = {
+        "immediate": {
+            "low_minor": 14152,
+            "base_minor": 31074,
+            "high_minor": 70210,
+        },
+        "planned_window": {
+            "low_minor": 28641,
+            "base_minor": 62888,
+            "high_minor": 142091,
+        },
+        "no_action_baseline": {
+            "low_minor": 43130,
+            "base_minor": 94701,
+            "high_minor": 213972,
+        },
+    }
+    for scenario in basis.scenarios:
+        if scenario.execution_timing.value == "reinspect_after":
+            assert scenario.expected_failure_loss is None
+            continue
+        assert scenario.expected_failure_loss is not None
+        assert scenario.expected_failure_loss.model_dump() == expected_by_timing[
+            scenario.execution_timing.value
+        ]
+
+    assert any(
+        source.input_name == "source_product_result_failure_probability"
+        and source.source_reference
+        == "product-result:product-result-demo#/failure_probability"
+        for source in basis.input_sources
+    )
 
 
 @pytest.mark.parametrize(

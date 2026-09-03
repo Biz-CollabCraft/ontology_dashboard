@@ -116,14 +116,17 @@ def test_runtime_uses_the_stored_producer_artifact_payload() -> None:
         "asset_type": artifact["asset_type"],
         "schema_version": artifact["schema_version"],
         "prediction_id": artifact["provenance"]["prediction_id"],
+        "source_sha256": "a" * 64,
         "prediction_result_payload": artifact,
     }
 
     stored = PredictiveMaintenanceRuntimeService._stored_producer_artifact(row)
 
-    assert stored is artifact
+    assert stored is not artifact
     assert stored["evidence_payload"] == artifact["evidence_payload"]
     assert stored["ranked_factor_evidence"] == artifact["ranked_factor_evidence"]
+    assert stored["source_sha256"] == "a" * 64
+    assert "source_sha256" not in artifact
 
 
 def test_snapshot_compatibility_does_not_require_dashboard_evidence_detail() -> None:

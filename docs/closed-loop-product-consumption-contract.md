@@ -350,8 +350,9 @@ mutation authorization/state validation은 replay 여부와 무관하게 Backend
 
 | Method | Path | Actor |
 |---|---|---|
+| `GET` | `/api/projects/{project_id}/workspaces/{workspace_id}/maintenance/inspection-work-orders` | `events.read` principal |
 | `POST` | `/api/projects/{project_id}/workspaces/{workspace_id}/maintenance/inspection-work-orders` | `process_manager` |
-| `POST` | `.../inspection-work-orders/{work_order_id}/approve` | `process_manager` |
+| `POST` | `.../inspection-work-orders/{work_order_id}/accept` | `process_engineer` |
 | `POST` | `.../inspection-work-orders/{work_order_id}/start` | `process_engineer` |
 | `POST` | `.../inspection-work-orders/{work_order_id}/complete` | `process_engineer` |
 | `POST` | `.../inspection-results/{inspection_result_id}/recommendations` | `process_manager` |
@@ -474,8 +475,8 @@ persona:
 권장 E2E 순서:
 
 1. Product Result / Evidence 생성·조회
-2. `process_engineer`가 Event / Equipment / Evidence 확인
-3. 현장 inspection / note / 측정 결과 기록
+2. `process_engineer`가 Event / Equipment / Evidence와 요청 큐를 확인
+3. `process_engineer`가 inspection WorkOrder를 수락해 자신에게 배정한 뒤 점검을 시작하고 결과를 기록
 4. `process_manager`가 Evidence + engineer 결과 확인
 5. Recommendation 승인 / 거절 / 보류
 6. Recommendation `accept` + 정비 필요 시 `WorkOrder(requested)` 생성 확인

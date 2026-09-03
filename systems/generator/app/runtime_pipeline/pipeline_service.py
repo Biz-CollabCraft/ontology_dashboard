@@ -140,6 +140,39 @@ class PipelineService:
         self.prediction_delivery_service = prediction_delivery_service or PredictionDeliveryService()
         self.active_model_set_service = active_model_set_service or ActiveModelSetService(models_store_dir=self.prediction_service.models_store)
 
+    @staticmethod
+    def _filter_observations_for_artifact(
+        observations: pd.DataFrame,
+        artifact: LoadedModelArtifact,
+    ) -> pd.DataFrame:
+        """Return only observations owned by the artifact's declared family.
+
+        Runtime snapshots may contain CNC and compressor observations together.  A
+        family-specific artifact must never see the other family's sparse columns,
+        because doing so turns a valid mixed snapshot into NaN feature input.  Older
+        generic artifacts without an ``observation_family`` declaration retain the
+        previous all-row behaviour.
+        """
+        compatibility = artifact.manifest.get("compatibility") or {}
+        family = str(compatibility.get("observation_family") or "").strip().lower()
+        if not family:
+            return observations
+
+        if "asset_type" not in observations.columns:
+            raise PipelineRuntimeFeatureFailedError(
+                "설비군별 Model Artifact를 실행하려면 입력에 asset_type이 필요합니다.",
+                details=[{"model_id": artifact.model_id, "observation_family": family}],
+                retryable=False,
+            )
+
+        aliases = {
+            "cnc": {"cnc", "cnc_machine"},
+            "compressor": {"compressor", "air_compressor"},
+        }
+        accepted = aliases.get(family, {family})
+        normalized = observations["asset_type"].astype("string").str.strip().str.lower()
+        return observations.loc[normalized.isin(accepted)].copy()
+
     def get_logical_source_uri(self, source_path: Path) -> str:
         """Convert filesystem path to logical relative URI without exposing local drives or absolute paths."""
         try:
@@ -724,6 +757,24 @@ class PipelineService:
 
                 schema_fp = compute_source_schema_fingerprint(raw_df)
                 plan = self.preprocessing_service.planner.build_plan(str(source_path))
+                if item.source_kind in {
+                    "live_sensor",
+                    "simulation_overlay",
+                    "maintenance_replay_overlay",
+                }:
+                    # Runtime snapshot envelopes are already validated at the
+                    # enqueue boundary.  Preserve their discriminator, lineage,
+                    # and both sensor-family column sets; generic profiling can
+                    # otherwise drop sparse CNC columns from a mixed fleet file.
+                    plan.update(
+                        {
+                            "structure_type": "tabular_column_as_attribute",
+                            "selected_columns": list(raw_df.columns),
+                            "id_column": target_id,
+                            "time_column": time_cols[0] if time_cols else None,
+                            "duplicate_policy": "error",
+                        }
+                    )
                 self.preprocessing_service.validate_plan(raw_df, plan)
 
                 try:
@@ -825,6 +876,17 @@ class PipelineService:
             for base_model in active_model_names:
                 model_id = self.prediction_service.resolve_model_id(base_model)
                 artifact = model_artifacts[base_model]
+                model_input_df = self._filter_observations_for_artifact(
+                    preprocessed_input_df,
+                    artifact,
+                )
+                if model_input_df.empty:
+                    logger.info(
+                        "[PipelineService] Skipping model '%s': input contains no '%s' observations",
+                        model_id,
+                        (artifact.manifest.get("compatibility") or {}).get("observation_family"),
+                    )
+                    continue
 
                 # Verify snapshot & feature schema match
                 active_snap_entry = current_snapshot.get(model_id, {})
@@ -845,7 +907,7 @@ class PipelineService:
                     try:
                         bundle = self.runtime_feature_service.load_bundle_from_artifact(
                             artifact_ref=cached_ref,
-                            preprocessed_df=preprocessed_input_df,
+                            preprocessed_df=model_input_df,
                             feature_schema_dict=artifact.feature_schema,
                             id_column=id_col,
                             time_column=plan.get("time_column"),
@@ -868,7 +930,7 @@ class PipelineService:
                 # Re-extract feature for model_id
                 try:
                     bundle, feat_ref = self.runtime_feature_service.extract_and_publish(
-                        preprocessed_df=preprocessed_input_df,
+                        preprocessed_df=model_input_df,
                         feature_schema_dict=artifact.feature_schema,
                         history_requirement_dict=artifact.history_requirement,
                         model_id=model_id,

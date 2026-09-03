@@ -35,7 +35,11 @@ from app.dashboard.visualizations import (
     validate_override_channel_mapping,
 )
 from app.dataset import DatasetCatalogService
-from app.diagnosis.evidence import FixtureContextProvider, build_product_result_artifact
+from app.diagnosis.evidence import (
+    FixtureContextProvider,
+    build_product_result_artifact,
+    validate_product_result_artifact,
+)
 from app.diagnosis.predictor import configured_predictor
 from app.diagnosis.runtime_service import (
     PredictiveMaintenanceRuntimeService,
@@ -76,6 +80,7 @@ from app.infra.maintenance_cost_basis_provider import JsonMaintenanceCostBasisPr
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.maintenance.live_service import LivePredictiveMaintenanceService
 from app.maintenance.service import MaintenanceLoopService
+from app.mvp.asset_detail_view_model import AssetDetailViewModelService
 from app.ontology import OntologyService
 from app.planner import LayoutPlanner, OntologyDashboardPlannerService
 from app.project import ProjectService
@@ -273,16 +278,27 @@ def build_live_predictive_maintenance_service(
     from app.infra.generator_runtime_pipeline import GeneratorRuntimePipelineClient
 
     target = database_url or database_target()
+    enqueue_client = GeneratorRuntimePipelineClient()
     shared = {
         "predictor_factory": configured_predictor,
         "artifact_builder": build_product_result_artifact,
     }
     return LivePredictiveMaintenanceService(
-        dataset=LiveDatasetIngestionAdapter(target, **shared),
-        diagnosis=LiveDiagnosisApplicationAdapter(**shared),
+        dataset=LiveDatasetIngestionAdapter(
+            target,
+            **shared,
+            allow_accelerated_simulation=os.getenv(
+                "ONTOLOGY_DASHBOARD_ALLOW_ACCELERATED_SIMULATION", "0"
+            ).lower()
+            in {"1", "true", "yes"},
+        ),
+        diagnosis=LiveDiagnosisApplicationAdapter(
+            snapshot_root=runtime_pipeline_input_root,
+            enqueue_client=enqueue_client,
+        ),
         maintenance=LiveMaintenanceOverlayAdapter(
             snapshot_root=runtime_pipeline_input_root,
-            enqueue_client=GeneratorRuntimePipelineClient(),
+            enqueue_client=enqueue_client,
         ),
         ontology=LiveOntologyProjectionAdapter(),
     )
@@ -435,6 +451,23 @@ def get_predictive_maintenance_runtime_service() -> PredictiveMaintenanceRuntime
             detail="Predictive-maintenance live runtime requires PostgreSQL",
         )
     return PredictiveMaintenanceRuntimeService(PredictiveMaintenanceRuntimeRepository(target))
+
+
+@lru_cache(maxsize=1)
+def get_runtime_asset_detail_service() -> AssetDetailViewModelService | None:
+    """Return the authoritative PostgreSQL AssetDetail read boundary when available."""
+
+    target = database_target()
+    if not is_postgresql(target):
+        return None
+    from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
+
+    return AssetDetailViewModelService(
+        PostgreSQLAssetDetailReadAdapter(
+            PredictiveMaintenanceRuntimeRepository(target),
+            validate_artifact=validate_product_result_artifact,
+        )
+    )
 
 
 class _RuntimeThenDemoEvidenceProjection:

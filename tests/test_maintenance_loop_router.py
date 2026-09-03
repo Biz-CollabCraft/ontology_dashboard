@@ -28,6 +28,20 @@ class Service:
         self.calls.append(("request", values))
         return {"work_order_id": "INSPECTION-WO-1", "work_type": "inspection"}
 
+    def list_open_inspection_work_orders(self, **values):
+        self.calls.append(("inspection_list", values))
+        return {
+            "items": [
+                {
+                    "work_order_id": "INSPECTION-WO-1",
+                    "event_id": "EVT-1",
+                    "asset_id": "CNC-1",
+                    "work_type": "inspection",
+                    "status": "requested",
+                }
+            ]
+        }
+
     def transition_inspection(self, **values):
         self.calls.append(("transition", values))
         return {
@@ -162,6 +176,12 @@ def client_for(role: str) -> tuple[TestClient, Service]:
 BASE = "/api/projects/project-1/workspaces/workspace-1/maintenance"
 INSPECTION = {
     "event_id": "EVT-1",
+    "snapshot_basis": {
+        "artifact_id": "RESULT-1",
+        "evidence_payload_reference": "evidence://EVT-1",
+        "asset_id": "CNC-1",
+        "event_id": "EVT-1",
+    },
 }
 RESULT = {
     "outcome": "maintenance_recommended",
@@ -201,6 +221,16 @@ def test_manager_can_request_and_decide_but_idempotency_header_is_required() -> 
     assert [name for name, _ in service.calls] == ["request", "decision"]
 
 
+def test_field_operator_can_read_open_inspection_queue() -> None:
+    client, service = client_for("process_engineer")
+
+    response = client.get(f"{BASE}/inspection-work-orders")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["status"] == "requested"
+    assert [name for name, _ in service.calls] == ["inspection_list"]
+
+
 def test_inspection_request_rejects_caller_supplied_authorization_lineage() -> None:
     client, service = client_for("process_manager")
     forged = {
@@ -222,6 +252,10 @@ def test_inspection_request_rejects_caller_supplied_authorization_lineage() -> N
 def test_process_engineer_can_record_inspection_result() -> None:
     client, service = client_for("process_engineer")
 
+    accepted = client.post(
+        f"{BASE}/inspection-work-orders/INSPECTION-WO-1/accept",
+        headers={"Idempotency-Key": "inspection-accept-001"},
+    )
     started = client.post(
         f"{BASE}/inspection-work-orders/INSPECTION-WO-1/start",
         headers={"Idempotency-Key": "inspection-start-001"},
@@ -232,10 +266,23 @@ def test_process_engineer_can_record_inspection_result() -> None:
         headers={"Idempotency-Key": "inspection-complete-001"},
     )
 
+    assert accepted.status_code == 200
     assert started.status_code == 200
     assert completed.status_code == 200
     assert completed.json()["maintenance_event_id"] is None
-    assert [name for name, _ in service.calls] == ["transition", "complete"]
+    assert [name for name, _ in service.calls] == ["transition", "transition", "complete"]
+
+
+def test_process_manager_cannot_accept_inspection_request() -> None:
+    client, service = client_for("process_manager")
+
+    response = client.post(
+        f"{BASE}/inspection-work-orders/INSPECTION-WO-1/accept",
+        headers={"Idempotency-Key": "inspection-accept-001"},
+    )
+
+    assert response.status_code == 403
+    assert service.calls == []
 
 
 def test_maintenance_technician_cannot_take_process_engineer_inspection_action() -> None:
@@ -301,6 +348,35 @@ def test_technician_executes_and_requests_replay_without_caller_lineage() -> Non
     )
 
     assert denied_approval.status_code == 403
+    assert started.status_code == 200
+    assert completed.status_code == 200
+    assert replay.status_code == 200
+    assert [name for name, _ in service.calls] == [
+        "maintenance_start",
+        "maintenance_complete",
+        "maintenance_replay",
+    ]
+
+
+def test_process_engineer_can_also_execute_maintenance_and_request_replay() -> None:
+    client, service = client_for("process_engineer")
+
+    started = client.post(
+        f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/start",
+        json={},
+        headers={"Idempotency-Key": "maintenance-start-engineer-001"},
+    )
+    completed = client.post(
+        f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/complete",
+        json={"outcome": "tool replaced"},
+        headers={"Idempotency-Key": "maintenance-complete-engineer-001"},
+    )
+    replay = client.post(
+        f"{BASE}/maintenance-events/MAINTENANCE-EVENT-1/replay",
+        json={"restart_at": "2026-08-24T09:35:00Z"},
+        headers={"Idempotency-Key": "maintenance-replay-engineer-001"},
+    )
+
     assert started.status_code == 200
     assert completed.status_code == 200
     assert replay.status_code == 200

@@ -276,7 +276,7 @@ def test_prediction_batch_promotion_creates_product_result_artifact() -> None:
     assert artifact["provenance"]["source_type"] == "product_runtime_inference"
     assert artifact["provenance"]["canonical_source_mutated"] is False
     assert artifact["evidence_payload"]["recommended_actions"][0]["action_id"] == (
-        "request_inspection"
+        "review_shutdown"
     )
     assert artifact["evidence_payload"]["evidence_gaps"]
     summary = service._product_result_evidence_summary(artifact)
@@ -390,7 +390,7 @@ def test_prediction_batch_promotion_absorbs_optional_generator_explanation() -> 
         for field in artifact["evidence_payload"]["source_fields"]
     }
     assert "generator_explanation.1.torque_nm_6h_mean" in source_field_ids
-    assert artifact["recommended_action"]["action"] == "request_inspection"
+    assert artifact["recommended_action"]["action"] == "review_shutdown"
 
 
 def test_product_result_materialization_exposes_shared_evidence_projection() -> None:

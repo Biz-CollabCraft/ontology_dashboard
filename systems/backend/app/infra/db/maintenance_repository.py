@@ -607,24 +607,56 @@ class MaintenanceRepository:
             if current.work_type is not WorkOrderType.INSPECTION:
                 raise ValueError("work order is not an inspection")
             transition_work_order(current.status, work_order.status)
-            if current.model_copy(update={"status": work_order.status}) != work_order:
+            expected_update: dict[str, Any] = {"status": work_order.status}
+            if work_order.status is WorkOrderStatus.APPROVED:
+                expected_update.update(
+                    assigned_to=actor_id,
+                    assigned_at=work_order.assigned_at,
+                )
+            if current.model_copy(update=expected_update) != work_order:
                 raise ValueError("persisted work order does not match inspection transition")
-            updated = connection.execute(
-                """
-                UPDATE closed_loop_work_orders SET status=?,updated_at=?
-                WHERE organization_id=? AND project_id=? AND workspace_id=?
-                  AND work_order_id=? AND status=?
-                """,
-                (
-                    work_order.status.value,
-                    now,
-                    scope.organization_id,
-                    scope.project_id,
-                    scope.workspace_id,
-                    work_order.work_order_id,
-                    current.status.value,
-                ),
-            )
+            if work_order.status is WorkOrderStatus.APPROVED:
+                updated = connection.execute(
+                    """
+                    UPDATE closed_loop_work_orders
+                    SET status=?,assigned_to=?,assigned_at=?,updated_at=?
+                    WHERE organization_id=? AND project_id=? AND workspace_id=?
+                      AND work_order_id=? AND status=? AND assigned_to IS NULL
+                    """,
+                    (
+                        work_order.status.value,
+                        actor_id,
+                        work_order.assigned_at.isoformat(),
+                        now,
+                        scope.organization_id,
+                        scope.project_id,
+                        scope.workspace_id,
+                        work_order.work_order_id,
+                        current.status.value,
+                    ),
+                )
+            else:
+                if current.assigned_to != actor_id:
+                    raise PermissionError(
+                        "only the assigned field operator can start this inspection"
+                    )
+                updated = connection.execute(
+                    """
+                    UPDATE closed_loop_work_orders SET status=?,updated_at=?
+                    WHERE organization_id=? AND project_id=? AND workspace_id=?
+                      AND work_order_id=? AND status=? AND assigned_to=?
+                    """,
+                    (
+                        work_order.status.value,
+                        now,
+                        scope.organization_id,
+                        scope.project_id,
+                        scope.workspace_id,
+                        work_order.work_order_id,
+                        current.status.value,
+                        actor_id,
+                    ),
+                )
             if updated.rowcount != 1:
                 raise InvalidTransition("inspection work order was changed concurrently")
             self._record_activity(
@@ -635,18 +667,31 @@ class MaintenanceRepository:
                 work_order_id=work_order.work_order_id,
                 aggregate_type="work_order",
                 aggregate_id=work_order.work_order_id,
-                activity_type=f"work_order.{work_order.status.value}",
+                activity_type=(
+                    "work_order.assigned"
+                    if work_order.status is WorkOrderStatus.APPROVED
+                    else f"work_order.{work_order.status.value}"
+                ),
                 actor_user_id=actor_id,
                 actor_display_name=actor_display_name,
                 before_status=current.status.value,
                 after_status=work_order.status.value,
-                payload={"work_type": WorkOrderType.INSPECTION.value},
+                payload={
+                    "work_type": WorkOrderType.INSPECTION.value,
+                    "assigned_to": work_order.assigned_to,
+                    "assigned_at": (
+                        None
+                        if work_order.assigned_at is None
+                        else work_order.assigned_at.isoformat()
+                    ),
+                },
                 created_at=transitioned_at.isoformat(),
             )
             result = {
                 "work_order_id": work_order.work_order_id,
                 "work_type": work_order.work_type.value,
                 "work_order_status": work_order.status.value,
+                "assigned_to": work_order.assigned_to,
                 "replayed": False,
             }
             self._finish_idempotency(
@@ -696,6 +741,10 @@ class MaintenanceRepository:
             current = self._work_order_from_row(row)
             if current.work_type is not WorkOrderType.INSPECTION:
                 raise ValueError("work order is not an inspection")
+            if current.assigned_to != inspection_result.recorded_by:
+                raise PermissionError(
+                    "only the assigned field operator can complete this inspection"
+                )
             transition_work_order(current.status, WorkOrderStatus.COMPLETED)
             if current.model_copy(update={"status": work_order.status}) != work_order:
                 raise ValueError("persisted work order does not match inspection completion")
@@ -717,7 +766,7 @@ class MaintenanceRepository:
                 """
                 UPDATE closed_loop_work_orders SET status=?,updated_at=?
                 WHERE organization_id=? AND project_id=? AND workspace_id=?
-                  AND work_order_id=? AND status=?
+                  AND work_order_id=? AND status=? AND assigned_to=?
                 """,
                 (
                     WorkOrderStatus.COMPLETED.value,
@@ -727,6 +776,7 @@ class MaintenanceRepository:
                     scope.workspace_id,
                     work_order.work_order_id,
                     current.status.value,
+                    inspection_result.recorded_by,
                 ),
             )
             if updated.rowcount != 1:
@@ -1643,8 +1693,8 @@ class MaintenanceRepository:
             INSERT INTO closed_loop_work_orders (
                 work_order_id,organization_id,project_id,workspace_id,event_id,
                 asset_id,equipment_id,asset_type,work_type,status,idempotency_key,
-                authorization_json,created_at,updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                assigned_to,assigned_at,authorization_json,created_at,updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 work_order.work_order_id,
@@ -1658,6 +1708,8 @@ class MaintenanceRepository:
                 work_order.work_type.value,
                 work_order.status.value,
                 work_order.idempotency_key,
+                work_order.assigned_to,
+                None if work_order.assigned_at is None else work_order.assigned_at.isoformat(),
                 work_order.authorization.model_dump_json(),
                 now,
                 now,
@@ -1733,6 +1785,33 @@ class MaintenanceRepository:
                 work_order_id=work_order_id,
             )
         return None if row is None else self._work_order_from_row(row)
+
+    def list_open_inspection_work_orders(
+        self,
+        *,
+        workspace_id: str,
+    ) -> tuple[WorkOrder, ...]:
+        with self._connect() as connection:
+            scope = self.project_context.resolve(workspace_id, connection=connection)
+            rows = connection.execute(
+                """
+                SELECT * FROM closed_loop_work_orders
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND work_type=?
+                  AND status IN (?,?,?)
+                ORDER BY created_at DESC,work_order_id DESC
+                """,
+                (
+                    scope.organization_id,
+                    scope.project_id,
+                    workspace_id,
+                    WorkOrderType.INSPECTION.value,
+                    WorkOrderStatus.REQUESTED.value,
+                    WorkOrderStatus.APPROVED.value,
+                    WorkOrderStatus.IN_PROGRESS.value,
+                ),
+            ).fetchall()
+        return tuple(self._work_order_from_row(row) for row in rows)
 
     def get_maintenance_action(
         self,
@@ -2137,6 +2216,8 @@ class MaintenanceRepository:
             asset_type=row["asset_type"],
             work_type=row["work_type"],
             status=row["status"],
+            assigned_to=row["assigned_to"],
+            assigned_at=row["assigned_at"],
             idempotency_key=row["idempotency_key"],
             authorization=WorkOrderAuthorization.model_validate(cls._decoded(row["authorization_json"])),
         )
@@ -2349,6 +2430,7 @@ class MaintenanceRepository:
             "recommendation.rejected": 20,
             "recommendation.deferred": 20,
             "work_order.requested": 30,
+            "work_order.assigned": 40,
             "work_order.approved": 40,
             "maintenance_action.planned": 50,
             "work_order.in_progress": 60,

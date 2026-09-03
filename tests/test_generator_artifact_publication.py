@@ -11,7 +11,7 @@ from systems.generator import entrypoint
 
 def test_compressor_publication_returns_published_artifact(monkeypatch, tmp_path: Path) -> None:
     source = tmp_path / "compressor_sensor_observation.csv"
-    source.write_text("observed_at,asset_id\n2026-08-08T00:00:00Z,CMP-1\n", encoding="utf-8")
+    truth = tmp_path / "compressor_failure_truth.csv"
     telemetry = pd.DataFrame(
         {
             "observed_at": ["2026-08-08T00:00:00Z"],
@@ -26,6 +26,8 @@ def test_compressor_publication_returns_published_artifact(monkeypatch, tmp_path
         }
     )
     failures = pd.DataFrame({"asset_id": ["CMP-1"], "failure_occurred_at": ["2026-08-09T00:00:00Z"]})
+    telemetry.to_csv(source, index=False)
+    failures.to_csv(truth, index=False)
     feature_schema = {
         "schema_version": entrypoint.FEATURE_SCHEMA_VERSION,
         "features": ["voltage_raw_current"],
@@ -49,36 +51,21 @@ def test_compressor_publication_returns_published_artifact(monkeypatch, tmp_path
     published = tmp_path / "published-artifact"
 
     monkeypatch.setenv("MODEL_ARTIFACT_URI", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("COMPRESSOR_OBSERVATION_URI", str(source))
+    monkeypatch.setenv("COMPRESSOR_FAILURE_TRUTH_URI", str(truth))
     monkeypatch.setattr(entrypoint, "PATHS", SimpleNamespace(data_dir=tmp_path))
-    monkeypatch.setattr(
-        entrypoint,
-        "load_all_sources",
-        lambda *_args, **_kwargs: {
-            "compressor_sensor_observation": telemetry,
-            "compressor_failure_truth": failures,
-        },
-    )
-    monkeypatch.setattr(entrypoint, "load_family_registry", lambda: {})
-    monkeypatch.setattr(entrypoint, "get_last_plans", lambda: {})
-    monkeypatch.setattr(
-        entrypoint,
-        "_metadata_for",
-        lambda key, _registry: {
-            "role": "telemetry_sensor" if "sensor" in key else "failure_event",
-            "id_columns": ["asset_id"],
-        },
-    )
     monkeypatch.setattr(entrypoint, "train_compressor_model", lambda *_args, **_kwargs: training)
 
     def fake_publish_model_artifact(**kwargs):
         assert kwargs["model_id"] == "compressor-failure-risk"
         assert kwargs["compatibility"]["observation_family"] == "compressor"
-        assert set(kwargs["extra_files"]) == {
-            "threshold_curve",
-            "label_schema",
-            "history_requirement",
-        }
+        assert set(kwargs["extra_files"]) == {"threshold_curve"}
         assert all(Path(path).exists() for path in kwargs["extra_files"].values())
+        assert kwargs["label_schema"]["label_schema_version"] == (
+            "compressor-failure-within-horizon-v1"
+        )
+        assert kwargs["history_requirement"]["minimum_history_rows"] == 36
+        assert kwargs["history_requirement"]["observation_family"] == "compressor"
         return published
 
     monkeypatch.setattr(entrypoint, "publish_model_artifact", fake_publish_model_artifact)

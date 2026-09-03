@@ -410,6 +410,7 @@
               "work_type": {"enum": ["inspection", "maintenance"]},
               "status": {"enum": ["requested", "approved", "in_progress", "completed", "blocked", "failed", "cancelled"]},
               "assigned_to": {"type": ["string", "null"]},
+              "assigned_at": {"type": ["string", "null"], "format": "date-time"},
               "actor_display_name": {"type": ["string", "null"]},
               "created_at": {"type": ["string", "null"], "format": "date-time"},
               "updated_at": {"type": ["string", "null"], "format": "date-time"}

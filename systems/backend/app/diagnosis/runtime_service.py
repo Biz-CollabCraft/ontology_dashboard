@@ -1173,7 +1173,13 @@ class PredictiveMaintenanceRuntimeService:
                 raise ValueError(f"stored Product Result Artifact {field} does not match runtime index")
         if str(provenance.get("prediction_id")) != str(row["prediction_id"]):
             raise ValueError("stored Product Result Artifact prediction_id does not match runtime index")
-        return artifact
+        # The producer payload deliberately does not claim the persistence-row
+        # checksum.  Add that governed index fact to the read projection so the
+        # AssetDetail stale-view guard and Maintenance authorization query
+        # compare the same stored Product Result identity.
+        enriched = dict(artifact)
+        enriched["source_sha256"] = str(row["source_sha256"])
+        return enriched
 
     @staticmethod
     def _product_result_evidence_summary(
