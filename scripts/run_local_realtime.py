@@ -25,7 +25,9 @@ ROOT = Path(__file__).resolve().parents[1]
 GEN_DATA_ROOT = ROOT.parent / "gen_data"
 LIVE_SOURCE_VERSION = "gen-data-wall-clock-live-v2"
 OBSERVATION_INTERVAL_MINUTES = 10
-INITIAL_HISTORY_ROWS = 36
+MODEL_MINIMUM_HISTORY_ROWS = 36
+DEFAULT_INITIAL_HISTORY_HOURS = 168
+DEFAULT_SIMULATION_HOURS = 336
 
 
 def _wait(url: str, *, seconds: int = 90) -> None:
@@ -182,17 +184,14 @@ def _simulation_start_at(
 def _initial_fast_forward_target_hours(
     *,
     latest_observed_at: datetime | None,
-    interval_minutes: int = OBSERVATION_INTERVAL_MINUTES,
-    history_rows: int = INITIAL_HISTORY_ROWS,
+    initial_history_hours: int = DEFAULT_INITIAL_HISTORY_HOURS,
 ) -> int | None:
-    """Return the one-time warm-up target for a genuinely new live stream."""
+    """Return the one-time historical warm-up target for a new live stream."""
     if latest_observed_at is not None:
         return None
-    total_minutes = interval_minutes * history_rows
-    hours, remainder = divmod(total_minutes, 60)
-    if remainder:
-        raise ValueError("initial history duration must resolve to whole hours")
-    return hours
+    if initial_history_hours <= 0:
+        raise ValueError("initial history duration must be positive")
+    return initial_history_hours
 
 
 def _fast_forward_initial_history(
@@ -200,10 +199,12 @@ def _fast_forward_initial_history(
     gen_data_port: int,
     run_id: str,
     latest_observed_at: datetime | None,
+    initial_history_hours: int = DEFAULT_INITIAL_HISTORY_HOURS,
 ) -> dict | None:
-    """Warm up the original simulation run without replacing its lineage."""
+    """Generate historical observations on the original run without changing lineage."""
     target_hours = _initial_fast_forward_target_hours(
         latest_observed_at=latest_observed_at,
+        initial_history_hours=initial_history_hours,
     )
     if target_hours is None:
         return None
@@ -369,7 +370,21 @@ def main() -> int:
     parser.add_argument("--web-port", type=int, default=3100)
     parser.add_argument("--postgres-port", type=int, default=5432)
     parser.add_argument("--speed", type=float, default=60.0)
-    parser.add_argument("--simulation-hours", type=int, default=72)
+    parser.add_argument(
+        "--simulation-hours",
+        type=int,
+        default=DEFAULT_SIMULATION_HOURS,
+        help="Total simulated horizon. Defaults to 336 hours (14 days).",
+    )
+    parser.add_argument(
+        "--initial-history-hours",
+        type=int,
+        default=DEFAULT_INITIAL_HISTORY_HOURS,
+        help=(
+            "Historical observations generated before the live demo reaches the "
+            "current-time boundary. Defaults to 168 hours (7 days)."
+        ),
+    )
     parser.add_argument(
         "--models-store",
         type=Path,
@@ -384,6 +399,20 @@ def main() -> int:
         help="Do not select the live Dataset Version for local demo project users.",
     )
     args = parser.parse_args()
+
+    minimum_history_hours = (
+        MODEL_MINIMUM_HISTORY_ROWS * OBSERVATION_INTERVAL_MINUTES // 60
+    )
+    if args.initial_history_hours < minimum_history_hours:
+        parser.error(
+            "--initial-history-hours must provide at least "
+            f"{minimum_history_hours} hours for runtime model history"
+        )
+    if args.simulation_hours <= args.initial_history_hours:
+        parser.error(
+            "--simulation-hours must be greater than --initial-history-hours so "
+            "the same run can continue into post-maintenance observations"
+        )
 
     args.api_port = _next_free_port(args.api_port)
     args.generator_port = _next_free_port(args.generator_port)
@@ -505,7 +534,9 @@ def main() -> int:
                 "PYTHONPATH": str(GEN_DATA_ROOT),
                 "GEN_DATA_OUTPUT_DIR": str(stream_root.resolve()),
                 "GEN_DATA_RUNTIME_OVERLAY_EVENT_FILE": str(maintenance_file.resolve()),
-                "GEN_DATA_RUNTIME_OVERLAY_FAST_FORWARD_ROWS": "36",
+                "GEN_DATA_RUNTIME_OVERLAY_FAST_FORWARD_ROWS": str(
+                    MODEL_MINIMUM_HISTORY_ROWS
+                ),
             }
         )
         processes.start(
@@ -550,9 +581,7 @@ def main() -> int:
             now=datetime.now(timezone.utc),
             latest_observed_at=latest_live_observed_at,
             interval_minutes=OBSERVATION_INTERVAL_MINUTES,
-            initial_history_hours=(
-                OBSERVATION_INTERVAL_MINUTES * INITIAL_HISTORY_ROWS // 60
-            ),
+            initial_history_hours=args.initial_history_hours,
         )
         run = _post_json(
             f"http://127.0.0.1:{args.gen_data_port}/api/runs",
@@ -569,18 +598,22 @@ def main() -> int:
                 "continuous": True,
                 "publish_opcua": False,
                 "source_kind": "simulation",
-                "runtime_overlay_fast_forward_rows": INITIAL_HISTORY_ROWS,
+                "runtime_overlay_fast_forward_rows": MODEL_MINIMUM_HISTORY_ROWS,
             },
         )
         initial_fast_forward = _fast_forward_initial_history(
             gen_data_port=args.gen_data_port,
             run_id=str(run["run_id"]),
             latest_observed_at=latest_live_observed_at,
+            initial_history_hours=args.initial_history_hours,
         )
         if initial_fast_forward is not None:
+            initial_history_rows = (
+                args.initial_history_hours * 60 // OBSERVATION_INTERVAL_MINUTES
+            )
             print(
                 "[simulation] initial history ready: "
-                f"{INITIAL_HISTORY_ROWS} ticks, "
+                f"{initial_history_rows} ticks / {args.initial_history_hours}h, "
                 f"{initial_fast_forward['generated_records']} records"
             )
 

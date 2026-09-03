@@ -159,6 +159,24 @@ CNC/Compressor Model Artifact를 발행하므로 몇 분이 걸릴 수 있으며
 .venv/bin/python scripts/run_local_realtime.py
 ```
 
+기본 로컬 데모는 과거 7일(168시간)의 Observation을 같은 Simulation Run에서
+먼저 생성한 뒤 현재 시각까지 fast-forward하고, 전체 Run horizon은 14일
+(336시간)로 잡아 정비 전 이력과 정비 후 재관측 시간을 모두 확보합니다. 72시간은
+데이터 계약의 상한이 아니며 필요하면 다음처럼 조정할 수 있습니다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_local_realtime.py `
+  --initial-history-hours 168 `
+  --simulation-hours 336 `
+  --speed 60
+```
+
+`--initial-history-hours`는 모델의 최소 6시간(36개 10분 Tick)보다 길어야 하고,
+`--simulation-hours`는 정비 후 Observation/Prediction이 같은 Run lineage에서 계속
+생성될 수 있도록 초기 이력보다 크게 설정해야 합니다. 정비 후 Overlay 자체의 모델
+warm-up은 계속 36 Tick을 사용하므로, 과거 이력을 7일로 늘렸다고 해서 모든 정비
+Replay가 7일치를 다시 생성하지는 않습니다.
+
 이 실행은 `Backend 직접 추론` 우회 경로를 사용하지 않습니다. Canonical/Live와
 정비 후 Overlay Observation 모두 불변 snapshot으로 Generator에 전달되고,
 Generator의 Prediction Result Batch를 Backend가 최종 판정으로 승격합니다.
