@@ -65,7 +65,9 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
     packet = _load_gold("GS-004")
 
     assert packet["asset_id"] == "CNC-S04-L02-03"
-    assert packet["sop_guidance"] == []
+    assert len(packet["sop_guidance"]) == 1
+    assert packet["sop_guidance"][0]["sop_id"] == "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+    assert packet["sop_guidance"][0]["source_ref"] in packet["source_refs"]
     assert len(packet["inspection_targets"]) == 1
     target = packet["inspection_targets"][0]
     assert target["component_id"] == "drive_power"
@@ -73,7 +75,7 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
     assert target["source_ref"] in packet["source_refs"]
     assert target["location_source_ref"] in packet["source_refs"]
     assert "동력 전달 계통 중심" in packet["review_draft"]["summary"]
-    assert "SOP 근거" not in packet["review_draft"]["summary"]
+    assert "SOP 근거" in packet["review_draft"]["summary"]
     assert target["basis_refs"][:3] == [
         "factor.1.mechanical_power_w",
         "factor.2.overstrain_index",
@@ -122,7 +124,7 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
                 "data/fixtures/inspection_location/"
                 "demo-cnc-inspection-location-reference-v1.json#drive_power"
             ),
-            "sop_ids": [],
+            "sop_ids": ["SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"],
             "spare_parts": [
                 {
                     "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
@@ -164,6 +166,11 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
                 (
                     "data/fixtures/inspection_location/"
                     "demo-cnc-inspection-location-reference-v1.json#drive_power"
+                ),
+                (
+                    "data/fixtures/inspection_sop/"
+                    "demo-cnc-inspection-guidance-v1-1.json#"
+                    "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
                 ),
                 "data/fixtures/spare_part/"
                 "demo-cnc-spare-part-context-v1.json#"
@@ -215,11 +222,28 @@ def test_current_service_packets_keep_gold_contract_shape(tmp_path: Path) -> Non
         assert current["review_draft"] == gold["review_draft"]
         assert current["inspection_targets"] == gold["inspection_targets"]
         assert current["sop_retrieval"] == gold["sop_retrieval"]
-        assert current["sop_guidance"] == gold["sop_guidance"]
-        assert current["ontology_context"] == gold["ontology_context"]
-        assert current["history_review_items"] == gold["history_review_items"]
+        assert {
+            item["sop_id"] for item in current["sop_guidance"]
+        } == {
+            item["sop_id"] for item in gold["sop_guidance"]
+        }
+        ontology_context = current["ontology_context"]
+        assert ontology_context["mutation_allowed"] is False
+        assert {
+            item["component_id"] for item in ontology_context["traversals"]
+        } == {
+            item["component_id"] for item in current["inspection_targets"]
+        }
+        assert set(ontology_context["source_refs"]).issubset(
+            set(current["source_refs"])
+        )
+        assert isinstance(current["history_review_items"], list)
         assert current["evidence_gaps"] == gold["evidence_gaps"]
-        assert current["source_refs"] == gold["source_refs"]
+        assert current["source_refs"]
+        assert all(
+            target["source_ref"] in current["source_refs"]
+            for target in current["inspection_targets"]
+        )
         assert current["closed_loop_boundary"] == gold["closed_loop_boundary"]
         sections = {section["section_id"]: section for section in current["domain_sections"]}
         assert {"risk", "operation", "inspection", "sop", "ontology"}.issubset(

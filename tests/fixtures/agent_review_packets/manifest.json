@@ -12,7 +12,7 @@
       "normal, attention, warning, critical, and data-quality hold states are included",
       "SOP-present and SOP-absent paths are both included",
       "closed-loop available actions remain read-only context, not executable AI authority",
-      "one provider-offline fixture separates LLM availability/fallback from product evidence gaps"
+      "provider availability is evaluated outside the packet fixture because it is runtime state, not Product Evidence"
     ],
     "non_goals": [
       "large-scale model benchmarking",
@@ -33,7 +33,6 @@
     "heat_dissipation_warning",
     "history_review_items_present",
     "inspection_focus_completeness",
-    "llm_offline_fixture",
     "low_confidence_attention",
     "multi_factor_warning",
     "multiple_inspection_targets",
@@ -99,9 +98,9 @@
       "scenario_id": "GS-004",
       "asset_id": "CNC-S04-L02-03",
       "fixture_path": "tests/fixtures/agent_review_packets/GS-004.json",
-      "description": "Critical risk where three top factors map to one drive-power inspection target, no SOP is displayable, and a closed-loop action is only visible as read-only context.",
+      "description": "Critical risk where three top factors map to one drive-power inspection target, applicable SOP guidance is displayable, and a closed-loop action is only visible as read-only context.",
       "covers": [
-        "sop_guidance_absent",
+        "sop_guidance_present",
         "field_location_present",
         "factor_bundle_to_single_inspection_target",
         "summary_structured_grounding",
@@ -167,9 +166,8 @@
       "scenario_id": "GS-008",
       "asset_id": "CNC-S04-L04-02",
       "fixture_path": "tests/fixtures/agent_review_packets/GS-008.json",
-      "description": "Provider-offline style warning case with SOP guidance; useful for fallback and LLM availability separation.",
+      "description": "Warning case derived from the provider-offline source scenario; this packet fixture evaluates Product Evidence only.",
       "covers": [
-        "llm_offline_fixture",
         "sop_guidance_present",
         "field_location_present",
         "summary_structured_grounding",
