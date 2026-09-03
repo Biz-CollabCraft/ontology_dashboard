@@ -2480,6 +2480,25 @@ function MapReportFeatureSeries({
   );
 }
 
+function FeatureSeriesLoadingPlaceholder({ title }: { title: string }) {
+  return (
+    <div className="operations-feature-series-loading" aria-busy="true">
+      <OperationsState
+        kind="loading"
+        title="관측 이력 로딩 중"
+        detail={`${title}에 연결된 센서 history를 불러오는 중입니다.`}
+      />
+      {[0, 1, 2].map((index) => (
+        <div className="operations-feature-series-loading__card" key={index}>
+          <div />
+          <span />
+          <i />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FeatureSeriesCollection({
   title,
   sensors,
@@ -2500,6 +2519,9 @@ function FeatureSeriesCollection({
   loading?: boolean;
 }) {
   const visibleSensors = sensors;
+  const isInitialHistoryLoading = Boolean(
+    loading && sensors.some((sensor) => sensor.points.length === 0),
+  );
   return (
     <section className="operations-feature-series-collection" aria-label={title}>
       <header>
@@ -2519,7 +2541,9 @@ function FeatureSeriesCollection({
           ))}
         </div>
       </header>
-      {sensors.length ? (
+      {isInitialHistoryLoading ? (
+        <FeatureSeriesLoadingPlaceholder title={title} />
+      ) : sensors.length ? (
         <>
           {visibleSensors.map((sensor) => (
             <MapReportFeatureSeries

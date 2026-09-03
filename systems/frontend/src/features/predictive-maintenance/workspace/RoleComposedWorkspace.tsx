@@ -60,6 +60,7 @@ interface RoleComposedWorkspaceProps {
   model: OperationsBootstrapModel;
   selectedEvent: OperationsEvent | null;
   detail: OperationsEventDetailModel | null;
+  detailLoading: boolean;
   companyContext: OperationsCompanyContext | null;
   role: OperationsRoleLens;
   currentUserId: string;
@@ -428,6 +429,21 @@ function sampleTrendPoints<T>(points: T[], maxPoints = 150): T[] {
   return sampled;
 }
 
+function trendSlope(values: number[]) {
+  if (values.length < 2) return 0;
+  return (values.at(-1)! - values[0]) / Math.max(1, values.length - 1);
+}
+
+function buildForecastBand(points: Array<{ x: number; upperY: number; lowerY: number }>, start: { x: number; y: number } | null) {
+  if (!points.length || !start) return "";
+  return [
+    `M ${start.x.toFixed(1)} ${start.y.toFixed(1)}`,
+    ...points.map((point) => `L ${point.x.toFixed(1)} ${point.upperY.toFixed(1)}`),
+    ...[...points].reverse().map((point) => `L ${point.x.toFixed(1)} ${point.lowerY.toFixed(1)}`),
+    "Z",
+  ].join(" ");
+}
+
 function CompactRiskTrend({
   detail,
 }: {
@@ -466,7 +482,8 @@ function CompactRiskTrend({
   const range = max - min || 1;
   const chartWidth = 900;
   const chartHeight = 164;
-  const frame = { left: 56, right: 862, top: 14, bottom: 120 };
+  const frame = { left: 56, right: 796, top: 14, bottom: 120 };
+  const forecastRight = 862;
   const xAt = (index: number) =>
     frame.left +
     (index / Math.max(1, plottedSeries.length - 1)) * (frame.right - frame.left);
@@ -491,6 +508,37 @@ function CompactRiskTrend({
       Math.max(0, Math.min(coords.length - 1, index + delta)),
     );
   const activeLabel = `${dateTime(activePoint.observedAt)} · 위험도 ${probability(activePoint.failureProbability)} · ${riskLabel(activePoint.status as OperationsEvent["status"] | null)}`;
+  const livePoint = coords.at(-1) ?? null;
+  const liveLabel = livePoint ? probability(livePoint.failureProbability) : "—";
+  const livePillWidth = Math.min(78, Math.max(48, liveLabel.length * 8 + 18));
+  const livePillX = livePoint
+    ? clampChart(livePoint.x - livePillWidth / 2, frame.left + 4, forecastRight - livePillWidth - 4)
+    : forecastRight - livePillWidth - 4;
+  const livePillY = livePoint
+    ? clampChart(livePoint.y - 32, frame.top + 3, frame.bottom - 32)
+    : frame.top + 3;
+  const recentFailureValues = plottedSeries.slice(-4).map((point) => point.failureProbability);
+  const slope = trendSlope(recentFailureValues);
+  const forecastPoints =
+    livePoint
+      ? [1, 2, 3].map((step) => {
+          const x = frame.right + ((forecastRight - frame.right) * step) / 3;
+          const center = clampChart(livePoint.failureProbability + slope * step, min, max);
+          const spread = Math.max(range * 0.035 * step, 0.015 * step);
+          return {
+            x,
+            center,
+            y: yAt(center),
+            upperY: yAt(clampChart(center + spread, min, max)),
+            lowerY: yAt(clampChart(center - spread, min, max)),
+          };
+        })
+      : [];
+  const forecastBandPath = buildForecastBand(forecastPoints, livePoint);
+  const forecastLinePoints =
+    livePoint && forecastPoints.length
+      ? [`${livePoint.x.toFixed(1)},${livePoint.y.toFixed(1)}`, ...forecastPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)].join(" ")
+      : "";
   return (
     <article className="rw-feature-risk-chart">
       <header>
@@ -534,6 +582,20 @@ function CompactRiskTrend({
           width={frame.right - frame.left}
           height={frame.bottom - frame.top}
         />
+        <rect
+          className="rw-feature-live-sweep"
+          x={frame.left}
+          y={frame.top}
+          width={frame.right - frame.left}
+          height={frame.bottom - frame.top}
+        />
+        <rect
+          className="rw-feature-forecast-lane"
+          x={frame.right}
+          y={frame.top}
+          width={forecastRight - frame.right}
+          height={frame.bottom - frame.top}
+        />
         <line
           className="rw-feature-chart-grid"
           x1={frame.left}
@@ -561,6 +623,37 @@ function CompactRiskTrend({
           </>
         ) : null}
         <path d={path} />
+        {forecastBandPath ? <path className="rw-feature-forecast-band" d={forecastBandPath} /> : null}
+        {forecastLinePoints ? <polyline className="rw-feature-forecast-line" points={forecastLinePoints} /> : null}
+        {forecastPoints.length ? (
+          <text
+            className="rw-feature-forecast-label"
+            x={forecastRight}
+            y={frame.bottom - 8}
+            textAnchor="end"
+          >
+            단기 추세
+          </text>
+        ) : null}
+        {livePoint ? (
+          <g className="rw-feature-live-layer">
+            <line
+              className="rw-feature-live-cursor"
+              x1={livePoint.x}
+              x2={livePoint.x}
+              y1={frame.top}
+              y2={frame.bottom}
+            />
+            <circle className="rw-feature-live-ring" cx={livePoint.x} cy={livePoint.y} r="8.4" />
+            <circle className="rw-feature-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.2" />
+            <g className="rw-feature-live-pill" transform={`translate(${livePillX} ${livePillY})`}>
+              <rect width={livePillWidth} height="24" rx="7" />
+              <text x={livePillWidth / 2} y="16" textAnchor="middle">
+                {liveLabel}
+              </text>
+            </g>
+          </g>
+        ) : null}
         {coords.map((point, index) => markerIndexes.has(index) || point.status !== "normal" ? (
           <g key={`${point.observedAt}-${index}`}>
             <circle
@@ -594,6 +687,14 @@ function CompactRiskTrend({
           textAnchor="end"
         >
           {shortTime(plottedSeries.at(-1)?.observedAt)}
+        </text>
+        <text
+          className="rw-feature-chart-axis"
+          x={forecastRight}
+          y={chartHeight - 22}
+          textAnchor="end"
+        >
+          +30s
         </text>
       </svg>
       <span className="rw-chart-keyboard-value" aria-live="polite">
@@ -643,7 +744,8 @@ function SensorTrendChart({
   const plottedPoints = sampleTrendPoints(numericPoints, 150);
   const chartWidth = 900;
   const chartHeight = 164;
-  const frame = { left: 56, right: 862, top: 14, bottom: 120 };
+  const frame = { left: 56, right: 796, top: 14, bottom: 120 };
+  const forecastRight = 862;
   const xAt = (index: number) =>
     frame.left +
     (index / Math.max(1, plottedPoints.length - 1)) *
@@ -672,6 +774,39 @@ function SensorTrendChart({
     setActiveIndex((index) =>
       Math.max(0, Math.min(coords.length - 1, index + delta)),
     );
+  const livePoint = coords.at(-1) ?? null;
+  const liveValueLabel = livePoint
+    ? `${livePoint.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${sensor.unit ? ` ${sensor.unit}` : ""}`
+    : "—";
+  const livePillWidth = Math.min(116, Math.max(52, liveValueLabel.length * 7.4 + 18));
+  const livePillX = livePoint
+    ? clampChart(livePoint.x - livePillWidth / 2, frame.left + 4, forecastRight - livePillWidth - 4)
+    : forecastRight - livePillWidth - 4;
+  const livePillY = livePoint
+    ? clampChart(livePoint.y - 32, frame.top + 3, frame.bottom - 32)
+    : frame.top + 3;
+  const recentValues = plottedPoints.slice(-4).map((point) => point.value);
+  const slope = trendSlope(recentValues);
+  const forecastPoints =
+    livePoint
+      ? [1, 2, 3].map((step) => {
+          const x = frame.right + ((forecastRight - frame.right) * step) / 3;
+          const center = clampChart(livePoint.value + slope * step, minimum, maximum);
+          const spread = Math.max(range * 0.035 * step, Math.abs(livePoint.value || 1) * 0.012 * step);
+          return {
+            x,
+            center,
+            y: yAt(center),
+            upperY: yAt(clampChart(center + spread, minimum, maximum)),
+            lowerY: yAt(clampChart(center - spread, minimum, maximum)),
+          };
+        })
+      : [];
+  const forecastBandPath = buildForecastBand(forecastPoints, livePoint);
+  const forecastLinePoints =
+    livePoint && forecastPoints.length
+      ? [`${livePoint.x.toFixed(1)},${livePoint.y.toFixed(1)}`, ...forecastPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)].join(" ")
+      : "";
   return (
     <article>
       <header>
@@ -725,6 +860,20 @@ function SensorTrendChart({
           width={frame.right - frame.left}
           height={frame.bottom - frame.top}
         />
+        <rect
+          className="rw-feature-live-sweep"
+          x={frame.left}
+          y={frame.top}
+          width={frame.right - frame.left}
+          height={frame.bottom - frame.top}
+        />
+        <rect
+          className="rw-feature-forecast-lane"
+          x={frame.right}
+          y={frame.top}
+          width={forecastRight - frame.right}
+          height={frame.bottom - frame.top}
+        />
         {yTicks.map((tick) => (
           <g key={tick}>
             <line
@@ -745,6 +894,37 @@ function SensorTrendChart({
           </g>
         ))}
         <path d={path} />
+        {forecastBandPath ? <path className="rw-feature-forecast-band" d={forecastBandPath} /> : null}
+        {forecastLinePoints ? <polyline className="rw-feature-forecast-line" points={forecastLinePoints} /> : null}
+        {forecastPoints.length ? (
+          <text
+            className="rw-feature-forecast-label"
+            x={forecastRight}
+            y={frame.bottom - 8}
+            textAnchor="end"
+          >
+            단기 추세
+          </text>
+        ) : null}
+        {livePoint ? (
+          <g className="rw-feature-live-layer">
+            <line
+              className="rw-feature-live-cursor"
+              x1={livePoint.x}
+              x2={livePoint.x}
+              y1={frame.top}
+              y2={frame.bottom}
+            />
+            <circle className="rw-feature-live-ring" cx={livePoint.x} cy={livePoint.y} r="8.4" />
+            <circle className="rw-feature-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.2" />
+            <g className="rw-feature-live-pill" transform={`translate(${livePillX} ${livePillY})`}>
+              <rect width={livePillWidth} height="24" rx="7" />
+              <text x={livePillWidth / 2} y="16" textAnchor="middle">
+                {liveValueLabel}
+              </text>
+            </g>
+          </g>
+        ) : null}
         {coords.map((point, index) => markerIndexes.has(index) || point.qualityStatus !== "good" ? (
           <g key={`${sensor.id}-${point.observedAt}-${index}`}>
             <circle
@@ -801,6 +981,14 @@ function SensorTrendChart({
             {shortTime(plottedPoints.at(-1)?.observedAt)}
           </text>
         ) : null}
+        <text
+          className="rw-feature-chart-axis"
+          x={forecastRight}
+          y={chartHeight - 22}
+          textAnchor="end"
+        >
+          +30s
+        </text>
       </svg>
       <span className="rw-chart-keyboard-value" aria-live="polite">
         선택 관측 · {activeLabel}
@@ -818,15 +1006,41 @@ function SensorTrendChart({
   );
 }
 
+function FeatureTrendLoadingPlaceholder() {
+  return (
+    <div className="rw-feature-trends is-loading" aria-busy="true">
+      {[0, 1, 2].map((index) => (
+        <article className="rw-feature-trend-skeleton" key={index}>
+          <header>
+            <div>
+              <span />
+              <strong />
+            </div>
+            <b />
+          </header>
+          <div>
+            <i />
+            <i />
+            <i />
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function FeatureTrendBlock({
   detail,
+  loading,
 }: {
   detail: OperationsEventDetailModel | null;
+  loading?: boolean;
 }) {
   const sensors =
     detail?.sensors
       .filter((sensor) => (sensor.historyPoints?.length ?? 0) > 1)
       .slice(0, 4) ?? [];
+  const hasChartData = Boolean(detail?.riskSeries.length || sensors.length);
   return (
     <Block
       title="실시간 피쳐 그래프"
@@ -834,7 +1048,9 @@ function FeatureTrendBlock({
       icon={<RadioTower size={15} />}
       className="span-12"
     >
-      {detail?.riskSeries.length || sensors.length ? (
+      {loading && !hasChartData ? (
+        <FeatureTrendLoadingPlaceholder />
+      ) : hasChartData ? (
         <div className="rw-feature-trends">
           <CompactRiskTrend detail={detail} />
           {sensors.map((sensor) => (
@@ -2516,7 +2732,13 @@ function renderBlock(
     case "sensor-signals":
       return <SensorSignalsBlock key={id} detail={props.detail} />;
     case "feature-trend":
-      return <FeatureTrendBlock key={id} detail={props.detail} />;
+      return (
+        <FeatureTrendBlock
+          key={id}
+          detail={props.detail}
+          loading={props.detailLoading}
+        />
+      );
     case "evidence-factors":
       return <EvidenceFactorsBlock key={id} detail={props.detail} />;
     case "inspection-targets":
@@ -2637,6 +2859,15 @@ export function RoleComposedWorkspace(props: RoleComposedWorkspaceProps) {
             : signals.hasMaintenanceOutcome
               ? "우선순위 상승 · 정비 완료 후 효과 확인이 필요합니다"
               : null;
+  const promotionReasonSurfaces = new Set([
+    "factory-status",
+    "monitoring",
+    "operations-overview",
+    "operational-risk",
+  ]);
+  const shouldShowPromotionReason =
+    props.view === "overview" &&
+    (!props.surfaceId || promotionReasonSurfaces.has(props.surfaceId));
 
   return (
     <div
@@ -2646,7 +2877,7 @@ export function RoleComposedWorkspace(props: RoleComposedWorkspaceProps) {
       data-selected-event-id={props.selectedEvent?.eventId ?? ""}
       data-composition={blocks.join(",")}
     >
-      {promotionReason ? (
+      {shouldShowPromotionReason && promotionReason ? (
         <div className="rw-composition-reason" role="status">
           <strong>{promotionReason}</strong>
           <span>현재 운영 상태에 따라 중요한 블록을 위로 배치했습니다.</span>

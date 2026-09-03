@@ -435,6 +435,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       model={model}
       selectedEvent={selectedEvent}
       detail={detail}
+      detailLoading={detailLoading}
       companyContext={companyContext}
       role={authorizedRole}
       currentUserId={user?.user_id ?? ""}
