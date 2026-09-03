@@ -1716,6 +1716,34 @@ export function OperationsWorkflowOverviewPage({
   const fieldSummary = selectedAsset
     ? `${fieldSummaryPart}을 먼저 확인하세요. 부품 상태는 ${fieldSummaryPartStatus}, 작업요청 ID는 아직 없고, ${fieldSummaryQuality}.`
     : "선택된 설비가 없어 점검 후보를 만들 수 없습니다.";
+  const liveRoleViewLabel = experienceKind === "executive"
+    ? "경영진 Brief 반영"
+    : role === "process_manager"
+      ? "운영 관리 화면 반영"
+      : role === "field_operator"
+        ? "현장 점검 화면 반영"
+        : "엔지니어 화면 반영";
+  const livePipelineSteps = [
+    {
+      key: "observation",
+      label: "Observation",
+      title: "센서 관측 생성",
+      detail: `${liveDemo.assetName} · ${liveDemo.signal}`,
+    },
+    {
+      key: "prediction",
+      label: "Prediction",
+      title: "위험도 재계산",
+      detail: `${formatProbability(liveDemo.risk)} · Result Artifact 승격`,
+    },
+    {
+      key: "role-view",
+      label: "Role view",
+      title: liveRoleViewLabel,
+      detail: "같은 Result를 역할별 우선순위로 재배치",
+    },
+  ];
+  const livePipelineStep = livePipelineSteps[Math.floor(liveDemo.sequence / 2) % livePipelineSteps.length] ?? livePipelineSteps[0]!;
 
   useEffect(() => {
     if (!detailDrawerOpen) return;
@@ -1781,6 +1809,25 @@ export function OperationsWorkflowOverviewPage({
           <span>마지막 수신 시각</span>
           <strong>{liveDemo.isGeneratedResult ? "방금 전" : lastReceived}</strong>
           <small>{liveDemo.sourceLabel} · {formatTimestamp(liveDemo.generatedAt)}</small>
+        </article>
+        <article className="operations-plan-impact-card is-live-result-card is-live-pulse">
+          <CircleLiveIcon />
+          <span>새 Result 수신</span>
+          <strong>{liveDemo.assetName}</strong>
+          <small>{formatProbability(liveDemo.risk)} · {formatTimestamp(liveDemo.generatedAt)}</small>
+        </article>
+        <article className="operations-plan-impact-card is-live-risk-card is-live-pulse">
+          <Gauge className="operations-plan-impact-icon" size={15} aria-hidden="true" />
+          <span>LIVE RISK</span>
+          <strong>{formatProbability(liveDemo.risk)}</strong>
+          <small>{operationsMonitorStatusLabel(liveDemo.status)} · 생산 영향 후보로 등록</small>
+          <i className="operations-live-risk-meter" aria-hidden="true"><b style={{ width: `${Math.round(liveDemo.risk * 100)}%` }} /></i>
+        </article>
+        <article className={`operations-plan-impact-card is-live-stage-card is-live-stage-${livePipelineStep.key}`}>
+          <DatabaseZap className="operations-plan-impact-icon" size={15} aria-hidden="true" />
+          <span>{livePipelineStep.label}</span>
+          <strong>{livePipelineStep.title}</strong>
+          <small>{livePipelineStep.detail}</small>
         </article>
       </section>
 

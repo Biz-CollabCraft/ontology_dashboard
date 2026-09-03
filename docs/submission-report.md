@@ -270,6 +270,58 @@ Live Observation
 
 이 설명은 초기 설계 문서의 ownership 표현과 일부 다를 수 있으며, **제출 보고서는 현재 production에 배포된 실행 구조를 기준으로 한다.**
 
+### 10.1 Current Architecture 정본
+
+팀 발표와 제출 보고서에서는 아래 구조를 단일 정본으로 사용한다.
+
+```text
+Offline
+Source / Protocol Data
+→ Extraction
+→ Feature / Label Dataset
+→ Training / Evaluation
+→ Versioned Model Artifact
+
+Online
+Live Source
+→ live-ingestor
+→ Generator Runtime Prediction
+→ Backend Validation / Promotion
+→ Team DB Product Result Artifact
+→ Product UI / Report / Assistant Context
+```
+
+핵심 책임 분리는 다음과 같다.
+
+- Generator Runtime: runtime feature 구성과 prediction batch 생성
+- Backend: scope, schema, 중복, product contract 검증 및 Team DB 승격
+- Team DB: 운영 화면과 report가 참조하는 authoritative product record
+- Frontend: Result, Evidence, Decision, Action, Report를 역할별 업무 흐름으로 재구성
+
+### 10.2 Runtime Timing 정의
+
+“실시간”은 모든 계층이 zero-latency로 움직인다는 뜻이 아니다. 본 프로젝트에서는 지속적으로 들어오는 관측을 runtime pipeline에서 처리하고, 제품 UI가 최신 Result를 주기적으로 확인하는 구조로 정의한다.
+
+| 단계 | 현재 동작 |
+|---|---|
+| Source observation | simulation/live source cadence에 따라 관측 생성 |
+| live-ingestor | 약 5초 polling 기준으로 source 확인 |
+| Generator prediction | 새 batch 수신 후 runtime prediction 실행 |
+| Backend promotion | prediction result 수신 후 validation/promotion |
+| Product UI | 약 10초 자동 refresh로 최신 Result 확인 |
+
+### 10.3 Model Quality 발표 요약
+
+모델 품질은 “정확도가 높다”가 아니라 release gate를 통과한 모델과 아직 운영 성숙도가 낮은 모델을 구분해 설명한다.
+
+| Model | PR-AUC | ROC-AUC | Precision | Recall | F1 | 판단 |
+|---|---:|---:|---:|---:|---:|---|
+| CNC RandomForest | 0.696 | 0.890 | 0.546 | 0.679 | 0.605 | release candidate 유지 |
+| CNC XGBoost | ranking metric 우수 | - | 0.345 | - | - | deployment precision floor 미달 |
+| Compressor | 0.509 | - | 0.135 | 0.750 | 0.229 | recall은 확보했지만 precision 낮음 |
+
+CNC 모델은 leave-one-site-out AP 0.604와 threshold 0.07 기준 operating point를 함께 설명한다. Compressor 모델은 한계를 숨기지 않고 operational maturity가 낮은 모델로 분리한다.
+
 ## 11. Team DB와 배포 구조
 
 현재 production 서비스는 Mac mini의 containerized application과 Team DB를 사용한다.
@@ -525,7 +577,11 @@ role/report type별 artifact를 생성하고 Event lineage를 유지한다.
 
 ### Closed-loop re-evaluation
 
-정비 workflow와 runtime overlay/replay 연결은 구현되어 있으나, 모든 presentation Case가 실제 post-maintenance Result Artifact까지 가지고 있는 것은 아니다. 후속 Result가 없는 경우 결과를 미확정으로 유지한다.
+정비 workflow와 runtime overlay/replay 연결은 구현되어 있으나, 모든 presentation Case가 실제 post-maintenance Result Artifact까지 가지고 있는 것은 아니다. 발표 전에는 최소 1건의 고정 Case에 대해 `Before Result → Maintenance → After Observation → New Result`가 실제 artifact로 닫히는지 확인해야 한다. 후속 Result가 없는 경우 결과를 미확정으로 유지한다.
+
+### Assistant/RAG evaluation scale
+
+contract/eval 테스트는 grounding, source reference, tool boundary를 검증하지만, 발표용 객관 지표로는 별도 20~30개 synthetic/internal question set이 필요하다. 제출·발표 시에는 `Grounded answer rate`, `Unsupported claim reject`, `Correct source citation`, `Correct role framing`, `Boundary violation`을 수치로 제시하는 것을 목표로 한다.
 
 ### Team DB operational dependency
 

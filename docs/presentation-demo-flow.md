@@ -125,6 +125,52 @@ DEMO_OBSERVED_AT = ...
 
 > 운영 의사결정에 사용한 Case는 새 관측이 들어와도 조용히 다른 Event로 바뀌지 않고 선택 당시 근거로 고정됩니다.
 
+### 4.3 발표 전 보강 우선순위
+
+다른 팀 발표 전사/피드백 기준으로 질문이 들어올 가능성이 높은 항목은 기능 추가보다 “화면에서 바로 확인 가능한 수치와 완결된 증거”다.
+
+| 우선 | 보강 항목 | 발표에서 답해야 하는 질문 | 준비할 증거 |
+|---|---|---|---|
+| P0 | 정비 후 실제 재예측 Closed-loop | 정비 후 위험도가 실제로 내려간 결과가 있나요? | Before Result → Maintenance → After Observation → New Result |
+| P0 | 발표용 고정 Case 재현성 | 발표 중 DB가 바뀌어도 같은 사건을 보여주나요? | `DEMO_EVENT_ID`, `DEMO_ASSET_ID`, deep link |
+| P1 | 모델 성능 설명 | 정확도와 모델 선택 근거는 무엇인가요? | Model Quality 표, selected/rejected 근거 |
+| P1 | “실시간” 정의 | 진짜 realtime인가요, polling인가요? | source/ingest/prediction/backend/UI timing 표 |
+| P1 | Assistant/RAG 평가 | 근거 없는 답변을 어떻게 막나요? | groundedness/source/boundary scorecard |
+| P1 | 생산·재무 영향 산식 | 생산 영향 숫자는 어디서 나왔나요? | 예상 정지시간 × 시간당 계획 생산량 × 단위 공헌이익 |
+| P1 | Current Architecture 정본 | generator/backend/DB 책임이 무엇인가요? | Offline/Online architecture 한 장 |
+| P2 | 실제 권한 차단 | AI나 Engineer가 승인할 수 있나요? | Engineer 승인 거부, Manager 승인 가능 화면 |
+| P2 | 장애 대비 증거 | production demo가 흔들리면 어떻게 하나요? | 90초 backup video, 고정 snapshot |
+
+발표 멘트는 “모든 기능이 완벽하다”가 아니라 “release gate를 통과한 것과 아직 운영 성숙도가 낮은 것을 구분한다”로 잡는다.
+
+### 4.4 실시간 표현 원칙
+
+“실시간 예측 시스템”이라고 뭉뚱그리면 위험하다. 현재 production 설명은 다음처럼 고정한다.
+
+> 지속적으로 들어오는 관측을 runtime pipeline에서 처리하고, UI는 10초 주기로 최신 Result를 확인합니다.
+
+| 단계 | 현재 설명 |
+|---|---|
+| Source observation | simulation/live source cadence로 관측 생성 |
+| live-ingestor | 약 5초 polling 기준으로 source 확인 |
+| Generator Runtime | 새 batch 수신 후 prediction 실행 |
+| Backend validation/promotion | schema, scope, 중복, product contract 검증 후 Team DB 승격 |
+| Product UI | 약 10초 자동 refresh로 최신 Result 확인 |
+
+### 4.5 발표용 모델 품질 요약
+
+성능 수치는 appendix가 아니라 시연 중 20~30초라도 보여준다.
+
+| Model | PR-AUC | ROC-AUC | Precision | Recall | F1 | Release 판단 |
+|---|---:|---:|---:|---:|---:|---|
+| CNC RandomForest | 0.696 | 0.890 | 0.546 | 0.679 | 0.605 | Selected |
+| CNC XGBoost | ranking 우수 | - | 0.345 | - | - | precision floor 미달로 rejected |
+| Compressor | 0.509 | - | 0.135 | 0.750 | 0.229 | precision 낮아 operational maturity 제한 |
+
+핵심 문장:
+
+> CNC는 단순히 AUC가 높은 모델이 아니라 실제 알람 workload를 고려한 operating point를 통과한 RandomForest를 선택했습니다. 압축기 모델은 recall은 확보했지만 precision이 낮아, 한계를 먼저 공개하고 current artifact 기준으로 운영 성숙도를 분리했습니다.
+
 ---
 
 ## 5. 시연 전 브라우저 준비
