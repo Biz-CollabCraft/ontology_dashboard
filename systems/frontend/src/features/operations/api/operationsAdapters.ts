@@ -405,9 +405,9 @@ function adaptResultFactor(
   return {
     id: `${item.feature}:${item.rank}`,
     feature: item.feature,
-    label: item.feature.replaceAll("_", " "),
+    label: item.display_name ?? item.feature.replaceAll("_", " "),
     value: item.feature_value,
-    unit: null,
+    unit: item.unit ?? null,
     contribution: Math.abs(item.signed_contribution),
     direction: item.direction,
     explanationMethod: item.explanation_method,

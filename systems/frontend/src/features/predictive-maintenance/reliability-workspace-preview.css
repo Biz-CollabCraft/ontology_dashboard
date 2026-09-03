@@ -284,3 +284,200 @@
 .rw-preview-selection-anchor__facts { font-size:max(12px, .92em); }
 .rw-preview-selection-anchor__facts :where(span,b,em) { white-space:nowrap; }
 .rw-preview-selection-anchor__facts span:first-child { min-width:0; max-width:min(58vw, 540px); overflow:hidden; text-overflow:ellipsis; }
+
+/* Preset ownership split:
+   - topbar, left rail, settings panel, bottom lifecycle stay stable chrome
+   - only the main work surface responds to report/desktop/presentation presets */
+.rw-preview-topbar,
+.rw-preview-left,
+.rw-preview-settings-panel,
+.rw-preview-bottom {
+  --rw-chrome-meta: 11px;
+  --rw-chrome-text: 12px;
+  --rw-chrome-strong: 13px;
+  font-size: var(--rw-chrome-text)!important;
+}
+.rw-preview-topbar :where(span,small,kbd,button),
+.rw-preview-left :where(span,small,button),
+.rw-preview-settings-panel :where(span,small,button),
+.rw-preview-bottom :where(span,small,button,p,li,time,em,kbd) {
+  font-size: var(--rw-chrome-text)!important;
+  line-height: 1.35;
+}
+.rw-preview-topbar :where(strong),
+.rw-preview-left :where(strong),
+.rw-preview-settings-panel :where(strong),
+.rw-preview-bottom :where(strong) {
+  font-size: var(--rw-chrome-strong)!important;
+  line-height: 1.25;
+}
+.rw-preview-brand small,
+.rw-preview-user small,
+.rw-preview-breadcrumb,
+.rw-preview-left-heading span,
+.rw-preview-nav-group>header,
+.rw-preview-scope span,
+.rw-preview-scope small,
+.rw-preview-settings-group>span {
+  font-size: var(--rw-chrome-meta)!important;
+}
+.rw-preview-left nav button {
+  min-height: 50px!important;
+  grid-template-columns: 27px minmax(0,1fr)!important;
+  padding: 5px 7px!important;
+}
+.rw-preview-body,
+.rw-preview-shell.assistant-open .rw-preview-body,
+.rw-preview-shell.assistant-closed .rw-preview-body,
+:root[data-density="comfortable"] .rw-preview-body,
+:root[data-density="comfortable"] .rw-preview-shell.assistant-open .rw-preview-body,
+:root[data-density="comfortable"] .rw-preview-shell.assistant-closed .rw-preview-body {
+  grid-template-columns: 224px minmax(0,1fr)!important;
+}
+.rw-preview-shell.left-collapsed .rw-preview-body,
+.rw-preview-shell.left-collapsed.assistant-open .rw-preview-body,
+.rw-preview-shell.left-collapsed.assistant-closed .rw-preview-body,
+:root[data-density="comfortable"] .rw-preview-shell.left-collapsed .rw-preview-body,
+:root[data-density="comfortable"] .rw-preview-shell.left-collapsed.assistant-open .rw-preview-body,
+:root[data-density="comfortable"] .rw-preview-shell.left-collapsed.assistant-closed .rw-preview-body {
+  grid-template-columns: 56px minmax(0,1fr)!important;
+}
+.rw-preview-settings-panel {
+  width: 236px;
+}
+.rw-preview-settings-group>span {
+  color: var(--rw-subtle);
+  font-weight: 900;
+}
+.rw-preview-segmented button,
+.rw-preview-settings-action {
+  min-height: 36px!important;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+.rw-preview-segmented.three {
+  grid-template-columns: 1fr;
+}
+
+:root[data-density="compact"] .rw-preview-main {
+  --rw-main-meta: 11px;
+  --rw-main-small: 12px;
+  --rw-main-body: 12px;
+  --rw-main-strong: 13px;
+  --rw-main-title: 24px;
+}
+:root[data-density="standard"] .rw-preview-main {
+  --rw-main-meta: 12px;
+  --rw-main-small: 12px;
+  --rw-main-body: 13px;
+  --rw-main-strong: 14px;
+  --rw-main-title: 31px;
+}
+:root[data-density="comfortable"] .rw-preview-main {
+  --rw-main-meta: 13px;
+  --rw-main-small: 14px;
+  --rw-main-body: 16px;
+  --rw-main-strong: 17px;
+  --rw-main-title: 42px;
+}
+.rw-preview-main :where(p,li,button,input,textarea,select,dd) {
+  font-size: var(--rw-main-body, 13px)!important;
+  line-height: 1.5;
+}
+.rw-preview-main :where(small,dt,time,em,kbd) {
+  font-size: var(--rw-main-small, 12px)!important;
+  line-height: 1.45;
+}
+.rw-preview-main :where(strong,b,h3) {
+  font-size: var(--rw-main-strong, 14px)!important;
+}
+.rw-preview-main .rw-preview-page-heading>span,
+.rw-preview-main .rw-preview-selection-anchor__path>span {
+  font-size: var(--rw-main-meta, 12px)!important;
+}
+.rw-preview-main .rw-preview-page-heading h1 {
+  font-size: var(--rw-main-title, 31px)!important;
+  line-height: 1.12;
+}
+.rw-preview-main .rw-preview-selection-anchor__path>strong,
+.rw-preview-main .rw-preview-selection-anchor__facts,
+.rw-preview-main .rw-preview-selection-anchor__facts b {
+  font-size: var(--rw-main-strong, 14px)!important;
+}
+
+@media (max-width: 860px) {
+  .rw-preview-body,
+  .rw-preview-shell.assistant-open .rw-preview-body,
+  .rw-preview-shell.assistant-closed .rw-preview-body,
+  .rw-preview-shell.left-collapsed .rw-preview-body,
+  .rw-preview-shell.left-collapsed.assistant-open .rw-preview-body,
+  .rw-preview-shell.left-collapsed.assistant-closed .rw-preview-body,
+  :root[data-density="comfortable"] .rw-preview-body,
+  :root[data-density="comfortable"] .rw-preview-shell.assistant-open .rw-preview-body,
+  :root[data-density="comfortable"] .rw-preview-shell.assistant-closed .rw-preview-body {
+    grid-template-columns: minmax(0,1fr)!important;
+  }
+}
+
+@media (max-width: 640px) {
+  .rw-preview-settings-panel {
+    width: auto;
+  }
+}
+
+.rw-preview-shell .rw-preview-topbar :where(span,small,kbd,button),
+.rw-preview-shell .rw-preview-left :where(span,small,button),
+.rw-preview-shell .rw-preview-settings-panel :where(span,small,button),
+.rw-preview-shell .rw-preview-bottom :where(span,small,button,p,li,time,em,kbd),
+:root[data-density="compact"] .rw-preview-shell .rw-preview-topbar :where(span,small,kbd,button),
+:root[data-density="compact"] .rw-preview-shell .rw-preview-left :where(span,small,button),
+:root[data-density="compact"] .rw-preview-shell .rw-preview-settings-panel :where(span,small,button),
+:root[data-density="standard"] .rw-preview-shell .rw-preview-topbar :where(span,small,kbd,button),
+:root[data-density="standard"] .rw-preview-shell .rw-preview-left :where(span,small,button),
+:root[data-density="standard"] .rw-preview-shell .rw-preview-settings-panel :where(span,small,button),
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-topbar :where(span,small,kbd,button),
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-left :where(span,small,button),
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-settings-panel :where(span,small,button) {
+  font-size: 12px!important;
+  line-height: 1.35!important;
+}
+.rw-preview-shell .rw-preview-topbar :where(strong),
+.rw-preview-shell .rw-preview-left :where(strong),
+.rw-preview-shell .rw-preview-settings-panel :where(strong),
+:root[data-density="compact"] .rw-preview-shell .rw-preview-topbar :where(strong),
+:root[data-density="compact"] .rw-preview-shell .rw-preview-left :where(strong),
+:root[data-density="compact"] .rw-preview-shell .rw-preview-settings-panel :where(strong),
+:root[data-density="standard"] .rw-preview-shell .rw-preview-topbar :where(strong),
+:root[data-density="standard"] .rw-preview-shell .rw-preview-left :where(strong),
+:root[data-density="standard"] .rw-preview-shell .rw-preview-settings-panel :where(strong),
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-topbar :where(strong),
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-left :where(strong),
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-settings-panel :where(strong) {
+  font-size: 13px!important;
+  line-height: 1.25!important;
+}
+.rw-preview-shell .rw-preview-settings-panel .rw-preview-settings-group>span,
+:root[data-density="compact"] .rw-preview-shell .rw-preview-settings-panel .rw-preview-settings-group>span,
+:root[data-density="standard"] .rw-preview-shell .rw-preview-settings-panel .rw-preview-settings-group>span,
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-settings-panel .rw-preview-settings-group>span {
+  font-size: 12px!important;
+}
+.rw-preview-shell .rw-preview-left .rw-preview-left-heading span,
+.rw-preview-shell .rw-preview-left .rw-preview-nav-group>header,
+.rw-preview-shell .rw-preview-left .rw-preview-scope span,
+.rw-preview-shell .rw-preview-left .rw-preview-scope small,
+:root[data-density="compact"] .rw-preview-shell .rw-preview-left .rw-preview-left-heading span,
+:root[data-density="compact"] .rw-preview-shell .rw-preview-left .rw-preview-nav-group>header,
+:root[data-density="compact"] .rw-preview-shell .rw-preview-left .rw-preview-scope span,
+:root[data-density="compact"] .rw-preview-shell .rw-preview-left .rw-preview-scope small,
+:root[data-density="standard"] .rw-preview-shell .rw-preview-left .rw-preview-left-heading span,
+:root[data-density="standard"] .rw-preview-shell .rw-preview-left .rw-preview-nav-group>header,
+:root[data-density="standard"] .rw-preview-shell .rw-preview-left .rw-preview-scope span,
+:root[data-density="standard"] .rw-preview-shell .rw-preview-left .rw-preview-scope small,
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-left .rw-preview-left-heading span,
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-left .rw-preview-nav-group>header,
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-left .rw-preview-scope span,
+:root[data-density="comfortable"] .rw-preview-shell .rw-preview-left .rw-preview-scope small {
+  font-size: 11px!important;
+}

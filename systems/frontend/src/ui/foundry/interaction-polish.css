@@ -170,6 +170,41 @@ button, input, select, textarea { line-height: var(--od-leading-control); }
 .auth-platform-bar .od-display-menu > summary { color: inherit; }
 .auth-platform-bar .od-display-popover { text-align: left; }
 
+/* Display controls are chrome, not content. Presets should change the work
+   surface, while this popover remains readable and stable. */
+.od-display-menu > summary {
+  min-height: 32px;
+  height: 32px;
+  font-size: 12px;
+}
+.od-display-popover {
+  --od-font-scale: 1;
+  --od-control-height: 34px;
+  --od-type-2xs: 12px;
+  --od-type-xs: 12px;
+  --od-type-sm: 13px;
+  --od-type-md: 14px;
+  width: min(400px, calc(100vw - 20px));
+  font-size: 13px;
+}
+.od-display-popover header strong { font-size: 14px; }
+.od-display-popover legend,
+.od-display-advanced > summary,
+.od-display-options button,
+.od-display-reset,
+.od-display-popover > p {
+  font-size: 12px!important;
+}
+.od-display-presets button strong,
+.od-display-metadata-toggle strong {
+  font-size: 13px!important;
+}
+.od-display-presets button small,
+.od-display-metadata-toggle small,
+.od-display-metadata-toggle b {
+  font-size: 12px!important;
+}
+
 /* Data → Logic → Action lifecycle loader */
 .od-lifecycle-loader {
   --od-loader-size: 180px;

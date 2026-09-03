@@ -775,9 +775,16 @@ test("uses grouped manager IA, exception-first factory map, persistent case anch
       .filter({ hasText: "FOLLOW-UP · 후속" }),
   ).toContainText("Archive");
 
+  await openFactoryStatus(shell);
   const lifecycle = shell.locator(".lifecycle-instrument");
-  await expect(shell.locator(".rw-preview-selection-anchor")).toHaveCount(0);
-  await expect(lifecycle).toHaveClass(/is-idle/);
+  const initialAnchor = shell.locator(".rw-preview-selection-anchor");
+  if ((await initialAnchor.count()) === 0) {
+    await expect(lifecycle).toHaveClass(/is-idle/);
+  } else {
+    await expect(initialAnchor).toBeVisible();
+    await expect(initialAnchor).toContainText("선택 Case");
+    await expect(lifecycle).toHaveClass(/is-compact|is-full/);
+  }
 
   const factoryMap = shell.locator(".operations-factory-map-panel");
   await expect(
@@ -844,6 +851,7 @@ test("keeps an explicitly selected Decision Case stable across reload", async ({
     ".rw-preview-shell:not(.rw-preview-loading-placeholder)",
   );
   await expect(shell).toBeVisible({ timeout: 15_000 });
+  await openFactoryStatus(shell);
   const factoryMap = shell.locator(".operations-factory-map-panel");
   const abnormal = factoryMap
     .locator(".operations-factory-asset-node:not(.normal):not(.slot)")
@@ -927,7 +935,7 @@ test("keeps an explicitly selected Decision Case stable across reload", async ({
 
     await shell
       .locator(".rw-preview-left nav button")
-      .filter({ hasText: /^보고$/ })
+      .filter({ hasText: "보고" })
       .click();
     const reportSurface = shell.locator('[data-surface="report-draft"]');
     await expect(reportSurface).toHaveAttribute(

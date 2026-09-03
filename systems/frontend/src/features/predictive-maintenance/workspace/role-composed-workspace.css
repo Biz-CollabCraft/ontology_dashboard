@@ -278,3 +278,106 @@
   .rw-composed-block__body { padding:7mm; }
   .rw-report-actions,.rw-case-lineage-actions { display:none!important; }
 }
+
+/* Main-surface preset typography. These cards live inside rw-preview-main, so
+   they should respond to report/desktop/presentation presets. */
+:root[data-density="compact"] .rw-composed-grid {
+  --rw-card-meta: 11px;
+  --rw-card-body: 12px;
+  --rw-card-strong: 13px;
+  --rw-card-metric: 15px;
+}
+:root[data-density="standard"] .rw-composed-grid {
+  --rw-card-meta: 12px;
+  --rw-card-body: 13px;
+  --rw-card-strong: 14px;
+  --rw-card-metric: 18px;
+}
+:root[data-density="comfortable"] .rw-composed-grid {
+  --rw-card-meta: 14px;
+  --rw-card-body: 16px;
+  --rw-card-strong: 17px;
+  --rw-card-metric: 22px;
+}
+.rw-composed-grid :where(
+  .rw-composition-reason span,
+  .rw-composed-block>header span,
+  .rw-composed-metrics span,
+  .rw-operational-kpis span,
+  .rw-composed-list small,
+  .rw-factory-map span,
+  .rw-factory-map i,
+  .rw-feature-trends article>header span,
+  .rw-feature-trends article>small,
+  .rw-composed-kv span,
+  .rw-composed-lifecycle span,
+  .rw-case-lineage i,
+  .rw-case-lineage small,
+  .rw-composed-cards span,
+  .rw-composed-timeline time,
+  .rw-composed-timeline small,
+  .rw-maintenance-effect span,
+  .rw-maintenance-effect small,
+  .rw-report-artifact-meta span,
+  .rw-report-artifact-meta small,
+  .rw-composed-context small,
+  .rw-context-source-row>span,
+  .rw-composed-context-grid span,
+  .rw-composed-context-grid small,
+  .rw-composed-meeting span,
+  .rw-composed-decision small,
+  .rw-feature-risk-chart>small
+) {
+  font-size: var(--rw-card-meta, 12px)!important;
+  line-height: 1.45;
+}
+.rw-composed-grid :where(
+  p,
+  li,
+  button,
+  input,
+  textarea,
+  select,
+  dd,
+  .rw-composed-cards p,
+  .rw-composed-timeline p,
+  .rw-maintenance-effect p,
+  .rw-composed-report-sections p,
+  .rw-report-evidence li,
+  .rw-composed-meeting p,
+  .rw-composed-decision p,
+  .rw-bottleneck-sla-note,
+  .rw-composed-empty
+) {
+  font-size: var(--rw-card-body, 13px)!important;
+  line-height: 1.5;
+}
+.rw-composed-grid :where(
+  .rw-composition-reason strong,
+  .rw-composed-block>header strong,
+  .rw-composed-list strong,
+  .rw-composed-list b,
+  .rw-composed-kv strong,
+  .rw-feature-trends article>header strong,
+  .rw-feature-trends article>header b,
+  .rw-composed-cards strong,
+  .rw-composed-timeline strong,
+  .rw-case-lineage strong,
+  .rw-composed-context-grid strong,
+  .rw-composed-meeting strong,
+  .rw-composed-decision strong,
+  .rw-workflow-prerequisite strong,
+  .rw-bottleneck-table strong
+) {
+  font-size: var(--rw-card-strong, 14px)!important;
+  line-height: 1.35;
+}
+.rw-composed-grid :where(.rw-composed-metrics strong,.rw-operational-kpis strong) {
+  font-size: var(--rw-card-metric, 18px)!important;
+  line-height: 1.15;
+}
+.rw-feature-chart-axis,
+.rw-feature-chart-axis-title,
+.rw-feature-threshold-label {
+  font-size: var(--rw-card-meta, 12px)!important;
+}

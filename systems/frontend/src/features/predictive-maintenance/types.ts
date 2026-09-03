@@ -151,7 +151,9 @@ export interface GovernedProductResultSummary {
   top_factors: Array<{
     rank: number;
     feature: string;
+    display_name?: string | null;
     feature_value: number;
+    unit?: string | null;
     signed_contribution: number;
     direction: "risk_up" | "risk_down";
     explanation_method: string;

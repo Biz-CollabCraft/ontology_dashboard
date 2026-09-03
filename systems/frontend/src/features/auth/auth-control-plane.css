@@ -152,13 +152,63 @@
 
 
 /* Login display-QA contract: presets may scale the product surface, but the
-   display popover itself stays stable and atomic labels do not split. */
+   platform bar and display popover stay stable. */
+.auth-platform-bar,
+.auth-platform-bar :where(strong,small,span,button,summary) {
+  line-height: 1.25;
+}
+.auth-platform-bar .auth-brand strong { font-size: 13px; }
+.auth-platform-bar .auth-brand small { font-size: 9px; }
+.auth-platform-bar > div,
+.auth-platform-bar > div span,
+.auth-platform-bar .od-display-menu > summary {
+  font-size: 12px!important;
+}
 .auth-page .od-display-popover {
   width: min(380px, calc(100vw - 20px));
   font-size: 13px;
 }
 .auth-page .od-display-popover :where(strong,small,legend,summary,p,button) {
-  font-size: revert-layer;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+.auth-page .od-display-popover legend,
+.auth-page .od-display-popover summary,
+.auth-page .od-display-popover button,
+.auth-page .od-display-popover p,
+.auth-page .od-display-popover small {
+  font-size: 12px!important;
+}
+.auth-page .od-display-popover header strong,
+.auth-page .od-display-presets button strong,
+.auth-page .od-display-metadata-toggle strong {
+  font-size: 13px!important;
+}
+
+.auth-control-plane {
+  --auth-meta-size: clamp(11px, calc(11px * var(--od-font-scale)), 15px);
+  --auth-small-size: clamp(12px, calc(12px * var(--od-font-scale)), 16px);
+  --auth-body-size: clamp(13px, calc(13px * var(--od-font-scale)), 18px);
+  --auth-title-size: clamp(22px, calc(25px * var(--od-font-scale)), 34px);
+  --auth-story-title-size: clamp(34px, calc(42px * var(--od-font-scale)), 62px);
+}
+.auth-control-plane :where(.section-label,.eyebrow,small,em,b) {
+  font-size: var(--auth-meta-size)!important;
+}
+.auth-control-plane :where(p,span,label,button,input,strong) {
+  font-size: var(--auth-body-size)!important;
+}
+.auth-control-plane .auth-card-heading h2 {
+  font-size: var(--auth-title-size)!important;
+}
+.auth-control-plane :where(.auth-problem-statement h1,.auth-story-copy h1) {
+  font-size: var(--auth-story-title-size)!important;
+}
+.auth-control-plane :where(.auth-problem-statement p,.auth-story-copy p,.auth-card > .auth-description) {
+  font-size: var(--auth-body-size)!important;
+}
+.auth-control-plane :where(.auth-brand strong,.auth-brand small,.od-display-popover strong,.od-display-popover small) {
+  font-size: unset!important;
   word-break: keep-all;
   overflow-wrap: normal;
 }
