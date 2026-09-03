@@ -808,6 +808,20 @@ function filterSeriesPoints(points: SeriesDatum[], currentObservedAt: string | n
   });
 }
 
+function liveRollingSeriesPoints(points: SeriesDatum[], currentObservedAt: string | null | undefined): SeriesDatum[] {
+  const anchor = timestampMillis(currentObservedAt)
+    ?? points.map((point) => timestampMillis(point.observedAt)).filter((time): time is number => time !== null).sort((left, right) => right - left)[0]
+    ?? null;
+  if (anchor === null) return points.slice(-18);
+  const recent = points.filter((point) => {
+    const observedAt = timestampMillis(point.observedAt);
+    return observedAt !== null && observedAt >= anchor - 60_000;
+  });
+  return recent.filter((point) => typeof point.value === "number" && Number.isFinite(point.value)).length >= 3
+    ? recent
+    : points.slice(-18);
+}
+
 function seriesRangeLabel(points: SeriesDatum[], windowId: OperationsSensorWindowId, window: OperationsFeatureHistoryWindow | null | undefined): string {
   const selected = SENSOR_WINDOW_OPTIONS.find((option) => option.id === windowId) ?? SENSOR_WINDOW_OPTIONS[0];
   if (window?.requested === windowId) {
@@ -1095,6 +1109,55 @@ function WorkStatusPrimaryAction({
 
 function CircleLiveIcon() {
   return <span className="operations-live-dot-icon" aria-hidden="true" />;
+}
+
+function LivePipelineTape({
+  liveDemo,
+  liveTickError,
+  compact = false,
+}: {
+  liveDemo: RealtimeDemoSnapshot;
+  liveTickError: string | null;
+  compact?: boolean;
+}) {
+  const activeIndex = Math.floor(liveDemo.sequence / 2) % 4;
+  const steps = [
+    {
+      id: "observation",
+      label: "Observation",
+      title: "센서 관측 생성",
+      detail: liveDemo.signal,
+    },
+    {
+      id: "prediction",
+      label: "Prediction",
+      title: `위험도 ${formatProbability(liveDemo.risk)} 재계산`,
+      detail: "Generator Runtime batch 처리",
+    },
+    {
+      id: "result",
+      label: "Result",
+      title: "Product Result 승격",
+      detail: liveTickError ? `tick 지연 · ${liveTickError}` : formatTimestamp(liveDemo.generatedAt),
+    },
+    {
+      id: "role-view",
+      label: "Role view",
+      title: "역할별 화면 반영",
+      detail: `${liveDemo.assetName} · Operations / Engineer / Executive`,
+    },
+  ];
+  return (
+    <div className={compact ? "operations-live-event-tape is-compact" : "operations-live-event-tape"} aria-label="실시간 처리 이벤트 흐름">
+      {steps.map((step, index) => (
+        <div key={step.id} className={index === activeIndex ? "is-active" : index < activeIndex ? "is-done" : ""}>
+          <span>{step.label}</span>
+          <strong>{step.title}</strong>
+          <small>{step.detail}</small>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function lifecycleTimelineItems(summary: OperationsClosedLoopLifecycleSummary | null | undefined): Array<{
@@ -1457,6 +1520,7 @@ function FactoryMonitoringMapPanel({
               </div>
             ))}
           </div>
+          <LivePipelineTape liveDemo={liveDemo} liveTickError={liveTickError} />
           <div className="operations-factory-line-map">
             {FACTORY_SITE_IDS.map((site) => {
               const siteCells = factoryCells.filter((cell) => cell.site === site);
@@ -2067,6 +2131,7 @@ function MapReportFeatureSeries({
   currentValue,
   currentObservedAt,
   primary,
+  liveDemo,
 }: {
   title: string;
   unit: string | null;
@@ -2078,9 +2143,11 @@ function MapReportFeatureSeries({
   currentValue?: number | string | boolean | null;
   currentObservedAt?: string | null;
   primary?: boolean;
+  liveDemo?: RealtimeDemoSnapshot | null;
 }) {
   const color = title.includes("진동") || title.includes("토크") ? "#a7630c" : "#285fcb";
-  const visiblePoints = filterSeriesPoints(points, currentObservedAt, windowId);
+  const filteredPoints = filterSeriesPoints(points, currentObservedAt, windowId);
+  const visiblePoints = liveDemo ? liveRollingSeriesPoints(filteredPoints, currentObservedAt) : filteredPoints;
   const numericPoints = visiblePoints.filter((point): point is SeriesDatum & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
   const currentNumericValue = typeof currentValue === "number" && Number.isFinite(currentValue) ? currentValue : null;
   if (!visiblePoints.length || !numericPoints.length) {
@@ -2143,17 +2210,24 @@ function MapReportFeatureSeries({
   const latestHistory = [...coords].reverse().find((point) => typeof point.value === "number" && typeof point.y === "number");
   const currentTimeLabel = currentObservedAt ? formatSeriesTime(currentObservedAt) : "현재 시간 없음";
   const currentPoint = currentNumericValue === null || !currentObservedAt ? null : { x: xAt(visiblePoints.length), y: yAt(currentNumericValue), value: currentNumericValue };
+  const livePoint = currentPoint ?? latestHistory ?? null;
+  const liveValue = livePoint && typeof livePoint.value === "number" ? livePoint.value : currentNumericValue;
+  const liveValueLabel = liveValue === null ? "값 없음" : `${liveValue.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${unit ? ` ${unit}` : ""}`;
+  const livePillWidth = Math.min(188, Math.max(86, liveValueLabel.length * 7.2 + 48));
+  const livePillX = livePoint ? clamp(livePoint.x + 10, frame.left + 8, frame.right - livePillWidth - 8) : frame.right - livePillWidth - 8;
+  const livePillY = livePoint && typeof livePoint.y === "number" ? clamp(livePoint.y - 14, frame.top + 8, frame.bottom - 28) : frame.top + 10;
   const middleIndex = Math.floor((visiblePoints.length - 1) / 2);
   const middlePoint = visiblePoints[middleIndex] ?? null;
   const endHistoryPoint = visiblePoints.at(-1) ?? null;
   return (
-    <section className={primary ? "asset-series-block is-primary" : "asset-series-block"}>
+    <section className={[primary ? "asset-series-block is-primary" : "asset-series-block", liveDemo ? "is-live-chart" : ""].filter(Boolean).join(" ")}>
       <header className="asset-series-heading">
         <div><RotateCcw size={17} /><strong>{title}</strong></div>
-        <span className="asset-baseline-key"><i style={{ background: color }} />{seriesRangeLabel(visiblePoints, windowId, window)}</span>
+        <span className="asset-baseline-key"><i style={{ background: color }} />{liveDemo ? "LIVE 60초 rolling · baseline 포함" : seriesRangeLabel(visiblePoints, windowId, window)}</span>
       </header>
       <svg className="asset-series-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${title} 관측 흐름`}>
         <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
+        {liveDemo ? <rect className="asset-live-sweep" x={frame.left} y={frame.top} width={width} height={height} /> : null}
         <text className="asset-chart-axis-title" transform={`translate(16 ${(frame.top + frame.bottom) / 2}) rotate(-90)`} textAnchor="middle">{unit || "값"}</text>
         {ticks.map((tick) => {
           const y = yAt(tick);
@@ -2174,6 +2248,18 @@ function MapReportFeatureSeries({
           <g>
             {latestHistory && typeof latestHistory.y === "number" ? <line className="asset-current-extension-line" x1={latestHistory.x} x2={currentPoint.x} y1={latestHistory.y} y2={currentPoint.y} style={{ stroke: color }} /> : null}
             <path className="asset-current-value-marker" d={`M ${currentPoint.x} ${currentPoint.y - 6} L ${currentPoint.x + 6} ${currentPoint.y} L ${currentPoint.x} ${currentPoint.y + 6} L ${currentPoint.x - 6} ${currentPoint.y} Z`} style={{ fill: color }} />
+          </g>
+        ) : null}
+        {liveDemo && livePoint && typeof livePoint.y === "number" ? (
+          <g className="asset-live-layer">
+            <line className="asset-live-cursor" x1={livePoint.x} x2={livePoint.x} y1={frame.top} y2={frame.bottom} />
+            <circle className="asset-live-ring" cx={livePoint.x} cy={livePoint.y} r="9" style={{ stroke: color }} />
+            <circle className="asset-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.8" style={{ fill: color }} />
+            <g className="asset-live-value-pill" transform={`translate(${livePillX} ${livePillY})`}>
+              <rect width={livePillWidth} height="28" rx="7" />
+              <text x="9" y="18">LIVE {liveValueLabel}</text>
+            </g>
+            <text className="asset-live-now-label" x={frame.right} y={frame.top + 16} textAnchor="end">LIVE</text>
           </g>
         ) : null}
         {coords.map((point, index) => point.qualityStatus === "bad" || point.qualityStatus === "unknown"
@@ -2220,9 +2306,9 @@ function MapReportFeatureSeries({
             </g>
           </g>
         ) : null}
-        <text className="asset-chart-axis" x={frame.left} y="252" textAnchor="start">{formatSeriesTime(visiblePoints[0].observedAt)}</text>
-        {middlePoint && visiblePoints.length > 2 ? <text className="asset-chart-axis" x={xAt(middleIndex)} y="252" textAnchor="middle">{formatSeriesTime(middlePoint.observedAt)}</text> : null}
-        {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y="252" textAnchor="end">현재 {currentTimeLabel}</text> : endHistoryPoint ? <text className="asset-chart-axis" x={frame.right} y="252" textAnchor="end">{formatSeriesTime(endHistoryPoint.observedAt)}</text> : null}
+        <text className="asset-chart-axis" x={frame.left} y="252" textAnchor="start">{liveDemo ? "-60s" : formatSeriesTime(visiblePoints[0].observedAt)}</text>
+        {middlePoint && visiblePoints.length > 2 ? <text className="asset-chart-axis" x={xAt(middleIndex)} y="252" textAnchor="middle">{liveDemo ? "-30s" : formatSeriesTime(middlePoint.observedAt)}</text> : null}
+        {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y="252" textAnchor="end">{liveDemo ? "LIVE" : `현재 ${currentTimeLabel}`}</text> : endHistoryPoint ? <text className="asset-chart-axis" x={frame.right} y="252" textAnchor="end">{liveDemo ? "LIVE" : formatSeriesTime(endHistoryPoint.observedAt)}</text> : null}
         <text className="asset-chart-axis-title" x="376" y="270" textAnchor="middle">시간</text>
       </svg>
     </section>
@@ -2236,6 +2322,7 @@ function FeatureSeriesCollection({
   onWindowChange,
   emptyTitle,
   emptyDetail,
+  liveDemo,
 }: {
   title: string;
   sensors: ReturnType<typeof sensorSeries>;
@@ -2243,6 +2330,7 @@ function FeatureSeriesCollection({
   onWindowChange: (windowId: OperationsSensorWindowId) => void;
   emptyTitle: string;
   emptyDetail: string;
+  liveDemo?: RealtimeDemoSnapshot | null;
 }) {
   const visibleSensors = sensors;
   return (
@@ -2277,6 +2365,7 @@ function FeatureSeriesCollection({
               currentValue={sensor.currentValue}
               currentObservedAt={sensor.currentObservedAt}
               primary={PRIMARY_FIELD_SENSOR_KEYS.has(sensor.id)}
+              liveDemo={liveDemo}
               emptyTitle="관측 이력 없음"
               emptyDetail={`${sensor.label} 관측 이력이 비어 있어 임의 그래프를 표시하지 않습니다.`}
             />
@@ -2672,11 +2761,13 @@ function AssetPreviewPanel({
                 sensors={liveFeatureSnapshots}
                 windowId={sensorWindow}
                 onWindowChange={onSensorWindowChange}
+                liveDemo={isLiveAsset ? liveDemo : null}
                 emptyTitle="관측 이력 없음"
                 emptyDetail={detailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
               />
+              {isLiveAsset ? <LivePipelineTape liveDemo={liveDemo} liveTickError={liveTickError} compact /> : null}
               <p className="operations-live-feature-note">
-                원본 필드명 대신 한국어 현장 용어로 표시합니다. 새 관측 snapshot이 들어오면 현재값과 그래프의 마지막 지점이 갱신됩니다.
+                원본 필드명 대신 한국어 현장 용어로 표시합니다. LIVE 그래프는 최근 tick을 오른쪽 끝 현재값으로 표시하고, 과거 이력은 baseline으로 유지합니다.
               </p>
             </section>
           ) : null}
