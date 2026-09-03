@@ -5421,3 +5421,11 @@ def test_generator_runtime_version_must_be_explicit(monkeypatch):
     monkeypatch.delenv("GENERATOR_RUNTIME_VERSION", raising=False)
     with pytest.raises(RuntimeError, match="GENERATOR_RUNTIME_VERSION"):
         get_generator_runtime_version()
+
+
+def test_runtime_prediction_uses_family_history_version_for_legacy_model_artifacts():
+    from systems.generator.app.runtime_pipeline.prediction_service import _fallback_history_requirement_version
+
+    assert _fallback_history_requirement_version("cnc-failure-risk", "cnc-random-forest-v3") == "cnc-history-requirement-v1"
+    assert _fallback_history_requirement_version("compressor-failure-risk", "compressor-random-forest-v3") == "compressor-history-requirement-v1"
+    assert _fallback_history_requirement_version("pdm-random_forest", "pdm-v1") == "pdm-history-v1"

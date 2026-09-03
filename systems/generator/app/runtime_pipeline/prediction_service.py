@@ -32,6 +32,23 @@ logger = logging.getLogger(__name__)
 REGISTERED_BASE_MODELS = ["lightgbm", "xgboost", "random_forest"]
 
 
+def _fallback_history_requirement_version(model_id: str, model_version: str) -> str:
+    """Return a stable history-contract version for legacy runtime artifacts.
+
+    The Mac mini runtime model artifacts published before the generator strict
+    contract included feature/label versions and history requirement checksum,
+    but some omitted the textual history_requirement_version.  Preserve the
+    strict checksum validation downstream while filling only that missing version
+    label from the model family.
+    """
+    identity = f"{model_id} {model_version}".lower()
+    if "cnc" in identity:
+        return "cnc-history-requirement-v1"
+    if "compressor" in identity:
+        return "compressor-history-requirement-v1"
+    return "pdm-history-v1"
+
+
 @dataclass
 class LoadedModelArtifact:
     model_id: str
@@ -247,6 +264,7 @@ class PredictionService:
                 artifact.manifest.get("history_requirement_version")
                 or artifact.history_requirement.get("history_requirement_version")
                 or artifact.history_requirement.get("version")
+                or _fallback_history_requirement_version(model_id, artifact.model_version)
             )
 
             missing_versions = [
