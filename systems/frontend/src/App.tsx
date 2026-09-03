@@ -240,6 +240,7 @@ function AppRouter() {
   if (pathname === "/team-share") return <TeamShareStory />;
   if (pathname === "/team-share-adaptive") return <AdaptiveTeamShareStory />;
   if (pathname === "/visualization-compare/echarts") return <EChartsComparisonEmbed />;
+  if (pathname === "/loader") return <RouteLoading operation="Checking session" />;
 
   if (loading) {
     return isReliabilityPreviewLocation()

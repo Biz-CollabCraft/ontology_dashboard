@@ -79,6 +79,16 @@ test("uses a light Korean placeholder before the reliability workspace is ready"
   expect(lightSurfaces.bottom?.backgroundColor).toBe("rgba(255, 255, 255, 0.98)");
 });
 
+test("keeps the login lifecycle loader available as a persistent preview route", async ({ page }) => {
+  await page.goto("/loader");
+  await expect(page.locator(".route-loading")).toBeVisible();
+  await expect(page.locator(".od-lifecycle-loader")).toBeVisible();
+  await expect(page.getByText("Checking session", { exact: true })).toBeVisible();
+  await page.waitForTimeout(1200);
+  await expect(page.locator(".od-lifecycle-loader")).toBeVisible();
+  await expect(page).toHaveURL(/\/loader$/);
+});
+
 test("keeps navigation expanded on laptop widths and wraps Korean copy by word boundary", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 800 });
   await login(page);
