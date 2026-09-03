@@ -30,6 +30,9 @@ DECLARE
   v_t_started timestamptz;
   v_t_completed timestamptz;
 BEGIN
+  PERFORM set_config('app.organization_id', v_org, true);
+  PERFORM set_config('app.project_id', v_project, true);
+
   SELECT artifact_id, asset_id, asset_type, prediction_result_id, schema_version,
          COALESCE(recommended_action->>'policy_version', 'recommendation-policy-v1'), observed_at
     INTO v_event, v_asset, v_asset_type, v_prediction_result, v_schema, v_policy, v_observed
