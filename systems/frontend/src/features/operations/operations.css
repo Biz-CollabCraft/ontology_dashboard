@@ -640,7 +640,7 @@
 .operations-asset-preview dd .operations-confidence { width: fit-content; }
 .operations-monitoring-detail-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
 .operations-monitoring-detail-grid .is-wide { grid-column: 1 / -1; }
-.operations-live-feature-monitor { display: grid; grid-template-columns: minmax(180px,.36fr) minmax(0,.64fr); align-items: start; gap: 8px 10px; padding: 10px; border: 1px solid rgba(76,144,240,.22); border-radius: 9px; background: linear-gradient(180deg, rgba(76,144,240,.08), rgba(255,255,255,.018)); }
+.operations-live-feature-monitor { display: grid; grid-template-columns: minmax(0,1fr); align-items: start; gap: 10px; padding: 10px; border: 1px solid rgba(76,144,240,.22); border-radius: 9px; background: linear-gradient(180deg, rgba(76,144,240,.08), rgba(255,255,255,.018)); }
 .operations-live-feature-monitor > header { display: flex; align-items: center; gap: 7px; color: var(--operations-muted); }
 .operations-live-feature-monitor > header strong { color: var(--operations-text); font-size: 12px; }
 .operations-live-feature-monitor > header,
@@ -649,9 +649,10 @@
 .operations-live-feed-status::before { content: ""; width: 7px; height: 7px; border-radius: 999px; background: var(--operations-success); box-shadow: 0 0 0 4px rgba(69,184,128,.12); animation: operations-live-pulse 1.5s ease-in-out infinite; }
 .operations-live-feed-status.is-hot { color: #ffb0b5; }
 .operations-live-feed-status.is-hot::before { background: var(--operations-danger); box-shadow: 0 0 0 4px rgba(236,91,98,.15); }
-.operations-live-signal-strip { display: grid; grid-template-columns: minmax(0,1fr); align-self: stretch; gap: 7px; }
+.operations-live-signal-strip { display: grid; grid-template-columns: minmax(220px,.75fr) minmax(0,1.25fr); align-self: stretch; gap: 7px; }
 .operations-live-signal-main,
 .operations-live-signal-factors > div { min-width: 0; display: grid; gap: 3px; padding: 8px; border: 1px solid rgba(236,91,98,.18); border-radius: 7px; background: linear-gradient(145deg, rgba(236,91,98,.09), rgba(255,255,255,.018)); }
+.operations-live-signal-main { min-height: 72px; align-content: center; }
 .operations-live-signal-main span,
 .operations-live-signal-factors span { color: var(--operations-dim); font-size: 9px; font-weight: 950; letter-spacing: 0; }
 .operations-live-signal-main strong,
@@ -661,7 +662,7 @@
 .operations-live-signal-main strong { color: #ffb0b5; font-size: 17px; line-height: 1; }
 .operations-live-signal-main small { color: var(--operations-text); font-size: 11px; font-weight: 850; }
 .operations-live-signal-main em { color: #f2bd6d; font-size: 10px; font-style: normal; font-weight: 850; }
-.operations-live-signal-factors { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr); gap: 6px; }
+.operations-live-signal-factors { min-width: 0; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
 .operations-live-signal-factors strong { color: var(--operations-text); font-size: 12px; }
 .operations-live-signal-factors i { height: 6px; overflow: hidden; border-radius: 999px; background: rgba(181,196,214,.12); }
 .operations-live-signal-factors b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4c90f0, #f0a23a, #ec5b62); }
@@ -713,8 +714,8 @@
 .operations-side-map-report .asset-window-control button:hover,
 .operations-side-map-report .asset-window-control button.is-active { background: rgba(76,144,240,.16); color: var(--operations-text); }
 .operations-side-map-report .asset-series-chart { display: block; width: 100%; height: auto; min-height: 150px; background: #121922; }
-.operations-live-feature-monitor .asset-series-chart { height: 142px; min-height: 142px; }
-.operations-live-feature-monitor .asset-series-block:nth-of-type(n+2) .asset-series-chart { height: 126px; min-height: 126px; }
+.operations-live-feature-monitor .asset-series-chart { height: 240px; min-height: 240px; }
+.operations-live-feature-monitor .asset-series-block:nth-of-type(n+2) .asset-series-chart { height: 210px; min-height: 210px; }
 .operations-side-map-report .asset-series-block.is-live-chart .asset-series-chart { background: radial-gradient(circle at 96% 46%, rgba(76,144,240,.16), transparent 26%), #121922; }
 .operations-side-map-report .asset-chart-frame { fill: #151d27; stroke: rgba(181,196,214,.16); }
 .operations-side-map-report .asset-chart-grid { stroke: rgba(181,196,214,.16); stroke-width: 1; }
