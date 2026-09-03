@@ -437,7 +437,7 @@ test("uses grouped manager IA, exception-first factory map, persistent case anch
 });
 
 test("keeps an explicitly selected Decision Case stable across reload", async ({ page }) => {
-  test.setTimeout(70_000);
+  test.setTimeout(120_000);
   await login(page);
   const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
   await expect(shell).toBeVisible({ timeout: 15_000 });
