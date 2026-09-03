@@ -2215,13 +2215,9 @@ function MapReportFeatureSeries({
   const filteredPoints = filterSeriesPoints(points, currentObservedAt, windowId);
   const currentNumericValue = typeof currentValue === "number" && Number.isFinite(currentValue) ? currentValue : null;
   const historicalPoints = liveDemo ? aggregateSeriesByTenMinuteBucket(filteredPoints) : filteredPoints;
-  const visiblePoints: ChartSeriesDatum[] = historicalPoints.length
-    ? historicalPoints
-    : currentNumericValue !== null && currentObservedAt
-      ? [{ observedAt: currentObservedAt, value: currentNumericValue, qualityStatus: "good" as const }]
-      : [];
+  const visiblePoints: ChartSeriesDatum[] = historicalPoints;
   const numericPoints = visiblePoints.filter((point): point is ChartSeriesDatum & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
-  if (!visiblePoints.length || !numericPoints.length) {
+  if (visiblePoints.length < 2 || numericPoints.length < 2) {
     return (
       <section className="asset-series-block">
         <header className="asset-series-heading">
