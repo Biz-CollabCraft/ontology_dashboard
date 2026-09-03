@@ -14,7 +14,8 @@ LLM 출력 품질, Evidence Packet의 기여, 전체 Workflow의 운영 통제, 
 점수로 섞지 않고 서로 다른 실행기로 검증한 뒤 하나의 최종 리포트에서 함께 판정한다.
 
 **최종 평가는 `2026-09-02-002-operational-domain-extension-plan.md`의 도메인·워크플로 확장 구현과
-completion gate가 끝난 뒤 수행한다.** 확장 전 실행은 하네스 smoke, 계약 검증, 회귀 탐지에만 사용하며
+`2026-09-03-005-ontology-aware-context-resolution-evidence-selection-plan.md`의 context/selection strategy
+freeze가 끝난 뒤 수행한다.** 확장 전 실행은 하네스 smoke, 계약 검증, 회귀 탐지에만 사용하며
 최종 품질·안정성 수치로 발표하거나 문서화하지 않는다.
 확장 구현 이후 평가 대상의 prompt/schema, provider/model, context tool, persistence/retry 정책을
 고정하고 같은 candidate version을 대상으로 전체 평가를 다시 실행한다.
@@ -94,6 +95,7 @@ flowchart TB
 - provider와 model
 - generation configuration
 - context pipeline/tool version
+- context resolution / evidence selection strategy version
 - persistence/retry policy version 또는 명시적 `not_applicable`
 - 실행 모드: `contract`, `mock`, `integration`, `live`
 - 실행 명령과 결과 artifact 경로
@@ -255,13 +257,24 @@ runtime에서 사용되지 않는다. 최종 구현에서는 다음 책임을 �
 확장 구현 중 만들어진 평가 결과는 smoke 또는 회귀 탐지 결과다. 최종 후보 성능이나 운영 안정성
 수치로 사용하지 않는다.
 
-### Phase 2. Freeze Final Candidate
+### Phase 2. Freeze Context Resolution and Selection Strategy
+
+`2026-09-03-005-ontology-aware-context-resolution-evidence-selection-plan.md`에 따라 relation-aware
+context resolution, freshness/as-of eligibility, S1 deterministic evidence selection, lineage trace를
+고정한다.
+
+최소 S0 Full Context vs S1 Deterministic Selection 비교로 required evidence recall, required limitation
+preservation, context reduction, prompt token reduction을 확인한다. S2 assisted ranking, vector retrieval,
+GraphRAG, multi-agent는 final candidate의 필수 범위가 아니라 deferred hypothesis로 둔다.
+
+### Phase 3. Freeze Final Candidate
 
 prompt/schema/rubric, gold fixture, provider/model/generation 설정, context pipeline/tool set,
-persistence/retry/stale policy와 migration version을 고정한 candidate commit SHA를 만든다.
+persistence/retry/stale policy, context resolution/selection strategy와 migration version을 고정한
+candidate commit SHA를 만든다.
 freeze 이후 평가에 영향을 주는 변경이 들어가면 해당 축의 최종 평가를 다시 실행한다.
 
-### Phase 3. Finish Reliability Runner
+### Phase 4. Finish Reliability Runner
 
 - 공통 measurement contract 정리
 - 평가 helper를 제품 package 밖으로 이동
@@ -273,7 +286,7 @@ freeze 이후 평가에 영향을 주는 변경이 들어가면 해당 축의 �
 runner 구현 자체는 확장 구현과 병행할 수 있다. 그러나 확장 완료와 candidate freeze 전에 생성한
 결과는 최종 결과로 승인하지 않는다.
 
-### Phase 4. Execute Final Evaluations
+### Phase 5. Execute Final Evaluations
 
 동일한 frozen candidate를 대상으로 순서대로 실행한다.
 
@@ -286,7 +299,7 @@ runner 구현 자체는 확장 구현과 병행할 수 있다. 그러나 확장 
 
 초기 gate가 실패하면 후속 유료 LLM 실행을 중단한다.
 
-### Phase 5. Produce Final Integrated Report
+### Phase 6. Produce Final Integrated Report
 
 구현된 통합기:
 
@@ -302,7 +315,7 @@ runner 구현 자체는 확장 구현과 병행할 수 있다. 그러나 확장 
 artifact path와 aggregate만 참조한다. 품질, workflow 가치, reliability, safety, 사람 검토를 서로
 독립된 gate로 유지하며 사람 검토 전에는 자동 평가가 통과해도 `pending_human_review`로 판정한다.
 
-### Phase 6. Decide Next Architecture Step
+### Phase 7. Decide Next Architecture Step
 
 - B2와 B3가 유사하고 운영 통제 기여가 작음: Evidence + validation 중심으로 단순화
 - B3의 reuse/trace/failure containment 기여가 큼: 현재 simple workflow 유지
@@ -330,11 +343,13 @@ artifact path와 aggregate만 참조한다. 품질, workflow 가치, reliability
 최종 계획 완료는 다음을 모두 충족할 때만 선언한다.
 
 - 계획된 확장 구현 완료
+- context resolution과 deterministic selection strategy 고정
 - candidate commit SHA 고정
 - 세 실행기와 공통 metadata/measurement 계약 준비
 - reliability runner가 실제 service/DB path를 사용
 - B1/B2/B3 live 비교 완료
 - 최종 LLM gold 평가 완료
+- S0/S1 selection 비교 결과와 required evidence recall/context reduction measurement 포함
 - safety scenario에서 side effect 0건 확인
 - 결과 artifact와 최종 리포트가 동일 run ID/candidate SHA를 참조
 - mock, contract, integration, live 증거 상태가 구분됨
@@ -394,6 +409,7 @@ LLM 품질 평가와 workflow 비교·안정성 평가 계약을 준비했습니
 ## Related Artifacts
 
 - `docs/plans/ai-workflow/2026-09-02-002-operational-domain-extension-plan.md`
+- `docs/plans/ai-workflow/2026-09-03-005-ontology-aware-context-resolution-evidence-selection-plan.md`
 - `docs/plans/ai-workflow/2026-09-01-001-agent-review-summary-llm-evaluation-report.md`
 - `docs/plans/ai-workflow/2026-09-01-004-feat-agent-workflow-stability-evaluation-plan.md`
 - `docs/plans/ai-workflow/2026-08-29-001-ai-context-orchestration-adapter-plan.md`
