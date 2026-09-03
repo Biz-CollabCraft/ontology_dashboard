@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.mvp.agent_workflow_stability_eval import (
+from scripts.eval_support.agent_workflow_stability import (
     aggregate_stability_evaluation,
     measurement,
     stability_evaluation_row,
@@ -112,7 +112,11 @@ def test_aggregate_keeps_reuse_fallback_failure_recovery_and_blocking_separate()
 def test_empty_aggregate_does_not_synthesize_rates_or_latency() -> None:
     report = aggregate_stability_evaluation([])
 
-    assert report["rates"] == {"reuse": None, "fallback": None}
+    assert report["rates"] == {
+        "reuse": None,
+        "fallback": None,
+        "side_effect_unchanged": None,
+    }
     assert report["latency_ms"]["status"] == "not_measured"
     assert report["latency_ms"]["p50"] is None
     assert report["latency_ms"]["p95"] is None
