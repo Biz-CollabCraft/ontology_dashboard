@@ -1,9 +1,9 @@
 """Prepare the frozen Canonical V3.1 models for the local real-time runtime.
 
 The launcher must not select a new algorithm or promote the newest local
-candidate.  It reconstructs the approved ``independent-logreg-v3.1`` artifacts
-from the immutable Canonical package when absent, verifies their lineage, and
-pins exactly those versions in the active model set.
+candidate. It reconstructs artifacts compatible with ``independent-logreg-v3.1``
+from the immutable Canonical package when absent, publishes them under a distinct
+reconstruction version, verifies their lineage, and pins exactly those artifacts.
 """
 
 from __future__ import annotations
@@ -18,7 +18,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LEGACY_MODEL_VERSION = "independent-logreg-v3.1"
+REFERENCE_MODEL_VERSION = "independent-logreg-v3.1"
+RECONSTRUCTED_MODEL_VERSION = "independent-logreg-v3.1-reconstructed-v1"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -88,20 +89,24 @@ def prepare(*, gen_data_root: Path, models_store: Path, force: bool = False) -> 
 
     def pinned_candidate(model_id: str) -> dict | None:
         for candidate in valid_candidates(model_id):
-            if candidate.get("model_version") != LEGACY_MODEL_VERSION:
+            if candidate.get("model_version") != RECONSTRUCTED_MODEL_VERSION:
                 continue
             training_config = candidate.get("training_config") or {}
             provenance = candidate.get("provenance") or {}
             if (
                 training_config.get("training_config_version")
                 != "independent-logreg-v3.1-frozen-reconstruction-v1"
+                or training_config.get("compatibility_target_model_version")
+                != REFERENCE_MODEL_VERSION
                 or float(training_config.get("selected_threshold", -1.0)) != 0.50
                 or provenance.get("reconstruction")
                 != "deterministic_from_frozen_v3.1_recipe"
+                or provenance.get("compatibility_target_model_version")
+                != REFERENCE_MODEL_VERSION
             ):
                 raise RuntimeError(
-                    f"pinned legacy artifact has incompatible lineage: "
-                    f"{model_id}/{LEGACY_MODEL_VERSION}"
+                    f"pinned reconstructed artifact has incompatible lineage: "
+                    f"{model_id}/{RECONSTRUCTED_MODEL_VERSION}"
                 )
             return candidate
         return None
@@ -111,7 +116,7 @@ def prepare(*, gen_data_root: Path, models_store: Path, force: bool = False) -> 
     pinned = {model_id: pinned_candidate(model_id) for model_id in required}
     if force or any(candidate is None for candidate in pinned.values()):
         print(
-            f"[models] reconstructing frozen {LEGACY_MODEL_VERSION} artifacts "
+            f"[models] reconstructing frozen {RECONSTRUCTED_MODEL_VERSION} artifacts "
             f"from {gen_data_root}",
             flush=True,
         )
@@ -129,7 +134,7 @@ def prepare(*, gen_data_root: Path, models_store: Path, force: bool = False) -> 
             + ", ".join(missing)
         )
     selected = {
-        model_id: {"model_version": LEGACY_MODEL_VERSION, "required": True}
+        model_id: {"model_version": RECONSTRUCTED_MODEL_VERSION, "required": True}
         for model_id in required
     }
 
@@ -140,7 +145,7 @@ def prepare(*, gen_data_root: Path, models_store: Path, force: bool = False) -> 
 
     model_set = ActiveModelSet(
         model_set_id="pdm-local-realtime",
-        model_set_version="3.1.0-independent-logreg-pinned",
+        model_set_version="3.1.0-independent-logreg-reconstructed-v1",
         updated_at=datetime.now(timezone.utc),
         models=selected,
     )

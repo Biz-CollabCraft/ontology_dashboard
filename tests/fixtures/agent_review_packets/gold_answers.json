@@ -1,0 +1,90 @@
+{
+  "gold_answer_set_id": "agent-review-summary-gold-answers-v1",
+  "purpose": "Minimal reference answers for 8-case Agent Review Summary accuracy scoring.",
+  "limits": [
+    "This file scores required operational facts, not full natural-language equivalence.",
+    "Usefulness and Korean quality remain candidate signals until calibrated by human review."
+  ],
+  "global_must_not_claim": [
+    "수리 완료",
+    "승인 완료",
+    "작업 지시",
+    "자동 실행",
+    "교체 완료",
+    "고장 확정"
+  ],
+  "cases": {
+    "GS-001": {
+      "must_mention": ["normal", "11.6%", "동력 전달 계통", "열 방산 계통", "생산 영향이 없음", "0건"],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": ["주축 모터", "커플링", "스핀들 냉각 라인", "기록", "전달"],
+        "process_manager": ["생산 영향이 없음", "0건", "점검 승인"]
+      },
+      "must_not_claim": ["긴급", "수리 완료", "승인 완료", "작업 지시"]
+    },
+    "GS-002": {
+      "must_mention": ["warning", "82.5%", "공구/마모 계통", "동력 전달 계통", "생산 영향이 중간", "25건"],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": ["공구 매거진", "스핀들 공구 체결부", "주축 모터", "기록", "전달"],
+        "process_manager": ["생산 영향이 중간", "25건", "점검 승인"]
+      },
+      "must_not_claim": ["critical", "수리 완료", "승인 완료", "작업 지시"]
+    },
+    "GS-003": {
+      "must_mention": ["warning", "60.2%", "열 방산 계통", "동력 전달 계통", "생산 영향이 중간", "32건"],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": ["스핀들 냉각 라인", "가공부 열 배출 경로", "주축 모터", "기록", "전달"],
+        "process_manager": ["생산 영향이 중간", "32건", "점검 승인"]
+      },
+      "must_not_claim": ["critical", "수리 완료", "승인 완료", "작업 지시"]
+    },
+    "GS-004": {
+      "must_mention": ["critical", "90.8%", "동력 전달 계통", "생산 영향이 높은", "51건", "점검 요청"],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": ["주축 모터", "커플링", "동력 전달 하우징", "요청됨", "기록", "전달"],
+        "process_manager": ["생산 영향이 높은", "51건", "점검 승인"]
+      },
+      "must_not_claim": ["수리 완료", "승인 완료", "작업 지시", "자동 실행"]
+    },
+    "GS-005": {
+      "must_mention": ["warning", "77.2%", "공구/마모 계통", "동력 전달 계통", "생산 영향이 낮은", "18건"],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": ["공구 매거진", "스핀들 공구 체결부", "주축 모터", "기록", "전달"],
+        "process_manager": ["생산 영향이 낮은", "18건", "점검 승인"]
+      },
+      "must_not_claim": ["critical", "수리 완료", "승인 완료", "작업 지시"]
+    },
+    "GS-006": {
+      "must_mention": ["attention", "29.5%", "공구/마모 계통", "동력 전달 계통", "생산 영향이 낮은", "13건"],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": ["공구 매거진", "스핀들 공구 체결부", "주축 모터", "기록", "전달"],
+        "process_manager": ["생산 영향이 낮은", "13건", "점검 승인"]
+      },
+      "must_not_claim": ["warning", "critical", "수리 완료", "승인 완료", "작업 지시"]
+    },
+    "GS-007": {
+      "must_mention": ["데이터 품질 보류", "위험 등급", "예측 위험도", "확정하지 않습니다", "근거 공백"],
+      "visible_limitations": ["데이터 품질 보류", "근거 공백"],
+      "role_points": {
+        "field_operator": ["데이터 품질 보류", "의심 계통", "참고 부품 후보는 이 패킷에 없습니다", "기록", "전달"],
+        "process_manager": ["추정 물량 손실", "유사 이력은 아직", "점검 승인"]
+      },
+      "must_not_claim": ["normal", "warning", "critical", "수리 완료", "승인 완료", "작업 지시", "고장 확정"]
+    },
+    "GS-008": {
+      "must_mention": ["warning", "82.5%", "공구/마모 계통", "동력 전달 계통", "생산 영향이 중간", "25건"],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": ["공구 매거진", "스핀들 공구 체결부", "주축 모터", "기록", "전달"],
+        "process_manager": ["생산 영향이 중간", "25건", "점검 승인"]
+      },
+      "must_not_claim": ["critical", "수리 완료", "승인 완료", "작업 지시"]
+    }
+  }
+}

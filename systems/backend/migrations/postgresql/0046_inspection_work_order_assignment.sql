@@ -1,5 +1,6 @@
 ALTER TABLE closed_loop_work_orders
   ADD COLUMN IF NOT EXISTS assigned_to text;
+
 ALTER TABLE closed_loop_work_orders
   ADD COLUMN IF NOT EXISTS assigned_at timestamptz;
 
@@ -46,10 +47,9 @@ WHERE work_order.work_type = 'inspection'
   AND work_order.status NOT IN ('requested', 'approved')
   AND work_order.assigned_to IS NULL;
 
--- The legacy `approved` state meant that a process manager had approved the
--- request; it did not identify a field assignee. Under the new lifecycle,
--- `approved` means accepted and assigned, so legacy rows return to the
--- unassigned request queue instead of being assigned to the old approver.
+-- Legacy `approved` meant a manager had approved the request; it did not name
+-- a field assignee. Under the new lifecycle `approved` means accepted and
+-- assigned, so legacy rows return to the unassigned request queue.
 UPDATE closed_loop_work_orders
 SET status = 'requested',
     assigned_to = NULL,

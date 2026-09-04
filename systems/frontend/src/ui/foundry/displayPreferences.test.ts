@@ -17,12 +17,14 @@ describe("display preferences", () => {
       version: 3,
       textSize: "large",
       density: "compact",
+      theme: "light",
       showTechnicalMetadata: false,
     });
     expect(normalizeDisplayPreferences({ textSize: "small", density: "comfortable" })).toEqual({
       version: 3,
       textSize: "small",
       density: "comfortable",
+      theme: "light",
       showTechnicalMetadata: false,
     });
   });
@@ -32,12 +34,14 @@ describe("display preferences", () => {
       version: 3,
       textSize: "extra-large",
       density: "comfortable",
+      theme: "light",
       showTechnicalMetadata: false,
     });
     expect(normalizeDisplayPreferences({ textSize: "huge", density: "cramped" })).toEqual({
       version: 3,
       textSize: "default",
       density: "standard",
+      theme: "light",
       showTechnicalMetadata: false,
     });
   });
@@ -45,11 +49,12 @@ describe("display preferences", () => {
   it("persists a migrated user-scoped record", () => {
     const storage = new MemoryStorage();
     storage.setItem("ontology-dashboard:display:user-7", JSON.stringify({ font_scale: "large", density: "standard" }));
-    expect(loadDisplayPreferences("user-7", storage)).toEqual({ version: 3, textSize: "large", density: "standard", showTechnicalMetadata: false });
+    expect(loadDisplayPreferences("user-7", storage)).toEqual({ version: 3, textSize: "large", density: "standard", theme: "light", showTechnicalMetadata: false });
     expect(JSON.parse(storage.getItem(displayPreferenceStorageKey("user-7")) ?? "null")).toEqual({
       version: 3,
       textSize: "large",
       density: "standard",
+      theme: "light",
       showTechnicalMetadata: false,
     });
   });
@@ -59,6 +64,7 @@ describe("display preferences", () => {
       version: 3,
       textSize: "default",
       density: "standard",
+      theme: "light",
       showTechnicalMetadata: false,
     });
   });

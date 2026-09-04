@@ -1,8 +1,76 @@
-export type OperationsView = "overview" | "objects" | "operations" | "reports" | "system";
+export type OperationsDecisionBriefRole =
+  | "process_manager"
+  | "process_engineer"
+  | "maintenance_technician"
+  | "system_admin";
+
+export interface OperationsDecisionSupportBrief {
+  schema_version: string;
+  frame: {
+    evidence_snapshot_id: string;
+    decision_as_of: string;
+    actor_role: OperationsDecisionBriefRole;
+    risk_status: string;
+    asset_id: string;
+    active_constraints: string[];
+    context_version_set: Record<string, string>;
+  };
+  why_now: {
+    order_ids: string[];
+    wip_units: number | null;
+    lot_ids: string[];
+    earliest_due_at: string | null;
+    decision_blockers: string[];
+    source_refs: string[];
+  };
+  relationships: Array<{
+    relationship_type: string;
+    from_ref: string;
+    to_ref: string;
+    status: string;
+    source_refs: string[];
+  }>;
+  readiness: Record<string, unknown>;
+  option_comparison: Array<{
+    option: string;
+    calculation_state: string;
+    assumptions: Record<string, unknown>;
+    formula: string | null;
+    source_refs: string[];
+  }>;
+  gaps: Array<{
+    state: string;
+    owner_domain: string;
+    blocks_options: string[];
+    detail: Record<string, unknown>;
+  }>;
+  source_classifications: Record<string, string>;
+  source_refs: string[];
+  limitations: string[];
+  mutation_available: false;
+  recommendation: null;
+}
+
+export interface OperationsDecisionSupportResponse {
+  brief: OperationsDecisionSupportBrief | null;
+  trace: {
+    status: string;
+    reason: string | null;
+    reused: boolean;
+    workflow_run_id: string | null;
+    context_version_set: Record<string, string>;
+    temporal_validation: string;
+  };
+}
+
+export type OperationsView =
+  "overview" | "objects" | "operations" | "reports" | "system";
 export type OperationsDashboardMode = "workflow" | "classic";
-export type OperationsReportTab = "status-map" | "inspection-request" | "summary-report" | "executive-brief";
+export type OperationsReportTab =
+  "status-map" | "inspection-request" | "summary-report" | "executive-brief";
 export type OperationsRoleLens = "process_manager" | "field_operator";
-export type OperationsRiskStatus = "normal" | "attention" | "warning" | "critical" | "data_quality_hold";
+export type OperationsRiskStatus =
+  "normal" | "attention" | "warning" | "critical" | "data_quality_hold";
 export type OperationsConfidence = "high" | "medium" | "low" | "unavailable";
 export type OperationsCriticality = "low" | "medium" | "high" | null;
 export type OperationsDecision =
@@ -11,9 +79,11 @@ export type OperationsDecision =
   | "review_shutdown"
   | "hold_for_data_check";
 
-export type OperationsSourceMode = "canonical-runtime" | "gold-fixture-fallback";
-export type OperationsSensorWindowId = "24h" | "7d" | "30d";
-export type OperationsSensorWindowCoverage = "complete" | "partial" | "empty" | "unknown";
+export type OperationsSourceMode =
+  "canonical-runtime" | "gold-fixture-fallback";
+export type OperationsSensorWindowId = "1h" | "3h" | "6h" | "12h" | "24h" | "7d" | "30d";
+export type OperationsSensorWindowCoverage =
+  "complete" | "partial" | "empty" | "unknown";
 
 export interface OperationsProvenance {
   datasetId: string | null;
@@ -150,6 +220,7 @@ export interface OperationsBootstrapModel {
   events: OperationsEvent[];
   metrics: OperationsMetrics;
   lineRisk: OperationsLineRisk[];
+  selectionRestoreError?: string | null;
 }
 
 export interface OperationsSensorValue {
@@ -207,6 +278,12 @@ export interface OperationsReportSection {
 
 export interface OperationsReportModel {
   reportId: string;
+  reportType:
+    | "inspection-summary"
+    | "operations-decision"
+    | "executive-brief"
+    | "maintenance-effect"
+    | "weekly-risk";
   snapshotId: string | null;
   artifactId: string | null;
   asOf: string | null;
@@ -243,10 +320,17 @@ export interface OperationsAssetDetailStatus {
   source: "canonical" | "fallback";
 }
 
-export type OperationsProductionImpact = "none" | "low" | "medium" | "high" | null;
-export type OperationsOperationSourceType = "synthetic_capacity_model";
-export type OperationsScreenPriority = "none" | "monitor" | "shift_inspection" | "plan_at_risk" | "data_check_required";
-export type OperationsImpactStatus = "not_applicable" | "estimated" | "withheld_data_quality_hold";
+export type OperationsProductionImpact =
+  "none" | "low" | "medium" | "high" | null;
+export type OperationsOperationSourceType = "capacity_model";
+export type OperationsScreenPriority =
+  | "none"
+  | "monitor"
+  | "shift_inspection"
+  | "plan_at_risk"
+  | "data_check_required";
+export type OperationsImpactStatus =
+  "not_applicable" | "estimated" | "withheld_data_quality_hold";
 
 export interface OperationsOperationTemporalScope {
   snapshotId: string;
@@ -301,10 +385,112 @@ export interface OperationsOperationContext {
   limitations?: string[];
 }
 
+export interface OperationsCompanyContext {
+  schema_version: string;
+  context_kind: string;
+  context_storage?: {
+    mode: "team_db_overlay" | "reference_bootstrap";
+    persisted_record_count: number;
+  };
+  project_id: string;
+  workspace_id: string;
+  company: {
+    id: string;
+    name: string;
+    english_name: string;
+    industry: string;
+    headquarters: string;
+    fiscal_year: number;
+    currency: string;
+    operating_principle: string;
+  };
+  organization_units: Array<{
+    id: string;
+    name: string;
+    parent_id: string | null;
+    leader: string;
+    responsibilities: string[];
+    persona_roles: string[];
+  }>;
+  plants: Array<Record<string, unknown>>;
+  products: Array<{
+    id: string;
+    variant: string;
+    name: string;
+    unit_sales_price_krw: number;
+    unit_material_cost_krw: number;
+    unit_contribution_margin_krw: number;
+    daily_plan_units: number;
+  }>;
+  materials: Array<{
+    id: string;
+    name: string;
+    category: string;
+    unit_cost_krw: number;
+    on_hand_quantity: number;
+    reorder_point: number;
+    lead_time_days: number;
+    related_asset_ids: string[];
+  }>;
+  business_metrics: Array<{
+    id: string;
+    name: string;
+    period: string;
+    value: number;
+    unit: string;
+    source_label: string;
+  }>;
+  maintenance_records: Array<{
+    id: string;
+    asset_id: string;
+    occurred_at: string;
+    work_type: string;
+    component: string;
+    symptom: string;
+    action: string;
+    result: string;
+    downtime_minutes: number;
+    material_ids: string[];
+    source_ref: string;
+  }>;
+  meeting_minutes: Array<{
+    id: string;
+    title: string;
+    occurred_at: string;
+    attendees: string[];
+    summary: string;
+    decision_ids: string[];
+    source_ref: string;
+  }>;
+  decisions: Array<{
+    id: string;
+    title: string;
+    decided_at: string;
+    owner_org_unit_id: string;
+    decision: string;
+    related_asset_ids: string[];
+    source_ref: string;
+  }>;
+}
+
 export type OperationsClosedLoopWorkType = "inspection" | "maintenance";
-export type OperationsClosedLoopWorkOrderStatus = "requested" | "approved" | "in_progress" | "completed" | "blocked" | "failed" | "cancelled";
-export type OperationsClosedLoopMaintenanceActionStatus = "planned" | "in_progress" | "completed" | "failed" | "cancelled";
-export type OperationsClosedLoopRuntimeStatus = "equipment_under_maintenance" | "warming_up" | "history_insufficient" | "ready" | "predicted" | null;
+export type OperationsClosedLoopWorkOrderStatus =
+  | "requested"
+  | "approved"
+  | "in_progress"
+  | "completed"
+  | "blocked"
+  | "failed"
+  | "cancelled";
+export type OperationsClosedLoopMaintenanceActionStatus =
+  "planned" | "in_progress" | "completed" | "failed" | "cancelled";
+export type OperationsClosedLoopRuntimeStatus =
+  | "equipment_under_maintenance"
+  | "warming_up"
+  | "history_insufficient"
+  | "ready"
+  | "predicted"
+  | null;
 export type OperationsClosedLoopLifecycleStep =
   | "prediction"
   | "evidence"
@@ -323,7 +509,12 @@ export type OperationsClosedLoopLifecycleStep =
 
 export interface OperationsClosedLoopAvailableAction {
   actionId: string;
-  targetType: "recommendation" | "work_order" | "maintenance_action" | "inspection_result" | "event";
+  targetType:
+    | "recommendation"
+    | "work_order"
+    | "maintenance_action"
+    | "inspection_result"
+    | "event";
   targetId: string | null;
   label?: string;
   disabledReason?: string | null;
@@ -334,10 +525,18 @@ export interface OperationsClosedLoopWorkOrder {
   workType: OperationsClosedLoopWorkType;
   status: OperationsClosedLoopWorkOrderStatus;
   assignedTo?: string | null;
-  assignedAt?: string | null;
   actorDisplayName?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+}
+
+export interface OperationsClosedLoopInspectionResult {
+  inspectionResultId: string;
+  workOrderId: string;
+  outcome: string;
+  recordedBy?: string | null;
+  recordedAt?: string | null;
+  createdAt?: string | null;
 }
 
 export interface OperationsClosedLoopMaintenanceAction {
@@ -380,7 +579,11 @@ export interface OperationsClosedLoopLifecycleSummary {
 
 export interface OperationsClosedLoopPrimaryAction extends OperationsClosedLoopAvailableAction {
   label: string;
-  ownerRole: "process_manager" | "process_engineer" | "maintenance_technician" | "unassigned";
+  ownerRole:
+    | "process_manager"
+    | "process_engineer"
+    | "maintenance_technician"
+    | "unassigned";
   ownerLabel: string;
   requiresInput: boolean;
 }
@@ -398,6 +601,7 @@ export interface OperationsClosedLoopTimelineItem {
 
 export interface OperationsClosedLoopSummary {
   workOrders: OperationsClosedLoopWorkOrder[];
+  inspectionResults: OperationsClosedLoopInspectionResult[];
   maintenanceActions: OperationsClosedLoopMaintenanceAction[];
   maintenanceEvents: OperationsClosedLoopMaintenanceEvent[];
   activities: OperationsClosedLoopActivity[];
@@ -580,7 +784,8 @@ export interface OperationsAgentReviewPacket {
         part_id: string;
         part_label: string;
         replacement_scope: string;
-        availability: "available_from_fixture" | "unavailable_from_fixture" | "unknown";
+        availability:
+          "available_from_fixture" | "unavailable_from_fixture" | "unknown";
         lead_time_days: number | null;
         replacement_window_minutes: number | null;
         assumption_level: string;
@@ -636,7 +841,12 @@ export interface OperationsAgentReviewSummary {
     source_refs: string[];
   }>;
   evidence_gaps: Array<{ field: string; reason: string; owner_domain: string }>;
-  data_footnotes: Array<{ code: string; note: string; owner_domain: string; source_refs: string[] }>;
+  data_footnotes: Array<{
+    code: string;
+    note: string;
+    owner_domain: string;
+    source_refs: string[];
+  }>;
   source_refs: string[];
   boundary_note: string;
   confidence_label: "grounded" | "partial" | "fallback" | "data_quality_hold";
@@ -726,14 +936,23 @@ export interface OperationsEventDetailModel {
   threshold: number | null;
   assetCriticality: OperationsCriticality;
   criticalityBasis: string[];
-  criticalitySource: "manual_initial_assessment" | "equipment_master" | "project_context" | "unknown";
+  criticalitySource:
+    | "manual_initial_assessment"
+    | "equipment_master"
+    | "project_context"
+    | "unknown";
   maintenanceContext: {
     lastMaintenanceDaysAgo: number | null;
     similarEvents30d: number | null;
     openWorkOrderExists: boolean | null;
   } | null;
   inspectionTargets: OperationsInspectionTarget[];
-  dataQualityWarnings: Array<{ code: string; field: string; message: string; severity: string }>;
+  dataQualityWarnings: Array<{
+    code: string;
+    field: string;
+    message: string;
+    severity: string;
+  }>;
   equipmentHistory: OperationsEquipmentHistoryItem[];
   evidenceGaps: OperationsEvidenceGap[];
   assetDetailStatus: OperationsAssetDetailStatus | null;
@@ -766,7 +985,11 @@ export interface AssetDetailViewModel {
     observed_at: string;
     criticality: OperationsCriticality;
     criticality_basis: string[];
-    criticality_source: "manual_initial_assessment" | "equipment_master" | "project_context" | "unknown";
+    criticality_source:
+      | "manual_initial_assessment"
+      | "equipment_master"
+      | "project_context"
+      | "unknown";
   };
   risk: {
     current: number | null;
@@ -855,7 +1078,8 @@ export interface AssetDetailViewModel {
         human_review_questions: string[];
         decision_boundary: string;
       };
-      safety_level: "none" | "caution" | "permit_required" | "shutdown_controlled";
+      safety_level:
+        "none" | "caution" | "permit_required" | "shutdown_controlled";
       requires_human_approval: boolean;
       source_ref: string;
       disclaimer: string;
@@ -881,7 +1105,11 @@ export interface AssetDetailViewModel {
       plan_id: string;
       plan_date: string;
       planned_units: number;
-      product_mix: Array<{ variant: string; share: number; planned_units: number }>;
+      product_mix: Array<{
+        variant: string;
+        share: number;
+        planned_units: number;
+      }>;
     };
     capacity_model?: {
       active_asset_count: number;
@@ -914,7 +1142,6 @@ export interface AssetDetailViewModel {
       work_type: OperationsClosedLoopWorkType;
       status: OperationsClosedLoopWorkOrderStatus;
       assigned_to?: string | null;
-      assigned_at?: string | null;
       actor_display_name?: string | null;
       created_at?: string | null;
       updated_at?: string | null;
@@ -946,10 +1173,22 @@ export interface AssetDetailViewModel {
       maintenance_action_id?: string | null;
       maintenance_event_id?: string | null;
     }>;
-    inspection_results?: Array<Record<string, unknown>>;
+    inspection_results?: Array<{
+      inspection_result_id: string;
+      work_order_id: string;
+      outcome: string;
+      recorded_by?: string | null;
+      recorded_at?: string | null;
+      created_at?: string | null;
+    }>;
     available_actions?: Array<{
       action_id: string;
-      target_type: "recommendation" | "work_order" | "maintenance_action" | "inspection_result" | "event";
+      target_type:
+        | "recommendation"
+        | "work_order"
+        | "maintenance_action"
+        | "inspection_result"
+        | "event";
       target_id?: string | null;
       label?: string;
       disabled_reason?: string | null;
@@ -963,10 +1202,19 @@ export interface AssetDetailViewModel {
     } | null;
     primary_action?: {
       action_id: string;
-      target_type: "recommendation" | "work_order" | "maintenance_action" | "inspection_result" | "event";
+      target_type:
+        | "recommendation"
+        | "work_order"
+        | "maintenance_action"
+        | "inspection_result"
+        | "event";
       target_id?: string | null;
       label: string;
-      owner_role: "process_manager" | "process_engineer" | "maintenance_technician" | "unassigned";
+      owner_role:
+        | "process_manager"
+        | "process_engineer"
+        | "maintenance_technician"
+        | "unassigned";
       owner_label: string;
       disabled_reason?: string | null;
       requires_input: boolean;
@@ -1006,6 +1254,7 @@ export interface AssetDetailViewModel {
 
 export interface OperationsSelection {
   view: OperationsView;
+  surface: string | null;
   dashboard: OperationsDashboardMode;
   reportTab: OperationsReportTab;
   projectId: string;

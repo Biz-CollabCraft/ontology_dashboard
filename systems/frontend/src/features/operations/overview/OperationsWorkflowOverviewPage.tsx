@@ -12,8 +12,9 @@ import {
   RefreshCw,
   RotateCcw,
   Wrench,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createOperationsAgentReviewSummary,
   getOpenInspectionWorkOrders,
@@ -229,6 +230,39 @@ const WORK_STATUS_ACTION: Record<WorkStatus, { label: string; disabled: boolean 
   ready_for_reprediction: { label: "정비 효과 확인", disabled: false },
 };
 
+interface RealtimeDemoSnapshot {
+  sequence: number;
+  nowAt: string;
+  assetId: string;
+  assetName: string;
+  eventId: string | null;
+  line: string;
+  risk: number;
+  status: OperationsRiskStatus;
+  signal: string;
+  generatedAt: string;
+  sourceLabel: string;
+  isGeneratedResult: boolean;
+  factors: Array<{
+    id: string;
+    label: string;
+    value: number | null;
+    unit: string | null;
+    contribution: number;
+  }>;
+  feed: Array<{
+    id: string;
+    assetName: string;
+    risk: number | null;
+    observedAt: string | null;
+    sourceLabel: string;
+    signal: string;
+    label: string;
+    detail: string;
+    tone: "critical" | "warning" | "note";
+  }>;
+}
+
 const CLOSED_LOOP_LIFECYCLE_LABEL: Record<OperationsClosedLoopLifecycleStep, string> = {
   prediction: "예측",
   evidence: "근거 확인",
@@ -264,17 +298,51 @@ const WORK_QUEUE_COLUMNS: Array<{ id: WorkQueueColumnId; label: string; detail: 
 ];
 
 const SENSOR_WINDOW_OPTIONS: Array<{ id: OperationsSensorWindowId; label: string; hours: number }> = [
+  { id: "1h", label: "1시간", hours: 1 },
+  { id: "3h", label: "3시간", hours: 3 },
+  { id: "6h", label: "6시간", hours: 6 },
+  { id: "12h", label: "12시간", hours: 12 },
   { id: "24h", label: "24시간", hours: 24 },
   { id: "7d", label: "7일", hours: 24 * 7 },
   { id: "30d", label: "30일", hours: 24 * 30 },
 ];
 
 const DERIVED_FEATURE_KEYS = new Set(["temperature_difference_k", "mechanical_power_w", "overstrain_index"]);
+const MODEL_METADATA_FEATURE_PREFIXES = ["generator_", "model_", "prediction_", "lineage_"];
+const MODEL_METADATA_FEATURE_KEYS = new Set([
+  "asset_criticality_adjustment",
+  "criticality_adjustment",
+  "failure_score",
+  "selected_threshold",
+]);
+const LIVE_SIGNAL_LABELS: Record<string, string> = {
+  spindle_load_pct: "스핀들 부하",
+  coolant_delta_c: "냉각 온도 편차",
+  vibration_rms_mm_s: "진동 RMS",
+  tool_wear_min: "공구 마모",
+  torque_nm: "토크 부하",
+  temperature_gap_k: "공정 온도 편차",
+};
+const LIVE_FEATURE_PRIORITY = ["tool_wear_min", "torque_nm", "temperature_gap_k", "rotational_speed_rpm", "process_temperature_k"];
+const LIVE_FEATURE_CHART_LIMIT = 3;
 
 function isDerivedFeatureKey(key: string): boolean {
   return DERIVED_FEATURE_KEYS.has(key)
-    || /_(?:1h|6h|12h|24h|7d|30d)_(?:change|mean|std|max_abs|abs_mean|max|min|last)$/.test(key)
+    || /_(?:1h|3h|6h|12h|24h|7d|30d)_(?:change|mean|std|max_abs|abs_mean|max|min|last)$/.test(key)
     || /_(?:current|abs_current)$/.test(key);
+}
+
+function isModelMetadataFeatureKey(key: string): boolean {
+  return MODEL_METADATA_FEATURE_PREFIXES.some((prefix) => key.startsWith(prefix))
+    || MODEL_METADATA_FEATURE_KEYS.has(key);
+}
+
+function hasNumericHistoryPoints(sensor: SensorSeriesSnapshot): boolean {
+  return sensor.points.some((point) => typeof point.value === "number" && Number.isFinite(point.value));
+}
+
+function isPhysicalSensorSeries(sensor: SensorSeriesSnapshot): boolean {
+  return !isDerivedFeatureKey(sensor.id) && !isModelMetadataFeatureKey(sensor.id);
 }
 const PRIMARY_FIELD_SENSOR_KEYS = new Set(["torque_nm", "tool_wear_min", "rotational_speed_rpm"]);
 
@@ -286,6 +354,141 @@ function partLabel(value: boolean | null): string {
 
 function productionLossLabel(value: number | null): string {
   return value === null ? "생산 영향 미산정" : `${value.toLocaleString()}개 예상`;
+}
+
+function demoStatusForRisk(risk: number): OperationsRiskStatus {
+  if (risk >= 0.78) return "critical";
+  if (risk >= 0.62) return "warning";
+  if (risk >= 0.42) return "attention";
+  return "normal";
+}
+
+function isGeneratedResultEvent(eventId: string | null | undefined): boolean {
+  return Boolean(eventId?.startsWith("RESULT#GEN-") || eventId?.includes("demo-live"));
+}
+
+function liveFactorLabel(factor: OperationsAsset["topFactors"][number]): string {
+  return LIVE_SIGNAL_LABELS[factor.feature] ?? displaySensorLabel(factor.feature, factor.label);
+}
+
+function featureSignalText(factors: OperationsAsset["topFactors"]): string {
+  const visibleFactors = factors.slice(0, 2);
+  if (!visibleFactors.length) return "위험도 재계산";
+  return visibleFactors
+    .map((factor) => {
+      const label = liveFactorLabel(factor);
+      const value = typeof factor.value === "number" && Number.isFinite(factor.value)
+        ? ` ${factor.value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${factor.unit ? factor.unit : ""}`
+        : "";
+      return `${label}${value}`;
+    })
+    .join(" · ");
+}
+
+function useRealtimeRoleDemo(
+  model: OperationsBootstrapModel,
+): RealtimeDemoSnapshot {
+  const [sequence, setSequence] = useState(0);
+
+  useEffect(() => {
+    setSequence(0);
+  }, [model.context.datasetVersionId, model.context.workspaceId]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSequence((value) => value + 1);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [model.context.datasetVersionId, model.context.workspaceId]);
+
+  const eventCandidates = [...model.events]
+    .filter((event) => event.failureProbability !== null)
+    .sort((left, right) => {
+      const generatedDelta = Number(isGeneratedResultEvent(right.eventId)) - Number(isGeneratedResultEvent(left.eventId));
+      if (generatedDelta) return generatedDelta;
+      const timeDelta = (timestampMillis(right.observedAt) ?? 0) - (timestampMillis(left.observedAt) ?? 0);
+      if (timeDelta) return timeDelta;
+      return (right.failureProbability ?? 0) - (left.failureProbability ?? 0);
+    });
+  const assetCandidates = [...model.assets]
+    .filter((asset) => asset.failureProbability !== null)
+    .sort((left, right) => {
+      const generatedDelta = Number(isGeneratedResultEvent(right.eventId)) - Number(isGeneratedResultEvent(left.eventId));
+      if (generatedDelta) return generatedDelta;
+      const timeDelta = (timestampMillis(right.observedAt) ?? 0) - (timestampMillis(left.observedAt) ?? 0);
+      if (timeDelta) return timeDelta;
+      return (right.failureProbability ?? 0) - (left.failureProbability ?? 0);
+    });
+  const event = eventCandidates[0] ?? null;
+  const asset = event
+    ? model.assets.find((item) => item.assetId === event.assetId) ?? null
+    : assetCandidates[0] ?? model.assets[0] ?? null;
+  const assetId = event?.assetId ?? asset?.assetId ?? "CNC-S03-L02-04";
+  const risk = event?.failureProbability ?? asset?.failureProbability ?? 0;
+  const status = event?.status ?? asset?.status ?? demoStatusForRisk(risk);
+  const assetName = displayFactoryAssetName(assetId) ?? event?.assetName ?? asset?.displayName ?? assetId;
+  const line = event?.line ?? asset?.line ?? "S03-L02";
+  const factors = (asset?.topFactors ?? []).slice(0, 3).map((factor) => ({
+    id: factor.feature,
+    label: liveFactorLabel(factor),
+    value: factor.value,
+    unit: factor.unit,
+    contribution: factor.contribution,
+  }));
+  const signal = featureSignalText(asset?.topFactors ?? []);
+  const generatedAt = event?.observedAt ?? asset?.observedAt ?? model.context.observedAt ?? model.context.refreshedAt;
+  const feedSources: Array<{ event: OperationsEvent | null; asset: OperationsAsset | null }> = [];
+  const feedAssetIds = new Set<string>();
+  eventCandidates.forEach((candidate) => {
+    if (feedSources.length >= 4) return;
+    if (feedAssetIds.has(candidate.assetId)) return;
+    const candidateAsset = model.assets.find((item) => item.assetId === candidate.assetId) ?? null;
+    feedAssetIds.add(candidate.assetId);
+    feedSources.push({ event: candidate, asset: candidateAsset });
+  });
+  assetCandidates.forEach((candidate) => {
+    if (feedSources.length >= 4) return;
+    if (feedAssetIds.has(candidate.assetId)) return;
+    feedAssetIds.add(candidate.assetId);
+    feedSources.push({ event: null, asset: candidate });
+  });
+  if (!feedSources.length) {
+    feedSources.push({ event, asset });
+  }
+  const feed: RealtimeDemoSnapshot["feed"] = feedSources.slice(0, 4).map(({ event: feedEvent, asset: feedAsset }, offset) => {
+    const feedAssetId = feedEvent?.assetId ?? feedAsset?.assetId ?? assetId;
+    const feedName = displayFactoryAssetName(feedAssetId) ?? feedEvent?.assetName ?? feedAsset?.displayName ?? feedAssetId;
+    const feedRisk = feedEvent?.failureProbability ?? feedAsset?.failureProbability ?? null;
+    const feedStatus = feedEvent?.status ?? feedAsset?.status ?? "normal";
+    return {
+      id: `${feedEvent?.eventId ?? feedAssetId}-${offset}`,
+      assetName: feedName,
+      risk: feedRisk,
+      observedAt: feedEvent?.observedAt ?? feedAsset?.observedAt ?? null,
+      sourceLabel: isGeneratedResultEvent(feedEvent?.eventId ?? feedAsset?.eventId) ? "새 Result 수신" : "최근 Result",
+      signal: featureSignalText(feedAsset?.topFactors ?? []),
+      label: `${feedName} · ${formatProbability(feedRisk)}`,
+      detail: `${isGeneratedResultEvent(feedEvent?.eventId ?? feedAsset?.eventId) ? "새 Result 수신" : "최근 Result"} · ${featureSignalText(feedAsset?.topFactors ?? [])}`,
+      tone: feedStatus === "critical" ? "critical" : feedStatus === "warning" || feedStatus === "attention" ? "warning" : "note",
+    };
+  });
+
+  return {
+    sequence,
+    nowAt: new Date().toISOString(),
+    assetId,
+    assetName,
+    eventId: event?.eventId ?? asset?.eventId ?? null,
+    line,
+    risk,
+    status,
+    signal,
+    generatedAt,
+    sourceLabel: isGeneratedResultEvent(event?.eventId ?? asset?.eventId) ? "새 Result 수신" : "최근 Result",
+    isGeneratedResult: isGeneratedResultEvent(event?.eventId ?? asset?.eventId),
+    factors,
+    feed,
+  };
 }
 
 function latestReceivedLabel(model: OperationsBootstrapModel): string {
@@ -545,7 +748,7 @@ function inspectionMethodLabel(target: OperationsInspectionTarget | null): strin
 function inspectionGuidanceSourceLabel(target: OperationsInspectionTarget | null): string {
   if (!target?.inspectionGuidance) return "점검 위치 계약 미연결";
   return target.inspectionGuidance.sourceType === "demo_sop_fixture"
-    ? "데모 SOP"
+    ? "표준 점검 절차"
     : "SOP";
 }
 
@@ -625,10 +828,26 @@ interface SeriesDatum {
   qualityStatus?: "good" | "bad" | "unknown";
 }
 
+interface ChartSeriesDatum extends SeriesDatum {
+  bucketStartAt?: string;
+  bucketEndAt?: string;
+  bucketCount?: number;
+  bucketMin?: number;
+  bucketMinObservedAt?: string;
+  bucketMax?: number;
+  bucketMaxObservedAt?: string;
+}
+
 function formatSeriesTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatSeriesTooltipTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function timestampMillis(value: string | null | undefined): number | null {
@@ -652,6 +871,47 @@ function filterSeriesPoints(points: SeriesDatum[], currentObservedAt: string | n
     const observedAt = timestampMillis(point.observedAt);
     return observedAt === null || observedAt >= start;
   });
+}
+
+function aggregateSeriesByTenMinuteBucket(points: SeriesDatum[]): ChartSeriesDatum[] {
+  const bucketMs = 10 * 60 * 1000;
+  const buckets = new Map<number, Array<SeriesDatum & { time: number; value: number }>>();
+  points.forEach((point) => {
+    if (typeof point.value !== "number" || !Number.isFinite(point.value)) return;
+    const time = timestampMillis(point.observedAt);
+    if (time === null) return;
+    const key = Math.floor(time / bucketMs) * bucketMs;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push({ ...point, time, value: point.value });
+    buckets.set(key, bucket);
+  });
+  return [...buckets.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([bucketStart, bucket]) => {
+      const ordered = [...bucket].sort((left, right) => left.time - right.time);
+      const sum = ordered.reduce((total, point) => total + point.value, 0);
+      const average = sum / ordered.length;
+      const minimum = ordered.reduce((lowest, point) => point.value < lowest.value ? point : lowest, ordered[0]);
+      const maximum = ordered.reduce((highest, point) => point.value > highest.value ? point : highest, ordered[0]);
+      const latest = ordered[ordered.length - 1];
+      const qualityStatus = ordered.some((point) => point.qualityStatus === "bad")
+        ? "bad"
+        : ordered.some((point) => point.qualityStatus === "unknown")
+          ? "unknown"
+          : "good";
+      return {
+        observedAt: latest.observedAt,
+        value: average,
+        qualityStatus,
+        bucketStartAt: new Date(bucketStart).toISOString(),
+        bucketEndAt: new Date(bucketStart + bucketMs).toISOString(),
+        bucketCount: ordered.length,
+        bucketMin: minimum.value,
+        bucketMinObservedAt: minimum.observedAt,
+        bucketMax: maximum.value,
+        bucketMaxObservedAt: maximum.observedAt,
+      };
+    });
 }
 
 function seriesRangeLabel(points: SeriesDatum[], windowId: OperationsSensorWindowId, window: OperationsFeatureHistoryWindow | null | undefined): string {
@@ -717,6 +977,75 @@ function sensorSeries(detail: OperationsEventDetailModel | null, asset: Operatio
       qualityStatus: point.qualityStatus,
     })),
   }));
+}
+
+type SensorSeriesSnapshot = ReturnType<typeof sensorSeries>[number];
+
+function withRealtimeCurrentValues(
+  sensors: SensorSeriesSnapshot[],
+  liveDemo: RealtimeDemoSnapshot | null,
+): SensorSeriesSnapshot[] {
+  if (!liveDemo) return sensors;
+  const liveFactors = new Map(liveDemo.factors.map((factor) => [factor.id, factor]));
+  const merged = sensors.map((sensor) => {
+    const factor = liveFactors.get(sensor.id);
+    if (!factor || typeof factor.value !== "number" || !Number.isFinite(factor.value)) {
+      return sensor;
+    }
+    return {
+      ...sensor,
+      currentValue: factor.value,
+      currentObservedAt: liveDemo.nowAt,
+      currentQuality: "good" as const,
+    };
+  });
+  const existingIds = new Set(merged.map((sensor) => sensor.id));
+  liveDemo.factors.forEach((factor) => {
+    if (existingIds.has(factor.id) || typeof factor.value !== "number" || !Number.isFinite(factor.value)) return;
+    merged.push({
+      id: factor.id,
+      label: factor.label,
+      unit: factor.unit,
+      currentValue: factor.value,
+      currentObservedAt: liveDemo.nowAt,
+      currentQuality: "good" as const,
+      window: null,
+      points: [],
+    });
+  });
+  return merged;
+}
+
+function selectedAssetLiveSnapshot(
+  asset: OperationsAsset | null,
+  baseLiveDemo: RealtimeDemoSnapshot,
+): RealtimeDemoSnapshot | null {
+  if (!asset) return null;
+  if (asset.assetId === baseLiveDemo.assetId) return baseLiveDemo;
+  const factors = asset.topFactors
+    .filter((factor) => typeof factor.value === "number" && Number.isFinite(factor.value))
+    .slice(0, 3)
+    .map((factor) => ({
+      id: factor.feature,
+      label: liveFactorLabel(factor),
+      value: factor.value,
+      unit: factor.unit,
+      contribution: factor.contribution,
+    }));
+  return {
+    ...baseLiveDemo,
+    assetId: asset.assetId,
+    assetName: displayFactoryAssetName(asset.assetId) ?? displayAssetName(asset),
+    eventId: asset.eventId,
+    line: asset.line || asset.cell || baseLiveDemo.line,
+    risk: asset.failureProbability ?? baseLiveDemo.risk,
+    status: asset.status,
+    signal: featureSignalText(asset.topFactors),
+    generatedAt: asset.observedAt ?? baseLiveDemo.generatedAt,
+    sourceLabel: isGeneratedResultEvent(asset.eventId) ? "새 Result 수신" : "선택 설비 최신 Result",
+    isGeneratedResult: isGeneratedResultEvent(asset.eventId),
+    factors,
+  };
 }
 
 function productionImpactLevelLabel(summary: LineImpactSummary, detail: OperationsEventDetailModel | null): string {
@@ -1308,31 +1637,39 @@ function reviewPriorityLabel(summary: LineImpactSummary, detail: OperationsEvent
 function FactoryMonitoringMapPanel({
   factoryCells,
   selectedAsset,
-  factorySlotPreview,
   postMaintenancePredictions,
   workOrders,
   planningBasis,
-  onPreviewSlot,
+  liveDemo,
+  focusMode,
+  onFocusModeChange,
   onPreviewAssetSlot,
 }: {
   factoryCells: FactoryCellLayout[];
   selectedAsset: OperationsAsset | null;
-  factorySlotPreview: FactorySlotPreview | null;
   postMaintenancePredictions: Record<string, PostMaintenancePredictionSummary>;
   workOrders: OpenInspectionWorkOrderReadModel[];
   planningBasis: { value: string; fallback: boolean };
-  onPreviewSlot: (slot: FactoryCellSlot, cell: FactoryCellLayout) => void;
+  liveDemo: RealtimeDemoSnapshot;
+  focusMode: "all" | "exceptions";
+  onFocusModeChange: (mode: "all" | "exceptions") => void;
   onPreviewAssetSlot: (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => void;
 }) {
   return (
     <OperationsPanel title="공장 설비 상태맵" eyebrow="실시간 라인/셀 현황" className="operations-process-panel operations-factory-map-panel">
       <div className="operations-plan-impact-note">
-        {FACTORY_LAYOUT_NOTICE} · {planningBasis.fallback ? "생산 영향 계산 준비 중" : "생산계획 연계"} · {planningBasis.value}
+        {FACTORY_LAYOUT_NOTICE} · {planningBasis.fallback ? "생산 영향 데이터 미연결" : "생산계획 연계"} · {planningBasis.value}
       </div>
       {factoryCells.length ? (
-        <div className="operations-factory-map">
-          <div className="operations-factory-map-legend" aria-label="설비 상태 범례">
-            <i className="normal">정상</i><i className="attention">주의</i><i className="critical">긴급</i><i className="warning">점검 중</i><i className="hold">완료 확인 필요</i><i className="slot">준비 중</i>
+        <div className={`operations-factory-map focus-${focusMode}`}>
+          <div className="operations-factory-map-toolbar">
+            <div className="operations-factory-map-mode" role="group" aria-label="설비 상태맵 강조 방식">
+              <button type="button" className={focusMode === "all" ? "is-active" : ""} onClick={() => onFocusModeChange("all")}>전체 설비</button>
+              <button type="button" className={focusMode === "exceptions" ? "is-active" : ""} onClick={() => onFocusModeChange("exceptions")}>이상만 강조</button>
+            </div>
+            <div className="operations-factory-map-legend" aria-label="설비 상태 범례">
+              <i className="normal">정상</i><i className="attention">주의</i><i className="critical">긴급</i><i className="warning">점검 중</i><i className="hold">완료 확인 필요</i><i className="slot">미연결</i>
+            </div>
           </div>
           <div className="operations-factory-line-map">
             {FACTORY_SITE_IDS.map((site) => {
@@ -1355,14 +1692,14 @@ function FactoryMonitoringMapPanel({
                       <strong>{displayFactorySite(site)}</strong>
                       <small>{siteCells.length}개 라인 · 연결 설비 {siteAssets.length}대 · 새 알림 {siteBadgeCount}건</small>
                     </div>
-                    {siteBadgeCount ? <b className="operations-live-notification-badge" aria-label={`${siteBadgeCount}개 알림`}>{siteBadgeCount}</b> : <span className="operations-live-ok-pill">정상</span>}
+                    {siteBadgeCount ? <b className="operations-live-notification-badge is-zone-summary" aria-label={`${siteBadgeCount}개 알림`}>알림 {siteBadgeCount}</b> : <span className="operations-live-ok-pill">정상</span>}
                   </header>
                   <div className="operations-factory-cell-grid" aria-label={`${site} 셀별 설비 상태`}>
                     {siteCells.map((cell) => (
                       <section key={cell.id} className={`operations-factory-cell-card tone-${cell.summary ? riskTone(cell.summary) : "empty"} ${cell.slots.some((slot) => slot.asset?.assetId === selectedAsset?.assetId) ? "is-selected" : ""}`} aria-label={cell.label}>
                         <header>
                           <strong>{displayFactoryCell(cell.cell)}</strong>
-                          <small>{cell.summary ? `${cell.summary.assets.length}대 연결` : "설비 정보 준비 중"}</small>
+                          <small>{cell.summary ? `${cell.summary.assets.length}대 연결` : "연결 설비 없음"}</small>
                         </header>
                         <div className="operations-factory-cell-slots">
                           {cell.slots.map((slot) => {
@@ -1372,33 +1709,38 @@ function FactoryMonitoringMapPanel({
                               ? workOrders.find((item) => item.asset_id === asset.assetId) ?? null
                               : null;
                             const workflowStatus = workStatusFromInspectionWorkflow(openWorkOrder);
-                            const selected = asset
-                              ? selectedAsset?.assetId === asset.assetId
-                              : factorySlotPreview?.slot.id === slot.id;
+                            const selected = asset ? selectedAsset?.assetId === asset.assetId : false;
+                            const isLiveDemoFocus = asset?.assetId === liveDemo.assetId;
+                            const liveStatus = isLiveDemoFocus ? liveDemo.status : null;
+                            const liveRisk = isLiveDemoFocus ? liveDemo.risk : null;
                             const tone = workflowStatus
-                              ? workflowStatus === "maintenance_completed"
-                                || workflowStatus === "observation_pending"
-                                || workflowStatus === "ready_for_reprediction"
+                              ? ["maintenance_completed", "observation_pending", "ready_for_reprediction"].includes(workflowStatus)
                                 ? "hold"
                                 : "warning"
-                              : asset ? mapTone(currentPrediction?.statusGrade ?? asset.status) : "slot";
+                              : asset ? mapTone(liveStatus ?? currentPrediction?.statusGrade ?? asset.status) : "slot";
                             const title = asset
                               ? workflowStatus
                                 ? `${displayFactorySlotName(slot, cell)} · ${WORK_STATUS_LABEL[workflowStatus]} · ${openWorkOrder?.work_order_id ?? "작업 ID 확인 중"}`
-                                : `${displayFactorySlotName(slot, cell)} · ${operationsMonitorStatusLabel(currentPrediction?.statusGrade ?? asset.status)} · ${formatProbability(currentPrediction?.failureProbability ?? asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}`
-                              : `${cell.label} · ${slot.label} · 설비 정보 준비 중`;
-                            return (
+                                : `${displayFactorySlotName(slot, cell)} · ${operationsMonitorStatusLabel(liveStatus ?? currentPrediction?.statusGrade ?? asset.status)} · ${formatProbability(liveRisk ?? currentPrediction?.failureProbability ?? asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}${isLiveDemoFocus ? " · 최근 Result 수신" : ""}`
+                              : `${cell.label} · ${slot.label} · 설비 미연결`;
+                            return asset ? (
                               <button
                                 key={slot.id}
                                 type="button"
-                                className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""}`}
+                                className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""} ${isLiveDemoFocus ? "is-live-result-focus" : ""} ${focusMode === "exceptions" && tone === "normal" && !selected && !isLiveDemoFocus ? "is-deemphasized" : ""}`}
                                 aria-pressed={selected}
-                                onClick={() => asset ? onPreviewAssetSlot(asset, slot, cell) : onPreviewSlot(slot, cell)}
+                                aria-label={`${displayFactorySlotName(slot, cell)} · ${asset.assetId} · ${workflowStatus ? WORK_STATUS_LABEL[workflowStatus] : operationsMonitorStatusLabel(liveStatus ?? currentPrediction?.statusGrade ?? asset.status)} · 위험 ${formatProbability(liveRisk ?? currentPrediction?.failureProbability ?? asset.failureProbability)}`}
+                                onClick={() => onPreviewAssetSlot(asset, slot, cell)}
                                 title={title}
                               >
-                                <span>{asset ? workflowStatus ? mapWorkStatusLabel(workflowStatus) : displayAssetShortName(asset) : slot.kind === "compressor" ? "공기압축기" : slot.label.replace("CNC ", "")}</span>
-                                {asset && tone !== "normal" ? <b className="operations-asset-alert-badge" aria-label={`${workflowStatus ? WORK_STATUS_LABEL[workflowStatus] : operationsMonitorStatusLabel(asset.status)} 알림`}>{tone === "critical" ? "!" : "1"}</b> : null}
+                                <span>{workflowStatus ? mapWorkStatusLabel(workflowStatus) : displayAssetShortName(asset)}</span>
+                                {isLiveDemoFocus ? <small className="operations-live-node-risk">{formatProbability(liveRisk)}</small> : null}
+                                {tone !== "normal" ? <b className="operations-asset-alert-badge" aria-label={`${workflowStatus ? WORK_STATUS_LABEL[workflowStatus] : operationsMonitorStatusLabel(liveStatus ?? asset.status)} 알림`}>{isLiveDemoFocus && !workflowStatus ? "LIVE" : tone === "critical" ? "!" : "1"}</b> : null}
                               </button>
+                            ) : (
+                              <div key={slot.id} className={`operations-factory-asset-node ${tone} ${slot.kind}`} title={title} aria-label={title}>
+                                <span>{slot.kind === "compressor" ? "공기압축기" : slot.label.replace("CNC ", "")}</span>
+                              </div>
                             );
                           })}
                         </div>
@@ -1418,6 +1760,7 @@ function FactoryMonitoringMapPanel({
 export function OperationsWorkflowOverviewPage({
   model,
   role,
+  currentUserId,
   experienceKind,
   selectedAssetId,
   detail,
@@ -1427,7 +1770,6 @@ export function OperationsWorkflowOverviewPage({
   monitoringDetailLoading,
   monitoringDetailError,
   sensorWindow,
-  currentUserId,
   canMaterializeAgentSummary,
   canManageWorkflow,
   canExecuteFieldWorkflow,
@@ -1438,6 +1780,7 @@ export function OperationsWorkflowOverviewPage({
 }: {
   model: OperationsBootstrapModel;
   role: OperationsRoleLens;
+  currentUserId: string;
   experienceKind: ReliabilityExperienceKind;
   selectedAssetId: string | null;
   detail: OperationsEventDetailModel | null;
@@ -1447,7 +1790,6 @@ export function OperationsWorkflowOverviewPage({
   monitoringDetailLoading: boolean;
   monitoringDetailError: string | null;
   sensorWindow: OperationsSensorWindowId;
-  currentUserId: string;
   canMaterializeAgentSummary: boolean;
   canManageWorkflow: boolean;
   canExecuteFieldWorkflow: boolean;
@@ -1457,7 +1799,6 @@ export function OperationsWorkflowOverviewPage({
   onRefresh: () => void;
 }) {
   const { metrics } = model;
-  const topAssets = model.assets.slice(0, 6);
   const anomalyEvents = model.events
     .filter((item) => item.recommendedDecision !== "continue_monitoring")
     .slice(0, 8);
@@ -1477,12 +1818,11 @@ export function OperationsWorkflowOverviewPage({
       setOpenInspectionWorkOrders(response.items);
       setOpenInspectionWorkOrdersError(null);
     }).catch((reason) => {
-      if (!controller.signal.aborted) {
-        setOpenInspectionWorkOrders([]);
-        setOpenInspectionWorkOrdersError(
-          reason instanceof Error ? reason.message : "열린 점검 요청을 불러오지 못했습니다.",
-        );
-      }
+      if (controller.signal.aborted) return;
+      setOpenInspectionWorkOrders([]);
+      setOpenInspectionWorkOrdersError(
+        reason instanceof Error ? reason.message : "열린 점검 요청을 불러오지 못했습니다.",
+      );
     });
     return () => controller.abort();
   }, [model.context.projectId, model.context.refreshedAt, model.context.workspaceId]);
@@ -1505,7 +1845,6 @@ export function OperationsWorkflowOverviewPage({
   const lineImpactSummaries = buildLineImpactSummaries(model.assets);
   const factoryCells = buildFactoryCellLayout(model.assets, lineImpactSummaries);
   const selectedAsset = model.assets.find((asset) => asset.assetId === selectedAssetId)
-    ?? topAssets[0]
     ?? null;
   const selectedOpenInspectionWorkOrder = selectedAsset
     ? openInspectionWorkOrders.find((item) => item.asset_id === selectedAsset.assetId) ?? null
@@ -1535,6 +1874,7 @@ export function OperationsWorkflowOverviewPage({
   const workInProgressCount = new Set(openInspectionWorkOrders.map((item) => item.asset_id)).size;
   const runningEquipmentCount = Math.max(0, metrics.totalAssets - workInProgressCount);
   const lastReceived = latestReceivedLabel(model);
+  const liveDemo = useRealtimeRoleDemo(model);
   const selectedCandidate = selectedEvent
     ? queueCandidates.find((candidate) => candidate.event.eventId === selectedEvent.eventId)
       ?? queueCandidates.find((candidate) => candidate.event.assetId === selectedEvent.assetId)
@@ -1559,7 +1899,10 @@ export function OperationsWorkflowOverviewPage({
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
   const [detailDrawerTab, setDetailDrawerTab] = useState<DrawerTab>("status");
   const [factorySlotPreview, setFactorySlotPreview] = useState<FactorySlotPreview | null>(null);
+  const [factoryFocusMode, setFactoryFocusMode] = useState<"all" | "exceptions">("exceptions");
   const [postMaintenancePredictions, setPostMaintenancePredictions] = useState<Record<string, PostMaintenancePredictionSummary>>({});
+  const autoOpenedDrawerKeyRef = useRef<string | null>(null);
+  const suppressAutoOpenDrawerRef = useRef(false);
   const handlePostMaintenancePrediction = useCallback((assetId: string, prediction: PostMaintenancePredictionSummary) => {
     setPostMaintenancePredictions((current) => {
       const previous = current[assetId];
@@ -1571,6 +1914,24 @@ export function OperationsWorkflowOverviewPage({
       return { ...current, [assetId]: prediction };
     });
   }, []);
+  useEffect(() => {
+    if (!selectedAsset || detailDrawerOpen) return;
+    if (suppressAutoOpenDrawerRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const requestedAssetId = params.get("asset_id");
+    const requestedEventId = params.get("event_id");
+    const selectedEventId = selectedEvent?.eventId ?? selectedAsset.eventId ?? "";
+    if (requestedAssetId !== selectedAsset.assetId && requestedEventId !== selectedEventId) return;
+    const drawerKey = `${selectedAsset.assetId}:${selectedEventId}`;
+    if (autoOpenedDrawerKeyRef.current === drawerKey) return;
+    autoOpenedDrawerKeyRef.current = drawerKey;
+    setFactorySlotPreview(null);
+    setDetailDrawerOpen(true);
+    setDetailDrawerTab("status");
+  }, [detailDrawerOpen, selectedAsset, selectedEvent?.eventId]);
+  // Live demo ticks update cards and map emphasis only. They must not mutate
+  // the selected Case because that writes asset_id/event_id into the URL and
+  // reopens the detail drawer after login or after the user closes it.
   const drawerAssetSource = factorySlotPreview?.slot.asset ?? (factorySlotPreview ? null : selectedAsset);
   const drawerPrediction = drawerAssetSource ? postMaintenancePredictions[drawerAssetSource.assetId] : null;
   const drawerAsset = drawerAssetSource && drawerPrediction
@@ -1650,30 +2011,65 @@ export function OperationsWorkflowOverviewPage({
   const fieldSummary = selectedAsset
     ? `${fieldSummaryPart}을 먼저 확인하세요. 부품 상태는 ${fieldSummaryPartStatus}, 작업 상태는 ${selectedWorkStatusLabel}, ${fieldSummaryQuality}.`
     : "선택된 설비가 없어 점검 후보를 만들 수 없습니다.";
+  const liveRoleViewLabel = experienceKind === "executive"
+    ? "경영진 Brief 반영"
+    : role === "process_manager"
+      ? "운영 관리 화면 반영"
+      : role === "field_operator"
+        ? "현장 점검 화면 반영"
+        : "엔지니어 화면 반영";
+  const livePipelineSteps = [
+    {
+      key: "observation",
+      label: "Observation",
+      title: "센서 관측 생성",
+      detail: `${liveDemo.assetName} · ${liveDemo.signal}`,
+    },
+    {
+      key: "prediction",
+      label: "Prediction",
+      title: "위험도 재계산",
+      detail: `${formatProbability(liveDemo.risk)} · Result Artifact 승격`,
+    },
+    {
+      key: "role-view",
+      label: "Role view",
+      title: liveRoleViewLabel,
+      detail: "같은 Result를 역할별 우선순위로 재배치",
+    },
+  ];
+  const livePipelineStep = livePipelineSteps[Math.floor(liveDemo.sequence / 2) % livePipelineSteps.length] ?? livePipelineSteps[0]!;
+  const rotatingLiveResult = liveDemo.feed[Math.floor(liveDemo.sequence / 3) % Math.max(1, liveDemo.feed.length)] ?? null;
+  const liveResultCardAssetName = rotatingLiveResult?.assetName ?? liveDemo.assetName;
+  const liveResultCardRisk = rotatingLiveResult?.risk ?? liveDemo.risk;
+  const liveResultCardSignal = rotatingLiveResult?.signal || liveDemo.signal;
+  const liveResultCardSource = rotatingLiveResult?.sourceLabel ?? liveDemo.sourceLabel;
+  const liveResultCardObservedAt = rotatingLiveResult?.observedAt ?? liveDemo.generatedAt;
+
+  const closeDetailDrawer = useCallback(() => {
+    suppressAutoOpenDrawerRef.current = true;
+    setDetailDrawerOpen(false);
+  }, []);
 
   useEffect(() => {
     if (!detailDrawerOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDetailDrawerOpen(false);
+      if (event.key === "Escape") closeDetailDrawer();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [detailDrawerOpen]);
+  }, [closeDetailDrawer, detailDrawerOpen]);
 
   const previewInDrawer = (assetId: string, eventId: string | null) => {
+    suppressAutoOpenDrawerRef.current = false;
     setFactorySlotPreview(null);
     onPreviewAsset(assetId, eventId);
     setDetailDrawerOpen(true);
     setDetailDrawerTab("status");
   };
 
-  const previewFactorySlot = (slot: FactoryCellSlot, cell: FactoryCellLayout) => {
-    setFactorySlotPreview({ slot, cell });
-    setDetailDrawerOpen(true);
-    setDetailDrawerTab("status");
-  };
-
   const previewFactoryAssetSlot = (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => {
+    suppressAutoOpenDrawerRef.current = false;
     setFactorySlotPreview({ slot, cell });
     const workOrder = openInspectionWorkOrders.find((item) => item.asset_id === asset.assetId) ?? null;
     onPreviewAsset(asset.assetId, workOrder?.event_id ?? asset.eventId);
@@ -1693,25 +2089,25 @@ export function OperationsWorkflowOverviewPage({
       </section>
 
       <section className="operations-overview-topline operations-live-kpi-grid" aria-label="실시간 현황 요약">
-        <article className="operations-plan-impact-card is-live">
+        <article className="operations-plan-impact-card is-live is-live-pulse">
           <Activity className="operations-plan-impact-icon" size={15} aria-hidden="true" />
           <span>가동 중 설비</span>
           <strong>{runningEquipmentCount.toLocaleString()}대</strong>
           <small>현재 연결 설비 {metrics.totalAssets.toLocaleString()}대 기준</small>
         </article>
-        <article className="operations-plan-impact-card is-attention">
+        <article className="operations-plan-impact-card is-attention is-live-pulse">
           <AlertTriangle className="operations-plan-impact-icon" size={15} aria-hidden="true" />
           <span>주의 설비</span>
           <strong>{attentionEquipmentCount.toLocaleString()}대</strong>
           <small>주의·경고·완료 확인 필요 포함</small>
         </article>
-        <article className="operations-plan-impact-card is-critical">
+        <article className="operations-plan-impact-card is-critical is-live-pulse">
           <CircleLiveIcon />
           <span>긴급 설비</span>
           <strong>{urgentEquipmentCount.toLocaleString()}대</strong>
-          <small>즉시 확인 대상</small>
+          <small>{liveDemo.assetName} 최근 Result</small>
         </article>
-        <article className="operations-plan-impact-card">
+        <article className="operations-plan-impact-card is-live-pulse">
           <Wrench className="operations-plan-impact-icon" size={15} aria-hidden="true" />
           <span>점검/정비 중</span>
           <strong>{workInProgressCount.toLocaleString()}건</strong>
@@ -1720,19 +2116,40 @@ export function OperationsWorkflowOverviewPage({
         <article className="operations-plan-impact-card is-hold">
           <Clock3 className="operations-plan-impact-icon" size={15} aria-hidden="true" />
           <span>마지막 수신 시각</span>
-          <strong>{lastReceived}</strong>
-          <small>실시간 운영 데이터 기준</small>
+          <strong>{liveDemo.isGeneratedResult ? "방금 전" : lastReceived}</strong>
+          <small>{liveDemo.sourceLabel} · {formatTimestamp(liveDemo.generatedAt)}</small>
+        </article>
+        <article className="operations-plan-impact-card is-live-risk-card is-live-pulse">
+          <Gauge className="operations-plan-impact-icon" size={15} aria-hidden="true" />
+          <span>LIVE RISK</span>
+          <strong>{formatProbability(liveDemo.risk)}</strong>
+          <small>{operationsMonitorStatusLabel(liveDemo.status)} · 생산 영향 후보로 등록</small>
+          <i className="operations-live-risk-meter" aria-hidden="true"><b style={{ width: `${Math.round(liveDemo.risk * 100)}%` }} /></i>
+        </article>
+        <article className={`operations-plan-impact-card is-live-stage-card is-live-stage-${livePipelineStep.key}`}>
+          <DatabaseZap className="operations-plan-impact-icon" size={15} aria-hidden="true" />
+          <span>{livePipelineStep.label}</span>
+          <strong>{livePipelineStep.title}</strong>
+          <small>{livePipelineStep.detail}</small>
+        </article>
+        <article className="operations-plan-impact-card is-live-result-card is-live-pulse">
+          <CircleLiveIcon />
+          <span>{liveResultCardSource}</span>
+          <strong>{liveResultCardAssetName}</strong>
+          <small>{formatProbability(liveResultCardRisk)} · {liveResultCardSignal}</small>
+          <em className="operations-live-result-time">{formatTimestamp(liveResultCardObservedAt)}</em>
         </article>
       </section>
 
       <FactoryMonitoringMapPanel
         factoryCells={factoryCells}
         selectedAsset={selectedAsset}
-        factorySlotPreview={factorySlotPreview}
         postMaintenancePredictions={postMaintenancePredictions}
         workOrders={openInspectionWorkOrders}
         planningBasis={planningBasis}
-        onPreviewSlot={previewFactorySlot}
+        liveDemo={liveDemo}
+        focusMode={factoryFocusMode}
+        onFocusModeChange={setFactoryFocusMode}
         onPreviewAssetSlot={previewFactoryAssetSlot}
       />
 
@@ -1939,10 +2356,11 @@ export function OperationsWorkflowOverviewPage({
             type="button"
             className="operations-detail-drawer-scrim"
             aria-label="상세 패널 닫기"
-            onClick={() => setDetailDrawerOpen(false)}
+            onClick={closeDetailDrawer}
           />
           <aside className="operations-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} monitoringDetail={drawerMonitoringDetail} monitoringDetailLoading={factorySlotPreview && !drawerAsset ? false : monitoringDetailLoading} monitoringDetailError={factorySlotPreview && !drawerAsset ? null : monitoringDetailError} sensorWindow={sensorWindow} role={role} currentUserId={currentUserId} openInspectionWorkOrder={drawerOpenInspectionWorkOrder} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerOpenInspectionWorkOrder ? "열린 WorkOrder" : drawerLifecycleSummary ? "작업 이력" : drawerClosedLoop ? "업무 기록" : "현재 판단"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerOpenInspectionWorkOrder?.event_id ?? drawerDetailEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
+            <button type="button" className="operations-detail-drawer-close" aria-label="선택 설비 상세 닫기" onClick={closeDetailDrawer}><X size={16} /></button>
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} monitoringDetail={drawerMonitoringDetail} monitoringDetailLoading={factorySlotPreview && !drawerAsset ? false : monitoringDetailLoading} monitoringDetailError={factorySlotPreview && !drawerAsset ? null : monitoringDetailError} sensorWindow={sensorWindow} liveDemo={liveDemo} role={role} currentUserId={currentUserId} openInspectionWorkOrder={drawerOpenInspectionWorkOrder} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerOpenInspectionWorkOrder ? "열린 WorkOrder" : drawerLifecycleSummary ? "작업 이력" : drawerClosedLoop ? "업무 기록" : "현재 판단"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerOpenInspectionWorkOrder?.event_id ?? drawerDetailEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -1961,6 +2379,8 @@ function MapReportFeatureSeries({
   currentValue,
   currentObservedAt,
   primary,
+  liveDemo,
+  loading,
 }: {
   title: string;
   unit: string | null;
@@ -1972,19 +2392,25 @@ function MapReportFeatureSeries({
   currentValue?: number | string | boolean | null;
   currentObservedAt?: string | null;
   primary?: boolean;
+  liveDemo?: RealtimeDemoSnapshot | null;
+  loading?: boolean;
 }) {
   const color = title.includes("진동") || title.includes("토크") ? "#a7630c" : "#285fcb";
-  const visiblePoints = filterSeriesPoints(points, currentObservedAt, windowId);
-  const numericPoints = visiblePoints.filter((point): point is SeriesDatum & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
+  const filteredPoints = filterSeriesPoints(points, currentObservedAt, windowId);
   const currentNumericValue = typeof currentValue === "number" && Number.isFinite(currentValue) ? currentValue : null;
-  if (!visiblePoints.length || !numericPoints.length) {
+  const historicalPoints = liveDemo ? aggregateSeriesByTenMinuteBucket(filteredPoints) : filteredPoints;
+  const visiblePoints: ChartSeriesDatum[] = historicalPoints;
+  const numericPoints = visiblePoints.filter((point): point is ChartSeriesDatum & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
+  if (visiblePoints.length < 2 || numericPoints.length < 2) {
     return (
       <section className="asset-series-block">
         <header className="asset-series-heading">
           <div><LineChart size={17} /><strong>{title}</strong></div>
-          <span>관측 이력 없음</span>
+          <span>{loading ? "관측 이력 로딩 중" : "관측 이력 없음"}</span>
         </header>
-        <div className="asset-chart-empty"><strong>{emptyTitle}</strong><span>{emptyDetail}</span></div>
+        {loading
+          ? <OperationsState kind="loading" title="관측 이력 로딩 중" detail={`${title} 그래프를 불러오는 중입니다.`} />
+          : <div className="asset-chart-empty"><strong>{emptyTitle}</strong><span>{emptyDetail}</span></div>}
       </section>
     );
   }
@@ -1997,9 +2423,10 @@ function MapReportFeatureSeries({
   const min = rawMinimum - rawSpan * 0.08;
   const max = rawMaximum + rawSpan * 0.08;
   const range = max - min || Number.EPSILON;
-  const chartWidth = 720;
-  const chartHeight = 282;
-  const frame = { left: 64, right: 690, top: 22, bottom: 226 };
+  const chartWidth = liveDemo ? 1040 : 900;
+  const chartHeight = 260;
+  const frame = { left: 48, right: liveDemo ? 934 : 858, top: liveDemo ? 34 : 22, bottom: 204 };
+  const forecastRight = liveDemo ? 1002 : frame.right;
   const width = frame.right - frame.left;
   const totalSlots = visiblePoints.length + (currentObservedAt ? 1 : 0);
   const height = frame.bottom - frame.top;
@@ -2027,24 +2454,84 @@ function MapReportFeatureSeries({
   const bandUpper = clamp(scale.bandUpper, min, max);
   const bandY = yAt(bandUpper);
   const bandHeight = Math.max(2, yAt(bandLower) - yAt(bandUpper));
-  const crossing = coords.find((point) => typeof point.value === "number" && typeof point.y === "number" && (point.value < scale.bandLower || point.value > scale.bandUpper));
+  const crossing = liveDemo ? null : coords.find((point) => typeof point.value === "number" && typeof point.y === "number" && (point.value < scale.bandLower || point.value > scale.bandUpper));
   const crossingText = crossing && typeof crossing.value === "number"
-    ? `최근 분포 대비 이탈 ${formatSeriesTime(crossing.observedAt)} · ${crossing.value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${unit ? ` ${unit}` : ""}`
+    ? `최근 분포 대비 이탈 ${formatSeriesTime(crossing.bucketMaxObservedAt ?? crossing.observedAt)} · ${(crossing.bucketMax ?? crossing.value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${unit ? ` ${unit}` : ""}`
     : null;
   const crossingLabelWidth = crossingText ? Math.min(260, Math.max(150, crossingText.length * 6.6 + 18)) : 0;
   const crossingLabelX = crossing && crossingText ? clamp(crossing.x - crossingLabelWidth / 2, frame.left + 6, frame.right - crossingLabelWidth - 6) : null;
   const crossingLabelY = crossing && typeof crossing.y === "number" ? frame.bottom - 10 : null;
+  const extremaCoords = coords
+    .filter((point): point is typeof point & { y: number; value: number } => typeof point.value === "number" && typeof point.y === "number");
+  const highest = extremaCoords.reduce<typeof extremaCoords[number] | null>((best, point) => {
+    if (!best) return point;
+    return (point.bucketMax ?? point.value) > (best.bucketMax ?? best.value) ? point : best;
+  }, null);
+  const lowest = extremaCoords.reduce<typeof extremaCoords[number] | null>((best, point) => {
+    if (!best) return point;
+    return (point.bucketMin ?? point.value) < (best.bucketMin ?? best.value) ? point : best;
+  }, null);
   const latestHistory = [...coords].reverse().find((point) => typeof point.value === "number" && typeof point.y === "number");
   const currentTimeLabel = currentObservedAt ? formatSeriesTime(currentObservedAt) : "현재 시간 없음";
   const currentPoint = currentNumericValue === null || !currentObservedAt ? null : { x: xAt(visiblePoints.length), y: yAt(currentNumericValue), value: currentNumericValue };
+  const livePoint = currentPoint ?? latestHistory ?? null;
+  const liveValue = livePoint && typeof livePoint.value === "number" ? livePoint.value : currentNumericValue;
+  const liveValueLabel = liveValue === null ? "값 없음" : `${liveValue.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${unit ? ` ${unit}` : ""}`;
+  const livePillWidth = Math.min(132, Math.max(56, liveValueLabel.length * 7.2 + 20));
+  const livePillX = livePoint
+    ? clamp(livePoint.x - livePillWidth / 2, frame.left + 4, forecastRight - livePillWidth - 4)
+    : forecastRight - livePillWidth - 4;
+  const livePillY = livePoint && typeof livePoint.y === "number"
+    ? clamp(livePoint.y - 38, frame.top + 3, frame.bottom - 36)
+    : frame.top + 3;
+  const recentNumericPoints = numericPoints.slice(-4);
+  const recentFirst = recentNumericPoints[0];
+  const recentLast = recentNumericPoints.at(-1);
+  const recentSlope = recentFirst && recentLast && recentNumericPoints.length > 1
+    ? (recentLast.value - recentFirst.value) / (recentNumericPoints.length - 1)
+    : 0;
+  const forecastPoints = liveDemo && livePoint && typeof livePoint.y === "number" && liveValue !== null
+    ? [1, 2, 3].map((step) => {
+      const x = frame.right + ((forecastRight - frame.right) * step) / 3;
+      const center = clamp(liveValue + recentSlope * step, min, max);
+      const spread = Math.max(range * 0.035 * step, Math.abs(liveValue || 1) * 0.012 * step);
+      return {
+        x,
+        center,
+        y: yAt(center),
+        upperY: yAt(clamp(center + spread, min, max)),
+        lowerY: yAt(clamp(center - spread, min, max)),
+      };
+    })
+    : [];
+  const forecastBandPath = forecastPoints.length
+    ? [
+      `M ${frame.right} ${livePoint?.y ?? frame.bottom}`,
+      ...forecastPoints.map((point) => `L ${point.x} ${point.upperY}`),
+      ...[...forecastPoints].reverse().map((point) => `L ${point.x} ${point.lowerY}`),
+      "Z",
+    ].join(" ")
+    : "";
+  const forecastLinePoints = livePoint && forecastPoints.length
+    ? [`${livePoint.x},${livePoint.y}`, ...forecastPoints.map((point) => `${point.x},${point.y}`)].join(" ")
+    : "";
+  const middleIndex = Math.floor((visiblePoints.length - 1) / 2);
+  const middlePoint = visiblePoints[middleIndex] ?? null;
+  const endHistoryPoint = visiblePoints.at(-1) ?? null;
+  const hitBandWidth = Math.max(12, width / Math.max(1, coords.length));
+  const xAxisY = chartHeight - 30;
+  const xAxisTitleY = chartHeight - 10;
   return (
-    <section className={primary ? "asset-series-block is-primary" : "asset-series-block"}>
+    <section className={[primary ? "asset-series-block is-primary" : "asset-series-block", liveDemo ? "is-live-chart" : ""].filter(Boolean).join(" ")}>
       <header className="asset-series-heading">
         <div><RotateCcw size={17} /><strong>{title}</strong></div>
-        <span className="asset-baseline-key"><i style={{ background: color }} />{seriesRangeLabel(visiblePoints, windowId, window)}</span>
+        <span className="asset-baseline-key"><i style={{ background: color }} />{liveDemo ? "10분 요약 라인 · 터치/호버 정확값 · NOW 실시간" : seriesRangeLabel(visiblePoints, windowId, window)}</span>
       </header>
       <svg className="asset-series-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${title} 관측 흐름`}>
         <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
+        {liveDemo ? <rect className="asset-live-sweep" x={frame.left} y={frame.top} width={width} height={height} /> : null}
+        {liveDemo ? <rect className="asset-forecast-lane" x={frame.right} y={frame.top} width={forecastRight - frame.right} height={height} /> : null}
+        <text className="asset-chart-axis-title" transform={`translate(16 ${(frame.top + frame.bottom) / 2}) rotate(-90)`} textAnchor="middle">{unit || "값"}</text>
         {ticks.map((tick) => {
           const y = yAt(tick);
           return <g key={tick}><line className="asset-chart-grid" x1={frame.left} x2={frame.right} y1={y} y2={y} /><text className="asset-chart-axis" x="58" y={y + 4} textAnchor="end">{tick.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}</text></g>;
@@ -2052,6 +2539,25 @@ function MapReportFeatureSeries({
         <rect className="asset-baseline-band" x={frame.left} y={bandY} width={width} height={bandHeight} style={{ fill: color }} />
         <line className="asset-baseline-mean" x1={frame.left} x2={frame.right} y1={yAt((scale.bandLower + scale.bandUpper) / 2)} y2={yAt((scale.bandLower + scale.bandUpper) / 2)} />
         {segments.map((segment, index) => <polyline key={`${title}-segment-${index}`} className="asset-series-line" points={segment.map((point) => `${point.x},${point.y}`).join(" ")} style={{ stroke: color }} />)}
+        {liveDemo && highest ? (
+          <g className="asset-extrema-label">
+            <circle cx={highest.x} cy={yAt(highest.bucketMax ?? highest.value)} r="3.8" style={{ fill: color }} />
+            <text x={clamp(highest.x - 30, frame.left, frame.right - 68)} y={clamp(yAt(highest.bucketMax ?? highest.value) - 10, frame.top + 12, frame.bottom - 6)}>
+              최고 {(highest.bucketMax ?? highest.value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}{unit ? ` ${unit}` : ""}
+            </text>
+          </g>
+        ) : null}
+        {liveDemo && lowest && lowest !== highest ? (
+          <g className="asset-extrema-label">
+            <circle cx={lowest.x} cy={yAt(lowest.bucketMin ?? lowest.value)} r="3.8" style={{ fill: color }} />
+            <text x={clamp(lowest.x - 30, frame.left, frame.right - 68)} y={clamp(yAt(lowest.bucketMin ?? lowest.value) + 18, frame.top + 18, frame.bottom - 4)}>
+              최저 {(lowest.bucketMin ?? lowest.value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}{unit ? ` ${unit}` : ""}
+            </text>
+          </g>
+        ) : null}
+        {forecastBandPath ? <path className="asset-forecast-band" d={forecastBandPath} /> : null}
+        {forecastLinePoints ? <polyline className="asset-forecast-line" points={forecastLinePoints} style={{ stroke: color }} /> : null}
+        {forecastPoints.length ? <text className="asset-forecast-label" x={forecastRight} y={frame.bottom - 9} textAnchor="end">단기 추세 범위</text> : null}
         {crossing && crossingText && typeof crossing.y === "number" && crossingLabelX !== null && crossingLabelY !== null ? (
           <g>
             <line className="asset-crossing-line" x1={crossing.x} x2={crossing.x} y1={crossing.y} y2={frame.bottom} style={{ stroke: color }} />
@@ -2066,16 +2572,110 @@ function MapReportFeatureSeries({
             <path className="asset-current-value-marker" d={`M ${currentPoint.x} ${currentPoint.y - 6} L ${currentPoint.x + 6} ${currentPoint.y} L ${currentPoint.x} ${currentPoint.y + 6} L ${currentPoint.x - 6} ${currentPoint.y} Z`} style={{ fill: color }} />
           </g>
         ) : null}
+        {liveDemo && livePoint && typeof livePoint.y === "number" ? (
+          <g className="asset-live-layer">
+            <line className="asset-live-cursor" x1={livePoint.x} x2={livePoint.x} y1={frame.top} y2={frame.bottom} />
+            <circle className="asset-live-ring" cx={livePoint.x} cy={livePoint.y} r="9" style={{ stroke: color }} />
+            <circle className="asset-live-dot" cx={livePoint.x} cy={livePoint.y} r="4.8" style={{ fill: color }} />
+            <g className="asset-live-value-pill is-top" transform={`translate(${livePillX} ${livePillY})`}>
+              <rect width={livePillWidth} height="26" rx="7" />
+              <text x={livePillWidth / 2} y="17" textAnchor="middle">{liveValueLabel}</text>
+            </g>
+          </g>
+        ) : null}
         {coords.map((point, index) => point.qualityStatus === "bad" || point.qualityStatus === "unknown"
           ? typeof point.y === "number"
             ? <circle key={`${point.observedAt}-${point.value}-${index}`} className="asset-quality-marker" cx={point.x} cy={point.y} r="4.4" style={{ fill: color }} />
             : <circle key={`${point.observedAt}-gap-${index}`} className="asset-gap-marker" cx={point.x} cy={frame.bottom} r="4.2" />
           : null)}
-        <text className="asset-chart-axis" x={frame.left} y="252" textAnchor="start">{formatSeriesTime(visiblePoints[0].observedAt)}</text>
-        {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y="252" textAnchor="end">현재 {currentTimeLabel}</text> : null}
-        <text className="asset-chart-axis-title" x="376" y="270" textAnchor="middle">시간</text>
+        {coords.map((point, index) => {
+          if (typeof point.value !== "number" || typeof point.y !== "number") return null;
+          const timeLabel = point.bucketStartAt && point.bucketEndAt
+            ? `${formatSeriesTime(point.bucketStartAt)}–${formatSeriesTime(point.bucketEndAt)}`
+            : formatSeriesTooltipTime(point.observedAt);
+          const valueLabel = `${point.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""}`;
+          const highLabel = point.bucketMax !== undefined && point.bucketMaxObservedAt
+            ? `고 ${point.bucketMax.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""} · ${formatSeriesTooltipTime(point.bucketMaxObservedAt)}`
+            : "";
+          const lowLabel = point.bucketMin !== undefined && point.bucketMinObservedAt
+            ? `저 ${point.bucketMin.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""} · ${formatSeriesTooltipTime(point.bucketMinObservedAt)}`
+            : "";
+          const tooltipWidth = point.bucketCount ? 254 : 184;
+          const tooltipHeight = point.bucketCount ? 52 : 33;
+          const tooltipX = clamp(point.x - tooltipWidth / 2, frame.left + 4, frame.right - tooltipWidth - 4);
+          const tooltipY = clamp(point.y - tooltipHeight - 9, frame.top + 4, frame.bottom - tooltipHeight - 4);
+          const readoutWidth = 126;
+          const readoutX = clamp(point.x - readoutWidth / 2, frame.left + 4, frame.right - readoutWidth - 4);
+          const hitBandX = clamp(point.x - hitBandWidth / 2, frame.left, frame.right - hitBandWidth);
+          return (
+            <g key={`${point.observedAt}-hit-${index}`} className="asset-chart-hover-point">
+              <rect className="asset-chart-hit-band" x={hitBandX} y={frame.top} width={hitBandWidth} height={height} />
+              <line className="asset-hover-crosshair" x1={point.x} x2={point.x} y1={frame.top} y2={frame.bottom} />
+              <g className="asset-chart-floating-readout" transform={`translate(${readoutX} ${frame.top + 3})`}>
+                <rect width={readoutWidth} height="36" rx="7" />
+                <text x={readoutWidth / 2} y="13" textAnchor="middle">{timeLabel}</text>
+                <text className="is-value" x={readoutWidth / 2} y="28" textAnchor="middle">{valueLabel}</text>
+              </g>
+              <circle
+                className="asset-chart-hit-target"
+                cx={point.x}
+                cy={point.y}
+                r="10"
+                tabIndex={0}
+                aria-label={`${timeLabel} ${valueLabel}`}
+              >
+                <title>{point.bucketCount
+                  ? `${timeLabel} · 평균 ${valueLabel} · ${highLabel} · ${lowLabel} · ${point.bucketCount}개 관측`
+                  : `${timeLabel} · ${valueLabel} · 품질 ${point.qualityStatus ?? "unknown"}`}</title>
+              </circle>
+              <g className="asset-chart-tooltip" transform={`translate(${tooltipX} ${tooltipY})`}>
+                <rect width={tooltipWidth} height={tooltipHeight} rx="6" />
+                <text x="9" y="13">{point.bucketCount ? `10분 요약 ${timeLabel}` : timeLabel}</text>
+                <text className="is-value" x="9" y="26">{point.bucketCount ? `평균 ${valueLabel}` : `${valueLabel} · ${point.qualityStatus ?? "unknown"}`}</text>
+                {point.bucketCount ? <text x="9" y="38">{highLabel}</text> : null}
+                {point.bucketCount ? <text x="9" y="49">{lowLabel}</text> : null}
+              </g>
+            </g>
+          );
+        })}
+        {currentPoint && currentObservedAt ? (
+          <g className="asset-chart-hover-point">
+            <circle className="asset-chart-hit-target" cx={currentPoint.x} cy={currentPoint.y} r="11" tabIndex={0} aria-label={`현재 ${formatSeriesTooltipTime(currentObservedAt)} ${currentPoint.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""}`}>
+              <title>{`현재 · ${formatSeriesTooltipTime(currentObservedAt)} · ${currentPoint.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ""}`}</title>
+            </circle>
+            <g className="asset-chart-tooltip" transform={`translate(${frame.right - 188} ${clamp(currentPoint.y - 42, frame.top + 4, frame.bottom - 36)})`}>
+              <rect width="184" height="33" rx="6" />
+              <text x="9" y="13">현재 · {formatSeriesTooltipTime(currentObservedAt)}</text>
+              <text className="is-value" x="9" y="26">{currentPoint.value.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}{unit ? ` ${unit}` : ""}</text>
+            </g>
+          </g>
+        ) : null}
+        <text className="asset-chart-axis" x={frame.left} y={xAxisY} textAnchor="start">{formatSeriesTime(visiblePoints[0].observedAt)}</text>
+        {middlePoint && visiblePoints.length > 2 ? <text className="asset-chart-axis" x={xAt(middleIndex)} y={xAxisY} textAnchor="middle">{formatSeriesTime(middlePoint.observedAt)}</text> : null}
+        {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y={xAxisY} textAnchor="middle">{liveDemo ? "실시간" : `현재 ${currentTimeLabel}`}</text> : endHistoryPoint ? <text className="asset-chart-axis" x={frame.right} y={xAxisY} textAnchor="end">{formatSeriesTime(endHistoryPoint.observedAt)}</text> : null}
+        {liveDemo ? <text className="asset-chart-axis" x={forecastRight} y={xAxisY} textAnchor="end">+30s</text> : null}
+        <text className="asset-chart-axis-title" x={chartWidth / 2} y={xAxisTitleY} textAnchor="middle">시간</text>
       </svg>
     </section>
+  );
+}
+
+function FeatureSeriesLoadingPlaceholder({ title }: { title: string }) {
+  return (
+    <div className="operations-feature-series-loading" aria-busy="true">
+      <OperationsState
+        kind="loading"
+        title="관측 이력 로딩 중"
+        detail={`${title}에 연결된 센서 history를 불러오는 중입니다.`}
+      />
+      {[0, 1, 2].map((index) => (
+        <div className="operations-feature-series-loading__card" key={index}>
+          <div />
+          <span />
+          <i />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -2086,6 +2686,8 @@ function FeatureSeriesCollection({
   onWindowChange,
   emptyTitle,
   emptyDetail,
+  liveDemo,
+  loading,
 }: {
   title: string;
   sensors: ReturnType<typeof sensorSeries>;
@@ -2093,8 +2695,13 @@ function FeatureSeriesCollection({
   onWindowChange: (windowId: OperationsSensorWindowId) => void;
   emptyTitle: string;
   emptyDetail: string;
+  liveDemo?: RealtimeDemoSnapshot | null;
+  loading?: boolean;
 }) {
   const visibleSensors = sensors;
+  const isInitialHistoryLoading = Boolean(
+    loading && sensors.some((sensor) => sensor.points.length === 0),
+  );
   return (
     <section className="operations-feature-series-collection" aria-label={title}>
       <header>
@@ -2114,7 +2721,9 @@ function FeatureSeriesCollection({
           ))}
         </div>
       </header>
-      {sensors.length ? (
+      {isInitialHistoryLoading ? (
+        <FeatureSeriesLoadingPlaceholder title={title} />
+      ) : sensors.length ? (
         <>
           {visibleSensors.map((sensor) => (
             <MapReportFeatureSeries
@@ -2127,18 +2736,20 @@ function FeatureSeriesCollection({
               currentValue={sensor.currentValue}
               currentObservedAt={sensor.currentObservedAt}
               primary={PRIMARY_FIELD_SENSOR_KEYS.has(sensor.id)}
+              liveDemo={liveDemo}
+              loading={loading}
               emptyTitle="관측 이력 없음"
               emptyDetail={`${sensor.label} 관측 이력이 비어 있어 임의 그래프를 표시하지 않습니다.`}
             />
           ))}
         </>
-      ) : <OperationsState kind="empty" title={emptyTitle} detail={emptyDetail} />}
+      ) : loading ? <OperationsState kind="loading" title="관측 이력 로딩 중" detail="선택 설비의 센서 그래프를 불러오는 중입니다." /> : <OperationsState kind="empty" title={emptyTitle} detail={emptyDetail} />}
     </section>
   );
 }
 
 function DerivedMetricSlots({ sensors, windowId }: { sensors: ReturnType<typeof sensorSeries>; windowId: OperationsSensorWindowId }) {
-  const derivedSensors = sensors.filter((sensor) => isDerivedFeatureKey(sensor.id) && sensor.points.length > 0);
+  const derivedSensors = sensors.filter((sensor) => isDerivedFeatureKey(sensor.id) && !isModelMetadataFeatureKey(sensor.id) && hasNumericHistoryPoints(sensor));
   return (
     <details className="operations-derived-metric-dropdown" aria-label="파생 지표 관측 흐름">
       <summary><span><LineChart size={14} />파생 지표 관측 흐름</span><b>{derivedSensors.length ? `${derivedSensors.length}개` : "미연결"}</b></summary>
@@ -2181,6 +2792,7 @@ function AssetPreviewPanel({
   monitoringDetailLoading,
   monitoringDetailError,
   sensorWindow,
+  liveDemo,
   role,
   currentUserId,
   openInspectionWorkOrder,
@@ -2221,6 +2833,7 @@ function AssetPreviewPanel({
   monitoringDetailLoading: boolean;
   monitoringDetailError: string | null;
   sensorWindow: OperationsSensorWindowId;
+  liveDemo: RealtimeDemoSnapshot;
   role: OperationsRoleLens;
   currentUserId: string;
   openInspectionWorkOrder: OpenInspectionWorkOrderReadModel | null;
@@ -2282,11 +2895,19 @@ function AssetPreviewPanel({
     : workActionHelper;
   const effectiveWorkActionDisabled = costReviewEligible || workActionDisabled;
   const featureSnapshots = sensorSeries(monitoringDetail, asset);
-  const directFeatureSnapshots = featureSnapshots.filter((sensor) => !isDerivedFeatureKey(sensor.id));
-  // Compressors expose five directly observed operational signals, including
-  // relative vibration. Keep all five on the live panel so a meaningful
-  // sensor does not disappear simply because it is fifth in the ViewModel.
-  const liveFeatureSnapshots = directFeatureSnapshots.slice(0, 5);
+  const directFeatureSnapshots = featureSnapshots.filter(isPhysicalSensorSeries);
+  const selectedLiveSnapshot = selectedAssetLiveSnapshot(asset, liveDemo);
+  const realtimeDirectFeatureSnapshots = withRealtimeCurrentValues(directFeatureSnapshots, selectedLiveSnapshot);
+  const realtimeFeatureSnapshots = withRealtimeCurrentValues(featureSnapshots, selectedLiveSnapshot);
+  const physicalHistorySnapshots = realtimeDirectFeatureSnapshots.filter(hasNumericHistoryPoints);
+  const orderedLiveFeatureSnapshots = [
+    ...LIVE_FEATURE_PRIORITY
+      .map((id) => physicalHistorySnapshots.find((sensor) => sensor.id === id))
+      .filter((sensor): sensor is ReturnType<typeof sensorSeries>[number] => Boolean(sensor)),
+    ...physicalHistorySnapshots.filter((sensor) => !LIVE_FEATURE_PRIORITY.includes(sensor.id)),
+  ];
+  const liveFeatureSnapshots = orderedLiveFeatureSnapshots
+    .slice(0, LIVE_FEATURE_CHART_LIMIT);
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
     ? detail.inspectionTargets.slice(0, 3).map((target, index) => ({
       target,
@@ -2306,7 +2927,9 @@ function AssetPreviewPanel({
     setReportOutputOpen(false);
     window.setTimeout(() => window.print(), 100);
   };
-  const agentSummaryKey = asset ? `${asset.assetId}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}` : "";
+  const agentSummaryKey = asset
+    ? `${asset.assetId}:${candidate?.event.eventId ?? ""}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}`
+    : "";
   const loadAgentSummary = async (materialize = false) => {
     if (!asset) return;
     if (materialize) setAgentSummaryMaterializing(true);
@@ -2323,7 +2946,9 @@ function AssetPreviewPanel({
     try {
       const request = {
         assetId: asset.assetId,
+        projectId,
         datasetVersionId: candidate?.event.datasetVersionId ?? null,
+        eventId,
         historyWindow: sensorWindow,
       };
       const summaryResponse = materialize
@@ -2385,7 +3010,7 @@ function AssetPreviewPanel({
       <div className="operations-asset-preview-panel">
         <div className="operations-asset-preview">
           <header>
-            <span className="operations-slot-status">설비 정보 준비 중</span>
+            <span className="operations-slot-status">설비 미연결</span>
             <div><strong>{displayFactorySlotName(slot, cell)}</strong><small>{slot.assetId} · 고장 확정 아님</small></div>
           </header>
           <WorkStatusFixedBar status={effectiveWorkStatus} actionLabel={effectiveWorkActionLabel} statusSource={workStatusSource} disabled />
@@ -2404,7 +3029,7 @@ function AssetPreviewPanel({
                 <div><dt>상태</dt><dd>상세 데이터 미연결</dd></div>
                 <div><dt>작업 ID</dt><dd>{workId}</dd></div>
                 <div><dt>관측 상세</dt><dd>상세 데이터 미연결</dd></div>
-                <div><dt>계획 기준</dt><dd>생산 영향 계산 준비 중</dd></div>
+                <div><dt>계획 기준</dt><dd>생산 영향 데이터 미연결</dd></div>
               </dl>
               <section className="operations-production-impact-block" aria-label="정상 설비 상세">
                 <header><Activity size={14} /><strong>설비 상세</strong><span>공장 배치</span></header>
@@ -2420,7 +3045,7 @@ function AssetPreviewPanel({
             <section className="operations-overview-action-panel" aria-label="정상 설비 처리">
               <header><ClipboardCheck size={14} /><strong>처리</strong><span>작업요청 없음</span></header>
               <div className="operations-action-summary-card">
-                <span className="operations-slot-status">설비 정보 준비 중</span>
+                <span className="operations-slot-status">설비 미연결</span>
                 <div>
                   <strong>{slot.label}</strong>
                   <small>작업요청 ID 없음 · 현재 조치 대상 아님</small>
@@ -2467,35 +3092,66 @@ function AssetPreviewPanel({
           <WorkStatusTimeline status={effectiveWorkStatus} lifecycleSummary={lifecycleSummary} />
           <ClosedLoopActivityTimeline timeline={activityTimeline} />
           {activeTab === "status" ? (
-            <dl className="operations-monitoring-detail-grid" aria-label="선택 설비 현재 상태">
-              <div><dt>설비명</dt><dd>{assetDisplayName}</dd></div>
-              <div><dt>현재 상태</dt><dd>{operationsMonitorStatusLabel(asset.status, effectiveWorkStatus)}</dd></div>
-              <div><dt>이상 센서</dt><dd>{factors.length ? factors.slice(0, 4).map((factor) => displaySensorLabel(factor.feature, factor.label)).join(", ") : "이상 센서 근거 없음"}</dd></div>
-              <div><dt>생산 영향</dt><dd>{planningImpact ? productionLossLabel(planningImpact.estimatedLossUnits) : displayProductionImpact(detail?.operationContext?.productionImpact)}</dd></div>
-              <div><dt>최근 정비일</dt><dd>{detail?.equipmentHistory[0]?.occurredAt ? formatTimestamp(detail.equipmentHistory[0].occurredAt) : "기록 없음"}</dd></div>
-              <div><dt>현재 조치 상태</dt><dd>{WORK_STATUS_LABEL[effectiveWorkStatus]}</dd></div>
-              <div className="is-wide"><dt>다음 액션</dt><dd>{effectiveWorkActionLabel ?? planningImpact?.nextAction ?? WORK_STATUS_ACTION[effectiveWorkStatus].label}</dd></div>
-            </dl>
-          ) : null}
-          {activeTab === "status" ? (
-            <section className="operations-live-feature-monitor operations-side-map-report" aria-label="실시간 피쳐 변화">
-              <header>
-                <LineChart size={14} />
-                <strong>실시간 피쳐 변화</strong>
-                <span className="operations-live-feed-status">최신 관측 기준 · {formatTimestamp(monitoringDetail?.assetDetailStatus?.lastUpdatedAt ?? asset.observedAt)}</span>
-              </header>
-              <FeatureSeriesCollection
-                title="핵심 센서"
-                sensors={liveFeatureSnapshots}
-                windowId={sensorWindow}
-                onWindowChange={onSensorWindowChange}
-                emptyTitle={monitoringDetailLoading ? "센서 이력 로딩 중" : "센서 이력 없음"}
-                emptyDetail={monitoringDetailError || "선택 설비의 주요 피쳐 이력이 내려오면 이 영역에서 바로 갱신됩니다."}
-              />
-              <p className="operations-live-feature-note">
-                원본 필드명 대신 한국어 현장 용어로 표시합니다. 새 관측 snapshot이 들어오면 현재값과 그래프의 마지막 지점이 갱신됩니다.
-              </p>
-            </section>
+            <>
+              <section className="operations-live-feature-monitor operations-side-map-report" aria-label="실시간 피쳐 변화">
+                <header>
+                  <LineChart size={14} />
+                  <strong>실시간 피쳐 변화</strong>
+                  <span className={`operations-live-feed-status ${selectedLiveSnapshot ? "is-hot" : ""}`}>
+                    {selectedLiveSnapshot ? "LIVE now" : "최신 관측 기준"} · {formatTimestamp(selectedLiveSnapshot?.nowAt ?? monitoringDetail?.assetDetailStatus?.lastUpdatedAt ?? asset.observedAt)}
+                  </span>
+                </header>
+                {selectedLiveSnapshot ? (
+                  <div className="operations-live-signal-strip" aria-label="방금 수신된 설비별 신호">
+                    <div className="operations-live-signal-main">
+                      <span>{selectedLiveSnapshot.sourceLabel}</span>
+                      <strong>{formatProbability(selectedLiveSnapshot.risk)} · {operationsMonitorStatusLabel(selectedLiveSnapshot.status)}</strong>
+                      <small>{selectedLiveSnapshot.signal}</small>
+                    </div>
+                    <div className="operations-live-signal-factors">
+                      {selectedLiveSnapshot.factors.length ? selectedLiveSnapshot.factors.map((factor) => (
+                        <div key={factor.id}>
+                          <span>{factor.label}</span>
+                          <strong>
+                            {factor.value === null ? "값 없음" : factor.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+                            {factor.unit ? ` ${factor.unit}` : ""}
+                          </strong>
+                          <i><b style={{ width: `${Math.min(100, Math.max(6, Math.round(Math.abs(factor.contribution) * 100)))}%` }} /></i>
+                        </div>
+                      )) : (
+                        <div>
+                          <span>위험도</span>
+                          <strong>{formatProbability(selectedLiveSnapshot.risk)}</strong>
+                          <i><b style={{ width: `${Math.round(selectedLiveSnapshot.risk * 100)}%` }} /></i>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+                <FeatureSeriesCollection
+                  title="핵심 센서"
+                  sensors={liveFeatureSnapshots}
+                  windowId={sensorWindow}
+                  onWindowChange={onSensorWindowChange}
+                  liveDemo={selectedLiveSnapshot}
+                  loading={monitoringDetailLoading}
+                  emptyTitle="관측 이력 없음"
+                  emptyDetail={monitoringDetailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
+                />
+                <p className="operations-live-feature-note">
+                  원본 필드명 대신 한국어 현장 용어로 표시합니다. LIVE 그래프는 과거 관측 이력 위에 지금 값과 단기 추세 범위를 함께 표시합니다.
+                </p>
+              </section>
+              <dl className="operations-monitoring-detail-grid" aria-label="선택 설비 현재 상태">
+                <div><dt>설비명</dt><dd>{assetDisplayName}</dd></div>
+                <div><dt>현재 상태</dt><dd>{operationsMonitorStatusLabel(asset.status, effectiveWorkStatus)}</dd></div>
+                <div><dt>이상 센서</dt><dd>{factors.length ? factors.slice(0, 4).map((factor) => displaySensorLabel(factor.feature, factor.label)).join(", ") : "이상 센서 근거 없음"}</dd></div>
+                <div><dt>생산 영향</dt><dd>{planningImpact ? productionLossLabel(planningImpact.estimatedLossUnits) : displayProductionImpact(detail?.operationContext?.productionImpact)}</dd></div>
+                <div><dt>최근 정비일</dt><dd>{detail?.equipmentHistory[0]?.occurredAt ? formatTimestamp(detail.equipmentHistory[0].occurredAt) : "기록 없음"}</dd></div>
+                <div><dt>현재 조치 상태</dt><dd>{WORK_STATUS_LABEL[effectiveWorkStatus]}</dd></div>
+                <div className="is-wide"><dt>다음 액션</dt><dd>{effectiveWorkActionLabel ?? planningImpact?.nextAction ?? WORK_STATUS_ACTION[effectiveWorkStatus].label}</dd></div>
+              </dl>
+            </>
           ) : null}
           {role === "process_manager" && activeTab === "status" ? (
             <>
@@ -2759,7 +3415,7 @@ function AssetPreviewPanel({
               </section>
 
               <section className="operations-overview-report-graph operations-side-map-report" aria-label="요약 리포트 센서 관측 그래프">
-                <header><LineChart size={14} /><strong>요약 리포트 관측 흐름</strong><span>{detailLoading ? "불러오는 중" : detailError ? "상세 연결 실패" : "동일 관측 기준"}</span></header>
+                <header><LineChart size={14} /><strong>요약 리포트 관측 흐름</strong><span>{monitoringDetailLoading ? "불러오는 중" : monitoringDetailError ? "상세 연결 실패" : "최신 관측 기준"}</span></header>
                 <div className="operations-overview-risk-meter">
                   <div><span>위험 예측 확률</span><strong>{riskPercent === null ? "-" : `${riskPercent}%`}</strong></div>
                   <i aria-hidden="true"><b style={{ width: `${riskPercent ?? 0}%` }} /></i>
@@ -2767,13 +3423,15 @@ function AssetPreviewPanel({
                 </div>
                 <FeatureSeriesCollection
                   title="센서 관측 흐름"
-                  sensors={directFeatureSnapshots}
+                  sensors={liveFeatureSnapshots}
                   windowId={sensorWindow}
                   onWindowChange={onSensorWindowChange}
+                  liveDemo={selectedLiveSnapshot}
+                  loading={monitoringDetailLoading}
                   emptyTitle="센서 이력 없음"
-                  emptyDetail="현재 화면 데이터에는 표시할 센서 관측 이력이 없습니다."
+                  emptyDetail={monitoringDetailError || "현재 화면 데이터에는 표시할 센서 관측 이력이 없습니다."}
                 />
-                <DerivedMetricSlots sensors={featureSnapshots} windowId={sensorWindow} />
+                <DerivedMetricSlots sensors={realtimeFeatureSnapshots} windowId={sensorWindow} />
               </section>
             </>
           ) : null}

@@ -250,8 +250,8 @@ export function groundedReliabilityAssistantAnswer(
     const items = context?.evidenceItems?.filter(Boolean) ?? [];
     if (items.length) {
       return english
-        ? `${asset}: the current connected evidence is ${items.slice(0, 4).join("; ")}. ${context?.retrievalCount ? `${context.retrievalCount} SOP guidance result(s) are also linked through ${context.retrievalProvider ?? "the retrieval adapter"}.` : ""}`
-        : `${asset}의 현재 연결 근거는 ${items.slice(0, 4).join(" · ")}입니다.${context?.retrievalCount ? ` 또한 ${context.retrievalProvider ?? "retrieval adapter"}를 통해 SOP guidance ${context.retrievalCount}건이 연결되어 있습니다.` : ""}`;
+        ? `${asset}: the current connected evidence is ${items.slice(0, 4).join("; ")}. ${context?.retrievalCount ? `${context.retrievalCount} governed SOP guidance result(s) are also linked.` : ""}`
+        : `${asset}의 현재 연결 근거는 ${items.slice(0, 4).join(" · ")}입니다.${context?.retrievalCount ? ` 또한 검증된 SOP 안내 ${context.retrievalCount}건이 연결되어 있습니다.` : ""}`;
     }
   }
 

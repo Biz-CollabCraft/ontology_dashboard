@@ -183,7 +183,8 @@ class PipelineService:
                 try:
                     rel = p.relative_to(root.resolve())
                     if root.resolve() == PATHS.data_dir.resolve():
-                        return f"data/{str(rel).replace('\\\\', '/')}"
+                        normalized_rel = str(rel).replace("\\", "/")
+                        return f"data/{normalized_rel}"
                     return str(rel).replace("\\", "/")
                 except ValueError:
                     pass

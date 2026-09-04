@@ -25,6 +25,7 @@ describe("Operations URL selection contract", () => {
     expect(selection).toEqual({
       projectId: "project-a",
       view: "operations",
+      surface: null,
       dashboard: "workflow",
       reportTab: "status-map",
       assetId: "CNC-2",
@@ -85,6 +86,7 @@ describe("Operations URL selection contract", () => {
     const query = selectionSearch({
       projectId: "project-a",
       view: "reports",
+      surface: "report-draft",
       dashboard: "workflow",
       reportTab: "inspection-request",
       role: "process_manager",
@@ -94,9 +96,53 @@ describe("Operations URL selection contract", () => {
     });
     const params = new URLSearchParams(query);
     expect(params.get("view")).toBe("reports");
+    expect(params.get("surface")).toBeNull();
     expect(params.get("dashboard")).toBe("workflow");
     expect(params.get("report")).toBe("inspection-request");
     expect(params.get("asset_id")).toBe("CNC S01");
     expect(params.get("event_id")).toBe("EVENT#1");
+  });
+
+  it("persists semantic role surface independently from the legacy view", () => {
+    const selection = parseOperationsSelection({
+      projectId: "project-a",
+      search: "?surface=maintenance-approval&view=operations",
+      defaultRole: "process_manager",
+      defaultSurface: "operations-status",
+    });
+    expect(selection.surface).toBe("maintenance-approval");
+    expect(selection.view).toBe("operations");
+  });
+
+  it("accepts the semantic surface from the route path when the query omits it", () => {
+    const selection = parseOperationsSelection({
+      projectId: "project-a",
+      search: "?view=objects",
+      defaultRole: "process_manager",
+      defaultSurface: "factory-status",
+      pathSurface: "production-impact",
+    });
+    expect(selection.surface).toBe("production-impact");
+    expect(selection.view).toBe("objects");
+  });
+
+  it("does not restore a stale selected Case when a broad workspace URL is opened", () => {
+    const selection = parseOperationsSelection({
+      projectId: "project-a",
+      search: "?view=overview&dashboard=workflow&role=process_manager&workspace_id=workspace-a",
+      defaultRole: "process_manager",
+      defaultSurface: "factory-status",
+      pathSurface: "factory-status",
+      sessionValue: JSON.stringify({
+        view: "overview",
+        surface: "factory-status",
+        assetId: "CNC-S04-L04-01",
+        eventId: "RESULT#OLD-SESSION",
+        workspaceId: "workspace-a",
+      }),
+    });
+    expect(selection.surface).toBe("factory-status");
+    expect(selection.assetId).toBeNull();
+    expect(selection.eventId).toBeNull();
   });
 });

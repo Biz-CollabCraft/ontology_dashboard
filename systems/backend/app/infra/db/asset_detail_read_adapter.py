@@ -116,6 +116,68 @@ class PostgreSQLAssetDetailReadAdapter:
         artifact["source_sha256"] = str(row["source_sha256"])
         return artifact
 
+    def latest_result_artifact_references(self, **query: Any) -> list[dict[str, Any]]:
+        context = self.repository.resolve_version(
+            organization_id=query["organization_id"],
+            project_id=query["project_id"],
+            workspace_id=query["workspace_id"],
+            dataset_version_id=query.get("dataset_version_id"),
+        )
+        source_contract, _total, rows = self.repository.latest_result_rows(
+            organization_id=query["organization_id"],
+            project_id=query["project_id"],
+            workspace_id=query["workspace_id"],
+            dataset_version_id=str(context["id"]),
+            asset_id=None,
+            site_id=None,
+            cell_id=None,
+            asset_type=None,
+            status_grade=None,
+            offset=0,
+            limit=max(1, int(query.get("limit") or 20)),
+        )
+        if source_contract != "result_artifact":
+            return []
+        candidates = []
+        for row in rows:
+            payload = row.get("prediction_result_payload") or {}
+            provenance = payload.get("provenance") if isinstance(payload, dict) else {}
+            lineage = payload.get("lineage") if isinstance(payload, dict) else {}
+            source_context = (
+                (lineage or {}).get("source_context") or {}
+                if isinstance(lineage, dict)
+                else {}
+            )
+            source_lineage = source_context.get("lineage") or {}
+            maintenance_event_id = (
+                (provenance or {}).get("maintenance_event_id")
+                or source_lineage.get("maintenance_event_id")
+            )
+            is_post_maintenance = bool(maintenance_event_id)
+            candidates.append(
+                {
+                    "source_kind": (
+                        "post_maintenance_feedback"
+                        if is_post_maintenance
+                        else "live_result"
+                    ),
+                    "asset_id": str(row["asset_id"]),
+                    "event_id": str(row["artifact_id"]),
+                    "dataset_version_id": str(row["dataset_version_id"]),
+                    "observed_at": row["observed_at"].isoformat(),
+                    "source_sha256": str(row["source_sha256"]),
+                    "lineage_event_id": (
+                        str(maintenance_event_id) if maintenance_event_id else None
+                    ),
+                    "stale_reason": (
+                        "post_maintenance_lineage_changed"
+                        if is_post_maintenance
+                        else "live_product_result_changed"
+                    ),
+                }
+            )
+        return candidates
+
     def feature_series(self, **query: Any) -> dict[str, dict[str, Any]]:
         rows = self.repository.observation_rows(
             organization_id=query["organization_id"],

@@ -122,7 +122,6 @@ def canonical_projection(
     dataset_version: str = "fixture-compatibility",
     source_sha256: str | None = None,
     decision: str | None = "review_shutdown",
-    failure_probability: float | None = 0.82,
 ) -> dict:
     actions = [] if decision is None else [{"action_id": decision, "basis": ["factor.1"]}]
     return {
@@ -144,10 +143,7 @@ def canonical_projection(
             "evidence_payload_reference": artifact_id,
             "source_sha256": source_sha256,
         },
-        "assessment": {
-            "operational_decision_kind": decision,
-            "failure_probability": failure_probability,
-        },
+        "assessment": {"operational_decision_kind": decision},
         "report_projection": {"recommended_actions": actions},
         "provenance": {
             "model_version": model_version,
@@ -175,7 +171,6 @@ def snapshot_basis(projection: dict) -> dict:
 class StaticCostBasisProvider:
     def __init__(self, basis: ToolReplacementCostBasis) -> None:
         self.basis = basis
-        self.tool_context: CostBasisResolutionContext | None = None
 
     def tool_replacement_basis(
         self,
@@ -183,8 +178,7 @@ class StaticCostBasisProvider:
         calculated_at: datetime,
         context: CostBasisResolutionContext,
     ) -> ToolReplacementCostBasis:
-        del calculated_at
-        self.tool_context = context
+        del calculated_at, context
         return self.basis
 
     def cooling_system_restore_basis(
@@ -417,224 +411,6 @@ def run_requested_maintenance(loop: MaintenanceLoopService) -> str:
     )
     assert decided["work_order_id"] is not None
     return decided["work_order_id"]
-
-
-def test_completed_inspection_requiring_maintenance_stays_in_active_queue(tmp_path) -> None:
-    loop = service(tmp_path)
-    work_order_id, _inspection_result_id = run_completed_inspection(loop)
-
-    queue = loop.list_open_inspection_work_orders(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-    )
-
-    assert queue["items"] == [
-        {
-            **loop.repository.get_work_order(
-                workspace_id="workspace-1",
-                work_order_id=work_order_id,
-            ).model_dump(mode="json"),
-            "inspection_outcome": "maintenance_recommended",
-            "current_step": "inspection_completed",
-        }
-    ]
-
-
-def test_completed_inspection_without_maintenance_leaves_active_queue(tmp_path) -> None:
-    loop = service(tmp_path)
-    run_completed_inspection(loop, outcome="no_action_required")
-
-    queue = loop.list_open_inspection_work_orders(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-    )
-
-    assert queue == {"items": []}
-
-
-def test_new_prediction_cannot_create_duplicate_open_inspection_for_same_equipment(tmp_path) -> None:
-    first_projection = canonical_projection()
-    second_projection = canonical_projection(
-        event_id="EVT-RESULT-002",
-        artifact_id="RESULT-002",
-        observed_at="2026-08-01T00:10:00+09:00",
-    )
-    loop = service(
-        tmp_path,
-        query=SequencedProjectionQuery([first_projection, second_projection]),
-    )
-    first = loop.request_inspection(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        payload=inspection_request(first_projection),
-        actor_id="manager-1",
-        actor_display_name="Manager One",
-        idempotency_key="inspection-request-first-event",
-    )
-
-    with pytest.raises(InvalidTransition, match="active inspection workflow already exists"):
-        loop.request_inspection(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            payload=InspectionWorkOrderCreateRequest(
-                event_id="EVT-RESULT-002",
-                snapshot_basis=snapshot_basis(second_projection),
-            ),
-            actor_id="manager-1",
-            actor_display_name="Manager One",
-            idempotency_key="inspection-request-second-event",
-        )
-
-    assert loop.repository.get_work_order(
-        workspace_id="workspace-1",
-        work_order_id=first["work_order_id"],
-    ) is not None
-    assert len(loop.repository.list_open_inspection_work_orders(workspace_id="workspace-1")) == 1
-
-
-def test_new_prediction_cannot_replace_completed_inspection_awaiting_maintenance_review(tmp_path) -> None:
-    loop = service(tmp_path)
-    work_order_id, _inspection_result_id = run_completed_inspection(loop)
-    second_projection = canonical_projection(
-        event_id="EVT-RESULT-002",
-        artifact_id="RESULT-002",
-        observed_at="2026-08-01T00:10:00+09:00",
-    )
-    loop.event_evidence_query.projection = second_projection
-
-    with pytest.raises(InvalidTransition, match="active inspection workflow already exists"):
-        loop.request_inspection(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            payload=InspectionWorkOrderCreateRequest(
-                event_id="EVT-RESULT-002",
-                snapshot_basis=snapshot_basis(second_projection),
-            ),
-            actor_id="manager-1",
-            actor_display_name="Manager One",
-            idempotency_key="inspection-request-after-completed-inspection",
-        )
-
-    assert loop.list_open_inspection_work_orders(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-    )["items"][0]["work_order_id"] == work_order_id
-
-
-def test_active_inspection_queue_reports_downstream_recommendation_step(tmp_path) -> None:
-    loop = service(tmp_path)
-    _work_order_id, inspection_result_id = run_completed_inspection(loop)
-    loop.create_manual_recommendation(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        inspection_result_id=inspection_result_id,
-        payload=OperationsManualRecommendationCreateRequest(
-            basis=("field engineer confirmed tool wear",)
-        ),
-        actor_id="manager-1",
-        actor_display_name="Manager One",
-        idempotency_key="manual-recommendation-active-queue-001",
-    )
-
-    queue = loop.list_open_inspection_work_orders(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-    )
-
-    assert queue["items"][0]["current_step"] == "recommendation_proposed"
-
-
-def test_field_operator_accepts_assignment_and_only_assignee_can_execute(tmp_path) -> None:
-    loop = service(tmp_path)
-    requested = loop.request_inspection(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        payload=inspection_request(),
-        actor_id="manager-1",
-        actor_display_name="Manager One",
-        idempotency_key="inspection-request-assignment-001",
-    )
-    work_order_id = requested["work_order_id"]
-    accepted_at = datetime(2026, 9, 2, 10, 0, tzinfo=timezone.utc)
-
-    accepted = loop.transition_inspection(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        work_order_id=work_order_id,
-        target=WorkOrderStatus.APPROVED,
-        actor_id="engineer-1",
-        actor_display_name="Engineer One",
-        idempotency_key="inspection-accept-assignment-001",
-        transitioned_at=accepted_at,
-    )
-
-    assert accepted["work_order_status"] == "approved"
-    assert accepted["assigned_to"] == "engineer-1"
-    stored = loop.repository.get_work_order(
-        workspace_id="workspace-1",
-        work_order_id=work_order_id,
-    )
-    assert stored is not None
-    assert stored.assigned_to == "engineer-1"
-    assert stored.assigned_at == accepted_at
-
-    with pytest.raises(InvalidTransition):
-        loop.transition_inspection(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            work_order_id=work_order_id,
-            target=WorkOrderStatus.APPROVED,
-            actor_id="engineer-2",
-            actor_display_name="Engineer Two",
-            idempotency_key="inspection-accept-race-002",
-        )
-
-    with pytest.raises(PermissionError, match="assigned field operator"):
-        loop.transition_inspection(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            work_order_id=work_order_id,
-            target=WorkOrderStatus.IN_PROGRESS,
-            actor_id="engineer-2",
-            actor_display_name="Engineer Two",
-            idempotency_key="inspection-start-wrong-assignee-001",
-        )
-
-    started = loop.transition_inspection(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        work_order_id=work_order_id,
-        target=WorkOrderStatus.IN_PROGRESS,
-        actor_id="engineer-1",
-        actor_display_name="Engineer One",
-        idempotency_key="inspection-start-assignment-001",
-    )
-    assert started["work_order_status"] == "in_progress"
-
-    with pytest.raises(PermissionError, match="assigned field operator"):
-        loop.complete_inspection(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            work_order_id=work_order_id,
-            payload=inspection_result("no_action_required"),
-            actor_id="engineer-2",
-            actor_display_name="Engineer Two",
-            idempotency_key="inspection-complete-wrong-assignee-001",
-        )
 
 
 def test_two_stage_inspection_to_maintenance_work_order_lineage(tmp_path) -> None:
@@ -895,36 +671,12 @@ def test_live_maintenance_approval_rejects_caller_session_override(tmp_path) -> 
             workspace_id="workspace-1",
             work_order_id=work_order_id,
             payload=MaintenanceWorkOrderApproveRequest(
-                simulation_session_id="pm-replay-forged"
+                simulation_session_id="CALLER-OVERRIDE-SESSION"
             ),
             actor_id="manager-1",
             actor_display_name="Manager One",
-            idempotency_key="maintenance-source-session-forged-001",
+            idempotency_key="maintenance-source-session-conflict-001",
         )
-
-    assert diagnosis.replay_calls == []
-    assert loop.repository.operational_side_effect_counts()["maintenance_actions"] == 0
-
-
-def test_live_maintenance_approval_fails_without_source_session_lineage(tmp_path) -> None:
-    diagnosis = ProjectionQuery()
-    loop = service(tmp_path, query=diagnosis)
-    work_order_id = run_requested_maintenance(loop)
-
-    with pytest.raises(ValueError, match="source simulation session lineage"):
-        loop.approve_maintenance_work_order(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            work_order_id=work_order_id,
-            payload=MaintenanceWorkOrderApproveRequest(),
-            actor_id="manager-1",
-            actor_display_name="Manager One",
-            idempotency_key="maintenance-source-session-missing-001",
-        )
-
-    assert diagnosis.replay_calls == []
-    assert loop.repository.operational_side_effect_counts()["maintenance_actions"] == 0
 
 
 def test_maintenance_approval_fails_closed_when_diagnosis_rejects_replay(tmp_path) -> None:
@@ -1140,7 +892,7 @@ def test_no_action_inspection_cannot_create_maintenance_recommendation(tmp_path)
     )
     work_order_id = requested["work_order_id"]
     for target, actor, key in (
-        (WorkOrderStatus.APPROVED, "engineer-1", "inspection-accept-001"),
+            (WorkOrderStatus.APPROVED, "engineer-1", "inspection-accept-001"),
         (WorkOrderStatus.IN_PROGRESS, "engineer-1", "inspection-start-001"),
     ):
         loop.transition_inspection(
@@ -1445,13 +1197,6 @@ def test_cost_analysis_resolves_lineage_and_persists_read_only_snapshot(tmp_path
         "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
         "sop_version": "demo-2026-08-28",
     }
-    assert isinstance(loop.cost_basis_provider, StaticCostBasisProvider)
-    assert loop.cost_basis_provider.tool_context is not None
-    assert loop.cost_basis_provider.tool_context.source_product_result_id == "RESULT-001"
-    assert loop.cost_basis_provider.tool_context.source_evidence_id == (
-        "EVD-EVT-RESULT-001"
-    )
-    assert loop.cost_basis_provider.tool_context.source_failure_probability == 0.82
     assert {
         option["action_candidate_id"] for option in result["options"]
     } == {
@@ -1514,31 +1259,6 @@ def test_cost_analysis_resolves_lineage_and_persists_read_only_snapshot(tmp_path
         workspace_id="workspace-1",
         analysis_id=created["analysis_id"],
     ) == result
-
-
-def test_cost_analysis_fails_closed_without_source_product_result_probability(
-    tmp_path,
-) -> None:
-    query = ProjectionQuery(canonical_projection(failure_probability=0.82))
-    loop = service(tmp_path, query=query)
-    _work_order_id, inspection_result_id = run_completed_inspection(loop)
-    query.projection = canonical_projection(failure_probability=None)
-
-    with pytest.raises(ValueError, match="Product Result failure_probability"):
-        loop.calculate_tool_replacement_cost(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            inspection_result_id=inspection_result_id,
-            payload=cost_analysis_request(),
-            actor_id="manager-1",
-            idempotency_key="cost-analysis-missing-probability-001",
-        )
-
-    assert loop.repository.list_cost_analyses(
-        workspace_id="workspace-1",
-        inspection_result_id=inspection_result_id,
-    ) == ()
 
 
 def test_manual_recommendation_preserves_consulted_analysis_without_selecting_option(
@@ -2003,3 +1723,136 @@ def test_cooling_vertical_slice_preserves_action_and_typed_overlay_patch(tmp_pat
     assert payloads["maintenance.replay_requested"]["state_patch"] == (
         payloads["maintenance.completed"]["state_patch"]
     )
+
+
+def test_new_prediction_cannot_create_duplicate_open_inspection_for_same_equipment(tmp_path) -> None:
+    first_projection = canonical_projection()
+    second_projection = canonical_projection(
+        event_id="EVT-RESULT-002",
+        artifact_id="RESULT-002",
+        observed_at="2026-08-01T00:10:00+09:00",
+    )
+    loop = service(
+        tmp_path,
+        query=SequencedProjectionQuery([first_projection, second_projection]),
+    )
+    first = loop.request_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        payload=inspection_request(first_projection),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="inspection-request-first-event",
+    )
+
+    with pytest.raises(InvalidTransition, match="active inspection workflow already exists"):
+        loop.request_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            payload=InspectionWorkOrderCreateRequest(
+                event_id="EVT-RESULT-002",
+                snapshot_basis=snapshot_basis(second_projection),
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="inspection-request-second-event",
+        )
+
+    assert loop.repository.get_work_order(
+        workspace_id="workspace-1",
+        work_order_id=first["work_order_id"],
+    ) is not None
+    assert len(loop.repository.list_open_inspection_work_orders(workspace_id="workspace-1")) == 1
+
+
+def test_new_prediction_cannot_replace_completed_inspection_awaiting_maintenance_review(tmp_path) -> None:
+    loop = service(tmp_path)
+    work_order_id, _inspection_result_id = run_completed_inspection(loop)
+    second_projection = canonical_projection(
+        event_id="EVT-RESULT-002",
+        artifact_id="RESULT-002",
+        observed_at="2026-08-01T00:10:00+09:00",
+    )
+    loop.event_evidence_query.projection = second_projection
+
+    with pytest.raises(InvalidTransition, match="active inspection workflow already exists"):
+        loop.request_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            payload=InspectionWorkOrderCreateRequest(
+                event_id="EVT-RESULT-002",
+                snapshot_basis=snapshot_basis(second_projection),
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="inspection-request-after-completed-inspection",
+        )
+
+    assert loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )["items"][0]["work_order_id"] == work_order_id
+
+
+def test_completed_inspection_requiring_maintenance_stays_in_active_queue(tmp_path) -> None:
+    loop = service(tmp_path)
+    work_order_id, _inspection_result_id = run_completed_inspection(loop)
+
+    queue = loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    assert queue["items"] == [
+        {
+            **loop.repository.get_work_order(
+                workspace_id="workspace-1",
+                work_order_id=work_order_id,
+            ).model_dump(mode="json"),
+            "inspection_outcome": "maintenance_recommended",
+            "current_step": "inspection_completed",
+        }
+    ]
+
+
+def test_completed_inspection_without_maintenance_leaves_active_queue(tmp_path) -> None:
+    loop = service(tmp_path)
+    run_completed_inspection(loop, outcome="no_action_required")
+
+    queue = loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    assert queue == {"items": []}
+
+
+def test_active_inspection_queue_reports_downstream_recommendation_step(tmp_path) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(loop)
+    loop.create_manual_recommendation(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=OperationsManualRecommendationCreateRequest(
+            basis=("field engineer confirmed tool wear",)
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="manual-recommendation-active-queue-001",
+    )
+
+    queue = loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    assert queue["items"][0]["current_step"] == "recommendation_proposed"

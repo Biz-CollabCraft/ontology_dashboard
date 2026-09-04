@@ -30,7 +30,6 @@ from .cost_analysis_schema import (
     CostAnalysisBasis,
     MaintenanceActionCode,
 )
-from .cost_basis import CostBasisResolutionContext
 from .cost_calculator import (
     MaintenanceCostAnalysisInput,
     calculate_maintenance_cost_scenarios,
@@ -45,6 +44,7 @@ from .integration import (
 )
 from .maintenance_domain import (
     InvalidTransition,
+    SourceSimulationSessionUnavailable,
     apply_recommendation_decision,
     create_inspection_work_order,
     create_operations_manual_recommendation,
@@ -675,8 +675,7 @@ class MaintenanceLoopService:
             item
             for item in lineage.get("recommendations") or []
             if item.get("recommendation_origin") == "operations_manual"
-            and item.get("source_inspection_work_order_id")
-            == work_order.work_order_id
+            and item.get("source_inspection_work_order_id") == work_order.work_order_id
         ]
         if manual_recommendations:
             return "recommendation_proposed"
@@ -950,9 +949,8 @@ class MaintenanceLoopService:
 
         Scope, equipment, Diagnosis lineage, and Action candidate identity are
         resolved from canonical Maintenance records. TOOL_REPLACEMENT economic
-        inputs come from the versioned Backend provider, while its no-action
-        probability is read from the authorized source Product Result. The
-        caller supplies only the Action and the SOP reference it consulted.
+        inputs come from the versioned Backend provider; the caller supplies
+        only the Action and the SOP reference it consulted.
         """
 
         inspection_result = self.repository.get_inspection_result(
@@ -1015,51 +1013,6 @@ class MaintenanceLoopService:
         resolution_context = derive_cost_basis_resolution_context(inspection_result)
         resolution_context.require_complete_for(action_code.value)
         if action_code is MaintenanceActionCode.TOOL_REPLACEMENT:
-            projection = self._event_evidence_projection(
-                organization_id=organization_id,
-                project_id=project_id,
-                workspace_id=workspace_id,
-                event_id=inspection_result.event_id,
-            )
-            subject = projection.get("subject")
-            artifact = projection.get("artifact_reference")
-            assessment = projection.get("assessment")
-            if not all(
-                isinstance(value, Mapping)
-                for value in (subject, artifact, assessment)
-            ):
-                raise ValueError(
-                    "Event Evidence Projection is missing cost probability sections"
-                )
-            if (
-                self._required_text(artifact, "artifact_id")
-                != source_product_result_id
-            ):
-                raise ValueError("cost analysis Product Result lineage mismatch")
-            if self._required_text(projection, "evidence_id") != source_evidence_id:
-                raise ValueError("cost analysis Evidence lineage mismatch")
-            if (
-                self._required_text(subject, "equipment_id")
-                != inspection_result.asset_id
-            ):
-                raise ValueError("cost analysis equipment identity mismatch")
-            failure_probability = assessment.get("failure_probability")
-            if (
-                isinstance(failure_probability, bool)
-                or not isinstance(failure_probability, (int, float))
-                or not 0 <= float(failure_probability) <= 1
-            ):
-                raise ValueError(
-                    "cost analysis requires a valid source Product Result failure_probability"
-                )
-            resolution_context = CostBasisResolutionContext.model_validate(
-                {
-                    **resolution_context.model_dump(),
-                    "source_product_result_id": source_product_result_id,
-                    "source_evidence_id": source_evidence_id,
-                    "source_failure_probability": float(failure_probability),
-                }
-            )
             cost_basis = self.cost_basis_provider.tool_replacement_basis(
                 calculated_at=timestamp,
                 context=resolution_context,
@@ -1312,29 +1265,20 @@ class MaintenanceLoopService:
         )
         if recommendation is None or recommendation.action_code is None:
             raise ValueError("authorized maintenance recommendation is unavailable")
-        source_product_result_id = recommendation.source_product_result_id
 
-        resolver = getattr(
-            self.replay_session_query,
-            "resolve_maintenance_source_session",
-            None,
+        source_binding = self.replay_session_query.resolve_maintenance_source_session(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            source_product_result_id=recommendation.source_product_result_id,
+            equipment_id=work_order.equipment_id,
         )
-        source_binding = None
-        if callable(resolver):
-            source_binding = resolver(
-                organization_id=organization_id,
-                project_id=project_id,
-                workspace_id=workspace_id,
-                source_product_result_id=source_product_result_id,
-                equipment_id=work_order.equipment_id,
-            )
-
         if source_binding is not None:
             replay_binding = source_binding
         elif payload.simulation_session_id is not None:
-            # Compatibility is limited to Product Results that predate source
-            # simulation lineage.  A caller-supplied Replay Session can never
-            # override lineage already recorded by a live Product Result.
+            # Historical Product Results may predate source-session lineage.
+            # Compatibility never overrides lineage already recorded by a
+            # current live Product Result.
             replay_binding = self.replay_session_query.resolve_maintenance_replay_session(
                 organization_id=organization_id,
                 project_id=project_id,
@@ -1343,11 +1287,7 @@ class MaintenanceLoopService:
                 equipment_id=work_order.equipment_id,
             )
         else:
-            if not callable(resolver):
-                raise ValueError(
-                    "Diagnosis source simulation session resolution is unavailable"
-                )
-            raise ValueError(
+            raise SourceSimulationSessionUnavailable(
                 "Product Result does not contain source simulation session lineage"
             )
         if not isinstance(replay_binding, Mapping):
@@ -1604,6 +1544,44 @@ class MaintenanceLoopService:
             ),
         )
 
+    def _post_maintenance_runtime_state(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        lineage: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        maintenance_events = list(lineage.get("maintenance_events") or [])
+        if not maintenance_events or self.replay_session_query is None:
+            return None
+        resolver = getattr(
+            self.replay_session_query,
+            "post_maintenance_runtime_status",
+            None,
+        )
+        if not callable(resolver):
+            return None
+        maintenance_event_id = maintenance_events[-1].get("maintenance_event_id")
+        work_orders = list(lineage.get("work_orders") or [])
+        asset_id = next(
+            (
+                item.get("asset_id") or item.get("equipment_id")
+                for item in reversed(work_orders)
+                if item.get("asset_id") or item.get("equipment_id")
+            ),
+            None,
+        )
+        if not maintenance_event_id or not asset_id:
+            return None
+        return resolver(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=str(asset_id),
+            maintenance_event_id=str(maintenance_event_id),
+        )
+
     def event_lineage(
         self,
         *,
@@ -1634,6 +1612,16 @@ class MaintenanceLoopService:
                 ):
                     if record.get(field) != expected:
                         raise ValueError(f"{field} scope mismatch")
+        runtime_state = self._post_maintenance_runtime_state(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            lineage=lineage,
+        )
+        lineage["runtime_state"] = runtime_state
+        lineage["runtime_status"] = (
+            runtime_state.get("status") if runtime_state else None
+        )
         return lineage
 
 

@@ -7,7 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ExportFormat = Literal["json", "csv", "pdf"]
 ExportScope = Literal["dashboard", "event", "role_workspace"]
-Role = Literal["manager", "engineer"]
+Role = Literal["manager", "engineer", "executive"]
+ReportType = Literal[
+    "inspection-summary",
+    "operations-decision",
+    "executive-brief",
+    "maintenance-effect",
+    "weekly-risk",
+]
 AppLocale = Literal["ko-KR", "en-US"]
 ReportContentOrigin = Literal["generated", "edited", "translated"]
 
@@ -36,6 +43,7 @@ class GroundedReport(StrictModel):
     report_id: str
     event_id: str
     role: Role
+    report_type: ReportType
     locale: AppLocale = "ko-KR"
     mode: Literal["deterministic", "llm", "deterministic_fallback"]
     headline: str
@@ -52,6 +60,7 @@ class GroundedReport(StrictModel):
 
 class ReportRequest(StrictModel):
     role: Role
+    report_type: ReportType | None = None
     locale: AppLocale = "ko-KR"
     use_llm: bool = True
 

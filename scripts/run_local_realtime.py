@@ -22,12 +22,38 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-GEN_DATA_ROOT = ROOT.parent / "gen_data"
+
+
+def _resolve_gen_data_root() -> Path:
+    candidates = []
+    if os.getenv("GEN_DATA_ROOT"):
+        candidates.append(Path(os.environ["GEN_DATA_ROOT"]).expanduser())
+    candidates.extend([ROOT.parent / "gen_data", ROOT.parent / "gen-data"])
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if (resolved / "app" / "main.py").is_file() and (
+            resolved / "canonical" / "dataset" / "dataset_manifest.json"
+        ).is_file():
+            return resolved
+    checked = ", ".join(str(candidate) for candidate in candidates)
+    raise RuntimeError(
+        "gen_data runtime root not found. Set GEN_DATA_ROOT or place it next to "
+        f"ontology-dashboard as gen-data/gen_data. Checked: {checked}"
+    )
+
+
+GEN_DATA_ROOT = _resolve_gen_data_root()
 LIVE_SOURCE_VERSION = "gen-data-wall-clock-live-v2"
 OBSERVATION_INTERVAL_MINUTES = 10
-MODEL_HISTORY_ROWS = 36
+MODEL_MINIMUM_HISTORY_ROWS = 36
 DEMO_ASSET_COUNT = 100
-DEFAULT_INITIAL_HISTORY_TICKS = 1008
+MODEL_MINIMUM_HISTORY_HOURS = (
+    MODEL_MINIMUM_HISTORY_ROWS * OBSERVATION_INTERVAL_MINUTES // 60
+)
+DEFAULT_HISTORY_BACKFILL_HOURS = 168
+# Backward-compatible import name for older local demo helpers.  The value is
+# historical backfill, not the model warm-up requirement.
+DEFAULT_INITIAL_HISTORY_HOURS = DEFAULT_HISTORY_BACKFILL_HOURS
 DEFAULT_SIMULATION_HOURS = 720
 
 
@@ -63,7 +89,7 @@ def _wait_database(database_url: str, *, seconds: int = 90) -> None:
 
 
 def _bootstrap_database(*, python: str, database_url: str, base_env: dict[str, str]) -> None:
-    """Create schema and demo scope before Canonical package ingestion."""
+    """Create the schema and demo identity scope before package ingestion."""
     _wait_database(database_url)
     subprocess.run(
         [python, "-m", "app.migrate"],
@@ -174,30 +200,25 @@ def _simulation_start_at(
     now: datetime,
     latest_observed_at: datetime | None,
     interval_minutes: int = 10,
-    initial_history_hours: int = (
-        OBSERVATION_INTERVAL_MINUTES * DEFAULT_INITIAL_HISTORY_TICKS // 60
-    ),
+    history_backfill_hours: int = MODEL_MINIMUM_HISTORY_HOURS,
 ) -> datetime:
     """Choose a cadence-safe start without mixing histories from prior sessions."""
     if latest_observed_at is not None:
         return latest_observed_at + timedelta(minutes=interval_minutes)
-    return now - timedelta(hours=initial_history_hours)
+    return now - timedelta(hours=history_backfill_hours)
 
 
 def _initial_fast_forward_target_hours(
     *,
     latest_observed_at: datetime | None,
-    interval_minutes: int = OBSERVATION_INTERVAL_MINUTES,
-    history_rows: int = DEFAULT_INITIAL_HISTORY_TICKS,
+    history_backfill_hours: int = DEFAULT_HISTORY_BACKFILL_HOURS,
 ) -> int | None:
-    """Return the one-time warm-up target for a genuinely new live stream."""
+    """Return the one-time historical backfill target for a new live stream."""
     if latest_observed_at is not None:
         return None
-    total_minutes = interval_minutes * history_rows
-    hours, remainder = divmod(total_minutes, 60)
-    if remainder:
-        raise ValueError("initial history duration must resolve to whole hours")
-    return hours
+    if history_backfill_hours <= 0:
+        raise ValueError("history backfill duration must be positive")
+    return history_backfill_hours
 
 
 def _fast_forward_initial_history(
@@ -205,12 +226,12 @@ def _fast_forward_initial_history(
     gen_data_port: int,
     run_id: str,
     latest_observed_at: datetime | None,
-    history_rows: int = DEFAULT_INITIAL_HISTORY_TICKS,
+    history_backfill_hours: int = DEFAULT_HISTORY_BACKFILL_HOURS,
 ) -> dict | None:
-    """Warm up the original Run without replacing its session identity."""
+    """Generate historical observations on the original run without changing lineage."""
     target_hours = _initial_fast_forward_target_hours(
         latest_observed_at=latest_observed_at,
-        history_rows=history_rows,
+        history_backfill_hours=history_backfill_hours,
     )
     if target_hours is None:
         return None
@@ -232,13 +253,12 @@ def _wait_for_live_dataset_session(
     required_result_at: datetime | None = None,
     timeout_seconds: int = 600,
 ) -> tuple[str, int]:
-    """Wait until warm-up ingestion and its required Generator round trip complete.
+    """Wait for this run's ingestion and a fixed warm-up result boundary.
 
-    A fresh continuous Run resumes its configured speed as soon as the initial
-    fast-forward call releases the Run lock.  In that case the latest
-    observation keeps moving while Generator drains the warm-up queue, so the
-    launch gate must follow the fixed warm-up boundary rather than chase the
-    live head forever.
+    The continuous run resumes its configured speed after fast-forward.  Waiting
+    for the moving latest Observation would therefore chase a boundary that may
+    never be reached while Generator drains the queue.  `required_result_at`
+    freezes the warm-up boundary instead.
     """
     import psycopg
 
@@ -283,11 +303,7 @@ def _wait_for_live_dataset_session(
                   AND version.source_version=%s
                   AND result.payload_json #>>
                       '{lineage,source_context,lineage,simulation_session_id}'=%s
-                GROUP BY
-                    version.id,
-                    version.record_count,
-                    version.version_number,
-                    version.created_at
+                GROUP BY version.id,version.record_count,version.version_number,version.created_at
                 ORDER BY version.version_number DESC,version.created_at DESC
                 LIMIT 1
                 """,
@@ -311,7 +327,7 @@ def _wait_for_live_dataset_session(
         if time.monotonic() >= deadline:
             raise RuntimeError(
                 "the current simulation session did not finish warm-up ingestion and "
-                "its latest live Product Result before timeout"
+                "its required live Product Result before timeout"
             )
         time.sleep(1)
 
@@ -441,12 +457,23 @@ def main() -> int:
     parser.add_argument("--web-port", type=int, default=3100)
     parser.add_argument("--postgres-port", type=int, default=5432)
     parser.add_argument("--speed", type=float, default=60.0)
-    parser.add_argument("--simulation-hours", type=int, default=DEFAULT_SIMULATION_HOURS)
     parser.add_argument(
-        "--initial-history-ticks",
+        "--simulation-hours",
         type=int,
-        default=DEFAULT_INITIAL_HISTORY_TICKS,
-        help="One-time full-fleet warm-up ticks for a fresh live Dataset.",
+        default=DEFAULT_SIMULATION_HOURS,
+        help="Total simulated horizon. Defaults to 720 hours (30 days).",
+    )
+    parser.add_argument(
+        "--history-hours",
+        "--initial-history-hours",
+        dest="history_hours",
+        type=int,
+        default=DEFAULT_HISTORY_BACKFILL_HOURS,
+        help=(
+            "Historical backfill generated before the live demo reaches the "
+            "current-time boundary. Defaults to 168 hours (7 days). The model "
+            "itself requires only 36 ten-minute rows (6 hours)."
+        ),
     )
     parser.add_argument(
         "--models-store",
@@ -459,20 +486,19 @@ def main() -> int:
     parser.add_argument(
         "--keep-dataset-selection",
         action="store_true",
-        help="Preserve each demo user's explicit Dataset Version selection.",
+        help="Do not select the live Dataset Version for local demo project users.",
     )
     args = parser.parse_args()
 
-    if args.initial_history_ticks <= 0:
-        parser.error("--initial-history-ticks must be positive")
-    initial_history_minutes = OBSERVATION_INTERVAL_MINUTES * args.initial_history_ticks
-    initial_history_hours, remainder = divmod(initial_history_minutes, 60)
-    if remainder:
-        parser.error("--initial-history-ticks must resolve to a whole-hour target")
-    if args.simulation_hours <= initial_history_hours:
+    if args.history_hours < MODEL_MINIMUM_HISTORY_HOURS:
         parser.error(
-            "--simulation-hours must be greater than the initial history target "
-            f"({initial_history_hours} hours)"
+            "--history-hours must provide at least "
+            f"{MODEL_MINIMUM_HISTORY_HOURS} hours for runtime model history"
+        )
+    if args.simulation_hours <= args.history_hours:
+        parser.error(
+            "--simulation-hours must be greater than --history-hours so "
+            "the same run can continue into post-maintenance observations"
         )
 
     args.api_port = _next_free_port(args.api_port)
@@ -595,7 +621,9 @@ def main() -> int:
                 "PYTHONPATH": str(GEN_DATA_ROOT),
                 "GEN_DATA_OUTPUT_DIR": str(stream_root.resolve()),
                 "GEN_DATA_RUNTIME_OVERLAY_EVENT_FILE": str(maintenance_file.resolve()),
-                "GEN_DATA_RUNTIME_OVERLAY_FAST_FORWARD_ROWS": str(MODEL_HISTORY_ROWS),
+                "GEN_DATA_RUNTIME_OVERLAY_FAST_FORWARD_ROWS": str(
+                    MODEL_MINIMUM_HISTORY_ROWS
+                ),
             }
         )
         processes.start(
@@ -632,15 +660,15 @@ def main() -> int:
             cwd=ROOT / "systems" / "backend",
             env=worker_env,
         )
-
+        # A clean database has no live Dataset Version until gen_data has
+        # produced the first simulation observations and live-ingestor has
+        # persisted them. Create the run before attempting user selection.
         latest_live_observed_at = _latest_live_observed_at(database_url)
         start_at = _simulation_start_at(
             now=datetime.now(timezone.utc),
             latest_observed_at=latest_live_observed_at,
             interval_minutes=OBSERVATION_INTERVAL_MINUTES,
-            initial_history_hours=(
-                OBSERVATION_INTERVAL_MINUTES * args.initial_history_ticks // 60
-            ),
+            history_backfill_hours=args.history_hours,
         )
         run = _post_json(
             f"http://127.0.0.1:{args.gen_data_port}/api/runs",
@@ -657,20 +685,28 @@ def main() -> int:
                 "continuous": True,
                 "publish_opcua": False,
                 "source_kind": "simulation",
-                "runtime_overlay_fast_forward_rows": MODEL_HISTORY_ROWS,
+                "runtime_overlay_fast_forward_rows": MODEL_MINIMUM_HISTORY_ROWS,
             },
         )
         initial_fast_forward = _fast_forward_initial_history(
             gen_data_port=args.gen_data_port,
             run_id=str(run["run_id"]),
             latest_observed_at=latest_live_observed_at,
-            history_rows=args.initial_history_ticks,
+            history_backfill_hours=args.history_hours,
         )
         if initial_fast_forward is not None:
+            initial_history_rows = (
+                args.history_hours * 60 // OBSERVATION_INTERVAL_MINUTES
+            )
             print(
-                "[simulation] initial history target ready: "
-                f"{args.initial_history_ticks} ticks "
-                f"(fast-forward added {initial_fast_forward['generated_records']} records)"
+                "[history] backfill ready: "
+                f"{initial_history_rows} ticks / {args.history_hours}h, "
+                f"{initial_fast_forward['generated_records']} records"
+            )
+            print(
+                "[model] minimum history: "
+                f"{MODEL_MINIMUM_HISTORY_ROWS} ticks / {MODEL_MINIMUM_HISTORY_HOURS}h; "
+                "maintenance replay uses the same 36-row branch-local warm-up"
             )
 
         required_result_at = None
@@ -685,7 +721,9 @@ def main() -> int:
         live_version_id, live_result_count = _wait_for_live_dataset_session(
             database_url,
             simulation_session_id=simulation_session_id,
-            minimum_record_count=args.initial_history_ticks * DEMO_ASSET_COUNT,
+            minimum_record_count=(
+                args.history_hours * 60 // OBSERVATION_INTERVAL_MINUTES
+            ) * DEMO_ASSET_COUNT,
             required_result_at=required_result_at,
         )
         print(

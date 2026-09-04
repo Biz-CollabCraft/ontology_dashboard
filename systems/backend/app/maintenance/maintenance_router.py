@@ -20,7 +20,11 @@ from .api_schema import (
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
 )
-from .maintenance_domain import IdempotencyConflict, InvalidTransition
+from .maintenance_domain import (
+    IdempotencyConflict,
+    InvalidTransition,
+    SourceSimulationSessionUnavailable,
+)
 from .maintenance_schema import WorkOrderStatus
 from .service import MaintenanceLoopService
 
@@ -36,21 +40,14 @@ def _require_scope(
 
 
 def _require_product_role(principal: Any, project_id: str, role: str) -> None:
-    _require_any_product_role(principal, project_id, role)
-
-
-def _require_any_product_role(
-    principal: Any, project_id: str, *allowed_roles: str
-) -> None:
     roles = set(principal.roles)
     roles.update(principal.project_roles.get(project_id, []))
     if principal.active_project_id == project_id:
         roles.update(principal.active_project_roles)
-    if not roles.intersection(allowed_roles):
-        role_label = " 또는 ".join(allowed_roles)
+    if role not in roles:
         raise AuthError(
             "role_context_denied",
-            f"이 작업은 {role_label} 역할에서만 수행할 수 있습니다.",
+            f"이 작업은 {role} 역할에서만 수행할 수 있습니다.",
         )
 
 
@@ -65,6 +62,8 @@ def _execute(command: Callable[[], Any]) -> Any:
         return _error(409, "invalid_state_transition", str(exc))
     except PermissionError as exc:
         return _error(403, "work_order_assignment_denied", str(exc))
+    except SourceSimulationSessionUnavailable as exc:
+        return _error(422, "source_simulation_session_unavailable", str(exc))
     except ValueError as exc:
         return _error(422, "contract_validation_failed", str(exc))
 
@@ -473,12 +472,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_any_product_role(
-            principal,
-            project_id,
-            "process_engineer",
-            "maintenance_technician",
-        )
+        _require_product_role(principal, project_id, "maintenance_technician")
         return _execute(
             lambda: service.start_maintenance(
                 organization_id=principal.organization_id,
@@ -512,12 +506,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_any_product_role(
-            principal,
-            project_id,
-            "process_engineer",
-            "maintenance_technician",
-        )
+        _require_product_role(principal, project_id, "maintenance_technician")
         return _execute(
             lambda: service.complete_maintenance(
                 organization_id=principal.organization_id,
@@ -551,12 +540,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_any_product_role(
-            principal,
-            project_id,
-            "process_engineer",
-            "maintenance_technician",
-        )
+        _require_product_role(principal, project_id, "maintenance_technician")
         return _execute(
             lambda: service.request_maintenance_replay(
                 organization_id=principal.organization_id,

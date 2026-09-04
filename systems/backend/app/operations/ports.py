@@ -51,6 +51,19 @@ class MaintenanceLineageQueryPort(Protocol):
     def event_lineage(self, **identity: Any) -> dict[str, Any]: ...
 
 
+class CompanyContextQueryPort(Protocol):
+    def list_records(self, *, project_id: str, workspace_id: str) -> list[dict[str, Any]]: ...
+
+    def seed_records(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        context: dict[str, Any],
+    ) -> int: ...
+
+
 class RoleWorkflowRepositoryPort(Protocol):
     def list_field_actions(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]: ...
 
@@ -107,6 +120,7 @@ class FactorySignalApplicationPort(Protocol):
 __all__ = [
     "AgentReviewLLMPort",
     "AuditRepositoryPort",
+    "CompanyContextQueryPort",
     "FactorySignalApplicationPort",
     "LayoutPlannerPort",
     "MaintenanceLineageQueryPort",

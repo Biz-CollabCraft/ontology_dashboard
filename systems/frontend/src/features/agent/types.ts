@@ -98,5 +98,6 @@ export interface AgentQueryInput {
   audience?: "engineering" | "operations" | "executive" | "maintenance";
   object_type?: string;
   object_id?: string;
+  event_id?: string;
   top_k?: number;
 }

@@ -21,12 +21,10 @@ import {
 } from "./routing";
 import { ApiError, getProject, getProjectWorkspaces } from "./api";
 import { AuthProvider, useAuth } from "./features/auth/AuthContext";
-import { LoginPage } from "./features/auth/LoginPage";
-import { PendingPage } from "./features/auth/PendingPage";
-import { RegisterPage } from "./features/auth/RegisterPage";
 import { DisplayPreferencesProvider } from "./ui/foundry/displayPreferences";
 import { I18nProvider } from "./ui/i18n/I18nProvider";
 import { WorkbenchState } from "./ui/foundry/WorkbenchState";
+import { HanbitLogo } from "./ui/foundry/HanbitLogo";
 import { featureFlags } from "./featureFlags";
 import {
   isReliabilityPreviewLocation,
@@ -35,6 +33,15 @@ import {
 
 const AdminApp = lazy(() =>
   import("./features/admin/AdminApp").then((module) => ({ default: module.AdminApp })),
+);
+const LoginPage = lazy(() =>
+  import("./features/auth/LoginPage").then((module) => ({ default: module.LoginPage })),
+);
+const PendingPage = lazy(() =>
+  import("./features/auth/PendingPage").then((module) => ({ default: module.PendingPage })),
+);
+const RegisterPage = lazy(() =>
+  import("./features/auth/RegisterPage").then((module) => ({ default: module.RegisterPage })),
 );
 const ManufacturingApp = lazy(() =>
   import("./features/manufacturing/ManufacturingApp").then((module) => ({ default: module.ManufacturingApp })),
@@ -93,9 +100,23 @@ const LAST_VALID_PROJECT_KEY = "ontology-dashboard:last-valid-project";
 const IS_PUBLIC_STORY = import.meta.env.VITE_PUBLIC_STORY === "1";
 
 function RouteLoading({ operation }: { operation: string }) {
+  const sessionBootstrap = operation === "Checking session" || operation === "Loading sign in";
   return (
     <div className="route-loading">
-      <WorkbenchState kind="loading" title={operation} />
+      <div className="route-loading__brand" aria-hidden="true">
+        <span><HanbitLogo /></span>
+        <div><strong>Hanbit Tech</strong><small>Reliability Operations</small></div>
+      </div>
+      <WorkbenchState
+        kind="loading"
+        title={operation}
+        detail={sessionBootstrap ? "Preparing a secure, role-aware operations workspace" : "Preparing governed resources and operational context"}
+        loaderVariant="page"
+        loaderSteps={sessionBootstrap ? ["Session", "Scope", "Workspace"] : ["Data", "Logic", "Action"]}
+      />
+      <div className="route-loading__trust" aria-hidden="true">
+        <span>Live signals</span><i /> <span>Traceable decisions</span><i /> <span>Closed loop</span>
+      </div>
     </div>
   );
 }
@@ -234,6 +255,7 @@ function AppRouter() {
   if (pathname === "/team-share") return <TeamShareStory />;
   if (pathname === "/team-share-adaptive") return <AdaptiveTeamShareStory />;
   if (pathname === "/visualization-compare/echarts") return <EChartsComparisonEmbed />;
+  if (pathname === "/loader") return <RouteLoading operation="Checking session" />;
 
   if (loading) {
     return isReliabilityPreviewLocation()
@@ -242,15 +264,25 @@ function AppRouter() {
   }
 
   if (!user) {
-    if (pathname === "/register") return <RegisterPage />;
-    if (pathname === "/pending") return <PendingPage />;
+    if (pathname === "/register") return <Suspense fallback={<RouteLoading operation="Loading registration" />}><RegisterPage /></Suspense>;
+    if (pathname === "/pending") return <Suspense fallback={<RouteLoading operation="Loading account status" />}><PendingPage /></Suspense>;
     if (pathname !== "/login" && pathname !== "/") {
       return <Redirect to={loginPath(`${pathname}${window.location.search}`)} />;
     }
-    return <LoginPage />;
+    return <Suspense fallback={<RouteLoading operation="Loading sign in" />}><LoginPage /></Suspense>;
   }
 
   if (pathname === "/admin") return user.is_admin ? <AdminApp /> : <ForbiddenPage />;
+
+  if (pathname === "/backup") {
+    const backupProjectId = user.active_project_id ?? user.project_scopes[0] ?? null;
+    if (!backupProjectId) return <Redirect to={user.default_path} />;
+    return (
+      <ProjectPreviewRoute projectId={backupProjectId}>
+        <OperationsApplication projectId={backupProjectId} backupMode />
+      </ProjectPreviewRoute>
+    );
+  }
 
   const operationsProjectRoute = matchOperationsProjectPath(pathname);
   if (operationsProjectRoute) {

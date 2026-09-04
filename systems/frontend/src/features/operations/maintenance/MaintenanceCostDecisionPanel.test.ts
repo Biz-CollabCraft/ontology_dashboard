@@ -11,7 +11,6 @@ import {
   isCostAnalysisStageOpen,
   latestCostAnalysisForInspection,
   latestEligibleInspection,
-  resolveCostAnalysisSopReference,
 } from "./MaintenanceCostDecisionPanel";
 
 const guidance: OperationsInspectionGuidance = {
@@ -194,27 +193,6 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
       action_code: "COOLING_SYSTEM_RESTORE",
       sop_id: "SOP-CNC-TOOL-001",
       sop_version: "v1",
-    });
-  });
-
-  it("prefills the governed demo SOP when runtime guidance is unavailable", () => {
-    expect(resolveCostAnalysisSopReference(null, "TOOL_REPLACEMENT")).toEqual({
-      sopId: "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
-      version: "demo-2026-08-28",
-    });
-  });
-
-  it("prefills the same consulted CNC SOP for a cooling restoration candidate", () => {
-    expect(resolveCostAnalysisSopReference(null, "COOLING_SYSTEM_RESTORE")).toEqual({
-      sopId: "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
-      version: "demo-2026-08-28",
-    });
-  });
-
-  it("uses runtime guidance instead of the demo fallback when it is available", () => {
-    expect(resolveCostAnalysisSopReference(guidance, "TOOL_REPLACEMENT")).toEqual({
-      sopId: "SOP-CNC-TOOL-001",
-      version: "v1",
     });
   });
 

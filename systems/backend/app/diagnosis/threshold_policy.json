@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "policy_version": "operational-policy-v1",
-  "model_version": "fixture-heuristic-v1",
+  "policy_version": "operational-policy-v2",
+  "model_version": "canonical-v3.1-artifact-runtime",
   "decision_threshold": 0.5,
   "minimum_recall_target": 0.8,
   "severity_rules": {
@@ -31,6 +31,7 @@
     "Runtime decision policy is owned by systems/backend/app/diagnosis.",
     "The Model Artifact selected_threshold is the binary failure-risk threshold and caps the operational attention boundary so a model-positive result cannot remain normal/continue_monitoring.",
     "The severity boundaries preserve the Canonical V3.1 independent-logreg risk-band contract for before/after maintenance comparability.",
+    "Operational severity bands are intentionally independent from the model-positive threshold: a warning can request human inspection without claiming a confirmed failure hypothesis.",
     "Warning and critical boundaries remain Backend-owned operational severity thresholds.",
     "High-criticality equipment lowers attention and warning boundaries only; it does not authorize automatic control.",
     "Final deployment thresholds require customer-specific cost validation."

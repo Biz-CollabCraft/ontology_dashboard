@@ -5,6 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 
+_TEMPORAL_FACTOR_SUFFIXES = (
+    "_6h_max_abs",
+    "_6h_abs_mean",
+    "_abs_current",
+    "_6h_change",
+    "_6h_mean",
+    "_6h_std",
+    "_1h_change",
+    "_current",
+)
+
+
 def retrieve_inspection_sops(
     *,
     fixture: dict[str, Any],
@@ -65,7 +77,7 @@ def _query_from_context(fixture: dict[str, Any], artifact: dict[str, Any]) -> di
         ),
         "factor_keys": sorted(
             {
-                str(factor.get("feature"))
+                _canonical_factor_key(str(factor.get("feature")))
                 for factor in artifact.get("top_factors") or []
                 if factor.get("feature")
             }
@@ -136,6 +148,21 @@ def _score_procedure(query: dict[str, Any], procedure: dict[str, Any]) -> tuple[
 
 def _contains(values: Any, value: str) -> bool:
     return bool(value) and value in {str(item) for item in values or []}
+
+
+def _canonical_factor_key(value: str) -> str:
+    """Map derived runtime feature names back to their governed sensor key.
+
+    The V3.1 runtime model explains temporal features such as
+    ``rotational_speed_rpm_6h_mean`` while SOP applicability is intentionally
+    expressed against the stable source sensor ``rotational_speed_rpm``.
+    Only the temporal suffixes owned by the CNC/compressor feature contract are
+    removed; arbitrary feature names are left untouched.
+    """
+    for suffix in _TEMPORAL_FACTOR_SUFFIXES:
+        if value.endswith(suffix) and len(value) > len(suffix):
+            return value[: -len(suffix)]
+    return value
 
 
 def _is_displayable_procedure(procedure: dict[str, Any]) -> bool:

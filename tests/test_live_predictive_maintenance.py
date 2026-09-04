@@ -49,6 +49,15 @@ def test_macmini_compose_runs_canonical_live_worker() -> None:
 
     assert 'command: ["python", "-m", "app.live_predictive_maintenance"]' in compose
     assert "ontology_dashboard.live_predictive_maintenance" not in compose
+    assert "generator-runtime:" in compose
+    assert 'entrypoint: ["python", "-m", "uvicorn"]' in compose
+    assert 'command: ["systems.generator.app.main:app", "--host", "0.0.0.0", "--port", "8000"]' in compose
+    assert 'GENERATOR_RUNTIME_PREDICTION_ENABLED: "true"' in compose
+    assert "GENERATOR_PIPELINE_INPUT_ROOTS: /runtime-pipeline-input" in compose
+    assert "GENERATOR_PREDICTION_RESULT_URL: http://backend:8000/internal/prediction-results" in compose
+    assert "PREDICTION_RESULT_INGEST_TOKEN is required" in compose
+    assert "http://generator-runtime:8000/internal/runtime-pipeline/enqueue" in compose
+    assert "generator-active-model-set.json:/data/models/active-model-set.json:ro" in compose
     assert "${GEN_DATA_RUNTIME_OUTPUT_ROOT}:/gen-data-runtime:ro" in compose
     assert "${RUNTIME_PIPELINE_INPUT_ROOT}:/runtime-pipeline-input" in compose
     assert "${RUNTIME_PIPELINE_INPUT_ROOT}:/runtime-pipeline-input:ro" in compose
@@ -68,6 +77,35 @@ def test_runtime_product_result_materialization_never_deletes_history() -> None:
         "prediction_results",
     ):
         assert f"DELETE FROM {table}" not in implementation
+
+
+def test_live_pipeline_snapshot_uses_only_cadence_aligned_observations() -> None:
+    implementation = inspect.getsource(live_runtime._live_pipeline_observation_rows)
+
+    assert "MOD(EXTRACT(EPOCH FROM observed_at)::bigint, 600) = 0" in implementation
+    assert "lookback_rows = max(minimum_history_rows, minimum_history_rows * 8)" in implementation
+    assert "latest_continuous_window" in implementation
+
+
+def test_macmini_generator_active_model_set_pins_both_equipment_families() -> None:
+    root = Path(__file__).resolve().parents[1]
+    payload = json.loads(
+        (root / "infra" / "macmini" / "generator-active-model-set.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert payload["model_set_id"] == "hanbit-live-reliability"
+    assert payload["models"] == {
+        "cnc-failure-risk": {
+            "model_version": "cnc-random-forest-v3-f898a33ade7f",
+            "required": True,
+        },
+        "compressor-failure-risk": {
+            "model_version": "compressor-random-forest-v3-138e75c0f721",
+            "required": True,
+        },
+    }
 
 
 def _write(path, rows):

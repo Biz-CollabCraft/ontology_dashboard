@@ -44,6 +44,10 @@ def test_maintenance_service_uses_diagnosis_runtime_for_replay_validation(
         dependencies.get_maintenance_loop_service.cache_clear()
 
     assert service.repository is repository
-    assert service.event_evidence_query is diagnosis_runtime
+    assert isinstance(
+        service.event_evidence_query,
+        dependencies._RuntimeThenDemoEvidenceProjection,
+    )
+    assert service.event_evidence_query.runtime is diagnosis_runtime
     assert service.replay_session_query is diagnosis_runtime
     assert runtime_calls == [None]

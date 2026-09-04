@@ -1,4 +1,4 @@
-"""Stable request, report, and layout contracts for the demo runtime."""
+"""Stable request, report, and layout contracts for the operations runtime."""
 
 from __future__ import annotations
 
@@ -112,6 +112,7 @@ class AgentQueryRequest(StrictModel):
     audience: AgentAudience | None = None
     object_type: str | None = Field(default=None, max_length=80)
     object_id: str | None = Field(default=None, max_length=160)
+    event_id: str | None = Field(default=None, max_length=240)
     top_k: int = Field(default=8, ge=1, le=20)
 
 

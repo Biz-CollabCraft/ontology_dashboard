@@ -165,7 +165,6 @@ export function MaintenanceWorkflowActionPanel({
   const [pollingError, setPollingError] = useState<string | null>(null);
   const [postMaintenancePrediction, setPostMaintenancePrediction] = useState<PostMaintenancePredictionSummary | null>(null);
   const postMaintenancePredictionRef = useRef<PostMaintenancePredictionSummary | null>(null);
-  const activeMaintenanceEventIdRef = useRef<string | null>(null);
   const [actionCandidates, setActionCandidates] = useState<MaintenanceActionCandidateReadModel[]>([]);
   const [selectedActionCandidateId, setSelectedActionCandidateId] = useState("");
   const [inspectionOutcome, setInspectionOutcome] = useState<InspectionOutcome>("maintenance_recommended");
@@ -235,14 +234,6 @@ export function MaintenanceWorkflowActionPanel({
       selectedActionCandidate,
     };
   }, [actionCandidates, assetId, lineage, openInspectionWorkOrder, selectedActionCandidateId]);
-
-  useEffect(() => {
-    const maintenanceEventId = state.maintenanceEvent?.maintenance_event_id ?? null;
-    if (activeMaintenanceEventIdRef.current === maintenanceEventId) return;
-    activeMaintenanceEventIdRef.current = maintenanceEventId;
-    postMaintenancePredictionRef.current = null;
-    setPostMaintenancePrediction(null);
-  }, [state.maintenanceEvent?.maintenance_event_id]);
 
   useEffect(() => {
     const inspectionResultId = state.inspectionResult?.inspection_result_id;
@@ -439,7 +430,7 @@ export function MaintenanceWorkflowActionPanel({
       }) : null;
     } else if (state.inspectionWorkOrder.status === "requested") {
       label = "현장 관리자 수락 대기";
-      helper = "현장 관리자가 요청을 수락하면 해당 관리자에게 자동 배정됩니다.";
+      helper = "현장 담당자가 요청을 수락하면 해당 담당자에게 자동 배정됩니다.";
     } else if (state.inspectionResult?.outcome === "no_action_required") {
       label = "점검 완료 · 정비 불필요";
       helper = "현장 점검 결과 추가 정비가 필요하지 않은 것으로 기록됐습니다.";
@@ -482,17 +473,21 @@ export function MaintenanceWorkflowActionPanel({
       });
     } else if (state.maintenanceWorkOrder?.status === "requested") {
       label = "정비 WorkOrder 승인";
-      helper = "승인된 진단의 실시간 Simulation 계보로 정비 Action을 계획합니다.";
+      helper = "승인된 Product Result의 source runtime lineage를 이어 정비 Action을 계획합니다.";
       enabled = canManage;
       command = () => approveMaintenanceWorkOrder({
         projectId,
         workspaceId,
         workOrderId: state.maintenanceWorkOrder!.work_order_id,
+        datasetVersionId,
         idempotencyKey: commandKey(workflowEventId, "maintenance-approve", state.maintenanceWorkOrder!.work_order_id),
       });
     }
   } else {
-    if (state.inspectionWorkOrder?.status === "requested") {
+    if (!state.inspectionWorkOrder) {
+      label = "운영 관리자 점검 요청 대기";
+      helper = "현재 Case의 근거는 준비되어 있습니다. 운영 관리자가 점검 작업요청을 생성하면 이 화면에서 수락할 수 있습니다.";
+    } else if (state.inspectionWorkOrder?.status === "requested") {
       label = "요청 수락·내게 배정";
       helper = "수락과 동시에 이 점검 요청의 담당자로 배정됩니다.";
       enabled = canFieldExecute;
@@ -514,7 +509,7 @@ export function MaintenanceWorkflowActionPanel({
     } else if (state.inspectionWorkOrder?.status === "in_progress") {
       label = "점검 결과 기록·완료";
       helper = !supportsCncMaintenance
-        ? "현재 MVP 정비·Overlay 실행은 CNC 설비만 지원합니다. 이 설비의 점검 완료는 후속 계약이 필요합니다."
+        ? "현재 정비·Overlay 실행은 CNC 설비만 지원합니다. 이 설비의 점검 완료는 후속 계약이 필요합니다."
         : inspectionReady
           ? "입력한 점검 사실을 기록합니다. 정비 Action 후보는 Backend가 이 결과에서 산출합니다."
           : "점검 판정, 체크리스트, 측정값과 발견 내용을 입력하세요.";
@@ -575,8 +570,8 @@ export function MaintenanceWorkflowActionPanel({
   }
 
   return (
-    <section className="operations-maintenance-workflow-panel" aria-label="Closed-loop 작업 실행">
-      <header><div><span>Closed-loop</span><strong>{role === "process_manager" ? "생산 관리자 작업" : "현장 관리자 작업"}</strong></div><button type="button" className="operations-icon-button" onClick={() => void refresh()} aria-label="작업 상태 새로고침">↻</button></header>
+    <section className="operations-maintenance-workflow-panel" aria-label="Closed-loop 작업 실행" data-event-id={eventId}>
+      <header><div><span>Closed-loop</span><strong>{role === "process_manager" ? "운영 관리자 작업" : "현장 점검 작업"}</strong></div><button type="button" className="operations-icon-button" onClick={() => void refresh()} aria-label="작업 상태 새로고침">↻</button></header>
       <p>{loading ? "작업 상태를 확인하고 있습니다." : helper}</p>
       {role === "process_manager"
         && state.inspectionResult?.outcome === "maintenance_recommended"

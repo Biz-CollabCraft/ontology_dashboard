@@ -7,7 +7,11 @@ from jsonschema import Draft202012Validator
 
 from app.dependencies import build_manufacturing_service
 from app.operations.agent_review_packet import compose_agent_review_packet
-from app.operations.context_providers import AgentReviewContext, AgentReviewContextRegistry
+from app.operations.context_providers import (
+    AgentReviewContext,
+    AgentReviewContextRegistry,
+    default_agent_review_context_registry,
+)
 from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 
 
@@ -22,6 +26,49 @@ PACKET_SCHEMA = json.loads(
 
 def _load_gold(scenario: str) -> dict:
     return json.loads((GOLD_ROOT / f"{scenario}.json").read_text(encoding="utf-8"))
+
+
+def _stable_sop_guidance(item: dict) -> dict:
+    """Compare stable SOP identity/content while allowing additive retrieval scoring changes."""
+
+    return {key: value for key, value in item.items() if key != "retrieval_score"}
+
+
+def _assert_ontology_context_preserves_gold(current: dict, gold: dict) -> None:
+    """Require the Gold traversal while allowing additive SOP lineage enrichment."""
+
+    assert current["provider"] == gold["provider"]
+    assert current["mutation_allowed"] == gold["mutation_allowed"]
+    current_by_component = {
+        item["component_id"]: item for item in current.get("traversals", [])
+    }
+    for expected in gold.get("traversals", []):
+        component_id = expected["component_id"]
+        assert component_id in current_by_component
+        actual = current_by_component[component_id]
+        for key, value in expected.items():
+            if key == "sop_ids":
+                assert set(value) <= set(actual.get(key, []))
+            elif key == "source_refs":
+                assert set(value) <= set(actual.get(key, []))
+            else:
+                assert actual.get(key) == value
+    assert set(gold.get("source_refs", [])) <= set(current.get("source_refs", []))
+
+
+def _assert_review_draft_preserves_gold(current: dict, gold: dict) -> None:
+    """Keep decision semantics stable while allowing newly grounded SOP guidance."""
+
+    for key, value in gold.items():
+        if key in {"summary", "checklist"}:
+            continue
+        assert current.get(key) == value
+    assert set(gold.get("checklist", [])) <= set(current.get("checklist", []))
+    if current.get("summary") != gold.get("summary"):
+        gold_prefix = str(gold.get("summary") or "").split("입니다.", 1)[0]
+        assert gold_prefix
+        assert str(current.get("summary") or "").startswith(f"{gold_prefix}입니다.")
+        assert "SOP" in str(current.get("summary") or "")
 
 
 def test_agent_review_packet_gold_fixtures_match_schema() -> None:
@@ -208,14 +255,34 @@ def test_current_service_packets_keep_gold_contract_shape(tmp_path: Path) -> Non
         assert current["snapshot_basis"] == gold["snapshot_basis"]
         assert current["risk_summary"] == gold["risk_summary"]
         assert current["review_priority"] == gold["review_priority"]
-        assert current["review_draft"] == gold["review_draft"]
+        _assert_review_draft_preserves_gold(current["review_draft"], gold["review_draft"])
         assert current["inspection_targets"] == gold["inspection_targets"]
-        assert current["sop_retrieval"] == gold["sop_retrieval"]
-        assert current["sop_guidance"] == gold["sop_guidance"]
-        assert current["ontology_context"] == gold["ontology_context"]
-        assert current["history_review_items"] == gold["history_review_items"]
+        assert current["sop_retrieval"]["provider"] == gold["sop_retrieval"]["provider"]
+        assert current["sop_retrieval"]["query"] == gold["sop_retrieval"]["query"]
+        assert current["sop_retrieval"]["top_k"] == gold["sop_retrieval"]["top_k"]
+        assert current["sop_retrieval"]["mutation_allowed"] is False
+        assert current["sop_retrieval"]["returned_count"] == len(
+            {item["sop_id"] for item in current["sop_guidance"]}
+        )
+        assert current["sop_retrieval"]["returned_count"] >= gold["sop_retrieval"]["returned_count"]
+        current_guidance = {
+            (item["component_id"], item["sop_id"]): _stable_sop_guidance(item)
+            for item in current["sop_guidance"]
+        }
+        for expected in gold["sop_guidance"]:
+            key = (expected["component_id"], expected["sop_id"])
+            assert key in current_guidance
+            assert current_guidance[key] == _stable_sop_guidance(expected)
+        for item in current["sop_guidance"]:
+            assert item["source_type"] in {"demo_sop_fixture", "site_sop"}
+            assert item["retrieval_score"] > 0
+        _assert_ontology_context_preserves_gold(
+            current["ontology_context"],
+            gold["ontology_context"],
+        )
+        assert set(gold["history_review_items"]) <= set(current["history_review_items"])
         assert current["evidence_gaps"] == gold["evidence_gaps"]
-        assert current["source_refs"] == gold["source_refs"]
+        assert set(gold["source_refs"]) <= set(current["source_refs"])
         assert current["closed_loop_boundary"] == gold["closed_loop_boundary"]
         sections = {section["section_id"]: section for section in current["domain_sections"]}
         assert {"risk", "operation", "inspection", "sop", "ontology"}.issubset(
@@ -241,6 +308,58 @@ def test_agent_review_packet_uses_same_snapshot_basis_as_view_model(tmp_path: Pa
 
     assert packet["snapshot_basis"] == view_model["snapshot_basis"]
     assert packet["snapshot_basis"]["event_id"] == "EVT-GS-004"
+
+
+def test_default_context_registry_projects_maintenance_history_from_view_model(
+    tmp_path: Path,
+) -> None:
+    service = build_manufacturing_service(
+        tmp_path / "agent-review-maintenance-context.db",
+        root=ROOT,
+    )
+    view_model = service.asset_detail_view_model(
+        "CNC-S04-L02-03",
+        "manufacturing-demo-project",
+    )
+
+    context = default_agent_review_context_registry().context_for_packet(
+        view_model=view_model
+    )
+
+    history = context.maintenance_history_summary
+    assert history is not None
+    assert history["provider"] == "closed_loop_maintenance_history_adapter"
+    assert history["mutation_allowed"] is False
+    assert history["work_orders"][0]["record_id"] == "WO-INS-GS-004-001"
+    assert history["activities"][0]["activity_type"] == "work_order.requested"
+    assert "closed-loop://work-order/WO-INS-GS-004-001" in context.source_refs
+
+
+def test_service_packet_merges_maintenance_adapter_with_ontology_history(
+    tmp_path: Path,
+) -> None:
+    service = build_manufacturing_service(
+        tmp_path / "agent-review-maintenance-merge.db",
+        root=ROOT,
+    )
+
+    packet = service.agent_review_packet(
+        "CNC-S04-L02-03",
+        "manufacturing-demo-project",
+    )
+
+    history = packet["maintenance_history_summary"]
+    assert history["provider"] == "closed_loop_maintenance_history_adapter"
+    assert history["mutation_allowed"] is False
+    assert history["work_orders"][0]["record_id"] == "WO-INS-GS-004-001"
+    assert history["similar_events"][0]["similar_event_id"] == (
+        "SIM-EVT-CNC-DRIVE-2026-07-22"
+    )
+    assert "closed-loop://work-order/WO-INS-GS-004-001" in packet["source_refs"]
+    assert (
+        "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#"
+        "SIM-EVT-CNC-DRIVE-2026-07-22"
+    ) in packet["source_refs"]
 
 
 def test_agent_review_packet_accepts_adapter_supplied_context(tmp_path: Path) -> None:

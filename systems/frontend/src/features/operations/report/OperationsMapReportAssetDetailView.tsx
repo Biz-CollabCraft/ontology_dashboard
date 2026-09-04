@@ -85,6 +85,8 @@ function CanonicalSeriesChart({
   if (currentSegment.length) segments.push(currentSegment);
   const first = points[0];
   const last = points.at(-1);
+  const middleIndex = Math.floor((points.length - 1) / 2);
+  const middle = points[middleIndex];
 
   return (
     <section className="asset-series-block">
@@ -97,6 +99,7 @@ function CanonicalSeriesChart({
       ) : (
         <svg className="asset-series-chart" viewBox="0 0 720 262" role="img" aria-label={`${title} 관측 흐름`}>
           <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
+          <text className="asset-chart-axis-title" transform={`translate(14 ${(frame.top + frame.bottom) / 2}) rotate(-90)`} textAnchor="middle">{unit || (tone === "risk" ? "%" : "값")}</text>
           {yTicks.map((tick) => {
             const y = yAt(tick);
             return (
@@ -108,11 +111,31 @@ function CanonicalSeriesChart({
           })}
           {threshold !== null && threshold !== undefined ? <line className="asset-threshold-line" x1={frame.left} x2={frame.right} y1={yAt(threshold)} y2={yAt(threshold)} /> : null}
           {segments.map((segment, index) => <polyline key={`${title}-segment-${index}`} className="asset-series-line" points={segment.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ")} style={{ stroke: color }} />)}
-          {coords.map((point, index) => typeof point.value === "number" && typeof point.y === "number" ? (
-            <circle key={`${point.observedAt}-${index}`} className={index === points.length - 1 ? "asset-current-marker" : "asset-crossing-marker"} cx={point.x} cy={point.y} r={index === points.length - 1 ? 5 : 3} style={{ fill: color, opacity: point.qualityStatus === "bad" ? 0.42 : 1 }} />
-          ) : null)}
+          {coords.map((point, index) => {
+            if (typeof point.value !== "number" || typeof point.y !== "number") return null;
+            const timeLabel = pointLabel(point, "관측 시각 미제공");
+            const valueLabel = formatValue(point.value, unit ?? "");
+            const tooltipWidth = 192;
+            const tooltipX = Math.min(frame.right - tooltipWidth - 4, Math.max(frame.left + 4, point.x - tooltipWidth / 2));
+            const tooltipY = Math.min(frame.bottom - 36, Math.max(frame.top + 4, point.y - 42));
+            return (
+              <g key={`${point.observedAt}-${index}`} className="asset-chart-hover-point">
+                <circle className={index === points.length - 1 ? "asset-current-marker" : "asset-crossing-marker"} cx={point.x} cy={point.y} r={index === points.length - 1 ? 5 : 3} style={{ fill: color, opacity: point.qualityStatus === "bad" ? 0.42 : 1 }} />
+                <circle className="asset-chart-hit-target" cx={point.x} cy={point.y} r="10" tabIndex={0} aria-label={`${timeLabel} ${valueLabel}`}>
+                  <title>{`${timeLabel} · ${valueLabel} · 품질 ${point.qualityStatus ?? "unknown"}`}</title>
+                </circle>
+                <g className="asset-chart-tooltip" transform={`translate(${tooltipX} ${tooltipY})`}>
+                  <rect width={tooltipWidth} height="33" rx="6" />
+                  <text x="9" y="13">{timeLabel}</text>
+                  <text className="is-value" x="9" y="26">{valueLabel} · {point.qualityStatus ?? "unknown"}</text>
+                </g>
+              </g>
+            );
+          })}
           {first ? <text className="asset-chart-axis" x={frame.left} y="248" textAnchor="start">{pointLabel(first, "시작")}</text> : null}
+          {middle && points.length > 2 ? <text className="asset-chart-axis" x={xAt(middleIndex)} y="248" textAnchor="middle">{pointLabel(middle, "중간")}</text> : null}
           {last ? <text className="asset-chart-axis" x={frame.right} y="248" textAnchor="end">{pointLabel(last, "현재")}</text> : null}
+          <text className="asset-chart-axis-title" x="370" y="259" textAnchor="middle">시간</text>
         </svg>
       )}
     </section>
@@ -193,7 +216,7 @@ export function OperationsMapReportAssetDetailView({
           </div>
           {status ? <span className={`status-badge ${status.tone}`}>{status.label}</span> : null}
         </section>
-        <div className="asset-chart-empty"><Database size={20} /><strong>상세 데이터 준비 중</strong><span>선택 설비의 상세 운영 데이터가 준비되면 이 영역에 표시합니다.</span></div>
+        <div className="asset-chart-empty"><Database size={20} /><strong>연결된 상세 데이터 없음</strong><span>현재 선택 설비에 연결된 상세 운영 데이터가 없습니다.</span></div>
       </div>
     );
   }

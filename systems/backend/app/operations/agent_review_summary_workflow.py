@@ -26,6 +26,7 @@ class AgentReviewSummaryWorkflowService(Protocol):
         *,
         history_window: str = "24h",
         limit: int | None = None,
+        source: str = "fixture",
     ) -> dict[str, Any]:
         """Create or reuse validated summaries for available snapshots."""
 
@@ -45,6 +46,7 @@ class AgentReviewSummaryWorkflow:
         trigger: str = "polling_watcher",
         max_attempts: int = DEFAULT_WORKFLOW_MAX_ATTEMPTS,
         operating_mode: dict[str, Any] | None = None,
+        source: str = "fixture",
     ) -> dict[str, Any]:
         attempt_limit = max(1, int(max_attempts))
         mode = _operating_mode(
@@ -53,6 +55,7 @@ class AgentReviewSummaryWorkflow:
             limit=limit,
             max_attempts=attempt_limit,
             operating_mode=operating_mode,
+            source=source,
         )
         attempts: list[dict[str, Any]] = []
         materialization: dict[str, Any] | None = None
@@ -62,6 +65,7 @@ class AgentReviewSummaryWorkflow:
                     project_id,
                     history_window=history_window,
                     limit=limit,
+                    source=source,
                 )
                 attempts.append({"attempt": attempt, "status": "succeeded"})
                 break
@@ -201,6 +205,7 @@ def _operating_mode(
     limit: int | None,
     max_attempts: int,
     operating_mode: dict[str, Any] | None,
+    source: str,
 ) -> dict[str, Any]:
     configured = dict(operating_mode or {})
     run_mode = str(configured.get("mode") or ("watch" if trigger == "polling_watcher" else "single_trigger"))
@@ -212,6 +217,7 @@ def _operating_mode(
         "target_scope": str(configured.get("target_scope") or "project"),
         "history_window": history_window,
         "limit": limit,
+        "source": source,
         "stale_detection": str(configured.get("stale_detection") or "summary_key"),
         "summary_duplicate_policy": str(
             configured.get("summary_duplicate_policy") or "reuse_existing_summary"

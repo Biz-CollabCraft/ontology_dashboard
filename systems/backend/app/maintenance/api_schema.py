@@ -152,10 +152,9 @@ class RecommendationDecisionCreateRequest(StrictCommand):
 class MaintenanceWorkOrderApproveRequest(StrictCommand):
     """Approve a WorkOrder using Diagnosis-owned runtime lineage.
 
-    ``simulation_session_id`` remains an optional compatibility selector only
-    for historical Product Results without source-session lineage.  Live callers
-    omit it; when lineage exists, the server resolves it from the authorized
-    Product Result and rejects any conflicting caller value.
+    ``simulation_session_id`` is compatibility-only for historical Product
+    Results that predate source-session lineage. Live callers omit it; when
+    lineage exists, the server resolves it from the authorized Product Result.
     """
 
     simulation_session_id: str | None = Field(default=None, min_length=1, max_length=240)

@@ -13,6 +13,7 @@ import type { ReliabilityExperienceKind } from "../../predictive-maintenance/wor
 export function OperationsOverviewPage({
   model,
   role,
+  currentUserId,
   experienceKind,
   dashboard,
   selectedAssetId,
@@ -23,7 +24,6 @@ export function OperationsOverviewPage({
   monitoringDetailLoading,
   monitoringDetailError,
   sensorWindow,
-  currentUserId,
   canMaterializeAgentSummary,
   canManageWorkflow,
   canExecuteFieldWorkflow,
@@ -36,6 +36,7 @@ export function OperationsOverviewPage({
 }: {
   model: OperationsBootstrapModel;
   role: OperationsRoleLens;
+  currentUserId: string;
   experienceKind: ReliabilityExperienceKind;
   dashboard: OperationsDashboardMode;
   selectedAssetId: string | null;
@@ -46,7 +47,6 @@ export function OperationsOverviewPage({
   monitoringDetailLoading: boolean;
   monitoringDetailError: string | null;
   sensorWindow: OperationsSensorWindowId;
-  currentUserId: string;
   canMaterializeAgentSummary: boolean;
   canManageWorkflow: boolean;
   canExecuteFieldWorkflow: boolean;
@@ -71,6 +71,7 @@ export function OperationsOverviewPage({
         <OperationsWorkflowOverviewPage
           model={model}
           role={role}
+          currentUserId={currentUserId}
           experienceKind={experienceKind}
           selectedAssetId={selectedAssetId}
           detail={detail}
@@ -80,7 +81,6 @@ export function OperationsOverviewPage({
           monitoringDetailLoading={monitoringDetailLoading}
           monitoringDetailError={monitoringDetailError}
           sensorWindow={sensorWindow}
-          currentUserId={currentUserId}
           canMaterializeAgentSummary={canMaterializeAgentSummary}
           canManageWorkflow={canManageWorkflow}
           canExecuteFieldWorkflow={canExecuteFieldWorkflow}

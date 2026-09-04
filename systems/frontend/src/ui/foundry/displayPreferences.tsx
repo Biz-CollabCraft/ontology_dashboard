@@ -10,11 +10,13 @@ import { getDisplayPreferences, saveDisplayPreferences } from "../../api";
 
 export type DisplayTextSize = "small" | "default" | "large" | "extra-large";
 export type DisplayDensity = "compact" | "standard" | "comfortable";
+export type DisplayTheme = "light" | "dark" | "system";
 
 export interface DisplayPreferences {
   version: 3;
   textSize: DisplayTextSize;
   density: DisplayDensity;
+  theme: DisplayTheme;
   showTechnicalMetadata: boolean;
 }
 
@@ -24,6 +26,7 @@ interface DisplayPreferencesContextValue {
   preferences: DisplayPreferences;
   setTextSize: (value: DisplayTextSize) => void;
   setDensity: (value: DisplayDensity) => void;
+  setTheme: (value: DisplayTheme) => void;
   setPreset: (value: DisplayPreset) => void;
   setShowTechnicalMetadata: (value: boolean) => void;
   reset: () => void;
@@ -33,17 +36,19 @@ const DEFAULT_PREFERENCES: DisplayPreferences = {
   version: 3,
   textSize: "default",
   density: "standard",
+  theme: "light",
   showTechnicalMetadata: false,
 };
 
 const PRESETS: Record<DisplayPreset, Pick<DisplayPreferences, "textSize" | "density">> = {
-  compact: { textSize: "default", density: "compact" },
+  compact: { textSize: "small", density: "compact" },
   standard: { textSize: "default", density: "standard" },
-  accessible: { textSize: "large", density: "comfortable" },
+  accessible: { textSize: "extra-large", density: "comfortable" },
 };
 
 const TEXT_SIZES = new Set<DisplayTextSize>(["small", "default", "large", "extra-large"]);
 const DENSITIES = new Set<DisplayDensity>(["compact", "standard", "comfortable"]);
+const THEMES = new Set<DisplayTheme>(["light", "dark", "system"]);
 const DisplayPreferencesContext = createContext<DisplayPreferencesContextValue | null>(null);
 
 export function displayPreferenceStorageKey(scope: string) {
@@ -71,6 +76,7 @@ export function normalizeDisplayPreferences(value: unknown): DisplayPreferences 
     version: 3,
     textSize,
     density: migratedDensity,
+    theme: THEMES.has(candidate.theme as DisplayTheme) ? candidate.theme as DisplayTheme : DEFAULT_PREFERENCES.theme,
     showTechnicalMetadata: candidate.showTechnicalMetadata === true,
   };
 }
@@ -101,6 +107,11 @@ function applyDisplayPreferences(preferences: DisplayPreferences) {
   root.dataset.textSize = preferences.textSize;
   root.dataset.density = preferences.density;
   root.dataset.technicalMetadata = preferences.showTechnicalMetadata ? "shown" : "hidden";
+  const resolvedTheme = preferences.theme === "system"
+    ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+    : preferences.theme;
+  root.dataset.theme = resolvedTheme;
+  root.dataset.themePreference = preferences.theme;
 }
 
 export function DisplayPreferencesProvider({ scope, children }: { scope: string; children: ReactNode }) {
@@ -138,10 +149,19 @@ export function DisplayPreferencesProvider({ scope, children }: { scope: string;
     return () => window.clearTimeout(timer);
   }, [preferences, scope, serverReady]);
 
+  useEffect(() => {
+    if (preferences.theme !== "system") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => applyDisplayPreferences(preferences);
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [preferences]);
+
   const value = useMemo<DisplayPreferencesContextValue>(() => ({
     preferences,
     setTextSize: (textSize) => setPreferences((current) => ({ ...current, textSize })),
     setDensity: (density) => setPreferences((current) => ({ ...current, density })),
+    setTheme: (theme) => setPreferences((current) => ({ ...current, theme })),
     setPreset: (preset) => setPreferences((current) => ({ ...current, ...PRESETS[preset] })),
     setShowTechnicalMetadata: (showTechnicalMetadata) => setPreferences((current) => ({ ...current, showTechnicalMetadata })),
     reset: () => setPreferences({ ...DEFAULT_PREFERENCES }),
@@ -170,9 +190,9 @@ export const DISPLAY_DENSITY_OPTIONS: ReadonlyArray<{ value: DisplayDensity; lab
 ];
 
 export const DISPLAY_PRESET_OPTIONS: ReadonlyArray<{ value: DisplayPreset; label: string; detail: string }> = [
-  { value: "compact", label: "Compact", detail: "More data, smaller spacing" },
-  { value: "standard", label: "Standard", detail: "Balanced reading and density" },
-  { value: "accessible", label: "Accessible", detail: "Larger text and touch targets" },
+  { value: "compact", label: "Compact", detail: "Print/report review with more rows per page" },
+  { value: "standard", label: "Standard", detail: "Desktop operations and everyday monitoring" },
+  { value: "accessible", label: "Presentation", detail: "Projector-friendly text and touch targets" },
 ];
 
 export function displayPreset(preferences: DisplayPreferences): DisplayPreset | "custom" {

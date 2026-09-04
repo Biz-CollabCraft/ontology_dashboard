@@ -20,8 +20,13 @@ from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
 from app.infra.db.diagnosis_runtime_repository import (
     PredictiveMaintenanceRuntimeRepository,
 )
+from app.infra.db.maintenance_repository import PostgreSQLMaintenanceRepository
 from app.infra.db.migrations import migrate
 from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
+from app.infra.db.postgresql_compat import (
+    PostgreSQLProjectContextResolver,
+    postgres_repository_connection,
+)
 from app.infra.db.pool import close_pools
 from app.infra.live_predictive_maintenance_runtime import (
     _consume_overlay_event,
@@ -32,6 +37,18 @@ from app.infra.runtime_overlay_contract import (
     resolve_storage_reference,
     semantic_observation_sha256,
 )
+from app.maintenance.api_schema import (
+    InspectionResultCreateRequest,
+    InspectionWorkOrderCreateRequest,
+    MaintenanceActionCompleteRequest,
+    MaintenanceActionStartRequest,
+    MaintenanceReplayRequest,
+    MaintenanceWorkOrderApproveRequest,
+    OperationsManualRecommendationCreateRequest,
+    RecommendationDecisionCreateRequest,
+)
+from app.maintenance.maintenance_schema import RecommendationDisposition, WorkOrderStatus
+from app.maintenance.service import MaintenanceLoopService
 from tests.test_predictive_maintenance_bundle_adapter import (
     build_manifest,
     create_small_package,
@@ -580,7 +597,7 @@ def test_postgresql_prediction_batch_promotion_materializes_product_result(
     assert artifact is not None
     assert artifact["batch_promotion_result_id"] == artifact["prediction_result_id"]
     assert artifact["item_promotion_result_id"] == artifact["prediction_result_id"]
-    assert artifact["status_grade"] == "warning"
+    assert artifact["status_grade"] == "critical"
     assert float(artifact["failure_probability"]) == 0.82
     gap_ids = {
         gap["gap_id"]
@@ -885,6 +902,401 @@ def test_product_results_remain_append_only_across_maintenance_overlay(
     )
     assert critical_total == 0
     assert critical_rows == []
+
+
+def test_closed_loop_feedback_promotes_post_maintenance_product_result(
+    tmp_path: Path,
+    postgresql_database: str,
+) -> None:
+    import psycopg
+    from psycopg.rows import dict_row
+    from psycopg.types.json import Jsonb
+
+    package_root = create_small_package(tmp_path)
+    manifest = build_manifest(package_root)
+    validation = BundleFileAdapter(allowed_roots=[package_root]).validate(manifest)
+    ingestion = PostgreSQLPredictiveMaintenanceBundleIngestor(
+        postgresql_database
+    ).ingest_validated_bundle(manifest=manifest, validation=validation)
+    runtime_repository = PredictiveMaintenanceRuntimeRepository(postgresql_database)
+    runtime_service = PredictiveMaintenanceRuntimeService(runtime_repository)
+
+    with psycopg.connect(postgresql_database, row_factory=dict_row) as connection:
+        connection.execute("SELECT set_config('app.organization_id','org-test',true)")
+        connection.execute("SELECT set_config('app.project_id','project-test',true)")
+        source = connection.execute(
+            """
+            SELECT prediction_id,prediction_result_id,asset_id,asset_type,observed_at,
+                   failure_probability,confidence,status,model_version
+            FROM pm_prediction_snapshots
+            WHERE dataset_version_id=%s AND asset_id='CNC-001'
+            """,
+            (ingestion.dataset_version_id,),
+        ).fetchone()
+        assert source is not None
+        source_artifact_id = "source-product-result-before-api-feedback"
+        connection.execute(
+            """
+            INSERT INTO pm_result_artifacts(
+                organization_id,project_id,workspace_id,dataset_version_id,
+                artifact_id,prediction_id,prediction_result_id,asset_id,asset_type,
+                observed_at,prediction_horizon_hours,prediction_task,
+                failure_probability,predicted_failure_type,status_grade,confidence,
+                top_factors,recommended_action,provenance,schema_version,
+                model_version,source_sha256
+            ) VALUES (
+                'org-test','project-test','workspace-test',%s,%s,%s,%s,%s,%s,%s,24,
+                'binary_failure_within_horizon',%s,'no_significant_risk',%s,%s,
+                '[]'::jsonb,'{}'::jsonb,%s::jsonb,'result-artifact-v1.0',%s,%s
+            )
+            """,
+            (
+                ingestion.dataset_version_id,
+                source_artifact_id,
+                source["prediction_id"],
+                source["prediction_result_id"],
+                source["asset_id"],
+                source["asset_type"],
+                source["observed_at"],
+                source["failure_probability"],
+                "critical",
+                source["confidence"],
+                Jsonb(
+                    {
+                        "prediction_id": source["prediction_id"],
+                        "model_version": source["model_version"],
+                    }
+                ),
+                source["model_version"],
+                "b" * 64,
+            ),
+        )
+
+    source_observed_at = source["observed_at"]
+    if source_observed_at.tzinfo is None:
+        source_observed_at = source_observed_at.replace(tzinfo=timezone.utc)
+    started_at = source_observed_at.astimezone(timezone.utc) + timedelta(hours=1)
+    completed_at = started_at + timedelta(minutes=30)
+    restart_at = completed_at + timedelta(minutes=5)
+
+    class RuntimeBackedClosedLoopQuery:
+        def __init__(self) -> None:
+            self.source_session_calls: list[dict[str, str]] = []
+
+        def event_evidence_projection(self, **values):
+            assert values["event_id"] == source_artifact_id
+            return {
+                "schema_version": "event-evidence-projection-v1",
+                "contract_type": "event_evidence_projection",
+                "event_id": source_artifact_id,
+                "evidence_id": f"EVD-{source_artifact_id}",
+                "subject": {
+                    "equipment_id": "CNC-001",
+                    "asset_type": "cnc",
+                },
+                "artifact_reference": {
+                    "event_id": source_artifact_id,
+                    "artifact_id": source_artifact_id,
+                    "artifact_schema_version": "result-artifact-v1.0",
+                    "asset_id": "CNC-001",
+                    "asset_type": "cnc",
+                    "observed_at": source_observed_at.isoformat(),
+                    "evidence_payload_reference": source_artifact_id,
+                    "source_sha256": "b" * 64,
+                },
+                "assessment": {
+                    "operational_decision_kind": "request_inspection",
+                    "failure_probability": 0.82,
+                },
+                "report_projection": {
+                    "recommended_actions": [
+                        {
+                            "action_id": "request_inspection",
+                            "basis": ["factor.1"],
+                        }
+                    ]
+                },
+                "provenance": {
+                    "model_version": source["model_version"],
+                    "dataset_version": ingestion.source_version,
+                    "lineage": {"policy_version": "recommendation-policy-v1"},
+                },
+            }
+
+        def resolve_maintenance_source_session(self, **values):
+            self.source_session_calls.append(values)
+            assert values["source_product_result_id"] == source_artifact_id
+            return {
+                "organization_id": values["organization_id"],
+                "project_id": values["project_id"],
+                "workspace_id": values["workspace_id"],
+                "equipment_id": values["equipment_id"],
+                "simulation_session_id": "SESSION-API-FEEDBACK-POSTGRES",
+            }
+
+        def post_maintenance_result(self, **values):
+            return runtime_service.post_maintenance_result(**values)
+
+        def post_maintenance_runtime_status(self, **values):
+            return runtime_service.post_maintenance_runtime_status(**values)
+
+    closed_loop_query = RuntimeBackedClosedLoopQuery()
+    maintenance_loop = MaintenanceLoopService(
+        PostgreSQLMaintenanceRepository(
+            postgresql_database,
+            project_context=PostgreSQLProjectContextResolver(postgresql_database),
+            connection_factory=postgres_repository_connection,
+        ),
+        event_evidence_query=closed_loop_query,
+        replay_session_query=closed_loop_query,
+    )
+
+    requested = maintenance_loop.request_inspection(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        payload=InspectionWorkOrderCreateRequest(
+            event_id=source_artifact_id,
+            snapshot_basis={
+                "artifact_id": source_artifact_id,
+                "evidence_payload_reference": source_artifact_id,
+                "asset_id": "CNC-001",
+                "event_id": source_artifact_id,
+                "observed_at": source_observed_at.isoformat(),
+                "model_version": source["model_version"],
+                "dataset_version": ingestion.source_version,
+                "source_sha256": "b" * 64,
+            },
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="pg-feedback-inspection-001",
+    )
+    inspection_work_order_id = requested["work_order_id"]
+    maintenance_loop.transition_inspection(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        work_order_id=inspection_work_order_id,
+        target=WorkOrderStatus.APPROVED,
+        actor_id="engineer-1",
+        actor_display_name="Engineer One",
+        idempotency_key="pg-feedback-inspection-accept-001",
+        transitioned_at=started_at - timedelta(minutes=20),
+    )
+    maintenance_loop.transition_inspection(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        work_order_id=inspection_work_order_id,
+        target=WorkOrderStatus.IN_PROGRESS,
+        actor_id="engineer-1",
+        actor_display_name="Engineer One",
+        idempotency_key="pg-feedback-inspection-start-001",
+        transitioned_at=started_at - timedelta(minutes=15),
+    )
+    inspection = maintenance_loop.complete_inspection(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        work_order_id=inspection_work_order_id,
+        payload=InspectionResultCreateRequest(
+            outcome="maintenance_recommended",
+            checklist=(
+                {"item_id": "tool-wear", "status": "fail", "note": "limit exceeded"},
+            ),
+            measurements=(
+                {"name": "tool_wear_min", "value": 221, "unit": "min"},
+            ),
+            findings=("tool wear limit exceeded",),
+            note="tool replacement should be reviewed",
+        ),
+        actor_id="engineer-1",
+        actor_display_name="Engineer One",
+        idempotency_key="pg-feedback-inspection-complete-001",
+        recorded_at=started_at - timedelta(minutes=10),
+    )
+    recommendation = maintenance_loop.create_manual_recommendation(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        inspection_result_id=inspection["inspection_result_id"],
+        payload=OperationsManualRecommendationCreateRequest(
+            action_code="TOOL_REPLACEMENT",
+            basis=("field engineer confirmed tool wear",),
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="pg-feedback-recommendation-001",
+        authored_at=started_at - timedelta(minutes=8),
+    )
+    decision = maintenance_loop.decide_manual_recommendation(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        recommendation_id=recommendation["recommendation_id"],
+        payload=RecommendationDecisionCreateRequest(
+            disposition=RecommendationDisposition.ACCEPT,
+            note="approve tool replacement",
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="pg-feedback-decision-001",
+        decided_at=started_at - timedelta(minutes=6),
+    )
+    approval = maintenance_loop.approve_maintenance_work_order(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        work_order_id=decision["work_order_id"],
+        payload=MaintenanceWorkOrderApproveRequest(),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="pg-feedback-maint-approve-001",
+        approved_at=started_at - timedelta(minutes=5),
+    )
+    action_id = approval["maintenance_action_id"]
+    maintenance_loop.start_maintenance(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        maintenance_action_id=action_id,
+        payload=MaintenanceActionStartRequest(),
+        actor_id="technician-1",
+        actor_display_name="Technician One",
+        idempotency_key="pg-feedback-maint-start-001",
+        started_at=started_at,
+    )
+    completed = maintenance_loop.complete_maintenance(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        maintenance_action_id=action_id,
+        payload=MaintenanceActionCompleteRequest(outcome="tool replaced"),
+        actor_id="technician-1",
+        actor_display_name="Technician One",
+        idempotency_key="pg-feedback-maint-complete-001",
+        completed_at=completed_at,
+    )
+    replay = maintenance_loop.request_maintenance_replay(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        maintenance_event_id=completed["maintenance_event_id"],
+        payload=MaintenanceReplayRequest(restart_at=restart_at),
+        actor_id="technician-1",
+        actor_display_name="Technician One",
+        idempotency_key="pg-feedback-replay-001",
+    )
+    assert replay["status"] == "replay_requested"
+    assert closed_loop_query.source_session_calls == [
+        {
+            "organization_id": "org-test",
+            "project_id": "project-test",
+            "workspace_id": "workspace-test",
+            "source_product_result_id": source_artifact_id,
+            "equipment_id": "CNC-001",
+        }
+    ]
+
+    post_artifact_id = "post-maintenance-product-result-api-feedback"
+    with psycopg.connect(postgresql_database, row_factory=dict_row) as connection:
+        connection.execute("SELECT set_config('app.organization_id','org-test',true)")
+        connection.execute("SELECT set_config('app.project_id','project-test',true)")
+        _persist_overlay_product_result(
+            connection,
+            Jsonb,
+            dataset_version_id=ingestion.dataset_version_id,
+            asset_id="CNC-001",
+            asset_type="cnc",
+                result={
+                    "artifact_id": post_artifact_id,
+                    "observed_at": (completed_at + timedelta(minutes=30)).isoformat(),
+                    "failure_probability": 0.12,
+                    "predicted_failure_type": "no_significant_risk",
+                    "status_grade": "normal",
+                    "confidence": 0.91,
+                    "top_factors": [
+                        {
+                            "rank": 1,
+                        "feature": "tool_wear_min",
+                        "feature_value": 0.0,
+                        "signed_contribution": -0.2,
+                            "direction": "negative",
+                            "explanation_method": "maintenance_replay",
+                        },
+                        {
+                            "rank": 2,
+                            "feature": "spindle_load_pct",
+                            "feature_value": 41.0,
+                            "signed_contribution": -0.08,
+                            "direction": "negative",
+                            "explanation_method": "maintenance_replay",
+                        },
+                        {
+                            "rank": 3,
+                            "feature": "vibration_rms",
+                            "feature_value": 0.22,
+                            "signed_contribution": -0.04,
+                            "direction": "negative",
+                            "explanation_method": "maintenance_replay",
+                        }
+                    ],
+                "recommended_action": {
+                    "action": "continue_monitoring",
+                    "priority": "low",
+                },
+                "provenance": {
+                    "prediction_id": "prediction-after-api-feedback-maintenance",
+                    "model_version": "test-v2",
+                    "maintenance_event_id": completed["maintenance_event_id"],
+                    "overlay_branch_id": "overlay-api-feedback-1",
+                    "history_segment_id": "history-segment-api-feedback-1",
+                    "maintenance_action_id": action_id,
+                    "canonical_source_mutated": False,
+                },
+            },
+        )
+
+    post_result = runtime_service.post_maintenance_result(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        asset_id="CNC-001",
+        maintenance_event_id=completed["maintenance_event_id"],
+    )
+    assert post_result is not None
+    assert post_result.artifact_id == post_artifact_id
+    assert post_result.provenance.maintenance_event_id == completed["maintenance_event_id"]
+    assert post_result.provenance.maintenance_action_id == action_id
+    assert post_result.predicted_failure_type == "no_significant_risk"
+    assert len(post_result.top_factors) == 3
+
+    source_contract, total, latest_rows = runtime_repository.latest_result_rows(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        dataset_version_id=ingestion.dataset_version_id,
+        asset_id="CNC-001",
+        site_id=None,
+        cell_id=None,
+        asset_type=None,
+        status_grade=None,
+        offset=0,
+        limit=100,
+    )
+    assert source_contract == "result_artifact"
+    assert total == 1
+    assert latest_rows[0]["artifact_id"] == post_artifact_id
+    assert latest_rows[0]["artifact_id"] != source_artifact_id
+    assert latest_rows[0]["provenance"]["source_product_result_id"] == source_artifact_id
+
+    queue = maintenance_loop.list_open_inspection_work_orders(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+    )
+    assert queue == {"items": []}
 
 
 def test_postgresql_copy_idempotency_rls_and_atomic_rollback(

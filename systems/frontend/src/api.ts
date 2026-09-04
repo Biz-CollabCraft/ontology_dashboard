@@ -11,6 +11,8 @@ import type {
 import type { AgentQueryInput, AgentRunPage, AgentRunResponse } from "./features/agent/types";
 import type {
   EvidenceSnapshotBasisWire,
+  OperationsDecisionBriefRole,
+  OperationsDecisionSupportResponse,
   OperationsAgentReviewPacket,
   OperationsAgentReviewSummaryResponse,
   OperationsAgentReviewWorkflowRunsResponse,
@@ -231,6 +233,7 @@ export interface ServerDisplayPreferences {
   version: 3;
   textSize: "small" | "default" | "large" | "extra-large";
   density: "compact" | "standard" | "comfortable";
+  theme: "light" | "dark" | "system";
   showTechnicalMetadata: boolean;
   updated_at?: string;
 }
@@ -768,7 +771,8 @@ export function getPredictiveMaintenanceDashboard(
   input: {
     dataset_version_id?: string;
     selected_event_id?: string;
-    role?: "manager" | "engineer";
+    role?: "manager" | "engineer" | "executive";
+    report_type?: import("./types").ReportType;
     intent?: string;
     locale?: "ko-KR" | "en-US";
   } = {},
@@ -778,6 +782,7 @@ export function getPredictiveMaintenanceDashboard(
   if (input.dataset_version_id) params.set("dataset_version_id", input.dataset_version_id);
   if (input.selected_event_id) params.set("selected_event_id", input.selected_event_id);
   if (input.role) params.set("role", input.role);
+  if (input.report_type) params.set("report_type", input.report_type);
   if (input.intent) params.set("intent", input.intent);
   if (input.locale) params.set("locale", input.locale);
   const query = params.size ? `?${params.toString()}` : "";
@@ -964,6 +969,7 @@ export function getOperationsAgentReviewPacket(input: {
   assetId: string;
   projectId?: string;
   datasetVersionId?: string | null;
+  eventId?: string | null;
   historyWindow?: string;
 }): Promise<OperationsAgentReviewPacket> {
   const params = new URLSearchParams({
@@ -971,6 +977,7 @@ export function getOperationsAgentReviewPacket(input: {
     history_window: input.historyWindow ?? "24h",
   });
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewPacket>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-packet?${params.toString()}`,
   );
@@ -980,6 +987,7 @@ export function getOperationsAgentReviewSummary(input: {
   assetId: string;
   projectId?: string;
   datasetVersionId?: string | null;
+  eventId?: string | null;
   historyWindow?: string;
 }): Promise<OperationsAgentReviewSummaryResponse> {
   const params = new URLSearchParams({
@@ -987,6 +995,7 @@ export function getOperationsAgentReviewSummary(input: {
     history_window: input.historyWindow ?? "24h",
   });
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
   );
@@ -996,6 +1005,7 @@ export function createOperationsAgentReviewSummary(input: {
   assetId: string;
   projectId?: string;
   datasetVersionId?: string | null;
+  eventId?: string | null;
   historyWindow?: string;
   trigger?: "manual_materialization" | "ui_manual_regeneration";
 }): Promise<OperationsAgentReviewSummaryResponse> {
@@ -1005,8 +1015,53 @@ export function createOperationsAgentReviewSummary(input: {
     trigger: input.trigger ?? "ui_manual_regeneration",
   });
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
+    { method: "POST" },
+  );
+}
+
+export function getOperationsDecisionSupportBrief(input: {
+  assetId: string;
+  projectId: string;
+  workspaceId: string;
+  evidenceSnapshotId: string;
+  decisionAsOf: string;
+  role: OperationsDecisionBriefRole;
+}): Promise<OperationsDecisionSupportResponse> {
+  const params = new URLSearchParams({
+    project_id: input.projectId,
+    workspace_id: input.workspaceId,
+    evidence_snapshot_id: input.evidenceSnapshotId,
+    decision_as_of: input.decisionAsOf,
+    role: input.role,
+  });
+  return request<OperationsDecisionSupportResponse>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/decision-support-brief?${params.toString()}`,
+  );
+}
+
+export function createOperationsDecisionSupportBrief(input: {
+  assetId: string;
+  projectId: string;
+  workspaceId: string;
+  evidenceSnapshotId: string;
+  decisionAsOf: string;
+  role: OperationsDecisionBriefRole;
+  riskStatus: string;
+}): Promise<OperationsDecisionSupportResponse> {
+  const params = new URLSearchParams({
+    project_id: input.projectId,
+    workspace_id: input.workspaceId,
+    evidence_snapshot_id: input.evidenceSnapshotId,
+    decision_as_of: input.decisionAsOf,
+    role: input.role,
+    risk_status: input.riskStatus,
+    trigger: "ui_manual_regeneration",
+  });
+  return request<OperationsDecisionSupportResponse>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/decision-support-brief?${params.toString()}`,
     { method: "POST" },
   );
 }
@@ -1246,10 +1301,11 @@ export async function getReport(
   role: Role,
   useLlm = true,
   locale: "ko-KR" | "en-US" = "ko-KR",
+  reportType?: import("./types").ReportType,
 ): Promise<Report> {
   const payload = await request<{ report: Report }>(`/api/events/${encodeURIComponent(eventId)}/report`, {
     method: "POST",
-    body: JSON.stringify({ role, locale, use_llm: useLlm }),
+    body: JSON.stringify({ role, report_type: reportType, locale, use_llm: useLlm }),
   });
   return payload.report;
 }
@@ -1407,13 +1463,29 @@ export async function approveMaintenanceWorkOrder(input: {
   projectId: string;
   workspaceId: string;
   workOrderId: string;
+  datasetVersionId: string;
   idempotencyKey: string;
 }) {
-  return maintenanceCommand(
-    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
-    {},
-    input.idempotencyKey,
-  );
+  const endpoint = `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-work-orders/${encodeURIComponent(input.workOrderId)}/approve`;
+  try {
+    return await maintenanceCommand(endpoint, {}, input.idempotencyKey);
+  } catch (reason) {
+    if (!(reason instanceof ApiError) || reason.code !== "source_simulation_session_unavailable") {
+      throw reason;
+    }
+    // Historical Product Results can predate source-session provenance. Only
+    // in that compatibility case do we create a replay selector; current live
+    // Results stay bound to the immutable source session resolved server-side.
+    const replay = await startPredictiveMaintenanceReplay(input.projectId, input.workspaceId, {
+      dataset_version_id: input.datasetVersionId,
+      speed_minutes_per_second: 60,
+    });
+    return maintenanceCommand(
+      endpoint,
+      { simulation_session_id: replay.cursor.session_id },
+      input.idempotencyKey,
+    );
+  }
 }
 
 export function startMaintenanceAction(input: {

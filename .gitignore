@@ -414,3 +414,7 @@ gha-creds-*.json
 # Local demo datasets and frontend test artifacts
 data/raw/predictive_maintenance_canonical_v3.1/
 systems/frontend/test-results/
+
+# Generated evaluation outputs
+tests/eval/results/*.json
+tests/eval/runtime/

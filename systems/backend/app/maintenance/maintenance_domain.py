@@ -54,6 +54,10 @@ class PriorActionFailed(ValueError):
     """Raised when the previous command with the same identity failed."""
 
 
+class SourceSimulationSessionUnavailable(ValueError):
+    """Raised when a historical Product Result has no source simulation lineage."""
+
+
 RISK_EVENT_TRANSITIONS = {
     RiskEventStatus.OPEN: {RiskEventStatus.ACKNOWLEDGED},
     RiskEventStatus.ACKNOWLEDGED: {RiskEventStatus.IN_PROGRESS},

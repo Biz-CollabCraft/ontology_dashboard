@@ -427,7 +427,7 @@ export function DashboardShell({
             <AlertTriangle size={15} />
             <div>
               <strong>{locale === "ko-KR" ? "현재 Dashboard는 대체 Runtime으로 표시됩니다" : "This dashboard is using a fallback runtime"}</strong>
-              <span>{locale === "ko-KR" ? "운영 데이터 연결이 준비되지 않아 검증된 Fixture 또는 결정론적 결과를 사용하고 있습니다. 실제 운영 Runtime과 동일한 상태로 해석하지 마세요." : "The operational data connection is unavailable, so validated fixture or deterministic results are shown. Do not interpret this as the live runtime state."}</span>
+              <span>{locale === "ko-KR" ? "운영 데이터 연결이 준비되지 않아 검증된 기준 데이터 또는 결정론적 결과를 사용하고 있습니다. 연결 상태를 확인한 뒤 최신 Runtime과 비교하세요." : "The operational data connection is unavailable, so validated reference data or deterministic results are shown. Verify the connection before comparing with the latest runtime state."}</span>
             </div>
             <button type="button" onClick={onRetry}>{t("common.retry")}</button>
           </section>

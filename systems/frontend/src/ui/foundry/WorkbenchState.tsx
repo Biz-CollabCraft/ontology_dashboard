@@ -1,7 +1,7 @@
 import { AlertTriangle, Ban, Inbox, RefreshCw, ShieldAlert, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider";
-import { OntologyLifecycleLoader } from "./OntologyLifecycleLoader";
+import { OntologyLifecycleLoader, type OntologyLifecycleLoaderVariant } from "./OntologyLifecycleLoader";
 
 export type WorkbenchStateKind = "loading" | "refreshing" | "empty" | "degraded" | "error" | "permission" | "unavailable";
 
@@ -11,13 +11,15 @@ interface StateProps {
   action?: ReactNode;
   className?: string;
   compact?: boolean;
+  loaderVariant?: OntologyLifecycleLoaderVariant;
+  loaderSteps?: readonly [string, string, string];
 }
 
 interface WorkbenchStateProps extends StateProps {
   kind: WorkbenchStateKind;
 }
 
-export function WorkbenchState({ kind, title, detail, action, className = "", compact = false }: WorkbenchStateProps) {
+export function WorkbenchState({ kind, title, detail, action, className = "", compact = false, loaderVariant, loaderSteps }: WorkbenchStateProps) {
   const { t } = useI18n();
   const defaults = {
     loading: t("state.loadingTitle"),
@@ -31,8 +33,13 @@ export function WorkbenchState({ kind, title, detail, action, className = "", co
 
   if (kind === "loading" || kind === "refreshing") {
     return (
-      <div className={`fd-state state-${kind} ${compact ? "is-compact" : ""} ${className}`.trim()} role="status" aria-live="polite">
-        <OntologyLifecycleLoader variant={compact ? "inline" : "panel"} operation={title ?? defaults[kind]} detail={detail} />
+      <div className={`fd-state state-${kind} ${compact ? "is-compact" : ""} ${className}`.trim()}>
+        <OntologyLifecycleLoader
+          variant={loaderVariant ?? (compact ? "inline" : "panel")}
+          operation={title ?? defaults[kind]}
+          detail={detail}
+          steps={loaderSteps}
+        />
       </div>
     );
   }

@@ -1,4 +1,4 @@
-"""Single-consumer worker processing priority-FIFO queue items sequentially."""
+"""Single-consumer background worker processing FIFO queue items sequentially."""
 
 from __future__ import annotations
 

@@ -52,7 +52,7 @@ def test_cost_analysis_reference_migrations_allow_no_option_selection() -> None:
         / "backend"
         / "migrations"
         / "postgresql"
-        / "0043_cost_analysis_reference_lineage.sql"
+        / "0044_cost_analysis_reference_lineage.sql"
     ).read_text(encoding="utf-8")
 
     for sql in (sqlite_sql, postgresql_sql):

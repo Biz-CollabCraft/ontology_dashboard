@@ -672,7 +672,11 @@ def test_planner_provenance_llm_success_and_fallback_tracking(monkeypatch, sampl
     planner = PreprocessingPlanner()
     filepath = str(PATHS.data_dir / sample_wide_csv)
 
-    # 1. Normal fallback when no API key (rule_fallback)
+    # 1. Deterministic fallback when the provider is unavailable.
+    def fail_llm(_prompt, system=None):
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(generator_llm_client, "call_llm", fail_llm)
     plan_fallback = planner.build_plan(filepath)
     assert plan_fallback["decision_source"] == "rule_fallback"
     assert "stage1:" in plan_fallback["fallback_reason"]

@@ -18,11 +18,17 @@ export interface ContextAssistantDrawerProps {
   context?: ReliabilityAssistantContext | null;
   messages?: ReliabilityAssistantMessage[];
   prompts?: ReliabilityAssistantPrompt[];
-  onSubmit?: (question: string) => void;
+  onSubmit?: (question: string) => void | Promise<void>;
   locale?: ReliabilityAssistantLocale;
   loading?: boolean;
   submitting?: boolean;
   error?: string | null;
+  actions?: Array<{
+    id: string;
+    label: string;
+    detail?: string;
+    onClick: () => void;
+  }>;
 }
 
 export function ContextAssistantDrawer({
@@ -36,6 +42,7 @@ export function ContextAssistantDrawer({
   loading = false,
   submitting = false,
   error = null,
+  actions = [],
 }: ContextAssistantDrawerProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -72,7 +79,7 @@ export function ContextAssistantDrawer({
   function submit(question: string) {
     const trimmed = question.trim();
     if (!trimmed || !onSubmit) return;
-    onSubmit(trimmed);
+    void onSubmit(trimmed);
     setDraft("");
   }
 
@@ -140,12 +147,13 @@ export function ContextAssistantDrawer({
                   : (english ? "Validated fallback" : "검증 fallback")}
               </strong>
             ) : null}
-            {context?.retrievalProvider ? (
-              <small>{context.retrievalProvider}{context.retrievalCount !== null && context.retrievalCount !== undefined ? ` · ${context.retrievalCount}` : ""}</small>
+            {context?.retrievalCount !== null && context?.retrievalCount !== undefined ? (
+              <small>검증된 SOP 안내 · {context.retrievalCount}</small>
             ) : null}
           </div>
         ) : null}
         {error ? <p className="rw-context-assistant__error">{error}</p> : null}
+        {selected && actions.length ? <div className="rw-context-assistant__actions" aria-label={english ? "Connected workspace actions" : "연결된 화면으로 이동"}>{actions.map((action) => <button type="button" key={action.id} onClick={action.onClick}><span><strong>{action.label}</strong>{action.detail ? <small>{action.detail}</small> : null}</span><ChevronRight size={13} /></button>)}</div> : null}
       </section>
 
       {suggestedPrompts.length ? (
@@ -178,6 +186,10 @@ export function ContextAssistantDrawer({
               : "선택된 실시간 이벤트, Agent Review Packet, 저장된 근거 기반 AI 요약과 연결 retrieval metadata를 사용해 답합니다."}</p>
           </div>
         )}
+        {submitting ? <article className="rw-context-assistant__message is-assistant is-loading" aria-live="polite">
+          <span>{english ? "CONNECTED DATA" : "연결 데이터 요약"}</span>
+          <p>{english ? "Checking linked evidence and the current case context…" : "연결 근거와 현재 Case 문맥을 확인하고 있습니다…"}</p>
+        </article> : null}
       </section>
 
       <form className="rw-context-assistant__composer" onSubmit={submitDraft}>

@@ -64,6 +64,27 @@ interface ExecutiveBriefSnapshot {
   agentSummary: OperationsAgentReviewSummaryResponse["summary"];
 }
 
+export function executiveBriefIsStale(input: {
+  snapshotEventId: string;
+  snapshotAssetId: string;
+  snapshotContextObservedAt: string | null;
+  selectedEventId: string | null;
+  selectedAssetId: string | null;
+  currentContextObservedAt: string | null;
+}): boolean {
+  const newerEventForSameAsset = Boolean(
+    input.selectedEventId
+    && input.selectedAssetId === input.snapshotAssetId
+    && input.selectedEventId !== input.snapshotEventId,
+  );
+  const newerMonitoringObservation = Boolean(
+    input.currentContextObservedAt
+    && input.snapshotContextObservedAt
+    && input.currentContextObservedAt > input.snapshotContextObservedAt,
+  );
+  return newerEventForSameAsset || newerMonitoringObservation;
+}
+
 function snapshotStorageKey(userScope: string, projectId: string): string {
   return `ontology-dashboard:executive-brief:${userScope}:${projectId}`;
 }
@@ -168,6 +189,7 @@ export function OperationsExecutiveReportPage({
       assetId: selectedEvent.assetId,
       projectId: model.context.projectId,
       datasetVersionId: model.context.datasetVersionId,
+      eventId: selectedEvent.eventId,
     };
     getOperationsAgentReviewSummary(request)
       .then((payload) => {
@@ -199,14 +221,14 @@ export function OperationsExecutiveReportPage({
     persistSnapshot(storageKey, next);
   }, [agentSummary?.summary, selectedEvent, snapshot, storageKey]);
 
-  const snapshotStale = Boolean(snapshot && (
-    (selectedEvent && selectedEvent.assetId === snapshot.event.assetId && selectedEvent.eventId !== snapshot.event.eventId)
-    || (
-      model.context.observedAt
-      && snapshot.contextObservedAt
-      && model.context.observedAt > snapshot.contextObservedAt
-    )
-  ));
+  const snapshotStale = Boolean(snapshot && executiveBriefIsStale({
+    snapshotEventId: snapshot.event.eventId,
+    snapshotAssetId: snapshot.event.assetId,
+    snapshotContextObservedAt: snapshot.contextObservedAt,
+    selectedEventId: selectedEvent?.eventId ?? null,
+    selectedAssetId: selectedEvent?.assetId ?? null,
+    currentContextObservedAt: model.context.observedAt,
+  }));
 
   async function regenerateSnapshot() {
     if (!selectedEvent || !detail || detail.event.eventId !== selectedEvent.eventId) {
@@ -221,6 +243,7 @@ export function OperationsExecutiveReportPage({
           assetId: selectedEvent.assetId,
           projectId: model.context.projectId,
           datasetVersionId: model.context.datasetVersionId,
+          eventId: selectedEvent.eventId,
           trigger: "ui_manual_regeneration",
         });
         setAgentSummary(payload);
@@ -264,7 +287,7 @@ export function OperationsExecutiveReportPage({
   const plannedUnits = reportDetail.operationContext?.productionPlan?.plannedUnits ?? null;
   const estimatedLostUnits = eventImpact?.estimatedLostUnits ?? null;
   const estimatedDowntime = eventImpact?.basis.estimatedDowntimeMinutes ?? reportEvent.estimatedDowntimeMinutes;
-  const productionContextIsSynthetic = reportDetail.operationContext?.sourceType === "synthetic_capacity_model";
+  const productionContextUsesCapacityModel = reportDetail.operationContext?.sourceType === "capacity_model";
   const asOf = snapshot?.asOf ?? report.asOf ?? reportEvent.observedAt ?? report.generatedAt;
   const generatedAt = snapshot?.generatedAt ?? report.generatedAt;
   const snapshotId = snapshot?.snapshotId ?? report.snapshotId ?? `event:${reportEvent.eventId}`;
@@ -303,7 +326,7 @@ export function OperationsExecutiveReportPage({
         </header>
 
         <section className="operations-report-executive-summary">
-          <div><span>경영 판단 요약</span><h2>{selectedDecisionHeadline(reportEvent)}</h2><p>{reportEvent.status === "data_quality_hold" ? "원천 데이터 확인 전에는 고장 위험과 생산 영향을 확정하지 않습니다." : `현재 예측 위험은 ${formatProbability(reportEvent.failureProbability)}입니다. 예상 정지 영향은 ${formatMinutes(estimatedDowntime)}${estimatedLostUnits !== null ? `, 계획 영향은 약 ${estimatedLostUnits.toLocaleString()}개` : ""}${plannedUnits !== null ? ` (일일 계획 ${plannedUnits.toLocaleString()}개 기준)` : ""}입니다.`}</p>{productionContextIsSynthetic ? <small>생산 영향은 발표용 synthetic planning context 기반 추정치이며 MES/ERP 실적이 아닙니다.</small> : null}</div>
+          <div><span>경영 판단 요약</span><h2>{selectedDecisionHeadline(reportEvent)}</h2><p>{reportEvent.status === "data_quality_hold" ? "원천 데이터 확인 전에는 고장 위험과 생산 영향을 확정하지 않습니다." : `현재 예측 위험은 ${formatProbability(reportEvent.failureProbability)}입니다. 예상 정지 영향은 ${formatMinutes(estimatedDowntime)}${estimatedLostUnits !== null ? `, 계획 영향은 약 ${estimatedLostUnits.toLocaleString()}개` : ""}${plannedUnits !== null ? ` (일일 계획 ${plannedUnits.toLocaleString()}개 기준)` : ""}입니다.`}</p>{productionContextUsesCapacityModel ? <small>생산 영향은 현재 capacity model 기반 추정치이며 결산 시 실제 실적과 재검증합니다.</small> : null}</div>
           <aside><OperationsStatusBadge status={reportEvent.status} /><strong>{DECISION_LABEL[reportEvent.recommendedDecision]}</strong><small>최근 사람 결정: {latestDecision?.decision ? DECISION_LABEL[latestDecision.decision] : "아직 기록 없음"}</small><small>판단 기록은 Operations에서 관리</small></aside>
         </section>
 
@@ -372,7 +395,7 @@ export function OperationsExecutiveReportPage({
             <section><span>주요 위험 설비</span><div className="operations-report-asset-list">{topAssets.map((asset, index) => <article key={asset.assetId}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{displayAssetName(asset)}</strong><small>{displayLineLabel(asset.line)}</small></div><span>{formatProbability(asset.failureProbability)}</span></article>)}</div></section>
             <section><span>선택 설비 판단 근거</span><dl><div><dt>고장 위험</dt><dd>{formatProbability(reportEvent.failureProbability)}</dd></div><div><dt>신뢰도</dt><dd>{CONFIDENCE_LABEL[reportEvent.confidence]}</dd></div><div><dt>예측 이상</dt><dd>{fieldFailureLabel(reportEvent.predictedFailureType)}</dd></div><div><dt>중요도</dt><dd>{displayCriticality(reportDetail.assetCriticality ?? reportEvent.criticality)}</dd></div><div><dt>검토 우선순위</dt><dd>{displayReviewPriority(reportDetail.reviewPriority?.level)}</dd></div><div><dt>담당자</dt><dd>{displayAssignee(reportEvent.assignedEngineer)}</dd></div></dl></section>
             <section><span>핵심 확인 항목</span>{reportDetail.topFactors.length ? <dl>{reportDetail.topFactors.slice(0, 5).map((factor, index) => <div key={factor.id}><dt>{fieldFactorItem(factor)}</dt><dd>{index + 1}순위 근거</dd></div>)}</dl> : <p>추가 확인이 필요한 설명 요인이 없습니다.</p>}</section>
-            <section><span>데이터 기준</span><p>센서 스트리밍은 Monitoring에 사용하고, 본 Executive Brief는 Product Result/Evidence와 운영 맥락의 as-of snapshot을 기준으로 고정합니다.</p>{productionContextIsSynthetic ? <small>운영 맥락은 발표용 synthetic capacity model이며 실제 MES/ERP/APS 연동을 주장하지 않습니다.</small> : null}</section>
+            <section><span>데이터 기준</span><p>센서 스트리밍은 Monitoring에 사용하고, 본 Executive Brief는 Product Result/Evidence와 운영 맥락의 as-of snapshot을 기준으로 고정합니다.</p>{productionContextUsesCapacityModel ? <small>운영 영향은 capacity model과 현재 계획 snapshot을 기준으로 산정하며 정산 데이터와 분리해 관리합니다.</small> : null}</section>
           </aside>
         </div>
 

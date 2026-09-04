@@ -293,8 +293,12 @@ class WorkOrder(ScopedRecord):
             if self.status is WorkOrderStatus.REQUESTED:
                 if self.assigned_to is not None or self.assigned_at is not None:
                     raise ValueError("requested inspection work order cannot be assigned")
-            elif self.assigned_to is None or self.assigned_at is None:
+            elif self.status in {WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS} and (
+                self.assigned_to is None or self.assigned_at is None
+            ):
                 raise ValueError("accepted inspection work order requires an assignee")
+            elif (self.assigned_to is None) != (self.assigned_at is None):
+                raise ValueError("inspection assignment identity and timestamp must be paired")
         return self
 
 

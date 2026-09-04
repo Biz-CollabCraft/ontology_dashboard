@@ -729,7 +729,7 @@ def compute_prediction_result_batch_id(
 
 
 class PipelineQueueItem(BaseModel):
-    """Item managed in the persistent priority-FIFO queue."""
+    """Item managed in persistent FIFO queue."""
     model_config = ConfigDict(extra="forbid")
 
     job_id: str = Field(..., min_length=1, description="Unique job identifier")

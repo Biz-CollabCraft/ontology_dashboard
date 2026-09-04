@@ -248,6 +248,7 @@ class DisplayPreferenceUpdateRequest(BaseModel):
     version: Literal[3] = 3
     textSize: Literal["small", "default", "large", "extra-large"] = "default"
     density: Literal["compact", "standard", "comfortable"] = "standard"
+    theme: Literal["light", "dark", "system"] = "light"
     showTechnicalMetadata: bool = False
 
 

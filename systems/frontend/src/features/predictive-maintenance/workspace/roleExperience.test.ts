@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AuthUser } from "../../../types";
 import {
   RELIABILITY_ROLE_EXPERIENCES,
+  reliabilityNavigation,
   resolveReliabilityRoleExperience,
 } from "./roleExperience";
 
@@ -36,7 +37,7 @@ describe("resolveReliabilityRoleExperience", () => {
     expect(resolveReliabilityRoleExperience(user({
       roles: ["executive_viewer"],
       active_project_roles: ["maintenance_technician"],
-    })).kind).toBe("engineering");
+    })).kind).toBe("maintenance");
   });
 
   it("falls back to account roles and resolves process_manager", () => {
@@ -49,13 +50,13 @@ describe("resolveReliabilityRoleExperience", () => {
     expect(experience.kind).toBe("operations");
   });
 
-  it("groups maintenance_technician into the engineering persona", () => {
+  it("resolves maintenance_technician into the maintenance persona", () => {
     const experience = resolveReliabilityRoleExperience(user({
       roles: ["maintenance_technician"],
       landing_key: "maintenance_technician",
     }));
 
-    expect(experience.kind).toBe("engineering");
+    expect(experience.kind).toBe("maintenance");
   });
 
   it("resolves process_engineer and preserves engineering as the fallback", () => {
@@ -91,6 +92,30 @@ describe("RELIABILITY_ROLE_EXPERIENCES", () => {
     expect(RELIABILITY_ROLE_EXPERIENCES.operations.defaultView).toBe("operations");
     expect(RELIABILITY_ROLE_EXPERIENCES.engineering.defaultView).toBe("overview");
     expect(RELIABILITY_ROLE_EXPERIENCES.maintenance.defaultView).toBe("operations");
+  });
+
+  it("renders each role's default surface as navigation item 01", () => {
+    for (const experience of Object.values(RELIABILITY_ROLE_EXPERIENCES)) {
+      expect(reliabilityNavigation(experience)[0].view).toBe(experience.defaultView);
+    }
+  });
+
+  it("uses role-specific navigation order instead of one shared dashboard menu", () => {
+    expect(reliabilityNavigation(RELIABILITY_ROLE_EXPERIENCES.executive).map((item) => item.view)).toEqual([
+      "reports", "operations", "overview", "objects",
+    ]);
+    expect(reliabilityNavigation(RELIABILITY_ROLE_EXPERIENCES.operations).map((item) => item.view)).toEqual([
+      "operations", "overview", "objects", "reports",
+    ]);
+    expect(reliabilityNavigation(RELIABILITY_ROLE_EXPERIENCES.engineering).map((item) => item.view)).toEqual([
+      "overview", "objects", "operations", "reports",
+    ]);
+  });
+
+  it("uses distinct presentation surfaces for executive, manager, and engineer", () => {
+    expect(RELIABILITY_ROLE_EXPERIENCES.executive.primarySurface).toBe("executive_brief");
+    expect(RELIABILITY_ROLE_EXPERIENCES.operations.primarySurface).toBe("decision_workspace");
+    expect(RELIABILITY_ROLE_EXPERIENCES.engineering.primarySurface).toBe("monitoring_workspace");
   });
 
   it("defines the intended first-screen focus for every role experience", () => {

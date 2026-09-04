@@ -1084,6 +1084,8 @@ def _live_pipeline_observation_rows(
     producer file and makes worker restart behaviour deterministic.
     """
     psycopg, dict_row, _ = _postgres_modules()
+    cadence_filter = "MOD(EXTRACT(EPOCH FROM observed_at)::bigint, 600) = 0"
+    lookback_rows = max(minimum_history_rows, minimum_history_rows * 8)
     queries = {
         "cnc": """
             SELECT * FROM (
@@ -1091,18 +1093,22 @@ def _live_pipeline_observation_rows(
                      product_type,air_temperature_k,process_temperature_k,
                      rotational_speed_rpm,torque_nm,tool_wear_min,generator_version,
                      ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY observed_at DESC) AS rn
-              FROM pm_cnc_observations WHERE dataset_version_id=%s
+              FROM pm_cnc_observations
+              WHERE dataset_version_id=%s
+                AND {cadence_filter}
             ) ranked WHERE rn <= %s ORDER BY asset_id,observed_at
-        """,
+        """.format(cadence_filter=cadence_filter),
         "compressor": """
             SELECT * FROM (
               SELECT observed_at,asset_id,site_id,cell_id,is_operating,operating_state,
                      voltage_raw,rotation_raw,pressure_raw,vibration_raw,
                      relative_vibration_z,relative_vibration_zone,generator_version,
                      ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY observed_at DESC) AS rn
-              FROM pm_compressor_observations WHERE dataset_version_id=%s
+              FROM pm_compressor_observations
+              WHERE dataset_version_id=%s
+                AND {cadence_filter}
             ) ranked WHERE rn <= %s ORDER BY asset_id,observed_at
-        """,
+        """.format(cadence_filter=cadence_filter),
     }
     selected: list[tuple[str, dict[str, Any]]] = []
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
@@ -1110,7 +1116,7 @@ def _live_pipeline_observation_rows(
         for family, query in queries.items():
             for raw in connection.execute(
                 query,
-                (dataset_version_id, minimum_history_rows),
+                (dataset_version_id, lookback_rows),
             ).fetchall():
                 row = dict(raw)
                 row.pop("rn", None)
@@ -1121,27 +1127,47 @@ def _live_pipeline_observation_rows(
     counts: dict[str, int] = defaultdict(int)
     for _, row in selected:
         counts[str(row["asset_id"])] += 1
-    ready_assets = {
-        asset_id for asset_id, count in counts.items() if count >= minimum_history_rows
-    }
+
+    def parse_observed_at(row: dict[str, Any]) -> datetime:
+        value = row["observed_at"]
+        if isinstance(value, datetime):
+            return value.astimezone(timezone.utc)
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc)
+
+    def latest_continuous_window(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        ordered = sorted(rows, key=parse_observed_at)
+        for end in range(len(ordered), minimum_history_rows - 1, -1):
+            candidate = ordered[end - minimum_history_rows : end]
+            stamps = [parse_observed_at(row) for row in candidate]
+            if all(
+                abs(((right - left).total_seconds() / 60.0) - 10.0) <= 1.0
+                for left, right in zip(stamps, stamps[1:])
+            ):
+                return candidate
+        return []
 
     observations: list[dict[str, Any]] = []
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for family, row in selected:
-        asset_id = str(row["asset_id"])
-        if asset_id not in ready_assets:
+        grouped[(family, str(row["asset_id"]))].append(row)
+
+    for (family, asset_id), rows in grouped.items():
+        window = latest_continuous_window(rows)
+        if len(window) < minimum_history_rows:
             continue
-        observations.append(
-            {
-                "contract_version": "gen-data-sensor-observation-v2",
-                "schema_version": "2",
-                "source_kind": "live_sensor",
-                "asset_type": family,
-                **{
-                    key: (value.isoformat() if key == "observed_at" else value)
-                    for key, value in row.items()
+        for row in window:
+            observations.append(
+                {
+                    "contract_version": "gen-data-sensor-observation-v2",
+                    "schema_version": "2",
+                    "source_kind": "live_sensor",
+                    "asset_type": family,
+                    **{
+                        key: (value.isoformat() if key == "observed_at" else value)
+                        for key, value in row.items()
+                    },
                 },
-            }
-        )
+            )
     observations.sort(key=lambda item: (str(item["asset_id"]), str(item["observed_at"])))
     return observations, dict(counts)
 
