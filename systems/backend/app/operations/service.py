@@ -28,7 +28,10 @@ from app.operations.agent_review_summary_materialization import (
     summary_key_payload,
 )
 from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider
-from app.operations.asset_detail_view_model import compose_asset_detail_view_model
+from app.operations.asset_detail_view_model import (
+    AssetDetailViewModelService,
+    compose_asset_detail_view_model,
+)
 from app.operations.domain_context_adapters import (
     DomainReviewContextAdapter,
     ManufacturingFixtureReviewContextAdapter,
@@ -94,6 +97,7 @@ class ManufacturingPredictiveMaintenanceService:
         domain_review_context_adapter: DomainReviewContextAdapter | None = None,
         maintenance_lineage_query: MaintenanceLineageQueryPort | None = None,
         company_context_query: CompanyContextQueryPort | None = None,
+        runtime_asset_detail_service: AssetDetailViewModelService | None = None,
         workspace_id: str = "manufacturing-demo",
     ) -> None:
         self.root = Path(root)
@@ -125,6 +129,7 @@ class ManufacturingPredictiveMaintenanceService:
         self.agent_review_context_registry = agent_review_context_registry
         self.maintenance_lineage_query = maintenance_lineage_query
         self.company_context_query = company_context_query
+        self.runtime_asset_detail_service = runtime_asset_detail_service
         self.workspace_id = workspace_id
         self.domain_review_context_adapter = (
             domain_review_context_adapter
@@ -387,6 +392,30 @@ class ManufacturingPredictiveMaintenanceService:
             ),
         )
 
+    def runtime_agent_review_packet(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
+        dataset_version_id: str | None,
+        event_id: str,
+        history_window: str = "24h",
+    ) -> dict[str, Any]:
+        return self._runtime_agent_review_packet_for_candidate(
+            {
+                "source_kind": "live_result",
+                "asset_id": asset_id,
+                "event_id": event_id,
+                "dataset_version_id": dataset_version_id,
+            },
+            project_id=project_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+            history_window=history_window,
+        )
+
     def agent_review_evidence_selection(
         self,
         asset_id: str,
@@ -475,6 +504,27 @@ class ManufacturingPredictiveMaintenanceService:
             dataset_version_id=dataset_version_id,
             history_window=history_window,
         )
+        return self._materialize_agent_review_packet(
+            packet=packet,
+            project_id=project_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+            history_window=history_window,
+            trigger=trigger,
+            engine=engine,
+        )
+
+    def _materialize_agent_review_packet(
+        self,
+        *,
+        packet: dict[str, Any],
+        project_id: str,
+        organization_id: str,
+        workspace_id: str,
+        history_window: str,
+        trigger: str,
+        engine: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         materializer = AgentReviewSummaryMaterializer(
             self.repository,
             self.agent_review_summary_provider,
@@ -594,6 +644,26 @@ class ManufacturingPredictiveMaintenanceService:
                 trace = {**trace, "workflow_run": _workflow_run_trace(run)}
         return summary, trace
 
+    def cached_agent_review_summary_for_packet(
+        self,
+        *,
+        packet: dict[str, Any],
+        project_id: str = "manufacturing-demo-project",
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
+        history_window: str = "24h",
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        return AgentReviewSummaryMaterializer(
+            self.repository,
+            self.agent_review_summary_provider,
+        ).lookup(
+            packet=packet,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            history_window=history_window,
+        )
+
     def agent_review_workflow_runs(
         self,
         project_id: str = "manufacturing-demo-project",
@@ -630,40 +700,60 @@ class ManufacturingPredictiveMaintenanceService:
         workspace_id: str = "manufacturing-demo",
         history_window: str = "24h",
         limit: int | None = None,
+        source: str = "fixture",
     ) -> dict[str, Any]:
-        """Materialize missing Agent Review Summaries for project fixtures."""
+        """Materialize missing Agent Review Summaries from explicit candidates."""
 
         items: list[dict[str, Any]] = []
-        fixtures = [
-            fixture
-            for fixture in self.project_fixtures.values()
-            if self._fixture_project_id(fixture) == project_id
-        ]
-        fixtures = sorted(
-            fixtures,
-            key=lambda fixture: str((fixture.get("equipment") or {}).get("equipment_id") or ""),
+        candidates = self._agent_review_summary_candidates(
+            project_id=project_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+            limit=limit,
+            source=source,
         )
-        if limit is not None:
-            fixtures = fixtures[: max(0, limit)]
 
-        for fixture in fixtures:
-            asset_id = str((fixture.get("equipment") or {}).get("equipment_id") or "")
+        for candidate in candidates:
+            asset_id = str(candidate.get("asset_id") or "")
             if not asset_id:
                 continue
-            summary, trace = self.agent_review_summary(
-                asset_id,
-                project_id,
-                organization_id=organization_id,
-                workspace_id=workspace_id,
-                dataset_version_id=fixture.get("dataset_version"),
-                history_window=history_window,
-                trigger="polling_watcher",
-            )
+            if candidate.get("source_kind") == "fixture":
+                summary, trace = self.agent_review_summary(
+                    asset_id,
+                    project_id,
+                    organization_id=organization_id,
+                    workspace_id=workspace_id,
+                    dataset_version_id=candidate.get("dataset_version_id"),
+                    history_window=history_window,
+                    trigger="polling_watcher",
+                )
+            else:
+                packet = self._runtime_agent_review_packet_for_candidate(
+                    candidate,
+                    project_id=project_id,
+                    organization_id=organization_id,
+                    workspace_id=workspace_id,
+                    history_window=history_window,
+                )
+                summary, trace = self._materialize_agent_review_packet(
+                    packet=packet,
+                    project_id=project_id,
+                    organization_id=organization_id,
+                    workspace_id=workspace_id,
+                    history_window=history_window,
+                    trigger="polling_watcher",
+                    engine="simple",
+                )
             materialization = trace.get("materialization") or {}
             items.append(
                 {
+                    "source_kind": candidate.get("source_kind"),
                     "asset_id": asset_id,
-                    "event_id": fixture.get("event_id"),
+                    "event_id": candidate.get("event_id"),
+                    "dataset_version_id": candidate.get("dataset_version_id"),
+                    "source_sha256": candidate.get("source_sha256"),
+                    "lineage_event_id": candidate.get("lineage_event_id"),
+                    "stale_reason": candidate.get("stale_reason"),
                     "summary_id": materialization.get("summary_id"),
                     "summary_key": materialization.get("summary_key"),
                     "status": materialization.get("status"),
@@ -682,11 +772,145 @@ class ManufacturingPredictiveMaintenanceService:
         return {
             "project_id": project_id,
             "history_window": history_window,
+            "source": source,
             "materialized_count": len(items),
             "created_count": sum(1 for item in items if not item.get("reused")),
             "reused_count": sum(1 for item in items if item.get("reused")),
             "items": items,
         }
+
+    def _agent_review_summary_candidates(
+        self,
+        *,
+        project_id: str,
+        organization_id: str,
+        workspace_id: str,
+        limit: int | None,
+        source: str,
+    ) -> list[dict[str, Any]]:
+        normalized_source = source.replace("_", "-")
+        if normalized_source not in {"fixture", "live", "post-maintenance", "auto"}:
+            raise ValueError(f"unsupported agent review watcher source: {source}")
+
+        live_candidates = (
+            self._runtime_agent_review_summary_candidates(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                limit=limit,
+            )
+            if self.runtime_asset_detail_service is not None
+            else []
+        )
+        if normalized_source == "post-maintenance":
+            return [
+                candidate
+                for candidate in live_candidates
+                if candidate.get("source_kind") == "post_maintenance_feedback"
+            ]
+        if normalized_source == "live":
+            return live_candidates
+        if normalized_source == "auto" and live_candidates:
+            return live_candidates
+        return self._fixture_agent_review_summary_candidates(
+            project_id=project_id,
+            limit=limit,
+        )
+
+    def _fixture_agent_review_summary_candidates(
+        self,
+        *,
+        project_id: str,
+        limit: int | None,
+    ) -> list[dict[str, Any]]:
+        fixtures = [
+            fixture
+            for fixture in self.project_fixtures.values()
+            if self._fixture_project_id(fixture) == project_id
+        ]
+        fixtures = sorted(
+            fixtures,
+            key=lambda fixture: str((fixture.get("equipment") or {}).get("equipment_id") or ""),
+        )
+        if limit is not None:
+            fixtures = fixtures[: max(0, limit)]
+        return [
+            {
+                "source_kind": "fixture",
+                "asset_id": str((fixture.get("equipment") or {}).get("equipment_id") or ""),
+                "event_id": fixture.get("event_id"),
+                "dataset_version_id": fixture.get("dataset_version"),
+                "source_sha256": None,
+                "lineage_event_id": None,
+                "stale_reason": "fixture_project_snapshot",
+            }
+            for fixture in fixtures
+        ]
+
+    def _runtime_agent_review_summary_candidates(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        limit: int | None,
+    ) -> list[dict[str, Any]]:
+        assert self.runtime_asset_detail_service is not None
+        return self.runtime_asset_detail_service.latest_result_artifact_references(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=None,
+            limit=limit or 20,
+        )
+
+    def _runtime_agent_review_packet_for_candidate(
+        self,
+        candidate: dict[str, Any],
+        *,
+        project_id: str,
+        organization_id: str,
+        workspace_id: str,
+        history_window: str,
+    ) -> dict[str, Any]:
+        if self.runtime_asset_detail_service is None:
+            raise RuntimeError("runtime AssetDetail service is not configured")
+        view_model = self.runtime_asset_detail_service.latest_detail_view(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=str(candidate["asset_id"]),
+            dataset_version_id=(
+                str(candidate["dataset_version_id"])
+                if candidate.get("dataset_version_id") is not None
+                else None
+            ),
+            event_id=str(candidate["event_id"]),
+            history_window=history_window,
+        )
+        return compose_agent_review_packet(
+            project_id=project_id,
+            view_model=view_model,
+            sop_retrieval={
+                "provider": "runtime_product_result",
+                "query": {
+                    "asset_id": candidate["asset_id"],
+                    "event_id": candidate["event_id"],
+                    "dataset_version_id": candidate["dataset_version_id"],
+                },
+                "top_k": 0,
+                "returned_count": 0,
+                "results": [],
+            },
+            ontology_context=None,
+            context=(
+                self.agent_review_context_registry.context_for_packet(
+                    view_model=view_model,
+                )
+                if self.agent_review_context_registry
+                else None
+            ),
+        )
 
     def patch_equipment_state(
         self,

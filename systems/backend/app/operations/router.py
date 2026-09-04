@@ -623,6 +623,7 @@ def _runtime_agent_review_packet(
             "model_version": model_version,
             "observed_at": observed_at,
             "source": "predictive-maintenance-runtime",
+            "source_sha256": result.provenance.result_artifact_source_sha256,
         },
         "domain_sections": [
             {
@@ -1259,39 +1260,38 @@ def get_agent_review_summary(
     _authorize_agent_review_summary(principal=principal, project_id=project_id)
     if event_id:
         try:
-            _runtime_agent_review_packet(
-                asset_id=asset_id,
+            try:
+                packet = service.runtime_agent_review_packet(
+                    asset_id,
+                    project_id,
+                    organization_id=principal.organization_id,
+                    workspace_id=MANUFACTURING_WORKSPACE,
+                    dataset_version_id=dataset_version_id,
+                    event_id=event_id,
+                    history_window=history_window,
+                )
+            except (KeyError, RuntimeError):
+                packet = _runtime_agent_review_packet(
+                    asset_id=asset_id,
+                    project_id=project_id,
+                    workspace_id=MANUFACTURING_WORKSPACE,
+                    dataset_version_id=dataset_version_id,
+                    selected_event_id=event_id,
+                    principal=principal,
+                    runtime_service=get_predictive_maintenance_runtime_service(),
+                )
+            summary, trace = service.cached_agent_review_summary_for_packet(
+                packet=packet,
                 project_id=project_id,
+                organization_id=principal.organization_id,
                 workspace_id=MANUFACTURING_WORKSPACE,
-                dataset_version_id=dataset_version_id,
-                selected_event_id=event_id,
-                principal=principal,
-                runtime_service=get_predictive_maintenance_runtime_service(),
+                history_window=history_window,
             )
             return JSONResponse(
-                status_code=202,
+                status_code=200 if summary is not None else 202,
                 content={
-                    "summary": None,
-                    "trace": {
-                        "provider": "runtime-product-result",
-                        "fallback": False,
-                        "reason": "runtime_packet_not_materialized_yet",
-                        "validation_errors": [],
-                        "materialization": {
-                            "summary_id": None,
-                            "summary_key": f"runtime:{event_id}",
-                            "workflow_run_id": None,
-                            "status": "pending",
-                            "reused": False,
-                            "source_sha256": "runtime-packet",
-                            "context_sha256": None,
-                            "prompt_version": "agent-review-summary-prompt-v1.0",
-                            "model_version": "runtime-product-result",
-                            "generated_at": None,
-                            "created_at": None,
-                            "updated_at": None,
-                        },
-                    },
+                    "summary": summary,
+                    "trace": trace,
                 },
             )
         except EventNotFound:

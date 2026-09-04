@@ -36,7 +36,11 @@ from app.dashboard.visualizations import (
     validate_override_channel_mapping,
 )
 from app.dataset import DatasetCatalogService
-from app.diagnosis.evidence import FixtureContextProvider, build_product_result_artifact
+from app.diagnosis.evidence import (
+    FixtureContextProvider,
+    build_product_result_artifact,
+    validate_product_result_artifact,
+)
 from app.diagnosis.predictor import configured_predictor
 from app.diagnosis.runtime_service import (
     PredictiveMaintenanceRuntimeService,
@@ -183,6 +187,16 @@ def build_manufacturing_service(
     )
     provider = configured_provider()
     company_context_repository = CompanyContextRepository(target)
+    runtime_asset_detail_service = None
+    if is_postgresql(target):
+        from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
+
+        runtime_asset_detail_service = AssetDetailViewModelService(
+            PostgreSQLAssetDetailReadAdapter(
+                PredictiveMaintenanceRuntimeRepository(target),
+                validate_artifact=validate_product_result_artifact,
+            )
+        )
     try:
         if is_postgresql(target):
             company_scope = PostgreSQLProjectContextResolver(target).resolve(MANUFACTURING_WORKSPACE)
@@ -216,6 +230,7 @@ def build_manufacturing_service(
         domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
         maintenance_lineage_query=maintenance_lineage_query,
         company_context_query=company_context_repository,
+        runtime_asset_detail_service=runtime_asset_detail_service,
         workspace_id=MANUFACTURING_WORKSPACE,
     )
 
@@ -509,7 +524,10 @@ def get_runtime_asset_detail_service() -> AssetDetailViewModelService | None:
     from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
 
     return AssetDetailViewModelService(
-        PostgreSQLAssetDetailReadAdapter(PredictiveMaintenanceRuntimeRepository(target))
+        PostgreSQLAssetDetailReadAdapter(
+            PredictiveMaintenanceRuntimeRepository(target),
+            validate_artifact=validate_product_result_artifact,
+        )
     )
 
 

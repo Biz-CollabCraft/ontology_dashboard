@@ -56,6 +56,16 @@ class AssetDetailReadPort(Protocol):
         event_id: str | None,
     ) -> dict[str, Any] | None: ...
 
+    def latest_result_artifact_references(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        dataset_version_id: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]: ...
+
     def feature_series(
         self,
         *,
@@ -177,6 +187,23 @@ class AssetDetailViewModelService:
             history_window=normalized_window,
         )
         return self._detail_view(request, artifact)
+
+    def latest_result_artifact_references(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        dataset_version_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        return self.read_port.latest_result_artifact_references(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=dataset_version_id,
+            limit=limit,
+        )
 
     def _detail_view(
         self,

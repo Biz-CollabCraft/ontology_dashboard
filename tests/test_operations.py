@@ -22,7 +22,12 @@ from app.identity import (
     PUBLIC_COMPARISON_PASSWORD,
     IdentityService,
 )
-from app.infra.llm import OpenAICompatibleProvider, VertexAIProvider, configured_provider
+from app.infra.llm import (
+    OpenAICompatibleProvider,
+    ProviderUnavailable,
+    VertexAIProvider,
+    configured_provider,
+)
 from app.main import app
 from app.dependencies import (
     build_manufacturing_service,
@@ -522,6 +527,7 @@ def test_live_asset_detail_route_uses_selected_event_scope(client: TestClient) -
 
 def test_exact_runtime_event_api_connects_sop_targets_and_agent_rag(
     client: TestClient,
+    service: FactorySignalService,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class RuntimeService:
@@ -551,6 +557,7 @@ def test_exact_runtime_event_api_connects_sop_targets_and_agent_rag(
                     "prediction_task": "binary_failure_within_horizon",
                     "prediction_id": result.artifact_id,
                     "prediction_result_id": "prediction-result-api",
+                    "result_artifact_source_sha256": "b" * 64,
                 },
             )()
             result.top_factors = [
@@ -595,6 +602,30 @@ def test_exact_runtime_event_api_connects_sop_targets_and_agent_rag(
     assert packet["snapshot_basis"]["event_id"] == runtime.result.artifact_id
     assert packet["sop_retrieval"]["returned_count"] >= 1
     assert len(packet["inspection_targets"]) >= 1
+    service.agent_review_summary_provider = FakeAgentReviewSummaryProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+        }
+    )
+    materialized_summary, materialized_trace = service._materialize_agent_review_packet(
+        packet=packet,
+        project_id="manufacturing-demo-project",
+        organization_id="org-ontology-demo",
+        workspace_id="manufacturing-demo",
+        history_window="24h",
+        trigger="polling_watcher",
+        engine="simple",
+    )
+    summary_response = client.get(
+        f"/api/objects/{runtime.result.asset_id}/agent-review-summary",
+        params=params,
+    )
+    assert summary_response.status_code == 200, summary_response.text
+    assert summary_response.json()["summary"] == materialized_summary
+    assert summary_response.json()["trace"]["materialization"]["summary_id"] == (
+        materialized_trace["materialization"]["summary_id"]
+    )
 
     detail_response = client.get(
         f"/api/objects/{runtime.result.asset_id}/detail-view",
@@ -989,6 +1020,28 @@ def test_agent_review_summary_watcher_refreshes_cached_fallback(
     assert second_trace["materialization"]["status"] == "ready"
     assert second_trace["materialization"]["reused"] is False
     assert second_trace["workflow_run"]["status"] == "completed"
+
+
+def test_agent_review_summary_watcher_reuses_stable_provider_unavailable_fallback(
+    service: FactorySignalService,
+) -> None:
+    class UnavailableProvider(FakeAgentReviewSummaryProvider):
+        def generate(self, packet: dict) -> dict:
+            self.calls += 1
+            raise ProviderUnavailable("credentials are not configured")
+
+    provider = UnavailableProvider(lambda packet: {})
+    service.agent_review_summary_provider = provider
+
+    first = service.materialize_agent_review_summaries(limit=1)
+    second = service.materialize_agent_review_summaries(limit=1)
+
+    assert provider.calls == 1
+    assert first["items"][0]["status"] == "fallback"
+    assert first["items"][0]["reused"] is False
+    assert second["items"][0]["status"] == "fallback"
+    assert second["items"][0]["reused"] is True
+    assert second["items"][0]["summary_id"] == first["items"][0]["summary_id"]
 
 
 def test_agent_review_summary_cache_hit_does_not_create_runtime_run(
@@ -1459,7 +1512,81 @@ def test_agent_review_summary_watcher_materializes_and_reuses_project_snapshots(
     assert {item["workflow_status"] for item in first["items"]} == {"completed"}
     assert all(item["workflow_run_id"] is None for item in second["items"])
     assert {item["workflow_status"] for item in second["items"]} == {None}
+    assert {item["source_kind"] for item in first["items"]} == {"fixture"}
     assert provider.calls == 2
+
+
+def test_agent_review_summary_watcher_reads_runtime_candidates(
+    service: FactorySignalService,
+) -> None:
+    packets: list[dict] = []
+
+    class RuntimeAssetDetailService:
+        def __init__(self) -> None:
+            self.references_query: dict | None = None
+            self.detail_query: dict | None = None
+
+        def latest_result_artifact_references(self, **query: object) -> list[dict]:
+            self.references_query = dict(query)
+            return [
+                {
+                    "source_kind": "post_maintenance_feedback",
+                    "asset_id": "CNC-S04-L04-01",
+                    "event_id": "RESULT#LIVE-FEEDBACK-001",
+                    "dataset_version_id": "dsv-live-001",
+                    "source_sha256": "sha-live-feedback-001",
+                    "lineage_event_id": "MEV-live-001",
+                    "stale_reason": "post_maintenance_lineage_changed",
+                }
+            ]
+
+        def latest_detail_view(self, **query: object) -> dict:
+            self.detail_query = dict(query)
+            view_model = service.asset_detail_view_model("CNC-S04-L04-01")
+            view_model["snapshot_basis"] = {
+                **view_model["snapshot_basis"],
+                "event_id": "RESULT#LIVE-FEEDBACK-001",
+                "dataset_version": "dsv-live-001",
+                "dataset_version_id": "dsv-live-001",
+                "source_sha256": "sha-live-feedback-001",
+            }
+            return view_model
+
+    runtime_detail = RuntimeAssetDetailService()
+    service.runtime_asset_detail_service = runtime_detail  # type: ignore[assignment]
+    service.agent_review_summary_provider = FakeAgentReviewSummaryProvider(
+        lambda packet: (
+            packets.append(packet)
+            or {
+                **compose_deterministic_agent_review_summary(packet),
+                "mode": "llm",
+            }
+        )
+    )
+
+    result = service.materialize_agent_review_summaries(source="post-maintenance", limit=1)
+
+    assert runtime_detail.references_query == {
+        "organization_id": "org-ontology-demo",
+        "project_id": "manufacturing-demo-project",
+        "workspace_id": "manufacturing-demo",
+        "dataset_version_id": None,
+        "limit": 1,
+    }
+    assert runtime_detail.detail_query == {
+        "organization_id": "org-ontology-demo",
+        "project_id": "manufacturing-demo-project",
+        "workspace_id": "manufacturing-demo",
+        "asset_id": "CNC-S04-L04-01",
+        "dataset_version_id": "dsv-live-001",
+        "event_id": "RESULT#LIVE-FEEDBACK-001",
+        "history_window": "24h",
+    }
+    assert result["source"] == "post-maintenance"
+    assert result["materialized_count"] == 1
+    assert result["items"][0]["source_kind"] == "post_maintenance_feedback"
+    assert result["items"][0]["lineage_event_id"] == "MEV-live-001"
+    assert packets[0]["snapshot_basis"]["event_id"] == "RESULT#LIVE-FEEDBACK-001"
 
 
 def test_agent_review_summary_workflow_reports_read_only_stage_status(
@@ -1481,6 +1608,7 @@ def test_agent_review_summary_workflow_reports_read_only_stage_status(
     assert first["read_only"] is True
     assert first["mutation_allowed"] is False
     assert first["operating_mode"]["mode"] == "watch"
+    assert first["operating_mode"]["source"] == "fixture"
     assert first["operating_mode"]["stale_detection"] == "summary_key"
     assert first["operating_mode"]["summary_duplicate_policy"] == "reuse_existing_summary"
     assert first["operating_mode"]["run_record_policy"] == "record_each_explicit_trigger"
@@ -1523,6 +1651,7 @@ def test_agent_review_summary_workflow_retries_transient_service_failure() -> No
             *,
             history_window: str = "24h",
             limit: int | None = None,
+            source: str = "fixture",
         ) -> dict:
             self.calls += 1
             if self.calls == 1:
@@ -1556,6 +1685,7 @@ def test_agent_review_summary_workflow_reports_terminal_failure_without_mutation
             *,
             history_window: str = "24h",
             limit: int | None = None,
+            source: str = "fixture",
         ) -> dict:
             raise TimeoutError("summary store unavailable")
 
@@ -1921,11 +2051,12 @@ def test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context(
     assert packet_after_response.status_code == 200, packet_after_response.text
     detail_after = detail_after_response.json()
     packet_after = packet_after_response.json()
-    summary_after = client.post(
-        f"/api/objects/{asset_id}/agent-review-summary?trigger=ui_manual_regeneration",
-        headers=csrf_headers(client),
+    watched = AgentReviewSummaryWorkflow(service).run(limit=8)
+    watched_item = next(
+        item for item in watched["items"] if item["asset_id"] == asset_id
     )
-    assert summary_after.status_code == 200
+    cached_after = client.get(f"/api/objects/{asset_id}/agent-review-summary")
+    assert cached_after.status_code == 200, cached_after.text
 
     lineage = client.get(f"{base}/events/{event_id}/lineage").json()
     assert detail_after["snapshot_basis"] == before_detail["snapshot_basis"]
@@ -1945,7 +2076,12 @@ def test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context(
         before_detail["snapshot_basis"]["artifact_id"]
     )
     assert query.runtime_status_calls[0]["maintenance_event_id"] == maintenance_event_id
-    assert summary_after.json()["summary"]["schema_version"] == (
+    assert watched_item["source_kind"] == "fixture"
+    assert watched_item["reused"] is False
+    assert watched_item["summary_id"] != summary_before.json()["trace"]["materialization"][
+        "summary_id"
+    ]
+    assert cached_after.json()["summary"]["schema_version"] == (
         "agent-review-summary-v1.0"
     )
 

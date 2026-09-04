@@ -52,7 +52,12 @@ class AgentReviewSummaryMaterializer:
         )
         materialization_key = summary_key(key_payload)
         cached = self.repository.get_agent_review_summary(materialization_key)
-        should_refresh_fallback = refresh_fallback and cached is not None and cached.get("status") == "fallback"
+        should_refresh_fallback = (
+            refresh_fallback
+            and cached is not None
+            and cached.get("status") == "fallback"
+            and not _stable_fallback_reason(cached.get("fallback_reason"))
+        )
         if cached is not None and not force and not should_refresh_fallback:
             return cached["summary"], {
                 **cached["trace"],
@@ -214,6 +219,13 @@ def _provider_model_version(provider: AgentReviewSummaryProvider | None) -> str:
     if model:
         return f"{provider.name}:{model}"
     return provider.name
+
+
+def _stable_fallback_reason(reason: Any) -> bool:
+    return str(reason or "") in {
+        "ProviderUnavailable",
+        "agent_review_summary_provider_disabled",
+    }
 
 
 def _sha256_json(value: Any) -> str:
