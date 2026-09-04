@@ -307,6 +307,13 @@ const SENSOR_WINDOW_OPTIONS: Array<{ id: OperationsSensorWindowId; label: string
 ];
 
 const DERIVED_FEATURE_KEYS = new Set(["temperature_difference_k", "mechanical_power_w", "overstrain_index"]);
+const MODEL_METADATA_FEATURE_PREFIXES = ["generator_", "model_", "prediction_", "lineage_"];
+const MODEL_METADATA_FEATURE_KEYS = new Set([
+  "asset_criticality_adjustment",
+  "criticality_adjustment",
+  "failure_score",
+  "selected_threshold",
+]);
 const LIVE_SIGNAL_LABELS: Record<string, string> = {
   spindle_load_pct: "스핀들 부하",
   coolant_delta_c: "냉각 온도 편차",
@@ -322,6 +329,19 @@ function isDerivedFeatureKey(key: string): boolean {
   return DERIVED_FEATURE_KEYS.has(key)
     || /_(?:1h|3h|6h|12h|24h|7d|30d)_(?:change|mean|std|max_abs|abs_mean|max|min|last)$/.test(key)
     || /_(?:current|abs_current)$/.test(key);
+}
+
+function isModelMetadataFeatureKey(key: string): boolean {
+  return MODEL_METADATA_FEATURE_PREFIXES.some((prefix) => key.startsWith(prefix))
+    || MODEL_METADATA_FEATURE_KEYS.has(key);
+}
+
+function hasNumericHistoryPoints(sensor: SensorSeriesSnapshot): boolean {
+  return sensor.points.some((point) => typeof point.value === "number" && Number.isFinite(point.value));
+}
+
+function isPhysicalSensorSeries(sensor: SensorSeriesSnapshot): boolean {
+  return !isDerivedFeatureKey(sensor.id) && !isModelMetadataFeatureKey(sensor.id);
 }
 const PRIMARY_FIELD_SENSOR_KEYS = new Set(["torque_nm", "tool_wear_min", "rotational_speed_rpm"]);
 
@@ -2562,7 +2582,7 @@ function FeatureSeriesCollection({
 }
 
 function DerivedMetricSlots({ sensors, windowId }: { sensors: ReturnType<typeof sensorSeries>; windowId: OperationsSensorWindowId }) {
-  const derivedSensors = sensors.filter((sensor) => isDerivedFeatureKey(sensor.id) && sensor.points.length > 0);
+  const derivedSensors = sensors.filter((sensor) => isDerivedFeatureKey(sensor.id) && !isModelMetadataFeatureKey(sensor.id) && hasNumericHistoryPoints(sensor));
   return (
     <details className="operations-derived-metric-dropdown" aria-label="파생 지표 관측 흐름">
       <summary><span><LineChart size={14} />파생 지표 관측 흐름</span><b>{derivedSensors.length ? `${derivedSensors.length}개` : "미연결"}</b></summary>
@@ -2698,21 +2718,18 @@ function AssetPreviewPanel({
     : workActionHelper;
   const effectiveWorkActionDisabled = costReviewEligible || workActionDisabled;
   const featureSnapshots = sensorSeries(detail, asset);
-  const directFeatureSnapshots = featureSnapshots.filter((sensor) => !isDerivedFeatureKey(sensor.id));
+  const directFeatureSnapshots = featureSnapshots.filter(isPhysicalSensorSeries);
   const isLiveAsset = Boolean(asset?.assetId && asset.assetId === liveDemo.assetId);
   const realtimeDirectFeatureSnapshots = withRealtimeCurrentValues(directFeatureSnapshots, isLiveAsset ? liveDemo : null);
   const realtimeFeatureSnapshots = withRealtimeCurrentValues(featureSnapshots, isLiveAsset ? liveDemo : null);
-  const numericFeatureSnapshots = realtimeFeatureSnapshots.filter((sensor) =>
-    typeof sensor.currentValue === "number"
-    || sensor.points.some((point) => typeof point.value === "number" && Number.isFinite(point.value)),
-  );
+  const physicalHistorySnapshots = realtimeDirectFeatureSnapshots.filter(hasNumericHistoryPoints);
   const orderedLiveFeatureSnapshots = [
     ...LIVE_FEATURE_PRIORITY
-      .map((id) => numericFeatureSnapshots.find((sensor) => sensor.id === id))
+      .map((id) => physicalHistorySnapshots.find((sensor) => sensor.id === id))
       .filter((sensor): sensor is ReturnType<typeof sensorSeries>[number] => Boolean(sensor)),
-    ...numericFeatureSnapshots.filter((sensor) => !LIVE_FEATURE_PRIORITY.includes(sensor.id)),
+    ...physicalHistorySnapshots.filter((sensor) => !LIVE_FEATURE_PRIORITY.includes(sensor.id)),
   ];
-  const liveFeatureSnapshots = (isLiveAsset ? orderedLiveFeatureSnapshots : realtimeDirectFeatureSnapshots)
+  const liveFeatureSnapshots = (isLiveAsset ? orderedLiveFeatureSnapshots : physicalHistorySnapshots)
     .slice(0, isLiveAsset ? LIVE_FEATURE_CHART_LIMIT : 5);
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
     ? detail.inspectionTargets.slice(0, 3).map((target, index) => ({
