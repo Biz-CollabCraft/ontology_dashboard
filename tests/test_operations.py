@@ -1719,6 +1719,237 @@ def test_inspection_request_decision_and_activity_reach_detail_and_agent_packet(
     assert set(summary["source_refs"]).issubset(set(packet["source_refs"]))
 
 
+def test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context(
+    client: TestClient,
+    database_path: Path,
+    service: FactorySignalService,
+) -> None:
+    class ReplayAwareEvidenceQuery:
+        def __init__(self, delegate: FactorySignalService) -> None:
+            self.delegate = delegate
+            self.source_session_calls: list[dict] = []
+            self.runtime_status_calls: list[dict] = []
+
+        def event_evidence_projection(self, **values):
+            return self.delegate.event_evidence_projection(values["event_id"])
+
+        def resolve_maintenance_source_session(self, **values):
+            self.source_session_calls.append(values)
+            return {
+                "organization_id": values["organization_id"],
+                "project_id": values["project_id"],
+                "workspace_id": values["workspace_id"],
+                "equipment_id": values["equipment_id"],
+                "simulation_session_id": "SIM-API-FEEDBACK-001",
+            }
+
+        def post_maintenance_runtime_status(self, **values):
+            self.runtime_status_calls.append(values)
+            return {
+                "status": "warming_up",
+                "failure_reason": None,
+                "observed_at": "2030-01-01T09:35:00+09:00",
+                "model_id": "predictive-maintenance-demo",
+            }
+
+        def post_maintenance_result(self, **values):
+            del values
+            return None
+
+    query = ReplayAwareEvidenceQuery(service)
+    maintenance_service = MaintenanceLoopService(
+        MaintenanceRepository(
+            database_path,
+            project_context=SQLiteProjectContextResolver(database_path),
+        ),
+        event_evidence_query=query,
+        replay_session_query=query,
+    )
+    app.dependency_overrides[get_maintenance_loop_service] = lambda: maintenance_service
+
+    class MvpLineageQuery:
+        def event_lineage(self, *, workspace_id: str, event_id: str):
+            return maintenance_service.event_lineage(
+                organization_id="org-ontology-demo",
+                project_id="manufacturing-demo-project",
+                workspace_id=workspace_id,
+                event_id=event_id,
+            )
+
+    service.maintenance_lineage_query = MvpLineageQuery()
+
+    event_id = "EVT-GS-002"
+    asset_id = "CNC-S04-L04-01"
+    base = (
+        "/api/projects/manufacturing-demo-project/workspaces/"
+        "manufacturing-demo/maintenance"
+    )
+
+    before = client.get(f"/api/objects/{asset_id}/detail-view")
+    assert before.status_code == 200
+    before_detail = before.json()
+    packet_before = client.get(f"/api/objects/{asset_id}/agent-review-packet").json()
+    activity_before = client.get(f"/api/events/{event_id}/activity").json()
+    summary_before = client.post(
+        f"/api/objects/{asset_id}/agent-review-summary",
+        headers=csrf_headers(client),
+    )
+    assert summary_before.status_code == 200
+    assert client.get(f"/api/events/{event_id}/activity").json() == activity_before
+    assert packet_before["closed_loop_boundary"]["mutation_allowed"] is False
+
+    requested = client.post(
+        f"{base}/inspection-work-orders",
+        headers={
+            **csrf_headers(client),
+            "Idempotency-Key": "api-feedback-inspection-001",
+        },
+        json=InspectionWorkOrderCreateRequest(
+            event_id=event_id,
+            snapshot_basis=before_detail["snapshot_basis"],
+        ).model_dump(mode="json"),
+    )
+    assert requested.status_code == 200, requested.text
+    inspection_work_order_id = requested.json()["work_order_id"]
+
+    login_as(client, "engineer@ontology.local", "Engineer!2026")
+    accepted = client.post(
+        f"{base}/inspection-work-orders/{inspection_work_order_id}/accept",
+        headers={
+            **csrf_headers(client),
+            "Idempotency-Key": "api-feedback-inspection-accept-001",
+        },
+    )
+    started = client.post(
+        f"{base}/inspection-work-orders/{inspection_work_order_id}/start",
+        headers={
+            **csrf_headers(client),
+            "Idempotency-Key": "api-feedback-inspection-start-001",
+        },
+    )
+    completed = client.post(
+        f"{base}/inspection-work-orders/{inspection_work_order_id}/complete",
+        headers={
+            **csrf_headers(client),
+            "Idempotency-Key": "api-feedback-inspection-complete-001",
+        },
+        json={
+            "outcome": "maintenance_recommended",
+            "checklist": [
+                {"item_id": "tool-wear", "status": "fail", "note": "limit exceeded"}
+            ],
+            "measurements": [{"name": "tool_wear_min", "value": 221, "unit": "min"}],
+            "findings": ["tool wear limit exceeded"],
+            "note": "tool replacement should be reviewed",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert started.status_code == 200, started.text
+    assert completed.status_code == 200, completed.text
+    inspection_result_id = completed.json()["inspection_result_id"]
+
+    login_as(client, "manager@ontology.local", "Manager!2026")
+    recommendation = client.post(
+        f"{base}/inspection-results/{inspection_result_id}/recommendations",
+        headers={
+            **csrf_headers(client),
+            "Idempotency-Key": "api-feedback-recommendation-001",
+        },
+        json={
+            "action_code": "TOOL_REPLACEMENT",
+            "basis": ["inspection confirmed tool wear limit exceeded"],
+        },
+    )
+    assert recommendation.status_code == 200, recommendation.text
+    recommendation_id = recommendation.json()["recommendation"]["recommendation_id"]
+    decision = client.post(
+        f"{base}/recommendations/{recommendation_id}/decisions",
+        headers={**csrf_headers(client), "Idempotency-Key": "api-feedback-decision-001"},
+        json={"disposition": "accept", "note": "approve tool replacement"},
+    )
+    assert decision.status_code == 200, decision.text
+    maintenance_work_order_id = decision.json()["work_order_id"]
+
+    approved = client.post(
+        f"{base}/maintenance-work-orders/{maintenance_work_order_id}/approve",
+        headers={**csrf_headers(client), "Idempotency-Key": "api-feedback-approve-001"},
+        json={},
+    )
+    assert approved.status_code == 200, approved.text
+    maintenance_action_id = approved.json()["maintenance_action_id"]
+
+    login_as(client, "technician@ontology.local", "Technician!2026")
+    maintenance_started = client.post(
+        f"{base}/maintenance-actions/{maintenance_action_id}/start",
+        headers={
+            **csrf_headers(client),
+            "Idempotency-Key": "api-feedback-maint-start-001",
+        },
+        json={},
+    )
+    maintenance_completed = client.post(
+        f"{base}/maintenance-actions/{maintenance_action_id}/complete",
+        headers={
+            **csrf_headers(client),
+            "Idempotency-Key": "api-feedback-maint-complete-001",
+        },
+        json={"outcome": "tool replaced"},
+    )
+    assert maintenance_started.status_code == 200, maintenance_started.text
+    assert maintenance_completed.status_code == 200, maintenance_completed.text
+    maintenance_event_id = maintenance_completed.json()["maintenance_event_id"]
+
+    replay = client.post(
+        f"{base}/maintenance-events/{maintenance_event_id}/replay",
+        headers={**csrf_headers(client), "Idempotency-Key": "api-feedback-replay-001"},
+        json={"restart_at": "2030-01-01T09:35:00+09:00"},
+    )
+    replayed = client.post(
+        f"{base}/maintenance-events/{maintenance_event_id}/replay",
+        headers={**csrf_headers(client), "Idempotency-Key": "api-feedback-replay-001"},
+        json={"restart_at": "2030-01-01T09:35:00+09:00"},
+    )
+    assert replay.status_code == 200, replay.text
+    assert replayed.status_code == 200, replayed.text
+    assert replay.json()["status"] == "replay_requested"
+    assert replayed.json()["replayed"] is True
+
+    login_as(client, "manager@ontology.local", "Manager!2026")
+    detail_after_response = client.get(f"/api/objects/{asset_id}/detail-view")
+    packet_after_response = client.get(f"/api/objects/{asset_id}/agent-review-packet")
+    assert detail_after_response.status_code == 200, detail_after_response.text
+    assert packet_after_response.status_code == 200, packet_after_response.text
+    detail_after = detail_after_response.json()
+    packet_after = packet_after_response.json()
+    summary_after = client.post(
+        f"/api/objects/{asset_id}/agent-review-summary?trigger=ui_manual_regeneration",
+        headers=csrf_headers(client),
+    )
+    assert summary_after.status_code == 200
+
+    lineage = client.get(f"{base}/events/{event_id}/lineage").json()
+    assert detail_after["snapshot_basis"] == before_detail["snapshot_basis"]
+    assert packet_after["snapshot_basis"] == before_detail["snapshot_basis"]
+    assert detail_after["closed_loop"]["lifecycle_summary"]["current_step"] == (
+        "post_maintenance_observation_pending"
+    )
+    assert packet_after["maintenance_history_summary"]["maintenance_events"][0][
+        "record_id"
+    ] == maintenance_event_id
+    assert lineage["maintenance_events"][0]["maintenance_event_id"] == maintenance_event_id
+    assert lineage["maintenance_events"][0]["state_patch"] == {
+        "tool_wear_min": {"operation": "reset", "unit": "min", "value": 0}
+    }
+    assert lineage["runtime_status"] == "warming_up"
+    assert query.source_session_calls[0]["source_product_result_id"] == (
+        before_detail["snapshot_basis"]["artifact_id"]
+    )
+    assert query.runtime_status_calls[0]["maintenance_event_id"] == maintenance_event_id
+    assert summary_after.json()["summary"]["schema_version"] == (
+        "agent-review-summary-v1.0"
+    )
+
+
 def test_agent_review_summary_absorbs_adapter_context_into_role_quotes(
     service: FactorySignalService,
 ) -> None:
