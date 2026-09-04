@@ -1177,7 +1177,8 @@ def _closed_loop_context_from_lineage(lineage: dict[str, Any]) -> dict[str, Any]
         "maintenance_events": list(lineage.get("maintenance_events") or []),
         "activities": activities,
         "available_actions": _available_closed_loop_actions(work_orders),
-        "runtime_status": None,
+        "runtime_status": lineage.get("runtime_status"),
+        "runtime_state": lineage.get("runtime_state"),
     }
 
 
