@@ -377,7 +377,7 @@ def test_agent_review_summary_provider_constrains_payload_to_summary_schema(
             captured["system_prompt"] = system_prompt
             captured["payload"] = payload
             captured["kwargs"] = kwargs
-            return {**payload["baseline_summary"], "mode": "llm", "title": "AI 검토 요약 후보"}
+            return {**payload["baseline_editable_fields"], "title": "AI 검토 요약 후보"}
 
     packet = service.agent_review_packet("CNC-S04-L04-01")
     provider = AgentReviewSummaryProvider(CapturingLLMProvider())
@@ -385,11 +385,11 @@ def test_agent_review_summary_provider_constrains_payload_to_summary_schema(
     summary = provider.generate(packet)
 
     assert summary["mode"] == "llm"
-    assert "baseline_summary" in captured["payload"]
+    assert "baseline_editable_fields" in captured["payload"]
     assert captured["payload"]["allowed_output_fields"] == list(
-        captured["payload"]["baseline_summary"].keys()
+        captured["payload"]["baseline_editable_fields"].keys()
     )
-    assert captured["kwargs"]["response_schema_name"] == "agent_review_summary"
+    assert captured["kwargs"]["response_schema_name"] == "agent_review_summary_editable"
     assert captured["kwargs"]["response_schema"]["additionalProperties"] is False
     assert "closed_loop_boundary" not in captured["payload"]["allowed_output_fields"]
 
@@ -401,7 +401,7 @@ def test_agent_review_summary_provider_preserves_grounding_when_llm_omits_refs(
         name = "ref-omitting-llm"
 
         def generate_json(self, system_prompt: str, payload: dict, **kwargs) -> dict:
-            baseline = payload["baseline_summary"]
+            baseline = payload["baseline_editable_fields"]
             return {
                 **baseline,
                 "title": "LLM 문장 개선",
@@ -2165,7 +2165,7 @@ def test_asset_detail_view_model_accepts_7d_feature_history_window(
     assert closed_loop["activities"][0]["activity_type"] == "work_order.requested"
     assert closed_loop["available_actions"][0]["action_id"] == "approve_inspection_work_order"
     assert closed_loop["lifecycle_summary"]["current_step"] == "inspection_requested"
-    assert closed_loop["primary_action"]["owner_role"] == "process_manager"
+    assert closed_loop["primary_action"]["owner_role"] == "unassigned"
     assert closed_loop["timeline"][0]["target_id"] == "WO-INS-GS-004-001"
     assert closed_loop["maintenance_actions"] == []
     assert closed_loop["maintenance_events"] == []

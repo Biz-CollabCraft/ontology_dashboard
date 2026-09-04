@@ -209,7 +209,7 @@
         "additionalProperties": false,
         "properties": {
           "input_name": {"type": "string", "minLength": 1, "maxLength": 160},
-          "source_kind": {"enum": ["observed", "quoted", "public_reference", "policy", "assumption"]},
+          "source_kind": {"enum": ["observed", "calculated", "quoted", "public_reference", "policy", "assumption"]},
           "source_reference": {"type": "string", "minLength": 1, "maxLength": 500},
           "confidence": {"enum": ["high", "medium", "low"]}
         },

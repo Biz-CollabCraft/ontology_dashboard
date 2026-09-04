@@ -173,18 +173,25 @@ failure_consequence_cost
 
 ## 4. 기대 고장손실 적용 규칙
 
-기존 What-if 계약에서 이미 제공하는 확률만 사용한다.
+미조치 확률은 점검 WorkOrder의 원인이 된 Product Result의
+`failure_probability`를 사용한다. 고정 fixture 값으로 Product Result를 덮어쓰지
+않는다. 즉시 교체는 기존 TOOL_REPLACEMENT What-if 계약의 정비 후 가정값 0.21을
+사용하며, 12시간 후 계획 정비는 두 값의 산술 중간값을 비용 시나리오 정책으로
+사용한다.
+
+아래 예시는 source Product Result 확률이 0.82인 경우다.
 
 | 시나리오 | 확률 | 기대 고장손실 Low/Base/High | 상태 |
 |---|---:|---:|---|
 | 즉시 교체 | 0.21 | 14,152 / 31,074 / 70,210원 | 계산 가능 |
-| 계획 정비 | 없음 | 없음 | `insufficient` |
+| 12시간 후 계획 정비 | (0.82 + 0.21) / 2 = 0.515 | 34,706 / 76,205 / 172,180원 | 계산 가능 |
 | 재점검 | 없음 | 없음 | `insufficient` |
-| 미조치 | 0.82 | 55,261 / 121,336 / 274,151원 | 계산 가능 |
+| 미조치 | Product Result 0.82 | 55,261 / 121,336 / 274,151원 | 계산 가능 |
 
-계획 정비와 재점검의 미래 위험확률을 Cost What-if가 추정·보간하지 않는다. 향후
-Diagnosis가 해당 horizon의 공식 Prediction을 제공하거나 팀이 별도의 governed
-sensitivity contract를 승인한 뒤에만 계산 가능 상태로 전환한다.
+계획 정비의 중간값은 Diagnosis가 생성한 새로운 Prediction이 아니다. 비용 비교를
+위해 승인한 `maintenance-cost-policy-v3`의 명시적 가정이며, 결과의 assumption과
+input source에 원본 Product Result ID, 실제 확률, 0.21 가정 및 계산값을 기록한다.
+재점검은 확률과 실행 기준이 없으므로 계속 `insufficient`로 처리한다.
 
 ## 5. 결과 해석 경계
 

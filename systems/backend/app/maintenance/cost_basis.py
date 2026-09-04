@@ -11,16 +11,21 @@ from .cost_calculator import ToolReplacementScenarioInput
 
 
 class CostBasisResolutionContext(FrozenModel):
-    """Typed operational facts used to resolve an Action-specific cost basis.
+    """Typed operational and Product Result facts for an Action cost basis.
 
     ``None`` means the inspection did not establish the fact.  Callers must
-    not treat an unknown fact as satisfying a demo basis applicability rule.
+    not treat an unknown fact as satisfying applicability or probability rules.
     """
 
     execution_mode: Literal["in_house", "external"] | None = None
     spare_part_available: bool | None = None
     vendor_dispatch_required: bool | None = None
     component_replacement_required: bool | None = None
+    source_product_result_id: str | None = Field(
+        default=None, min_length=1, max_length=240
+    )
+    source_evidence_id: str | None = Field(default=None, min_length=1, max_length=240)
+    source_failure_probability: float | None = Field(default=None, ge=0, le=1)
 
     def require_complete_for(self, action_code: str) -> None:
         required = {

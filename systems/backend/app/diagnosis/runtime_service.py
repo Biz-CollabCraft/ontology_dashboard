@@ -1206,7 +1206,9 @@ class PredictiveMaintenanceRuntimeService:
                 raise ValueError(f"stored Product Result Artifact {field} does not match runtime index")
         if str(provenance.get("prediction_id")) != str(row["prediction_id"]):
             raise ValueError("stored Product Result Artifact prediction_id does not match runtime index")
-        return artifact
+        enriched = dict(artifact)
+        enriched["source_sha256"] = str(row["source_sha256"])
+        return enriched
 
     @staticmethod
     def _product_result_evidence_summary(

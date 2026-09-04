@@ -88,6 +88,11 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
             "prediction_id": provenance.get("prediction_id"),
             "top_factor_count": len(clean_artifact.get("top_factors", [])),
             "evidence_payload_reference": provenance.get("evidence_payload_reference"),
+            # Persistence adds this checksum after validating the immutable
+            # producer payload.  Carry it through the canonical projection so
+            # command-side stale-view checks compare the same stored row that
+            # the AssetDetail ViewModel displayed.
+            "source_sha256": clean_artifact.get("source_sha256"),
         },
         "assessment": {
             "status": clean_artifact.get("status_grade"),

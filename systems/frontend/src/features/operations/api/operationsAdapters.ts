@@ -192,6 +192,7 @@ export function promoteRuntimeProductResultsToEvents(
   events: OperationsEvent[],
 ): OperationsEvent[] {
   const representedEvents = new Set(events.map((event) => event.eventId));
+  const representedAssets = new Set(events.map((event) => event.assetId));
   const latestResultByAsset = new Map<string, GovernedProductResultSummary>();
   for (const result of results) {
     const current = latestResultByAsset.get(result.asset_id);
@@ -204,7 +205,7 @@ export function promoteRuntimeProductResultsToEvents(
   for (const result of latestResultByAsset.values()) {
     const event = runtimeEventFromResult(result);
     if (!event) continue;
-    if (representedEvents.has(event.eventId)) continue;
+    if (representedEvents.has(event.eventId) || representedAssets.has(event.assetId)) continue;
     promoted.push(event);
     representedEvents.add(event.eventId);
   }
@@ -455,7 +456,7 @@ export function mergeAssets(
           related?.recommendedDecision ??
           normalizeDecision(result.recommended_action?.action),
         observedAt: result.observed_at,
-        eventId: result.artifact_id ?? related?.eventId ?? null,
+        eventId: related?.eventId ?? result.artifact_id ?? null,
         topFactors: result.top_factors.map(adaptResultFactor),
         provenance: {
           datasetId: result.provenance.dataset_id,

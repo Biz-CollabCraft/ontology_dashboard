@@ -1,0 +1,57 @@
+{
+  "schema_version": "operational-decision-e2e-evidence-v1.0",
+  "run_id": "operational-e2e-20260903-0404e327",
+  "candidate_sha": "0404e327",
+  "recorded_at": "2026-09-03T08:40:00Z",
+  "evidence_state": "partially_verified",
+  "modes": {
+    "api": "fastapi_testclient_isolated_sqlite",
+    "ui": "playwright_local_route_isolated",
+    "external_sources": "not_connected"
+  },
+  "results": {
+    "backend_regression": {
+      "passed": 145,
+      "failed": 0
+    },
+    "frontend_unit": {
+      "passed": 89,
+      "failed": 0
+    },
+    "frontend_lint": "passed",
+    "frontend_build": "passed",
+    "playwright_targeted": {
+      "passed": 3,
+      "failed": 0,
+      "scenarios": [
+        "manager_materialize_and_relation_rendering",
+        "engineer_read_only",
+        "partial_context_safe_ui"
+      ]
+    }
+  },
+  "verified": [
+    "GET is cache-only and returns pending when no snapshot exists",
+    "manager POST requires permission and CSRF",
+    "same request identity reuses the stored SQLite brief",
+    "workflow run audit API is admin-only and read-only",
+    "scope mismatch and future decision_as_of are rejected",
+    "manager UI renders relations, options, gaps, sources, and temporal state",
+    "engineer UI keeps materialization disabled",
+    "partial UI preserves not_calculable without selecting a recommendation"
+  ],
+  "safety": {
+    "brief_mutation_available": false,
+    "brief_recommendation": null,
+    "work_order_delta": null,
+    "maintenance_action_delta": null,
+    "command_delta": null,
+    "state": "not_measured_in_targeted_playwright"
+  },
+  "not_verified": [
+    "unmocked browser to FastAPI to SQLite to UI in one Playwright scenario",
+    "actual MES, CMMS, WMS, QMS, ERP, or APS connectivity",
+    "production load, soak, and p99 latency",
+    "cross-owner Closed-loop and post-maintenance reprediction"
+  ]
+}

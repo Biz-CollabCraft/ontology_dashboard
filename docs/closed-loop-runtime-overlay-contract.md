@@ -200,6 +200,10 @@ Overlay Observation과 `runtime_overlay.observations.available`은 각각
 - Closed-loop event producer가 동일
   `simulation_session_id + equipment_id + maintenance_action_id` 범위에서
   `state_version`을 단조 증가시킨다.
+- Live WorkOrder의 `simulation_session_id`는 별도로 생성한 화면용 Replay Cursor ID가
+  아니라, 승인 근거인 Product Result가 보존한 `gen_data` Source Simulation Session
+  lineage에서 Diagnosis가 서버 측으로 해석한다. 클라이언트는 이 값을 만들거나
+  바꾸지 않는다.
 - `maintenance.started`, `maintenance.completed`, `maintenance.replay_requested`의
   일반적인 version은 각각 `1`, `2`, `3`이지만 consumer는 event type 문자열 정렬이
   아니라 전달된 version과 Domain 선행 조건을 함께 검증한다.
@@ -321,6 +325,12 @@ ID가 replacement sanitizer 때문에 같은 파일로 합쳐지지 않는다. c
 ## 10. Overlay branch와 Simulation Clock
 
 Fast-forward는 전체 Session Clock에 적용하지 않는다.
+
+가속 Simulation에서는 업무 시각(`maintenance_started_at`)보다 Source Clock이 앞설 수
+있다. 동일한 `simulation_session_id`로 검증된 이벤트가 늦게 도착한 경우 과거 Canonical
+Observation을 다시 쓰지 않는다. 대상 설비는 마지막으로 출력된 Canonical Tick의 다음
+Tick을 `source_effective_started_at`으로 삼아 Overlay로 전환하고, 원래 업무 시각은
+감사·lifecycle 검증 값으로 그대로 보존한다.
 
 ```text
 Canonical Replay Clock
@@ -446,11 +456,15 @@ maintenance_event_id + history_segment_id + prediction_target_time
 정상 Prediction이 아니다. 정비 후 실제 Prediction이 조치 불필요로 판정한 경우에만
 정상으로 표시한다.
 
-Product API의 canonical runtime-status read location은 이 PR에서 확정하지 않는다.
-`gen_data` Runtime Overlay의 Observation/status handoff Schema가 확정된 이후 Backend
-integration 단계에서 결정한다. 이는 누락된 TBD가 아니라 선행조건이 명시된 Deferred
-decision이다. 기존 Result의 `status_grade`와 Runtime Overlay 준비 상태는 어떤 위치를
-채택하더라도 별도 필드와 의미로 유지한다.
+Prediction 실행 결과의 canonical runtime-status read location은 Backend의
+`pm_prediction_result_inbox_items.raw_item`이다. `predicted`가 아닌 결과는 Product Result로
+승격하지 않되, Closed-loop lineage API가 `runtime_state`와 `runtime_status`로 투영한다.
+기존 Result의 `status_grade`와 Runtime Overlay 준비 상태는 별도 필드와 의미로 유지한다.
+
+Observation 생성 진행률의 정본은 Prediction Inbox가 아니다. 진행률은 `gen_data`가 소유한
+Overlay branch의 누적 생성 사실과 Generator가 소유한 현재 Model Artifact의
+`history_requirement.json`을 결합한 read model이다. Closed-loop는 그 값을 계산하거나
+고정 숫자 `36`을 소유하지 않고, 제공된 진행 상태를 Maintenance lineage에 연결한다.
 
 ## 14. 역할 경계
 
@@ -464,6 +478,25 @@ decision이다. 기존 Result의 `status_grade`와 Runtime Overlay 준비 상태
 
 `ontology_dashboard/systems/generator`의 책임은 Feature/Label, training, Model Artifact
 publish 및 Runtime Prediction Pipeline(추론 점수 계산 및 `Prediction Result Batch` 송신)이며 최종 이상 판정과 Report/Evidence 생성 주체가 아니다.
+
+### Closed-loop 소유 역할에 대한 진행률 연결 요청
+
+Closed-loop 소유 역할은 다음의 orchestration/read-model 작업을 담당한다.
+
+1. `maintenance_event_id`, `simulation_session_id`, `overlay_branch_id`,
+   `history_segment_id`를 기준으로 한 진행 상태를 Maintenance lineage에 연결한다.
+2. upstream이 제공한 `generated_rows`, `required_rows`, `latest_observed_at`,
+   `last_progress_at`, `status`, `reason_code`, `retryable`을 의미 변경 없이 API에 투영한다.
+3. `warming_up`만 대기 상태로 취급하고, `history_insufficient`와 source/feature/model/delivery
+   실패는 `blocked`로 분리한다.
+4. 진행 상태가 멈춰도 자동 정상화하거나 설비를 자동 resume하지 않는다. `stalled` 판단은
+   versioned timeout policy와 마지막 실제 진행 시각을 근거로 표시만 한다.
+5. 성공·실패·재시작 경로를 포함한 Closed-loop E2E 시나리오를 Product API/UI 담당과 함께
+   검증한다.
+
+이 요청은 Closed-loop 역할에 Observation 생성, Model Artifact 해석, Feature 계산, score
+추론을 넘기는 것이 아니다. `generated_rows`는 `gen_data`, `required_rows`와 readiness는
+Generator가 소유하며, Closed-loop는 correlation, 상태 전이, API projection만 소유한다.
 
 ## 15. 완료 조건
 

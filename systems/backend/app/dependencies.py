@@ -104,6 +104,9 @@ from app.infra.db.postgresql_repositories import (
     seed_runtime_reference_data,
 )
 from app.infra.db.project_repository import SQLiteProjectContextResolver as RuntimeProjectContextResolver
+from app.infra.db.operational_decision_support_service import (
+    PersistedOperationalDecisionSupportService,
+)
 from app.infra.db.role_workflow_repository import RoleWorkflowRepository
 from app.infra.db.operations_audit_repository import AuditRepository
 from app.operations.role_workflow_service import RoleWorkflowService
@@ -111,6 +114,7 @@ from app.operations.agent_review_summary_provider import AgentReviewSummaryProvi
 from app.operations.context_providers import default_agent_review_context_registry
 from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.operations.service import ManufacturingPredictiveMaintenanceService
+from app.operations.operational_decision_support_port import OperationalDecisionSupportService
 
 
 ROOT = project_root()
@@ -229,6 +233,15 @@ def get_service() -> ManufacturingPredictiveMaintenanceService:
     # first service is cached, exhausting low-limit Team DB roles.
     with _SERVICE_BUILD_LOCK:
         return _cached_manufacturing_service(database_target())
+
+
+@lru_cache(maxsize=1)
+def get_operational_decision_support_service() -> OperationalDecisionSupportService:
+    target = database_target()
+    if is_postgresql(target):
+        return PersistedOperationalDecisionSupportService(ROOT, database_url=str(target))
+    return PersistedOperationalDecisionSupportService(ROOT, Path(target))
+
 
 def _password_hasher() -> PasswordHasher:
     return PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1, hash_len=32, salt_len=16)

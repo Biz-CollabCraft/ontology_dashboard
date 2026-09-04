@@ -832,10 +832,10 @@ def test_composer_projects_closed_loop_lifecycle_action_and_timeline() -> None:
             ],
             "available_actions": [
                 {
-                    "action_id": "approve_inspection_work_order",
+                    "action_id": "accept_inspection_work_order",
                     "target_type": "work_order",
                     "target_id": "WO-INS-001",
-                    "label": "점검 승인",
+                    "label": "요청 수락·내게 배정",
                     "disabled_reason": None,
                 }
             ],
@@ -847,18 +847,18 @@ def test_composer_projects_closed_loop_lifecycle_action_and_timeline() -> None:
     closed_loop = payload["closed_loop"]
     assert closed_loop["lifecycle_summary"] == {
         "current_step": "inspection_requested",
-        "current_step_label": "점검 승인 대기",
+        "current_step_label": "현장 수락·배정 대기",
         "completed_steps": ["prediction", "evidence", "decision"],
         "next_step": "inspection_approved",
         "source": "backend_closed_loop_policy",
     }
     assert closed_loop["primary_action"] == {
-        "action_id": "approve_inspection_work_order",
+        "action_id": "accept_inspection_work_order",
         "target_type": "work_order",
         "target_id": "WO-INS-001",
-        "label": "점검 승인",
-        "owner_role": "process_manager",
-        "owner_label": "생산 운영 의사결정자",
+        "label": "요청 수락·내게 배정",
+        "owner_role": "process_engineer",
+        "owner_label": "현장 관리자",
         "disabled_reason": None,
         "requires_input": False,
     }
