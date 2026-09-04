@@ -27,6 +27,10 @@ import { MvpReportsPage } from "./report/MvpReportsPage";
 import { MvpShell } from "./shell/MvpShell";
 import { MvpSystemAdminPage } from "./system/MvpSystemAdminPage";
 import {
+  ReliabilityWorkspacePreview,
+  reliabilityWorkspacePreviewEnabled,
+} from "../predictive-maintenance/ReliabilityWorkspacePreview";
+import {
   canMaterializeAgentReviewSummary,
   canReadMvpSystemLogs,
 } from "./permissions";
@@ -258,6 +262,29 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
     content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
+  const body = <>
+    {error ? <div className="mvp-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}
+    {content}
+  </>;
+
+  if (user && reliabilityWorkspacePreviewEnabled()) {
+    return (
+      <ReliabilityWorkspacePreview
+        context={model.context}
+        activeView={selection.view}
+        user={user}
+        selectedEvent={selectedEvent}
+        detail={detail}
+        onNavigate={openView}
+        onRefresh={refresh}
+        refreshing={loading}
+        onLogout={signOut}
+      >
+        {body}
+      </ReliabilityWorkspacePreview>
+    );
+  }
+
   return (
     <MvpShell
       context={model.context}
@@ -271,8 +298,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       refreshIntervalSeconds={MVP_REFRESH_INTERVAL_SECONDS}
       onLogout={signOut}
     >
-      {error ? <div className="mvp-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}
-      {content}
+      {body}
     </MvpShell>
   );
 }
