@@ -998,6 +998,38 @@ function withRealtimeCurrentValues(
   return merged;
 }
 
+function selectedAssetLiveSnapshot(
+  asset: OperationsAsset | null,
+  baseLiveDemo: RealtimeDemoSnapshot,
+): RealtimeDemoSnapshot | null {
+  if (!asset) return null;
+  if (asset.assetId === baseLiveDemo.assetId) return baseLiveDemo;
+  const factors = asset.topFactors
+    .filter((factor) => typeof factor.value === "number" && Number.isFinite(factor.value))
+    .slice(0, 3)
+    .map((factor) => ({
+      id: factor.feature,
+      label: liveFactorLabel(factor),
+      value: factor.value,
+      unit: factor.unit,
+      contribution: factor.contribution,
+    }));
+  return {
+    ...baseLiveDemo,
+    assetId: asset.assetId,
+    assetName: displayFactoryAssetName(asset.assetId) ?? displayAssetName(asset),
+    eventId: asset.eventId,
+    line: asset.line || asset.cell || baseLiveDemo.line,
+    risk: asset.failureProbability ?? baseLiveDemo.risk,
+    status: asset.status,
+    signal: featureSignalText(asset.topFactors),
+    generatedAt: asset.observedAt ?? baseLiveDemo.generatedAt,
+    sourceLabel: isGeneratedResultEvent(asset.eventId) ? "새 Result 수신" : "선택 설비 최신 Result",
+    isGeneratedResult: isGeneratedResultEvent(asset.eventId),
+    factors,
+  };
+}
+
 function productionImpactLevelLabel(summary: LineImpactSummary, detail: OperationsEventDetailModel | null): string {
   const hasSelectedAsset = detail ? summary.assets.some((asset) => asset.assetId === detail.event.assetId) : false;
   return hasSelectedAsset
@@ -2719,9 +2751,9 @@ function AssetPreviewPanel({
   const effectiveWorkActionDisabled = costReviewEligible || workActionDisabled;
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter(isPhysicalSensorSeries);
-  const isLiveAsset = Boolean(asset?.assetId && asset.assetId === liveDemo.assetId);
-  const realtimeDirectFeatureSnapshots = withRealtimeCurrentValues(directFeatureSnapshots, isLiveAsset ? liveDemo : null);
-  const realtimeFeatureSnapshots = withRealtimeCurrentValues(featureSnapshots, isLiveAsset ? liveDemo : null);
+  const selectedLiveSnapshot = selectedAssetLiveSnapshot(asset, liveDemo);
+  const realtimeDirectFeatureSnapshots = withRealtimeCurrentValues(directFeatureSnapshots, selectedLiveSnapshot);
+  const realtimeFeatureSnapshots = withRealtimeCurrentValues(featureSnapshots, selectedLiveSnapshot);
   const physicalHistorySnapshots = realtimeDirectFeatureSnapshots.filter(hasNumericHistoryPoints);
   const orderedLiveFeatureSnapshots = [
     ...LIVE_FEATURE_PRIORITY
@@ -2729,8 +2761,8 @@ function AssetPreviewPanel({
       .filter((sensor): sensor is ReturnType<typeof sensorSeries>[number] => Boolean(sensor)),
     ...physicalHistorySnapshots.filter((sensor) => !LIVE_FEATURE_PRIORITY.includes(sensor.id)),
   ];
-  const liveFeatureSnapshots = (isLiveAsset ? orderedLiveFeatureSnapshots : physicalHistorySnapshots)
-    .slice(0, isLiveAsset ? LIVE_FEATURE_CHART_LIMIT : 5);
+  const liveFeatureSnapshots = orderedLiveFeatureSnapshots
+    .slice(0, LIVE_FEATURE_CHART_LIMIT);
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
     ? detail.inspectionTargets.slice(0, 3).map((target, index) => ({
       target,
@@ -2918,20 +2950,20 @@ function AssetPreviewPanel({
                 <header>
                   <LineChart size={14} />
                   <strong>실시간 피쳐 변화</strong>
-                  <span className={`operations-live-feed-status ${isLiveAsset ? "is-hot" : ""}`}>
-                    {isLiveAsset ? "LIVE now" : "최신 관측 기준"} · {formatTimestamp(isLiveAsset ? liveDemo.nowAt : asset.observedAt)}
+                  <span className={`operations-live-feed-status ${selectedLiveSnapshot ? "is-hot" : ""}`}>
+                    {selectedLiveSnapshot ? "LIVE now" : "최신 관측 기준"} · {formatTimestamp(selectedLiveSnapshot?.nowAt ?? asset.observedAt)}
                   </span>
                 </header>
-                {isLiveAsset ? (
+                {selectedLiveSnapshot ? (
                   <div className="operations-live-signal-strip" aria-label="방금 수신된 설비별 신호">
                     <div className="operations-live-signal-main">
-                      <span>{liveDemo.sourceLabel}</span>
-                      <strong>{formatProbability(liveDemo.risk)} · {operationsMonitorStatusLabel(liveDemo.status)}</strong>
-                      <small>{liveDemo.signal}</small>
+                      <span>{selectedLiveSnapshot.sourceLabel}</span>
+                      <strong>{formatProbability(selectedLiveSnapshot.risk)} · {operationsMonitorStatusLabel(selectedLiveSnapshot.status)}</strong>
+                      <small>{selectedLiveSnapshot.signal}</small>
                       {liveTickError ? <em>생성 tick 지연 · {liveTickError}</em> : null}
                     </div>
                     <div className="operations-live-signal-factors">
-                      {liveDemo.factors.length ? liveDemo.factors.map((factor) => (
+                      {selectedLiveSnapshot.factors.length ? selectedLiveSnapshot.factors.map((factor) => (
                         <div key={factor.id}>
                           <span>{factor.label}</span>
                           <strong>
@@ -2943,8 +2975,8 @@ function AssetPreviewPanel({
                       )) : (
                         <div>
                           <span>위험도</span>
-                          <strong>{formatProbability(liveDemo.risk)}</strong>
-                          <i><b style={{ width: `${Math.round(liveDemo.risk * 100)}%` }} /></i>
+                          <strong>{formatProbability(selectedLiveSnapshot.risk)}</strong>
+                          <i><b style={{ width: `${Math.round(selectedLiveSnapshot.risk * 100)}%` }} /></i>
                         </div>
                       )}
                     </div>
@@ -2955,7 +2987,7 @@ function AssetPreviewPanel({
                   sensors={liveFeatureSnapshots}
                   windowId={sensorWindow}
                   onWindowChange={onSensorWindowChange}
-                  liveDemo={isLiveAsset ? liveDemo : null}
+                  liveDemo={selectedLiveSnapshot}
                   loading={detailLoading}
                   emptyTitle="관측 이력 없음"
                   emptyDetail={detailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
@@ -3242,10 +3274,10 @@ function AssetPreviewPanel({
                 </div>
                 <FeatureSeriesCollection
                   title="센서 관측 흐름"
-                  sensors={isLiveAsset ? liveFeatureSnapshots : realtimeDirectFeatureSnapshots}
+                  sensors={liveFeatureSnapshots}
                   windowId={sensorWindow}
                   onWindowChange={onSensorWindowChange}
-                  liveDemo={isLiveAsset ? liveDemo : null}
+                  liveDemo={selectedLiveSnapshot}
                   loading={detailLoading}
                   emptyTitle="센서 이력 없음"
                   emptyDetail="현재 화면 데이터에는 표시할 센서 관측 이력이 없습니다."
