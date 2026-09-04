@@ -17,7 +17,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createOperationsAgentReviewSummary,
-  createPredictiveMaintenanceRealtimeDemoTick,
   getOperationsAgentReviewSummary,
 } from "../../../api";
 import type {
@@ -1762,7 +1761,6 @@ export function OperationsWorkflowOverviewPage({
   const [factorySlotPreview, setFactorySlotPreview] = useState<FactorySlotPreview | null>(null);
   const [factoryFocusMode, setFactoryFocusMode] = useState<"all" | "exceptions">("exceptions");
   const [postMaintenancePredictions, setPostMaintenancePredictions] = useState<Record<string, PostMaintenancePredictionSummary>>({});
-  const [liveTickError, setLiveTickError] = useState<string | null>(null);
   const autoOpenedDrawerKeyRef = useRef<string | null>(null);
   const suppressAutoOpenDrawerRef = useRef(false);
   const handlePostMaintenancePrediction = useCallback((assetId: string, prediction: PostMaintenancePredictionSummary) => {
@@ -1776,37 +1774,6 @@ export function OperationsWorkflowOverviewPage({
       return { ...current, [assetId]: prediction };
     });
   }, []);
-  useEffect(() => {
-    if (model.context.projectId !== "manufacturing-demo-project" || model.context.workspaceId !== "manufacturing-demo") return;
-    let cancelled = false;
-    let inFlight = false;
-    const createTick = async () => {
-      if (cancelled || inFlight || document.visibilityState === "hidden") return;
-      inFlight = true;
-      try {
-        await createPredictiveMaintenanceRealtimeDemoTick(
-          model.context.projectId,
-          model.context.workspaceId,
-          model.context.datasetVersionId,
-        );
-        if (!cancelled) {
-          setLiveTickError(null);
-          onRefresh();
-        }
-      } catch (reason) {
-        if (!cancelled) setLiveTickError(reason instanceof Error ? reason.message : "실시간 생성 tick 호출 실패");
-      } finally {
-        inFlight = false;
-      }
-    };
-  const first = window.setTimeout(() => { void createTick(); }, 900);
-  const timer = window.setInterval(() => { void createTick(); }, 5_000);
-  return () => {
-      cancelled = true;
-      window.clearTimeout(first);
-      window.clearInterval(timer);
-    };
-  }, [model.context.datasetVersionId, model.context.projectId, model.context.workspaceId, onRefresh]);
   useEffect(() => {
     if (!selectedAsset || detailDrawerOpen) return;
     if (suppressAutoOpenDrawerRef.current) return;
@@ -2225,7 +2192,7 @@ export function OperationsWorkflowOverviewPage({
           />
           <aside className="operations-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
             <button type="button" className="operations-detail-drawer-close" aria-label="선택 설비 상세 닫기" onClick={closeDetailDrawer}><X size={16} /></button>
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} liveDemo={liveDemo} liveTickError={liveTickError} role={role} currentUserId={currentUserId} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "작업 이력" : drawerClosedLoop ? "업무 기록" : "현재 판단"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} liveDemo={liveDemo} role={role} currentUserId={currentUserId} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "작업 이력" : drawerClosedLoop ? "업무 기록" : "현재 판단"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -2655,7 +2622,6 @@ function AssetPreviewPanel({
   detailError,
   sensorWindow,
   liveDemo,
-  liveTickError,
   role,
   currentUserId,
   activeTab,
@@ -2693,7 +2659,6 @@ function AssetPreviewPanel({
   detailError: string | null;
   sensorWindow: OperationsSensorWindowId;
   liveDemo: RealtimeDemoSnapshot;
-  liveTickError: string | null;
   role: OperationsRoleLens;
   currentUserId: string;
   activeTab: DrawerTab;
@@ -2960,7 +2925,6 @@ function AssetPreviewPanel({
                       <span>{selectedLiveSnapshot.sourceLabel}</span>
                       <strong>{formatProbability(selectedLiveSnapshot.risk)} · {operationsMonitorStatusLabel(selectedLiveSnapshot.status)}</strong>
                       <small>{selectedLiveSnapshot.signal}</small>
-                      {liveTickError ? <em>생성 tick 지연 · {liveTickError}</em> : null}
                     </div>
                     <div className="operations-live-signal-factors">
                       {selectedLiveSnapshot.factors.length ? selectedLiveSnapshot.factors.map((factor) => (

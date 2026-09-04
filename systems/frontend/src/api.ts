@@ -809,39 +809,6 @@ export function getPredictiveMaintenanceLatestResults(
   );
 }
 
-export interface PredictiveMaintenanceRealtimeDemoTickResponse {
-  batch_id: string;
-  validation_status: "accepted" | "duplicate" | "conflict" | "rejected";
-  promotion_status: "promoted" | "already_promoted" | "partially_promoted" | "not_promoted";
-  product_result_created: boolean;
-  product_result_ids: string[];
-  artifact_ids: string[];
-  tick: {
-    asset_id: string;
-    asset_type: "compressor" | "cnc";
-    site_id: string;
-    cell_id: string;
-    event_id: string;
-    score: number;
-    status_grade: "normal" | "attention" | "warning" | "critical";
-    observed_at: string;
-  };
-}
-
-export function createPredictiveMaintenanceRealtimeDemoTick(
-  projectId: string,
-  workspaceId: string,
-  datasetVersionId?: string | null,
-): Promise<PredictiveMaintenanceRealtimeDemoTickResponse> {
-  const params = new URLSearchParams();
-  if (datasetVersionId) params.set("dataset_version_id", datasetVersionId);
-  const query = params.size ? `?${params.toString()}` : "";
-  return request<PredictiveMaintenanceRealtimeDemoTickResponse>(
-    `${predictiveMaintenanceBase(projectId, workspaceId)}/demo/realtime-tick${query}`,
-    { method: "POST", body: JSON.stringify({}) },
-  );
-}
-
 export function getPostMaintenanceProductResults(
   projectId: string,
   workspaceId: string,
