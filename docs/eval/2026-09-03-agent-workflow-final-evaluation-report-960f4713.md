@@ -97,6 +97,8 @@
 
 ## Artifact references
 
+Raw evaluation JSON files are local generated artifacts ignored by Git; regenerate them with the corresponding evaluation scripts when needed.
+
 - quality: `tests/eval/results/agent_summary_llm_eval_live_120_20260903_960f4713.json`
 - workflow_value: `tests/eval/results/agent_workflow_baseline_live_72_20260903_960f4713.json`
 - reliability: `tests/eval/results/decision_support_reliability_20260903_960f4713.json`

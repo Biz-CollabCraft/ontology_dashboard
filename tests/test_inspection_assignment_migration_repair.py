@@ -114,7 +114,7 @@ def test_postgresql_repair_preserves_the_same_assignment_contract() -> None:
         / "backend"
         / "migrations"
         / "postgresql"
-        / "0046_repair_legacy_inspection_assignment.sql"
+        / "0048_repair_legacy_inspection_assignment.sql"
     ).read_text(encoding="utf-8")
 
     assert "work_order.reverted_to_requested" in repair_sql

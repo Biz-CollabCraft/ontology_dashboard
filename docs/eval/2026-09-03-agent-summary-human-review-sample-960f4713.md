@@ -5,7 +5,7 @@
 - Campaign run ID: `decision-support-final-20260903-960f4713`
 - Candidate SHA: `960f4713`
 - Provider/model: `openai-compatible / gpt-4o-mini`
-- Source artifact: `tests/eval/results/agent_summary_llm_eval_live_120_20260903_960f4713.json`
+- Source artifact: local generated `tests/eval/results/agent_summary_llm_eval_live_120_20260903_960f4713.json` (ignored by Git; regenerate with the evaluation harness)
 - Selection rule: each Gold case's accepted output at `iteration=1`
 - Review status: **not_measured**
 - Reviewer/date: `________________ / ________________`

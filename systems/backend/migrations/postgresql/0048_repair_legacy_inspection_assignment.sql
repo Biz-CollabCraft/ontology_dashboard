@@ -10,7 +10,7 @@ INSERT INTO closed_loop_activities(
   timeline_order, payload_json, created_at
 )
 SELECT
-  'migration-0046-reopen-' || md5(
+  'migration-0048-reopen-' || md5(
     work_order.organization_id || ':' || work_order.project_id || ':' ||
     work_order.workspace_id || ':' || work_order.work_order_id
   ),
@@ -23,7 +23,7 @@ SELECT
   'work_order',
   work_order.work_order_id,
   'work_order.reverted_to_requested',
-  'migration:0046',
+  'migration:0048',
   'Assignment repair migration',
   'in_progress',
   'requested',
@@ -47,7 +47,7 @@ WHERE work_order.work_type = 'inspection'
   AND NOT EXISTS (
     SELECT 1
     FROM closed_loop_activities AS existing
-    WHERE existing.activity_id = 'migration-0046-reopen-' || md5(
+    WHERE existing.activity_id = 'migration-0048-reopen-' || md5(
       work_order.organization_id || ':' || work_order.project_id || ':' ||
       work_order.workspace_id || ':' || work_order.work_order_id
     )

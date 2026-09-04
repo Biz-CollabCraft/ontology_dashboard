@@ -10,7 +10,7 @@
 - Gold set: 8 Agent Review Packet cases
 - Iterations: 15 per case
 - Client-side concurrency: 1
-- Artifact: `tests/eval/results/agent_summary_llm_eval_live_120_f796b97f.json`
+- Local generated artifact: `tests/eval/results/agent_summary_llm_eval_live_120_f796b97f.json` (ignored by Git; regenerate with the evaluation harness)
 
 This run validates the merged PR 161, deterministic evidence selection, closed-loop feedback fixes, and LLM evaluation path as one frozen candidate. It does not claim production MES, CMMS, WMS, or QMS connectivity, production traffic reliability, or provider billing reconciliation.
 

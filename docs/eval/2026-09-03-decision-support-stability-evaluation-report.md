@@ -106,6 +106,8 @@ unmocked 시나리오는 실제 FastAPI와 SQLite를 통과한다. 나머지 3�
 
 ## Artifacts
 
+These raw JSON outputs are local generated artifacts ignored by Git; regenerate them with the decision-support evaluation scripts when needed.
+
 - `tests/eval/results/operational_decision_support_final-20260903-6bd2f7c2.json`
 - `tests/eval/results/decision_support_reliability_20260903_6bd2f7c2.json`
 - `tests/eval/results/decision_support_temporal_20260903_6bd2f7c2.json`
