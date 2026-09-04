@@ -753,7 +753,12 @@ def read_complete_ticks(
         return []
 
     root = Path(stream_root).expanduser()
-    files = sorted(root.glob("sensor/**/sensor_stream.jsonl"))
+    files = sorted(
+        {
+            *root.glob("sensor/**/sensor_stream.jsonl"),
+            *root.glob("runs/*/source/sensor_records.jsonl"),
+        }
+    )
     if not files:
         return []
     grouped: dict[datetime, dict[str, dict[str, Any]]] = defaultdict(dict)
@@ -764,6 +769,17 @@ def read_complete_ticks(
                     continue
                 try:
                     payload = json.loads(line)
+                    measurements = payload.pop("measurements", None)
+                    if measurements is not None:
+                        if not isinstance(measurements, dict):
+                            raise ValueError("gen_data measurements must be an object")
+                        overlap = set(payload) & set(measurements)
+                        if overlap:
+                            raise ValueError(
+                                "gen_data measurement fields conflict with observation envelope: "
+                                + ", ".join(sorted(overlap))
+                            )
+                        payload.update(measurements)
                     observed_at = _parse_observed_at(payload["observed_at"])
                     asset_id = str(payload["asset_id"])
                 except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
@@ -1051,6 +1067,128 @@ def _materialize_overlay_pipeline_snapshot(
         "size_bytes": len(content),
         "source_contract_version": next(iter(source_contract_versions)),
         "source_schema_version": next(iter(source_schema_versions)),
+    }
+
+
+def _live_pipeline_observation_rows(
+    database_url: str,
+    dataset_version_id: str,
+    *,
+    excluded_asset_ids: set[str],
+    minimum_history_rows: int = 36,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Read a bounded, family-complete history snapshot for live inference.
+
+    The relational observation tables are the Dataset-owned source of truth after
+    ingestion.  Reading the latest window from them avoids enqueueing a mutable
+    producer file and makes worker restart behaviour deterministic.
+    """
+    psycopg, dict_row, _ = _postgres_modules()
+    queries = {
+        "cnc": """
+            SELECT * FROM (
+              SELECT observed_at,asset_id,site_id,cell_id,is_operating,operating_state,
+                     product_type,air_temperature_k,process_temperature_k,
+                     rotational_speed_rpm,torque_nm,tool_wear_min,generator_version,
+                     ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY observed_at DESC) AS rn
+              FROM pm_cnc_observations WHERE dataset_version_id=%s
+            ) ranked WHERE rn <= %s ORDER BY asset_id,observed_at
+        """,
+        "compressor": """
+            SELECT * FROM (
+              SELECT observed_at,asset_id,site_id,cell_id,is_operating,operating_state,
+                     voltage_raw,rotation_raw,pressure_raw,vibration_raw,
+                     relative_vibration_z,relative_vibration_zone,generator_version,
+                     ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY observed_at DESC) AS rn
+              FROM pm_compressor_observations WHERE dataset_version_id=%s
+            ) ranked WHERE rn <= %s ORDER BY asset_id,observed_at
+        """,
+    }
+    selected: list[tuple[str, dict[str, Any]]] = []
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        _set_scope(connection)
+        for family, query in queries.items():
+            for raw in connection.execute(
+                query,
+                (dataset_version_id, minimum_history_rows),
+            ).fetchall():
+                row = dict(raw)
+                row.pop("rn", None)
+                if str(row["asset_id"]) in excluded_asset_ids:
+                    continue
+                selected.append((family, row))
+
+    counts: dict[str, int] = defaultdict(int)
+    for _, row in selected:
+        counts[str(row["asset_id"])] += 1
+    ready_assets = {
+        asset_id for asset_id, count in counts.items() if count >= minimum_history_rows
+    }
+
+    observations: list[dict[str, Any]] = []
+    for family, row in selected:
+        asset_id = str(row["asset_id"])
+        if asset_id not in ready_assets:
+            continue
+        observations.append(
+            {
+                "contract_version": "gen-data-sensor-observation-v2",
+                "schema_version": "2",
+                "source_kind": "live_sensor",
+                "asset_type": family,
+                **{
+                    key: (value.isoformat() if key == "observed_at" else value)
+                    for key, value in row.items()
+                },
+            }
+        )
+    observations.sort(key=lambda item: (str(item["asset_id"]), str(item["observed_at"])))
+    return observations, dict(counts)
+
+
+def _materialize_live_pipeline_snapshot(
+    snapshot_root: str | Path,
+    rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not rows:
+        raise ValueError("Live Runtime Pipeline snapshot requires ready observations")
+    encoded = [
+        json.dumps(
+            row,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        for row in rows
+    ]
+    content = ("\n".join(encoded) + "\n").encode("utf-8")
+    checksum = hashlib.sha256(content).hexdigest()
+    snapshot_dir = Path(snapshot_root).expanduser().resolve()
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_path = snapshot_dir / f"sha256-{checksum}.jsonl"
+    if snapshot_path.exists():
+        existing = snapshot_path.read_bytes()
+        if existing != content:
+            raise ValueError(f"Live Runtime Pipeline snapshot conflict: {snapshot_path}")
+    else:
+        temporary = snapshot_dir / f".tmp-{uuid.uuid4().hex}.jsonl"
+        try:
+            with temporary.open("xb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, snapshot_path)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+    return {
+        "job_id": f"live-sensor-{checksum[:32]}",
+        "source_uri": str(snapshot_path),
+        "source_checksum": checksum,
+        "size_bytes": len(content),
+        "source_contract_version": "gen-data-sensor-observation-v2",
+        "source_schema_version": "2",
     }
 
 
@@ -2468,10 +2606,12 @@ class LiveDatasetIngestionAdapter:
         *,
         predictor_factory: Callable[[str], Any],
         artifact_builder: Callable[..., dict[str, Any]],
+        allow_accelerated_simulation: bool = False,
     ) -> None:
         self.database_url = _normalize_database_url(database_url)
         self.predictor_factory = predictor_factory
         self.artifact_builder = artifact_builder
+        self.allow_accelerated_simulation = bool(allow_accelerated_simulation)
 
     def prepare_batch(
         self, *, stream_root: str | Path, active_overlay_assets: set[str]
@@ -2494,7 +2634,11 @@ class LiveDatasetIngestionAdapter:
         ticks = read_complete_ticks(
             stream_root,
             after=latest,
-            not_after=datetime.now(tz=timezone.utc) + MAX_LIVE_CLOCK_SKEW,
+            not_after=(
+                None
+                if self.allow_accelerated_simulation
+                else datetime.now(tz=timezone.utc) + MAX_LIVE_CLOCK_SKEW
+            ),
             expected_asset_ids=expected_asset_ids,
             excluded_asset_ids=active_overlay_assets,
         )
@@ -2511,6 +2655,11 @@ class LiveDatasetIngestionAdapter:
                 "dataset_version_id": dataset_version_id,
                 "source_version": LIVE_SOURCE_VERSION,
                 "latest_observed_at": latest.isoformat() if latest else None,
+                "clock_mode": (
+                    "accelerated_simulation"
+                    if self.allow_accelerated_simulation
+                    else "wall_clock"
+                ),
             },
         }
 
@@ -2523,27 +2672,67 @@ class LiveDatasetIngestionAdapter:
 
 
 class LiveDiagnosisApplicationAdapter:
-    """Adapter that executes Diagnosis rules supplied by the composition root."""
+    """Hand live observations to the Generator-owned Runtime Prediction boundary."""
 
     def __init__(
         self,
         *,
-        predictor_factory: Callable[[str], Any],
-        artifact_builder: Callable[..., dict[str, Any]],
+        snapshot_root: str | Path,
+        enqueue_client: GeneratorRuntimePipelineClient,
+        minimum_history_rows: int = 36,
+        simulation_session_id: str | None = None,
     ) -> None:
-        self.predictor_factory = predictor_factory
-        self.artifact_builder = artifact_builder
+        self.snapshot_root = Path(snapshot_root).expanduser().resolve()
+        self.enqueue_client = enqueue_client
+        self.minimum_history_rows = max(1, int(minimum_history_rows))
+        self.simulation_session_id = (
+            simulation_session_id.strip() if simulation_session_id else None
+        )
 
     def materialize_live_results(self, batch: dict[str, Any]) -> dict[str, Any]:
-        return _materialize_runtime_results(
+        rows, counts = _live_pipeline_observation_rows(
             str(batch["database_url"]),
             str(batch["dataset_version_id"]),
-            source_version=LIVE_SOURCE_VERSION,
-            materialization_profile=LIVE_MATERIALIZATION_PROFILE,
             excluded_asset_ids=batch["active_overlay_assets"],
-            predictor_factory=self.predictor_factory,
-            artifact_builder=self.artifact_builder,
+            minimum_history_rows=self.minimum_history_rows,
         )
+        if not rows:
+            return {
+                "status": "warming_up",
+                "minimum_history_rows": self.minimum_history_rows,
+                "history_counts": counts,
+            }
+        snapshot = _materialize_live_pipeline_snapshot(self.snapshot_root, rows)
+        if self.simulation_session_id:
+            session_digest = hashlib.sha256(
+                self.simulation_session_id.encode("utf-8")
+            ).hexdigest()[:12]
+            snapshot = {
+                **snapshot,
+                "job_id": f"{snapshot['job_id']}-session-{session_digest}",
+            }
+        queued = self.enqueue_client.enqueue(
+            {
+                **snapshot,
+                "dataset_id": str(batch["dataset_id"]),
+                "dataset_version": str(batch["dataset_version_id"]),
+                "pipeline_contract_version": "generator-prediction-result-v1",
+                "source_kind": "live_sensor",
+                "lineage": (
+                    {"simulation_session_id": self.simulation_session_id}
+                    if self.simulation_session_id
+                    else {}
+                ),
+            }
+        )
+        return {
+            "status": str(queued.get("status") or "queued"),
+            "generator_job_id": str(queued.get("job_id") or snapshot["job_id"]),
+            "source_checksum": snapshot["source_checksum"],
+            "observation_rows": len(rows),
+            "ready_assets": len({str(row["asset_id"]) for row in rows}),
+            "minimum_history_rows": self.minimum_history_rows,
+        }
 
 
 class LiveMaintenanceOverlayAdapter:

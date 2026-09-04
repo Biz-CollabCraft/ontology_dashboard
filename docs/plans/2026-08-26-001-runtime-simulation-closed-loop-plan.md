@@ -523,7 +523,7 @@ append와 ViewModel 계약이 확인된 뒤 같은 stack에서 병렬 진행한�
 
 범위:
 
-- Inspection WorkOrder request/approve/start/complete
+- Inspection WorkOrder request/accept-and-self-assign/start/complete
 - Recommendation create/decision
 - Maintenance WorkOrder approve
 - MaintenanceAction start/complete

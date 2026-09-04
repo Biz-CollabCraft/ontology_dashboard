@@ -19,7 +19,11 @@ export function OperationsOverviewPage({
   detail,
   detailLoading,
   detailError,
+  monitoringDetail,
+  monitoringDetailLoading,
+  monitoringDetailError,
   sensorWindow,
+  currentUserId,
   canMaterializeAgentSummary,
   canManageWorkflow,
   canExecuteFieldWorkflow,
@@ -38,7 +42,11 @@ export function OperationsOverviewPage({
   detail: OperationsEventDetailModel | null;
   detailLoading: boolean;
   detailError: string | null;
+  monitoringDetail: OperationsEventDetailModel | null;
+  monitoringDetailLoading: boolean;
+  monitoringDetailError: string | null;
   sensorWindow: OperationsSensorWindowId;
+  currentUserId: string;
   canMaterializeAgentSummary: boolean;
   canManageWorkflow: boolean;
   canExecuteFieldWorkflow: boolean;
@@ -68,7 +76,11 @@ export function OperationsOverviewPage({
           detail={detail}
           detailLoading={detailLoading}
           detailError={detailError}
+          monitoringDetail={monitoringDetail}
+          monitoringDetailLoading={monitoringDetailLoading}
+          monitoringDetailError={monitoringDetailError}
           sensorWindow={sensorWindow}
+          currentUserId={currentUserId}
           canMaterializeAgentSummary={canMaterializeAgentSummary}
           canManageWorkflow={canManageWorkflow}
           canExecuteFieldWorkflow={canExecuteFieldWorkflow}

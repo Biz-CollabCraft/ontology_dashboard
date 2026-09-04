@@ -72,12 +72,16 @@ async function getEventActivity(eventId: string): Promise<unknown> {
 
 async function getAssetDetailViewModel(
   projectId: string,
+  workspaceId: string,
   assetId: string,
+  eventId: string,
   datasetVersionId: string,
   historyWindow: OperationsSensorWindowId,
 ): Promise<AssetDetailViewModel> {
   const params = new URLSearchParams({
     project_id: projectId,
+    workspace_id: workspaceId,
+    event_id: eventId,
     dataset_version_id: datasetVersionId,
     history_window: historyWindow,
   });
@@ -104,7 +108,10 @@ function staleFrom(observedAt: string | null): boolean {
   const value = Date.parse(observedAt);
   if (!Number.isFinite(value)) return false;
   const now = Date.now();
-  return now - value > 24 * 60 * 60 * 1000 || value - now > 15 * 60 * 1000;
+  // "stale" means that no recent Observation has arrived. An accelerated
+  // Simulation Clock may legitimately be ahead of wall time, so a future
+  // timestamp must not be presented as an observation delay.
+  return now - value > 24 * 60 * 60 * 1000;
 }
 
 function warningMessage(reason: unknown, fallback: string): string {
@@ -260,7 +267,9 @@ export async function loadOperationsEventDetail(input: {
     : getEventActivity(input.event.eventId);
   const assetDetailPromise = getAssetDetailViewModel(
     input.projectId,
+    input.workspaceId,
     input.event.assetId,
+    input.event.eventId,
     input.datasetVersionId,
     input.historyWindow,
   );
@@ -271,6 +280,15 @@ export async function loadOperationsEventDetail(input: {
     activityPromise,
     assetDetailPromise,
   ]);
+  if (usesRuntimeProductResult && assetDetailState.status === "rejected") {
+    throw assetDetailState.reason;
+  }
+  if (usesRuntimeProductResult && assetDetailState.status === "fulfilled") {
+    const snapshot = assetDetailState.value.snapshot_basis;
+    if (snapshot.event_id !== input.event.eventId || assetDetailState.value.asset.asset_id !== input.event.assetId) {
+      throw new Error("요청한 Product Result와 설비 상세 snapshot이 일치하지 않습니다.");
+    }
+  }
   const predictiveDetail = predictiveState.status === "fulfilled"
     ? predictiveState.value.selected_event_detail
     : null;
@@ -281,7 +299,7 @@ export async function loadOperationsEventDetail(input: {
   const report = legacyReport.report ?? predictiveDetail?.report ?? null;
   const activity = activityState.status === "fulfilled" ? activityState.value : null;
   const warnings = [
-    legacyReport.warning,
+    legacyReport.warning && !predictiveDetail?.report ? legacyReport.warning : null,
     evidenceState.status === "rejected" && !predictiveDetail?.evidence
       ? `상세 근거 조회 지연: ${warningMessage(evidenceState.reason, "사용 불가")}`
       : null,

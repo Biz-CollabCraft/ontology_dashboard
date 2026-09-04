@@ -4,8 +4,11 @@ import json
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
+from pydantic import ValidationError
 
 from app.infra.db.maintenance_repository import MaintenanceRepository
 from app.maintenance.api_schema import (
@@ -17,6 +20,7 @@ from app.maintenance.api_schema import (
     MaintenanceReplayRequest,
     MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
+    RecommendationInput,
     RecommendationDecisionCreateRequest,
     ToolReplacementCostAnalysisCreateRequest,
 )
@@ -26,7 +30,7 @@ from app.maintenance.cost_basis import (
     CostBasisResolutionContext,
     ToolReplacementCostBasis,
 )
-from app.maintenance.maintenance_domain import IdempotencyConflict
+from app.maintenance.maintenance_domain import IdempotencyConflict, InvalidTransition
 from app.maintenance.maintenance_schema import RecommendationDisposition, WorkOrderStatus
 from app.maintenance.service import MaintenanceLoopService
 
@@ -60,12 +64,15 @@ class ProjectionQuery:
         *,
         replay_binding: dict | None = None,
         replay_error: ValueError | None = None,
+        source_binding: dict | None = None,
     ) -> None:
         self.projection = projection if projection is not None else canonical_projection()
         self.calls: list[dict] = []
         self.replay_binding = replay_binding
         self.replay_error = replay_error
+        self.source_binding = source_binding
         self.replay_calls: list[dict] = []
+        self.source_session_calls: list[dict] = []
 
     def event_evidence_projection(self, **scope):
         self.calls.append(scope)
@@ -85,6 +92,24 @@ class ProjectionQuery:
             "equipment_id": values["equipment_id"],
         }
 
+    def resolve_maintenance_source_session(self, **values):
+        self.source_session_calls.append(values)
+        if self.replay_error is not None:
+            raise self.replay_error
+        return self.source_binding
+
+
+class SequencedProjectionQuery(ProjectionQuery):
+    def __init__(self, projections: list[dict | None]) -> None:
+        super().__init__(projections[0] if projections else None)
+        self.projections = list(projections)
+
+    def event_evidence_projection(self, **scope):
+        self.calls.append(scope)
+        if len(self.calls) <= len(self.projections):
+            return self.projections[len(self.calls) - 1]
+        return self.projections[-1] if self.projections else None
+
 
 def canonical_projection(
     *,
@@ -97,6 +122,7 @@ def canonical_projection(
     dataset_version: str = "fixture-compatibility",
     source_sha256: str | None = None,
     decision: str | None = "review_shutdown",
+    failure_probability: float | None = 0.82,
 ) -> dict:
     actions = [] if decision is None else [{"action_id": decision, "basis": ["factor.1"]}]
     return {
@@ -118,7 +144,10 @@ def canonical_projection(
             "evidence_payload_reference": artifact_id,
             "source_sha256": source_sha256,
         },
-        "assessment": {"operational_decision_kind": decision},
+        "assessment": {
+            "operational_decision_kind": decision,
+            "failure_probability": failure_probability,
+        },
         "report_projection": {"recommended_actions": actions},
         "provenance": {
             "model_version": model_version,
@@ -146,6 +175,7 @@ def snapshot_basis(projection: dict) -> dict:
 class StaticCostBasisProvider:
     def __init__(self, basis: ToolReplacementCostBasis) -> None:
         self.basis = basis
+        self.tool_context: CostBasisResolutionContext | None = None
 
     def tool_replacement_basis(
         self,
@@ -153,7 +183,8 @@ class StaticCostBasisProvider:
         calculated_at: datetime,
         context: CostBasisResolutionContext,
     ) -> ToolReplacementCostBasis:
-        del calculated_at, context
+        del calculated_at
+        self.tool_context = context
         return self.basis
 
     def cooling_system_restore_basis(
@@ -164,6 +195,16 @@ class StaticCostBasisProvider:
     ) -> CoolingSystemRestoreCostBasis:
         del calculated_at, context
         return CoolingSystemRestoreCostBasis.model_validate(self.basis.model_dump())
+
+
+def recommendation_input_schema() -> dict:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "contracts"
+        / "schemas"
+        / "recommendation-input.schema.json"
+    )
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def tool_replacement_cost_basis(
@@ -231,9 +272,13 @@ def service(
     )
 
 
-def inspection_request() -> InspectionWorkOrderCreateRequest:
+def inspection_request(
+    projection: dict | None = None,
+) -> InspectionWorkOrderCreateRequest:
+    projection = projection or canonical_projection()
     return InspectionWorkOrderCreateRequest(
         event_id="EVT-RESULT-001",
+        snapshot_basis=snapshot_basis(projection),
     )
 
 
@@ -315,9 +360,9 @@ def run_completed_inspection(
         workspace_id="workspace-1",
         work_order_id=work_order_id,
         target=WorkOrderStatus.APPROVED,
-        actor_id="manager-1",
-        actor_display_name="Manager One",
-        idempotency_key="inspection-approve-001",
+        actor_id="engineer-1",
+        actor_display_name="Engineer One",
+        idempotency_key="inspection-accept-001",
     )
     loop.transition_inspection(
         organization_id="org-1",
@@ -372,6 +417,224 @@ def run_requested_maintenance(loop: MaintenanceLoopService) -> str:
     )
     assert decided["work_order_id"] is not None
     return decided["work_order_id"]
+
+
+def test_completed_inspection_requiring_maintenance_stays_in_active_queue(tmp_path) -> None:
+    loop = service(tmp_path)
+    work_order_id, _inspection_result_id = run_completed_inspection(loop)
+
+    queue = loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    assert queue["items"] == [
+        {
+            **loop.repository.get_work_order(
+                workspace_id="workspace-1",
+                work_order_id=work_order_id,
+            ).model_dump(mode="json"),
+            "inspection_outcome": "maintenance_recommended",
+            "current_step": "inspection_completed",
+        }
+    ]
+
+
+def test_completed_inspection_without_maintenance_leaves_active_queue(tmp_path) -> None:
+    loop = service(tmp_path)
+    run_completed_inspection(loop, outcome="no_action_required")
+
+    queue = loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    assert queue == {"items": []}
+
+
+def test_new_prediction_cannot_create_duplicate_open_inspection_for_same_equipment(tmp_path) -> None:
+    first_projection = canonical_projection()
+    second_projection = canonical_projection(
+        event_id="EVT-RESULT-002",
+        artifact_id="RESULT-002",
+        observed_at="2026-08-01T00:10:00+09:00",
+    )
+    loop = service(
+        tmp_path,
+        query=SequencedProjectionQuery([first_projection, second_projection]),
+    )
+    first = loop.request_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        payload=inspection_request(first_projection),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="inspection-request-first-event",
+    )
+
+    with pytest.raises(InvalidTransition, match="active inspection workflow already exists"):
+        loop.request_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            payload=InspectionWorkOrderCreateRequest(
+                event_id="EVT-RESULT-002",
+                snapshot_basis=snapshot_basis(second_projection),
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="inspection-request-second-event",
+        )
+
+    assert loop.repository.get_work_order(
+        workspace_id="workspace-1",
+        work_order_id=first["work_order_id"],
+    ) is not None
+    assert len(loop.repository.list_open_inspection_work_orders(workspace_id="workspace-1")) == 1
+
+
+def test_new_prediction_cannot_replace_completed_inspection_awaiting_maintenance_review(tmp_path) -> None:
+    loop = service(tmp_path)
+    work_order_id, _inspection_result_id = run_completed_inspection(loop)
+    second_projection = canonical_projection(
+        event_id="EVT-RESULT-002",
+        artifact_id="RESULT-002",
+        observed_at="2026-08-01T00:10:00+09:00",
+    )
+    loop.event_evidence_query.projection = second_projection
+
+    with pytest.raises(InvalidTransition, match="active inspection workflow already exists"):
+        loop.request_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            payload=InspectionWorkOrderCreateRequest(
+                event_id="EVT-RESULT-002",
+                snapshot_basis=snapshot_basis(second_projection),
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="inspection-request-after-completed-inspection",
+        )
+
+    assert loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )["items"][0]["work_order_id"] == work_order_id
+
+
+def test_active_inspection_queue_reports_downstream_recommendation_step(tmp_path) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(loop)
+    loop.create_manual_recommendation(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=OperationsManualRecommendationCreateRequest(
+            basis=("field engineer confirmed tool wear",)
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="manual-recommendation-active-queue-001",
+    )
+
+    queue = loop.list_open_inspection_work_orders(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    assert queue["items"][0]["current_step"] == "recommendation_proposed"
+
+
+def test_field_operator_accepts_assignment_and_only_assignee_can_execute(tmp_path) -> None:
+    loop = service(tmp_path)
+    requested = loop.request_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        payload=inspection_request(),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="inspection-request-assignment-001",
+    )
+    work_order_id = requested["work_order_id"]
+    accepted_at = datetime(2026, 9, 2, 10, 0, tzinfo=timezone.utc)
+
+    accepted = loop.transition_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        work_order_id=work_order_id,
+        target=WorkOrderStatus.APPROVED,
+        actor_id="engineer-1",
+        actor_display_name="Engineer One",
+        idempotency_key="inspection-accept-assignment-001",
+        transitioned_at=accepted_at,
+    )
+
+    assert accepted["work_order_status"] == "approved"
+    assert accepted["assigned_to"] == "engineer-1"
+    stored = loop.repository.get_work_order(
+        workspace_id="workspace-1",
+        work_order_id=work_order_id,
+    )
+    assert stored is not None
+    assert stored.assigned_to == "engineer-1"
+    assert stored.assigned_at == accepted_at
+
+    with pytest.raises(InvalidTransition):
+        loop.transition_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            target=WorkOrderStatus.APPROVED,
+            actor_id="engineer-2",
+            actor_display_name="Engineer Two",
+            idempotency_key="inspection-accept-race-002",
+        )
+
+    with pytest.raises(PermissionError, match="assigned field operator"):
+        loop.transition_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            target=WorkOrderStatus.IN_PROGRESS,
+            actor_id="engineer-2",
+            actor_display_name="Engineer Two",
+            idempotency_key="inspection-start-wrong-assignee-001",
+        )
+
+    started = loop.transition_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        work_order_id=work_order_id,
+        target=WorkOrderStatus.IN_PROGRESS,
+        actor_id="engineer-1",
+        actor_display_name="Engineer One",
+        idempotency_key="inspection-start-assignment-001",
+    )
+    assert started["work_order_status"] == "in_progress"
+
+    with pytest.raises(PermissionError, match="assigned field operator"):
+        loop.complete_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=inspection_result("no_action_required"),
+            actor_id="engineer-2",
+            actor_display_name="Engineer Two",
+            idempotency_key="inspection-complete-wrong-assignee-001",
+        )
 
 
 def test_two_stage_inspection_to_maintenance_work_order_lineage(tmp_path) -> None:
@@ -562,6 +825,106 @@ def test_maintenance_execution_uses_persisted_lineage_and_emits_replay_events(tm
         "maintenance.replay_requested": 3,
     }
     assert all("SIMULATION-SESSION-001" in row["payload_json"] for row in outbox)
+
+
+def test_live_maintenance_approval_uses_authorized_product_result_source_session(
+    tmp_path,
+) -> None:
+    diagnosis = ProjectionQuery(
+        source_binding={
+            "simulation_session_id": "SOURCE-SIMULATION-SESSION-001",
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "equipment_id": "CNC-001",
+        }
+    )
+    loop = service(tmp_path, query=diagnosis)
+    work_order_id = run_requested_maintenance(loop)
+
+    approved = loop.approve_maintenance_work_order(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        work_order_id=work_order_id,
+        payload=MaintenanceWorkOrderApproveRequest(),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="maintenance-source-session-approve-001",
+    )
+
+    assert approved["maintenance_action_status"] == "planned"
+    assert diagnosis.replay_calls == []
+    assert diagnosis.source_session_calls == [
+        {
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "source_product_result_id": "RESULT-001",
+            "equipment_id": "CNC-001",
+        }
+    ]
+    lineage = loop.event_lineage(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        event_id="EVT-RESULT-001",
+    )
+    assert lineage["maintenance_actions"][0]["simulation_session_id"] == (
+        "SOURCE-SIMULATION-SESSION-001"
+    )
+
+
+def test_live_maintenance_approval_rejects_caller_session_override(tmp_path) -> None:
+    diagnosis = ProjectionQuery(
+        source_binding={
+            "simulation_session_id": "SOURCE-SIMULATION-SESSION-001",
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "equipment_id": "CNC-001",
+        }
+    )
+    loop = service(tmp_path, query=diagnosis)
+    work_order_id = run_requested_maintenance(loop)
+
+    with pytest.raises(ValueError, match="canonical identity mismatch"):
+        loop.approve_maintenance_work_order(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=MaintenanceWorkOrderApproveRequest(
+                simulation_session_id="pm-replay-forged"
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="maintenance-source-session-forged-001",
+        )
+
+    assert diagnosis.replay_calls == []
+    assert loop.repository.operational_side_effect_counts()["maintenance_actions"] == 0
+
+
+def test_live_maintenance_approval_fails_without_source_session_lineage(tmp_path) -> None:
+    diagnosis = ProjectionQuery()
+    loop = service(tmp_path, query=diagnosis)
+    work_order_id = run_requested_maintenance(loop)
+
+    with pytest.raises(ValueError, match="source simulation session lineage"):
+        loop.approve_maintenance_work_order(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=MaintenanceWorkOrderApproveRequest(),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="maintenance-source-session-missing-001",
+        )
+
+    assert diagnosis.replay_calls == []
+    assert loop.repository.operational_side_effect_counts()["maintenance_actions"] == 0
 
 
 def test_maintenance_approval_fails_closed_when_diagnosis_rejects_replay(tmp_path) -> None:
@@ -756,6 +1119,14 @@ def test_manual_recommendation_replay_dedupe_and_conflict(tmp_path) -> None:
         raise AssertionError("reusing an idempotency key with another body must conflict")
 
 
+def test_manual_recommendation_request_rejects_incomplete_cost_reference() -> None:
+    with pytest.raises(ValidationError, match="cost_analysis_id and action_candidate_id"):
+        OperationsManualRecommendationCreateRequest(
+            basis=("replace worn tool",),
+            cost_analysis_id="cost-analysis-001",
+        )
+
+
 def test_no_action_inspection_cannot_create_maintenance_recommendation(tmp_path) -> None:
     loop = service(tmp_path)
     requested = loop.request_inspection(
@@ -769,7 +1140,7 @@ def test_no_action_inspection_cannot_create_maintenance_recommendation(tmp_path)
     )
     work_order_id = requested["work_order_id"]
     for target, actor, key in (
-        (WorkOrderStatus.APPROVED, "manager-1", "inspection-approve-001"),
+        (WorkOrderStatus.APPROVED, "engineer-1", "inspection-accept-001"),
         (WorkOrderStatus.IN_PROGRESS, "engineer-1", "inspection-start-001"),
     ):
         loop.transition_inspection(
@@ -840,6 +1211,56 @@ def test_inspection_request_fails_closed_for_unknown_or_mismatched_projection(tm
         )
 
 
+def test_recommendation_input_is_projected_from_event_evidence_only(tmp_path) -> None:
+    projection = canonical_projection(
+        event_id="EVT-RESULT-001",
+        asset_id="CNC-RECOMMENDATION-001",
+        asset_type="cnc",
+        artifact_id="RESULT-RECOMMENDATION-001",
+        source_sha256="a" * 64,
+        decision="request_inspection",
+    )
+    query = ProjectionQuery(projection)
+    loop = service(tmp_path, query=query)
+
+    recommendation_input = loop.recommendation_input(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        event_id="EVT-RESULT-001",
+    )
+
+    assert RecommendationInput.model_validate(recommendation_input)
+    assert (
+        list(
+            Draft202012Validator(recommendation_input_schema()).iter_errors(
+                recommendation_input
+            )
+        )
+        == []
+    )
+    assert recommendation_input["snapshot_basis"] == snapshot_basis(projection)
+    assert recommendation_input["equipment"] == {
+        "organization_id": "org-1",
+        "project_id": "project-1",
+        "workspace_id": "workspace-1",
+        "asset_id": "CNC-RECOMMENDATION-001",
+        "equipment_id": "CNC-RECOMMENDATION-001",
+        "asset_type": "cnc",
+    }
+    assert recommendation_input["operational_decision_kind"] == "request_inspection"
+    assert recommendation_input["source_context"] == {
+        "source_product_result_id": "RESULT-RECOMMENDATION-001",
+        "source_evidence_id": "EVD-EVT-RESULT-001",
+        "source_action_id": "request_inspection",
+        "source_schema_version": "result-artifact-v1.0",
+        "source_policy_version": "recommendation-policy-v1",
+    }
+    assert "risk" not in recommendation_input
+    assert "review_draft" not in recommendation_input
+    assert "maintenance_history_summary" not in recommendation_input
+
+
 def test_inspection_request_rejects_stale_client_snapshot_basis(tmp_path) -> None:
     query = ProjectionQuery(
         canonical_projection(artifact_id="RESULT-OLD")
@@ -869,8 +1290,56 @@ def test_inspection_request_rejects_stale_client_snapshot_basis(tmp_path) -> Non
             "project_id": "project-1",
             "workspace_id": "workspace-1",
             "event_id": "EVT-RESULT-001",
+        },
+        {
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "event_id": "EVT-RESULT-001",
         }
     ]
+
+
+def test_inspection_request_requires_snapshot_basis_precondition() -> None:
+    with pytest.raises(ValidationError, match="snapshot_basis"):
+        InspectionWorkOrderCreateRequest(event_id="EVT-RESULT-001")
+
+
+def test_inspection_request_rejects_empty_snapshot_basis_identity() -> None:
+    with pytest.raises(ValidationError, match="snapshot_basis requires identity fields"):
+        InspectionWorkOrderCreateRequest(
+            event_id="EVT-RESULT-001",
+            snapshot_basis={},
+        )
+
+
+def test_inspection_request_retries_once_for_transient_stale_projection(tmp_path) -> None:
+    current = canonical_projection(artifact_id="RESULT-CURRENT")
+    stale = canonical_projection(artifact_id="RESULT-STALE")
+    query = SequencedProjectionQuery([stale, current])
+    loop = service(tmp_path, query=query)
+
+    requested = loop.request_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        payload=InspectionWorkOrderCreateRequest(
+            event_id="EVT-RESULT-001",
+            snapshot_basis=snapshot_basis(current),
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="inspection-request-001",
+    )
+
+    work_order = loop.repository.get_work_order(
+        workspace_id="workspace-1",
+        work_order_id=requested["work_order_id"],
+    )
+    assert work_order is not None
+    assert work_order.authorization.source_product_result_id == "RESULT-CURRENT"
+    assert loop.repository.operational_side_effect_counts()["work_orders"] == 1
+    assert len(query.calls) == 2
 
 
 def test_inspection_request_accepts_matching_client_snapshot_basis(tmp_path) -> None:
@@ -917,9 +1386,8 @@ def test_inspection_request_rejects_non_authorizing_canonical_decision(tmp_path)
 
 
 def test_asset_type_is_preserved_from_projection_through_inspection(tmp_path) -> None:
-    query = ProjectionQuery(
-        canonical_projection(asset_id="CMP-001", asset_type="compressor")
-    )
+    projection = canonical_projection(asset_id="CMP-001", asset_type="compressor")
+    query = ProjectionQuery(projection)
     loop = service(
         tmp_path,
         query=query,
@@ -928,7 +1396,7 @@ def test_asset_type_is_preserved_from_projection_through_inspection(tmp_path) ->
         organization_id="org-1",
         project_id="project-1",
         workspace_id="workspace-1",
-        payload=inspection_request(),
+        payload=inspection_request(projection),
         actor_id="manager-1",
         actor_display_name="Manager One",
         idempotency_key="inspection-request-001",
@@ -977,6 +1445,13 @@ def test_cost_analysis_resolves_lineage_and_persists_read_only_snapshot(tmp_path
         "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
         "sop_version": "demo-2026-08-28",
     }
+    assert isinstance(loop.cost_basis_provider, StaticCostBasisProvider)
+    assert loop.cost_basis_provider.tool_context is not None
+    assert loop.cost_basis_provider.tool_context.source_product_result_id == "RESULT-001"
+    assert loop.cost_basis_provider.tool_context.source_evidence_id == (
+        "EVD-EVT-RESULT-001"
+    )
+    assert loop.cost_basis_provider.tool_context.source_failure_probability == 0.82
     assert {
         option["action_candidate_id"] for option in result["options"]
     } == {
@@ -1039,6 +1514,69 @@ def test_cost_analysis_resolves_lineage_and_persists_read_only_snapshot(tmp_path
         workspace_id="workspace-1",
         analysis_id=created["analysis_id"],
     ) == result
+
+
+def test_cost_analysis_fails_closed_without_source_product_result_probability(
+    tmp_path,
+) -> None:
+    query = ProjectionQuery(canonical_projection(failure_probability=0.82))
+    loop = service(tmp_path, query=query)
+    _work_order_id, inspection_result_id = run_completed_inspection(loop)
+    query.projection = canonical_projection(failure_probability=None)
+
+    with pytest.raises(ValueError, match="Product Result failure_probability"):
+        loop.calculate_tool_replacement_cost(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            inspection_result_id=inspection_result_id,
+            payload=cost_analysis_request(),
+            actor_id="manager-1",
+            idempotency_key="cost-analysis-missing-probability-001",
+        )
+
+    assert loop.repository.list_cost_analyses(
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+    ) == ()
+
+
+def test_manual_recommendation_preserves_consulted_analysis_without_selecting_option(
+    tmp_path,
+) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(loop)
+    created = loop.calculate_tool_replacement_cost(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=cost_analysis_request(),
+        actor_id="manager-1",
+        idempotency_key="cost-analysis-reference-001",
+    )
+    result = created["cost_analysis"]
+    action_candidate_id = result["options"][0]["action_candidate_id"]
+
+    recommendation = loop.create_manual_recommendation(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=OperationsManualRecommendationCreateRequest(
+            basis=("manager reviewed cost analysis",),
+            cost_analysis_id=created["analysis_id"],
+            action_candidate_id=action_candidate_id,
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="manual-recommendation-with-cost-reference-001",
+    )["recommendation"]
+
+    assert recommendation["source_cost_analysis_id"] == created["analysis_id"]
+    assert recommendation["source_action_candidate_id"] == action_candidate_id
+    assert recommendation["source_cost_option_id"] is None
+    assert recommendation["status"] == "proposed"
 
 
 def test_cost_analysis_is_idempotent_but_new_request_appends_snapshot(tmp_path) -> None:

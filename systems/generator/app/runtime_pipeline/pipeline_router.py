@@ -113,7 +113,7 @@ def get_pipeline_queue(status: Optional[str] = Query(None, description="Filter b
 
 @router.post("/internal/runtime-pipeline/enqueue", response_model=PipelineQueueItem)
 def enqueue_observation_source(req: EnqueueRequest) -> PipelineQueueItem:
-    """Internal evaluation endpoint to enqueue completed observation file into FIFO queue."""
+    """Internal endpoint to enqueue a completed observation file into the priority-FIFO queue."""
     try:
         input_identity = req.to_input_identity()
         return get_manager().enqueue(
@@ -134,7 +134,7 @@ def enqueue_observation_source(req: EnqueueRequest) -> PipelineQueueItem:
 
 @router.post("/internal/runtime-pipeline/retry-failed/{job_id}", response_model=PipelineQueueItem)
 def retry_failed_job_endpoint(job_id: str) -> PipelineQueueItem:
-    """Explicitly re-enqueue a failed or dead_letter job into the FIFO queue."""
+    """Explicitly re-enqueue a failed or dead-letter job into the priority-FIFO queue."""
     try:
         return get_manager().retry_failed_job(job_id)
     except PipelineBaseError:

@@ -12,6 +12,8 @@ def create_test_batch_payload(
     batch_id: str = "batch-001",
     model_set_id: str = "model-set-v1",
     model_set_version: str = "1.0.0",
+    source_kind: str = "live_sensor",
+    maintenance_event_id: str | None = None,
 ) -> PredictionResultBatchPayload:
     from datetime import datetime, timezone
     from systems.generator.app.runtime_pipeline.pipeline_schema import (
@@ -37,12 +39,33 @@ def create_test_batch_payload(
     f_sha = "1" * 64
     h_sha = "2" * 64
     l_sha = "3" * 64
+    if source_kind == "maintenance_replay_overlay" and not maintenance_event_id:
+        raise ValueError("maintenance_event_id is required for a maintenance replay test payload")
+    lineage = (
+        {
+            "simulation_session_id": "sim-priority-test",
+            "overlay_branch_id": f"overlay-{maintenance_event_id}",
+            "history_segment_id": f"history-{maintenance_event_id}",
+            "maintenance_event_id": maintenance_event_id,
+            "maintenance_action_id": f"action-{maintenance_event_id}",
+            "state_version": 1,
+        }
+        if source_kind == "maintenance_replay_overlay"
+        else {
+            "simulation_session_id": None,
+            "overlay_branch_id": None,
+            "history_segment_id": None,
+            "maintenance_event_id": None,
+            "maintenance_action_id": None,
+            "state_version": None,
+        }
+    )
 
     item_dict = {
         "event_id": event_id,
         "asset_id": asset_id,
         "observed_at": obs_dt,
-        "source_kind": "live_sensor",
+        "source_kind": source_kind,
         "source_ref": {"uri": "test.jsonl", "sha256": "a" * 64},
         "output_status": output_status,
         "score": score if output_status == "predicted" else None,
@@ -55,14 +78,7 @@ def create_test_batch_payload(
         "feature_schema_sha256": f_sha,
         "history_requirement_sha256": h_sha,
         "label_schema_sha256": l_sha,
-        "lineage": {
-            "simulation_session_id": None,
-            "overlay_branch_id": None,
-            "history_segment_id": None,
-            "maintenance_event_id": None,
-            "maintenance_action_id": None,
-            "state_version": None,
-        },
+        "lineage": lineage,
         "failure_reason": None if output_status == "predicted" else "failure reason",
     }
 
@@ -72,7 +88,7 @@ def create_test_batch_payload(
         event_id=event_id,
         asset_id=asset_id,
         observed_at=obs_dt,
-        source_kind="live_sensor",
+        source_kind=source_kind,
         source_ref=PredictionResultSourceRef(uri="test.jsonl", sha256="a" * 64),
         payload_sha256=item_sha,
         output_status=output_status,
@@ -86,7 +102,7 @@ def create_test_batch_payload(
         feature_schema_sha256=f_sha,
         history_requirement_sha256=h_sha,
         label_schema_sha256=l_sha,
-        lineage=PredictionResultLineage(),
+        lineage=PredictionResultLineage.model_validate(lineage),
         failure_reason=None if output_status == "predicted" else "failure reason",
     )
 
@@ -108,11 +124,11 @@ def create_test_batch_payload(
         dataset_version="v1.0",
         source_uri="test.jsonl",
         source_checksum="a" * 64,
-        source_kind="live_sensor",
+        source_kind=source_kind,
         source_contract_version="observation-source-v1",
         source_schema_version="sensor-record-v2",
         pipeline_contract_version="generator-prediction-result-v1",
-        lineage=PredictionResultLineage(),
+        lineage=PredictionResultLineage.model_validate(lineage),
     )
 
     producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
@@ -677,6 +693,156 @@ def test_delivery_worker_decoupled_retry_and_backoff(isolated_runtime_env, monke
     sent_item = notif_service.get_outbox_item(success_item.event_id)
     assert sent_item.status == "sent"
     assert sent_item.attempt == 1
+
+
+def test_queue_promotes_only_first_replay_for_each_maintenance_event(tmp_path):
+    queue = PipelineQueue(db_path=tmp_path / "queue.db")
+
+    def enqueue(job_id: str, source_kind: str, maintenance_event_id: str | None = None) -> None:
+        source_file = tmp_path / f"{job_id}.jsonl"
+        source_file.write_text(json.dumps({"job_id": job_id}) + "\n", encoding="utf-8")
+        lineage = None
+        if source_kind == "maintenance_replay_overlay":
+            lineage = {
+                "simulation_session_id": "sim-priority-test",
+                "overlay_branch_id": f"overlay-{maintenance_event_id}",
+                "history_segment_id": f"history-{maintenance_event_id}",
+                "maintenance_event_id": maintenance_event_id,
+                "maintenance_action_id": f"action-{maintenance_event_id}",
+                "state_version": 1,
+            }
+        queue.enqueue(
+            job_id=job_id,
+            runtime_input=create_test_runtime_input_identity(
+                source_uri=str(source_file),
+                source_checksum=compute_file_sha256(source_file),
+                source_kind=source_kind,
+                lineage=lineage,
+            ),
+        )
+
+    enqueue("live-first", "live_sensor")
+    enqueue("live-second", "live_sensor")
+    enqueue("replay-a-first", "maintenance_replay_overlay", "maintenance-a")
+    enqueue("replay-a-second", "maintenance_replay_overlay", "maintenance-a")
+    enqueue("replay-b-first", "maintenance_replay_overlay", "maintenance-b")
+
+    first = queue.claim_next()
+    assert first is not None
+    assert first.job_id == "replay-a-first"
+    queue.mark_succeeded(first.job_id)
+
+    second = queue.claim_next()
+    assert second is not None
+    assert second.job_id == "replay-b-first"
+    queue.mark_succeeded(second.job_id)
+
+    third = queue.claim_next()
+    assert third is not None
+    assert third.job_id == "live-first"
+
+
+def test_delivery_promotes_one_replay_per_event_then_returns_to_fifo(
+    isolated_runtime_env,
+    monkeypatch,
+):
+    service = isolated_runtime_env["notif_service"]
+    worker = isolated_runtime_env["notif_worker"]
+    delivered: list[str] = []
+
+    def register(payload: PredictionResultBatchPayload, created_at: str) -> None:
+        item = service.create_outbox_record(payload)
+        item.created_at = created_at
+        service.save_outbox_item(item)
+
+    register(
+        create_test_batch_payload(event_id="evt-live-old", batch_id="batch-live-old"),
+        "2026-08-25T10:00:00+00:00",
+    )
+    register(
+        create_test_batch_payload(
+            event_id="evt-replay-a-first",
+            batch_id="batch-replay-a-first",
+            source_kind="maintenance_replay_overlay",
+            maintenance_event_id="maintenance-a",
+        ),
+        "2026-08-25T10:01:00+00:00",
+    )
+    register(
+        create_test_batch_payload(
+            event_id="evt-replay-a-second",
+            batch_id="batch-replay-a-second",
+            source_kind="maintenance_replay_overlay",
+            maintenance_event_id="maintenance-a",
+        ),
+        "2026-08-25T10:02:00+00:00",
+    )
+    register(
+        create_test_batch_payload(
+            event_id="evt-replay-b-first",
+            batch_id="batch-replay-b-first",
+            source_kind="maintenance_replay_overlay",
+            maintenance_event_id="maintenance-b",
+        ),
+        "2026-08-25T10:03:00+00:00",
+    )
+
+    def record_delivery(payload: PredictionResultBatchPayload):
+        delivered.append(payload.batch_id)
+        return {"delivered": True, "status_code": 200}
+
+    monkeypatch.setattr(service, "send_once", record_delivery)
+
+    assert worker.process_pending() == 4
+    assert delivered == [
+        "batch-replay-a-first",
+        "batch-replay-b-first",
+        "batch-live-old",
+        "batch-replay-a-second",
+    ]
+
+
+def test_new_replay_interrupts_stale_live_delivery_snapshot(
+    isolated_runtime_env,
+    monkeypatch,
+):
+    service = isolated_runtime_env["notif_service"]
+    worker = isolated_runtime_env["notif_worker"]
+    delivered: list[str] = []
+
+    for index in range(3):
+        payload = create_test_batch_payload(
+            event_id=f"evt-live-{index}",
+            batch_id=f"batch-live-{index}",
+        )
+        item = service.create_outbox_record(payload)
+        item.created_at = f"2026-08-25T10:0{index}:00+00:00"
+        service.save_outbox_item(item)
+
+    def register_replay_during_first_live_delivery(payload: PredictionResultBatchPayload):
+        delivered.append(payload.batch_id)
+        if payload.batch_id == "batch-live-0":
+            replay = create_test_batch_payload(
+                event_id="evt-replay-new",
+                batch_id="batch-replay-new",
+                source_kind="maintenance_replay_overlay",
+                maintenance_event_id="maintenance-new",
+            )
+            service.create_outbox_record(replay)
+        return {"delivered": True, "status_code": 200}
+
+    monkeypatch.setattr(service, "send_once", register_replay_during_first_live_delivery)
+
+    assert worker.process_pending() == 1
+    assert delivered == ["batch-live-0"]
+
+    assert worker.process_pending() == 3
+    assert delivered == [
+        "batch-live-0",
+        "batch-replay-new",
+        "batch-live-1",
+        "batch-live-2",
+    ]
 
 
 # =====================================================================
@@ -1255,6 +1421,26 @@ def test_duplicate_source_identity_enqueue_blocked(isolated_runtime_env):
     assert items[0].job_id == "job-dup-1"
 
 
+def test_failed_source_redelivery_requires_explicit_retry(isolated_runtime_env):
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    src_file, sha = create_sample_observation_jsonl(
+        incoming_dir / "failed_redelivery.jsonl", num_rows=2
+    )
+    runtime_input = create_test_runtime_input_identity(
+        source_uri=str(src_file), source_checksum=sha
+    )
+    queue.enqueue(job_id="job-failed-original", runtime_input=runtime_input)
+    queue.mark_failed("job-failed-original", "PIPELINE_HISTORY_INSUFFICIENT")
+
+    with pytest.raises(PipelineDuplicateInputError) as exc_info:
+        queue.enqueue(job_id="job-failed-redelivery", runtime_input=runtime_input)
+
+    assert exc_info.value.code == "PIPELINE_DUPLICATE_INPUT"
+    assert len(queue.list_items()) == 1
+
+
 # =====================================================================
 # 14. Same Path Different Checksum Enqueued as Separate Job Test
 # =====================================================================
@@ -1703,6 +1889,26 @@ def test_safe_cleanup_removes_run_dedicated_intermediates_preserves_models(isola
     # Run-dedicated pipeline dataset directory MUST be removed
     run_dataset_dir = env["repository"].base_dir / "pipeline_datasets" / run_state.run_id
     assert not run_dataset_dir.exists()
+
+
+def test_safe_cleanup_accepts_configured_runtime_feature_root(tmp_path, monkeypatch):
+    run_id = "run-configured-feature-root"
+    feature_root = tmp_path / "external-runtime-features"
+    feature_file = feature_root / run_id / "features.npy"
+    feature_file.parent.mkdir(parents=True)
+    feature_file.write_bytes(b"runtime-features")
+    monkeypatch.setattr(PATHS, "runtime_feature_root", feature_root)
+    repository = PipelineRepository(base_dir=tmp_path / "data_preprocessed")
+
+    cleaned, deleted, error = repository.cleanup_run_intermediate_outputs(
+        run_id,
+        [ArtifactReference(uri=str(feature_file), sha256="a" * 64, role="runtime_features")],
+    )
+
+    assert cleaned is True
+    assert error is None
+    assert str(feature_file.resolve()) in deleted
+    assert not feature_file.exists()
 
 
 # =====================================================================
@@ -4192,6 +4398,156 @@ def test_model_inference_out_of_bounds_score_raises_pipeline_model_prediction_fa
         )
 
     assert "out of bounds" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("selected_model", "non_applicable_model"),
+    [
+        ("lightgbm", "compressor"),
+        ("compressor", "lightgbm"),
+    ],
+)
+def test_prediction_service_runs_only_models_selected_for_the_input_family(
+    isolated_runtime_env,
+    monkeypatch,
+    selected_model,
+    non_applicable_model,
+):
+    """A required model for another asset family must not block a scoped prediction."""
+    import pytest
+
+    from systems.generator.app.runtime_pipeline.pipeline_exception import (
+        PipelineModelPredictionFailedError,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ActiveModelConfig,
+        ActiveModelSet,
+        now_utc_iso,
+    )
+
+    svc = isolated_runtime_env["service"].prediction_service
+    artifact = svc.load_active_artifact("lightgbm")
+    active_set = ActiveModelSet(
+        model_set_id="family-scoped-model-set",
+        model_set_version="1.0.0",
+        updated_at=now_utc_iso(),
+        models={
+            non_applicable_model: ActiveModelConfig(
+                model_version="non-applicable-v1",
+                required=True,
+            ),
+            selected_model: ActiveModelConfig(
+                model_version=artifact.model_version,
+                required=True,
+            ),
+        },
+    )
+    loaded_models: list[str] = []
+
+    def load_selected(base_model: str, target_version=None):
+        loaded_models.append(base_model)
+        if base_model == non_applicable_model:
+            raise AssertionError("non-applicable family model was loaded")
+        return artifact
+
+    monkeypatch.setattr(svc, "load_active_artifact", load_selected)
+
+    with pytest.raises(PipelineModelPredictionFailedError, match=selected_model):
+        svc.predict_for_models(
+            base_models=[selected_model],
+            model_feature_refs={},
+            active_model_set=active_set,
+        )
+
+    assert loaded_models == [selected_model]
+
+
+def test_concurrent_outbox_saves_use_independent_temp_files(isolated_runtime_env):
+    """Concurrent status writers must leave one valid outbox record and no temp files."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    service = isolated_runtime_env["notif_service"]
+    payload = create_test_batch_payload(
+        event_id="evt-concurrent-outbox",
+        asset_id="Asset-Concurrent",
+        batch_id="batch-concurrent-outbox",
+    )
+    original = service.create_outbox_record(payload, run_id="run-concurrent-outbox")
+
+    def save(attempt: int):
+        item = original.model_copy(deep=True)
+        item.attempt = attempt
+        item.status = "retry_wait" if attempt % 2 else "sending"
+        return service.save_outbox_item(item)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        paths = list(pool.map(save, range(1, 17)))
+
+    assert len(set(paths)) == 1
+    persisted = service.get_outbox_item(original.event_id)
+    assert persisted is not None
+    assert persisted.event_id == original.event_id
+    assert not list(service.outbox_dir.glob(".tmp_*.json"))
+
+
+def test_concurrent_prediction_event_updates_do_not_lose_each_other(isolated_runtime_env):
+    """Repository read-modify-write updates are serialized across delivery workers."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ArtifactReference,
+        PipelineRunState,
+        PredictionDeliveryEventState,
+        now_utc_iso,
+    )
+
+    repository = isolated_runtime_env["repository"]
+    event_ids = ["evt-concurrent-a", "evt-concurrent-b"]
+    repository.save_run_state(
+        PipelineRunState(
+            run_id="run-concurrent-events",
+            job_id="job-concurrent-events",
+            status="succeeded",
+            current_stage=None,
+            source_ref=ArtifactReference(
+                uri="data/concurrent.jsonl",
+                sha256="0" * 64,
+                role="source_observation_protocol",
+            ),
+            stages={},
+            prediction_results=[],
+            prediction_delivery_status="pending",
+            prediction_event_ids=event_ids,
+            prediction_events=[
+                PredictionDeliveryEventState(
+                    event_id=event_id,
+                    asset_id=f"Asset-{index}",
+                    status="pending",
+                    attempt=0,
+                    max_attempts=5,
+                    updated_at=now_utc_iso(),
+                )
+                for index, event_id in enumerate(event_ids)
+            ],
+        )
+    )
+
+    def mark_sent(index: int):
+        return repository.update_prediction_event(
+            run_id="run-concurrent-events",
+            event_id=event_ids[index],
+            asset_id=f"Asset-{index}",
+            status="sent",
+            attempt=1,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(mark_sent, range(2)))
+
+    persisted = repository.get_run_state("run-concurrent-events")
+    assert persisted is not None
+    assert persisted.prediction_delivery_status == "sent"
+    assert {event.event_id for event in persisted.prediction_events if event.status == "sent"} == set(event_ids)
 
 
 # =====================================================================

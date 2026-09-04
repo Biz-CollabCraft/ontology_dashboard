@@ -37,6 +37,13 @@ producer와 Generator/Backend consumer가 별도 Schema로 확정한다.
 - Canonical, 정비 전 Observation, 정비 전 Product Result/Evidence는 immutable하게
   보존한다.
 - 정비 완료 자체를 정상 판정으로 사용하지 않는다.
+- 정비 효과를 비교하는 정비 전 기준 Result와 정비 후 Overlay Result는 동일한
+  `model_id`, immutable `model_version`, Model Artifact manifest checksum 및 판정
+  threshold 정책을 사용한다. 하나라도 다르면 정비 효과 개선으로 비교하지 않고
+  `model_lineage_mismatch`로 처리한다.
+- 활성 Model Artifact가 변경된 경우 정비 후 결과에만 새 모델을 적용하지 않는다.
+  새 모델로 정비 전 Observation을 다시 산출한 별도 baseline과 정비 후 Overlay를
+  함께 평가하거나, 기존에 고정된 Artifact로 해당 정비 비교를 완료한다.
 
 ## 3. 전체 흐름
 
@@ -193,6 +200,10 @@ Overlay Observation과 `runtime_overlay.observations.available`은 각각
 - Closed-loop event producer가 동일
   `simulation_session_id + equipment_id + maintenance_action_id` 범위에서
   `state_version`을 단조 증가시킨다.
+- Live WorkOrder의 `simulation_session_id`는 별도로 생성한 화면용 Replay Cursor ID가
+  아니라, 승인 근거인 Product Result가 보존한 `gen_data` Source Simulation Session
+  lineage에서 Diagnosis가 서버 측으로 해석한다. 클라이언트는 이 값을 만들거나
+  바꾸지 않는다.
 - `maintenance.started`, `maintenance.completed`, `maintenance.replay_requested`의
   일반적인 version은 각각 `1`, `2`, `3`이지만 consumer는 event type 문자열 정렬이
   아니라 전달된 version과 Domain 선행 조건을 함께 검증한다.
@@ -314,6 +325,12 @@ ID가 replacement sanitizer 때문에 같은 파일로 합쳐지지 않는다. c
 ## 10. Overlay branch와 Simulation Clock
 
 Fast-forward는 전체 Session Clock에 적용하지 않는다.
+
+가속 Simulation에서는 업무 시각(`maintenance_started_at`)보다 Source Clock이 앞설 수
+있다. 동일한 `simulation_session_id`로 검증된 이벤트가 늦게 도착한 경우 과거 Canonical
+Observation을 다시 쓰지 않는다. 대상 설비는 마지막으로 출력된 Canonical Tick의 다음
+Tick을 `source_effective_started_at`으로 삼아 Overlay로 전환하고, 원래 업무 시각은
+감사·lifecycle 검증 값으로 그대로 보존한다.
 
 ```text
 Canonical Replay Clock

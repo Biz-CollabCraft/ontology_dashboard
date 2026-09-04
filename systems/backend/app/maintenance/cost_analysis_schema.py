@@ -41,6 +41,7 @@ class ConfidenceLevel(StrEnum):
 
 class CostInputSourceKind(StrEnum):
     OBSERVED = "observed"
+    CALCULATED = "calculated"
     QUOTED = "quoted"
     PUBLIC_REFERENCE = "public_reference"
     POLICY = "policy"

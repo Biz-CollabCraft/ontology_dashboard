@@ -847,6 +847,29 @@ def test_product_results_remain_append_only_across_maintenance_overlay(
         "product-result-after-maintenance"
     ]
 
+    post_maintenance = repository.post_maintenance_result_row(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        asset_id="CNC-001",
+        maintenance_event_id="maintenance-event-1",
+    )
+    assert post_maintenance is not None
+    assert post_maintenance["artifact_id"] == "product-result-after-maintenance"
+    assert post_maintenance["dataset_version_id"] == ingestion.dataset_version_id
+    assert (
+        post_maintenance["provenance"]["maintenance_event_id"]
+        == "maintenance-event-1"
+    )
+
+    assert repository.post_maintenance_result_row(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        asset_id="CNC-001",
+        maintenance_event_id="maintenance-event-unknown",
+    ) is None
+
     _, critical_total, critical_rows = repository.latest_result_rows(
         organization_id="org-test",
         project_id="project-test",

@@ -18,13 +18,14 @@ from app.equipment.equipment_router import register_equipment_routes
 from .contracts import AgentQueryRequest, DecisionRequest, FollowUpRequest, LayoutRequest, NoteRequest, ReportRequest
 from .agent_context_tool_pipeline import run_read_only_tool_pipeline
 from .agent_review_summary import compose_deterministic_agent_review_summary, validate_agent_review_summary_contract
-from .asset_detail_view_model import compose_asset_detail_view_model
+from .asset_detail_view_model import AssetDetailViewModelService, compose_asset_detail_view_model
 from app.dependencies import (
     MANUFACTURING_WORKSPACE,
     get_identity_service,
     get_ontology_service,
     get_predictive_maintenance_runtime_service,
     get_rate_limiter,
+    get_runtime_asset_detail_service,
     get_service,
     rate_limit_subject,
     require_csrf,
@@ -702,6 +703,7 @@ def _runtime_asset_detail_view_model(
     project_id: str,
     workspace_id: str,
     dataset_version_id: str | None,
+    selected_event_id: str | None = None,
     history_window: str,
     principal: Principal,
     runtime_service: PredictiveMaintenanceRuntimeService,
@@ -718,6 +720,8 @@ def _runtime_asset_detail_view_model(
         raise EventNotFound(asset_id)
     result = page.items[0]
     event_id = _runtime_event_id(result)
+    if selected_event_id and event_id != selected_event_id:
+        raise EventNotFound(selected_event_id)
     observed_at = result.observed_at.isoformat()
     artifact = result.producer_artifact
     if artifact is None:
@@ -865,6 +869,29 @@ def _runtime_asset_detail_view_model(
     )
 
 
+def _merge_runtime_detail_supplemental(
+    canonical: dict[str, Any],
+    supplemental: dict[str, Any],
+) -> dict[str, Any]:
+    """Add presentation context without replacing exact Event evidence facts."""
+
+    merged = dict(canonical)
+    merged["operation_context"] = supplemental.get("operation_context")
+    if not merged.get("inspection_targets") and supplemental.get("inspection_targets"):
+        merged["inspection_targets"] = supplemental["inspection_targets"]
+    if not merged.get("review_priority") and supplemental.get("review_priority"):
+        merged["review_priority"] = supplemental["review_priority"]
+    evidence = dict(merged.get("evidence") or {})
+    evidence["gaps"] = [
+        gap
+        for gap in evidence.get("gaps") or []
+        if not str((gap or {}).get("field") or "").startswith("operation_context")
+        and str((gap or {}).get("field") or "") != "review_priority"
+    ]
+    merged["evidence"] = evidence
+    return merged
+
+
 def _dynamic_summary_from_packet(
     *,
     service: ManufacturingPredictiveMaintenanceService,
@@ -968,15 +995,62 @@ def get_event(
 def get_asset_detail_view(
     asset_id: str,
     project_id: str = Query(default="manufacturing-demo-project"),
+    workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
     dataset_version_id: str | None = Query(default=None, max_length=160),
+    event_id: str | None = Query(default=None, max_length=240),
     history_window: Literal["24h", "7d", "30d"] = Query(default="24h"),
     principal: Principal = Depends(require_permission("events.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+    runtime_detail: AssetDetailViewModelService | None = Depends(get_runtime_asset_detail_service),
 ):
     if not principal.is_admin and project_id not in principal.project_scopes:
         raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 Object입니다.")
+    if not principal.is_admin and workspace_id not in principal.workspace_scopes:
+        raise AuthError(403, "workspace_scope_denied", "허용된 Workspace 범위를 벗어난 Object입니다.")
     if principal.active_project_id != project_id:
         raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
+    if dataset_version_id and event_id and runtime_detail is not None:
+        try:
+            exact_detail = runtime_detail.latest_detail_view(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                asset_id=asset_id,
+                dataset_version_id=dataset_version_id,
+                event_id=event_id,
+                history_window=history_window,
+            )
+        except KeyError as exc:
+            raise EventNotFound(event_id) from exc
+        try:
+            supplemental = _runtime_asset_detail_view_model(
+                asset_id=asset_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                dataset_version_id=dataset_version_id,
+                selected_event_id=event_id,
+                history_window=history_window,
+                principal=principal,
+                runtime_service=get_predictive_maintenance_runtime_service(),
+            )
+        except EventNotFound:
+            return exact_detail
+        return _merge_runtime_detail_supplemental(exact_detail, supplemental)
+    if event_id:
+        try:
+            return _runtime_asset_detail_view_model(
+                asset_id=asset_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                dataset_version_id=dataset_version_id,
+                selected_event_id=event_id,
+                history_window=history_window,
+                principal=principal,
+                runtime_service=get_predictive_maintenance_runtime_service(),
+            )
+        except EventNotFound:
+            if event_id.startswith("RESULT#"):
+                raise
     try:
         return service.asset_detail_view_model(
             asset_id,
@@ -988,8 +1062,9 @@ def get_asset_detail_view(
         return _runtime_asset_detail_view_model(
             asset_id=asset_id,
             project_id=project_id,
-            workspace_id=MANUFACTURING_WORKSPACE,
+            workspace_id=workspace_id,
             dataset_version_id=dataset_version_id,
+            selected_event_id=event_id,
             history_window=history_window,
             principal=principal,
             runtime_service=get_predictive_maintenance_runtime_service(),

@@ -41,6 +41,8 @@ class AssetDetailReadPort(Protocol):
         project_id: str,
         workspace_id: str,
         asset_id: str,
+        dataset_version_id: str | None,
+        event_id: str | None,
     ) -> dict[str, Any] | None: ...
 
     def latest_result_artifact(
@@ -51,6 +53,7 @@ class AssetDetailReadPort(Protocol):
         workspace_id: str,
         asset_id: str,
         dataset_version_id: str | None,
+        event_id: str | None,
     ) -> dict[str, Any] | None: ...
 
     def feature_series(
@@ -97,6 +100,7 @@ class AssetDetailReadPort(Protocol):
         workspace_id: str,
         asset_id: str,
         dataset_version_id: str | None,
+        event_id: str | None,
     ) -> dict[str, Any] | None: ...
 
 
@@ -109,6 +113,7 @@ class AssetDetailRequest:
     start: datetime
     end: datetime
     dataset_version_id: str | None = None
+    event_id: str | None = None
     grain: str = "raw"
     history_window: str = DEFAULT_HISTORY_WINDOW
 
@@ -118,23 +123,74 @@ class AssetDetailViewModelService:
         self.read_port = read_port
 
     def detail_view(self, request: AssetDetailRequest) -> dict[str, Any]:
-        asset = self.read_port.asset_summary(
-            organization_id=request.organization_id,
-            project_id=request.project_id,
-            workspace_id=request.workspace_id,
-            asset_id=request.asset_id,
-        )
         artifact = self.read_port.latest_result_artifact(
             organization_id=request.organization_id,
             project_id=request.project_id,
             workspace_id=request.workspace_id,
             asset_id=request.asset_id,
             dataset_version_id=request.dataset_version_id,
+            event_id=request.event_id,
         )
         if artifact is None:
             raise KeyError(f"result artifact not found for asset_id={request.asset_id}")
         if str(artifact.get("asset_id")) != request.asset_id:
             raise ValueError("result artifact asset_id does not match request asset_id")
+        return self._detail_view(request, artifact)
+
+    def latest_detail_view(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        dataset_version_id: str,
+        event_id: str,
+        history_window: str = DEFAULT_HISTORY_WINDOW,
+    ) -> dict[str, Any]:
+        """Anchor a live detail read to the exact selected Product Result."""
+
+        normalized_window = _normalize_history_window(history_window)
+        artifact = self.read_port.latest_result_artifact(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            dataset_version_id=dataset_version_id,
+            event_id=event_id,
+        )
+        if artifact is None:
+            raise KeyError(f"result artifact not found for event_id={event_id}")
+        if str(artifact.get("asset_id")) != asset_id:
+            raise ValueError("result artifact asset_id does not match request asset_id")
+        end = _timestamp_instant(str(artifact["observed_at"]))
+        request = AssetDetailRequest(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            start=end - timedelta(hours=HISTORY_WINDOW_HOURS[normalized_window]),
+            end=end,
+            dataset_version_id=dataset_version_id,
+            event_id=event_id,
+            grain="1h" if normalized_window == "30d" else "raw",
+            history_window=normalized_window,
+        )
+        return self._detail_view(request, artifact)
+
+    def _detail_view(
+        self,
+        request: AssetDetailRequest,
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        asset = self.read_port.asset_summary(
+            organization_id=request.organization_id,
+            project_id=request.project_id,
+            workspace_id=request.workspace_id,
+            asset_id=request.asset_id,
+            dataset_version_id=request.dataset_version_id,
+            event_id=request.event_id,
+        )
         feature_series = self.read_port.feature_series(
             organization_id=request.organization_id,
             project_id=request.project_id,
@@ -168,6 +224,7 @@ class AssetDetailViewModelService:
             workspace_id=request.workspace_id,
             asset_id=request.asset_id,
             dataset_version_id=request.dataset_version_id,
+            event_id=request.event_id,
         )
         return compose_asset_detail_view_model(
             asset=asset or {
@@ -181,6 +238,7 @@ class AssetDetailViewModelService:
             equipment_history=history,
             data_status=data_status,
             history_window=request.history_window,
+            event_id=request.event_id,
         )
 
 
@@ -284,6 +342,15 @@ def compose_asset_detail_view_model(
         inspection_guidance or {},
         inspection_locations or {},
     )
+    closed_loop_read_model = (
+        _closed_loop_read_model(
+            closed_loop,
+            prediction_available=True,
+            evidence_available=bool(evidence_payload),
+        )
+        if closed_loop is not None
+        else None
+    )
 
     return {
         "snapshot_basis": _evidence_snapshot_basis_from_artifact(
@@ -299,7 +366,7 @@ def compose_asset_detail_view_model(
         "inspection_targets": inspection_targets,
         "operation_context": operation_context,
         "review_priority": review_priority,
-        **({"closed_loop": closed_loop} if closed_loop is not None else {}),
+        **({"closed_loop": closed_loop_read_model} if closed_loop_read_model is not None else {}),
         "evidence": {
             "artifact_id": result_artifact.get("artifact_id"),
             "evidence_payload_reference": _evidence_payload_reference(provenance),
@@ -447,9 +514,14 @@ def _feature(
             **_optional(factor_evidence or {}, "evidence_field_id"),
         }
     current_value = sensor.get("current") if "current" in sensor else (factor_evidence or {}).get("value")
-    current_quality = (
-        "unknown" if is_data_quality_hold or current_value is None else "good"
-    )
+    current_quality = "good"
+    if current_value is None and not is_data_quality_hold:
+        current_point = _feature_point_at(history, current_observed_at)
+        if current_point is not None:
+            current_value = current_point.get("value")
+            current_quality = str(current_point.get("quality_status") or "unknown")
+    if is_data_quality_hold or current_value is None:
+        current_quality = "unknown"
     return (
         {
             "key": key,
@@ -466,6 +538,16 @@ def _feature(
         },
         gap,
     )
+
+
+def _feature_point_at(history: dict[str, Any], observed_at: str) -> dict[str, Any] | None:
+    """Return the exact Observation used by the selected Product Result."""
+
+    target = _timestamp_instant(observed_at)
+    for point in reversed(history.get("points") or []):
+        if _timestamp_instant(str(point["observed_at"])) == target:
+            return point
+    return None
 
 
 def _feature_history(
@@ -786,6 +868,291 @@ def _operation_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[dict
                 }
             )
     return result, gaps
+
+
+_LIFECYCLE_STEP_LABELS = {
+    "prediction": "예측 생성",
+    "evidence": "근거 연결",
+    "decision": "운영 판단",
+    "inspection_requested": "현장 수락·배정 대기",
+    "inspection_approved": "점검 시작 대기",
+    "inspection_in_progress": "점검 진행 중",
+    "inspection_completed": "점검 결과 확인",
+    "recommendation_proposed": "정비안 검토 대기",
+    "maintenance_requested": "정비 승인 대기",
+    "maintenance_approved": "정비 시작 대기",
+    "maintenance_in_progress": "정비 진행 중",
+    "maintenance_completed": "정비 완료",
+    "post_maintenance_observation_pending": "재관측 준비 중",
+    "ready_for_reprediction": "재예측 준비",
+}
+
+_LIFECYCLE_ORDER = [
+    "prediction",
+    "evidence",
+    "decision",
+    "inspection_requested",
+    "inspection_approved",
+    "inspection_in_progress",
+    "inspection_completed",
+    "recommendation_proposed",
+    "maintenance_requested",
+    "maintenance_approved",
+    "maintenance_in_progress",
+    "maintenance_completed",
+    "post_maintenance_observation_pending",
+    "ready_for_reprediction",
+]
+
+_NEXT_STEP_BY_CURRENT = {
+    "prediction": "evidence",
+    "evidence": "decision",
+    "decision": "inspection_requested",
+    "inspection_requested": "inspection_approved",
+    "inspection_approved": "inspection_in_progress",
+    "inspection_in_progress": "inspection_completed",
+    "inspection_completed": "recommendation_proposed",
+    "recommendation_proposed": "maintenance_requested",
+    "maintenance_requested": "maintenance_approved",
+    "maintenance_approved": "maintenance_in_progress",
+    "maintenance_in_progress": "maintenance_completed",
+    "maintenance_completed": "post_maintenance_observation_pending",
+    "post_maintenance_observation_pending": "ready_for_reprediction",
+}
+
+_ACTION_OWNER_BY_ID = {
+    "create_inspection_work_order": ("process_manager", "생산 운영 의사결정자"),
+    "request_inspection_work_order": ("process_manager", "생산 운영 의사결정자"),
+    "request_inspection": ("process_manager", "생산 운영 의사결정자"),
+    "accept_inspection_work_order": ("process_engineer", "현장 관리자"),
+    "start_inspection_work_order": ("process_engineer", "현장 엔지니어"),
+    "start_inspection": ("process_engineer", "현장 엔지니어"),
+    "complete_inspection_work_order": ("process_engineer", "현장 엔지니어"),
+    "complete_inspection": ("process_engineer", "현장 엔지니어"),
+    "calculate_maintenance_cost": ("process_manager", "생산 운영 의사결정자"),
+    "create_operations_manual_recommendation": (
+        "process_manager",
+        "생산 운영 의사결정자",
+    ),
+    "decide_operations_manual_recommendation": (
+        "process_manager",
+        "생산 운영 의사결정자",
+    ),
+    "approve_maintenance_work_order": ("process_manager", "생산 운영 의사결정자"),
+    "start_maintenance_action": ("maintenance_technician", "정비 작업자"),
+    "complete_maintenance_action": ("maintenance_technician", "정비 작업자"),
+    "request_maintenance_replay": ("maintenance_technician", "정비 작업자"),
+}
+
+_ACTIONS_REQUIRING_INPUT = {
+    "complete_inspection_work_order",
+    "complete_inspection",
+    "calculate_maintenance_cost",
+    "create_operations_manual_recommendation",
+    "decide_operations_manual_recommendation",
+    "approve_maintenance_work_order",
+    "complete_maintenance_action",
+    "request_maintenance_replay",
+}
+
+
+def _closed_loop_read_model(
+    closed_loop: dict[str, Any],
+    *,
+    prediction_available: bool,
+    evidence_available: bool,
+) -> dict[str, Any]:
+    result = dict(closed_loop)
+    result.setdefault("work_orders", [])
+    result.setdefault("inspection_results", [])
+    result.setdefault("maintenance_actions", [])
+    result.setdefault("maintenance_events", [])
+    result.setdefault("activities", [])
+    result.setdefault("available_actions", [])
+    result.setdefault("runtime_status", None)
+    result["lifecycle_summary"] = _closed_loop_lifecycle_summary(
+        result,
+        prediction_available=prediction_available,
+        evidence_available=evidence_available,
+    )
+    result["primary_action"] = _closed_loop_primary_action(
+        result.get("available_actions") or []
+    )
+    result["timeline"] = _closed_loop_timeline(result)
+    return result
+
+
+def _closed_loop_lifecycle_summary(
+    closed_loop: dict[str, Any],
+    *,
+    prediction_available: bool,
+    evidence_available: bool,
+) -> dict[str, Any] | None:
+    current_step = _closed_loop_current_step(closed_loop)
+    if current_step is None:
+        if evidence_available:
+            current_step = "evidence"
+        elif prediction_available:
+            current_step = "prediction"
+        else:
+            return None
+    completed_steps = _completed_lifecycle_steps(current_step)
+    return {
+        "current_step": current_step,
+        "current_step_label": _LIFECYCLE_STEP_LABELS[current_step],
+        "completed_steps": completed_steps,
+        "next_step": _NEXT_STEP_BY_CURRENT.get(current_step),
+        "source": "backend_closed_loop_policy",
+    }
+
+
+def _closed_loop_current_step(closed_loop: dict[str, Any]) -> str | None:
+    runtime_status = closed_loop.get("runtime_status")
+    if runtime_status in {"ready", "predicted"}:
+        return "ready_for_reprediction"
+    if runtime_status in {"equipment_under_maintenance"}:
+        return "maintenance_in_progress"
+    if runtime_status in {"warming_up", "history_insufficient"}:
+        return "post_maintenance_observation_pending"
+    if closed_loop.get("maintenance_events"):
+        return "maintenance_completed"
+
+    maintenance_actions = _sorted_by_time(
+        closed_loop.get("maintenance_actions") or [],
+        keys=("completed_at", "started_at"),
+    )
+    for action in maintenance_actions:
+        status = action.get("status")
+        if status == "in_progress":
+            return "maintenance_in_progress"
+        if status == "planned":
+            return "maintenance_approved"
+        if status == "completed":
+            return "maintenance_completed"
+
+    work_orders = _sorted_by_time(
+        closed_loop.get("work_orders") or [],
+        keys=("updated_at", "created_at"),
+    )
+    for work_order in work_orders:
+        work_type = work_order.get("work_type")
+        status = work_order.get("status")
+        if work_type == "maintenance":
+            if status == "requested":
+                return "maintenance_requested"
+            if status == "approved":
+                return "maintenance_approved"
+            if status == "in_progress":
+                return "maintenance_in_progress"
+            if status == "completed":
+                return "maintenance_completed"
+        if work_type == "inspection":
+            if status == "requested":
+                return "inspection_requested"
+            if status == "approved":
+                return "inspection_approved"
+            if status == "in_progress":
+                return "inspection_in_progress"
+            if status == "completed":
+                return "inspection_completed"
+    if closed_loop.get("inspection_results"):
+        return "inspection_completed"
+    return None
+
+
+def _completed_lifecycle_steps(current_step: str) -> list[str]:
+    try:
+        index = _LIFECYCLE_ORDER.index(current_step)
+    except ValueError:
+        return []
+    return _LIFECYCLE_ORDER[:index]
+
+
+def _closed_loop_primary_action(actions: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for action in actions:
+        action_id = str(action.get("action_id") or "")
+        target_type = str(action.get("target_type") or "")
+        if not action_id or not target_type:
+            continue
+        owner_role, owner_label = _ACTION_OWNER_BY_ID.get(
+            action_id,
+            ("unassigned", "담당 역할 미지정"),
+        )
+        return {
+            "action_id": action_id,
+            "target_type": target_type,
+            "target_id": action.get("target_id"),
+            "label": str(action.get("label") or action_id),
+            "owner_role": owner_role,
+            "owner_label": owner_label,
+            "disabled_reason": action.get("disabled_reason"),
+            "requires_input": action_id in _ACTIONS_REQUIRING_INPUT,
+        }
+    return None
+
+
+def _closed_loop_timeline(closed_loop: dict[str, Any]) -> list[dict[str, Any]]:
+    timeline = []
+    for activity in closed_loop.get("activities") or []:
+        activity_id = str(activity.get("activity_id") or "")
+        activity_type = str(activity.get("activity_type") or "")
+        if not activity_id or not activity_type:
+            continue
+        target_type, target_id = _activity_target(activity)
+        timeline.append(
+            {
+                "timeline_id": activity_id,
+                "event_type": activity_type,
+                "label": _activity_label(activity_type),
+                "status": "completed",
+                "actor_display_name": activity.get("actor_display_name"),
+                "occurred_at": activity.get("created_at"),
+                "target_type": target_type,
+                "target_id": target_id,
+            }
+        )
+    return _sorted_by_time(timeline, keys=("occurred_at",))
+
+
+def _activity_target(activity: dict[str, Any]) -> tuple[str | None, Any]:
+    for key, target_type in (
+        ("maintenance_event_id", "maintenance_event"),
+        ("maintenance_action_id", "maintenance_action"),
+        ("work_order_id", "work_order"),
+    ):
+        value = activity.get(key)
+        if value:
+            return target_type, value
+    return None, None
+
+
+def _activity_label(activity_type: str) -> str:
+    labels = {
+        "work_order.requested": "작업요청 생성",
+        "work_order.assigned": "요청 수락·담당 배정",
+        "work_order.approved": "작업요청 승인",
+        "work_order.started": "작업 시작",
+        "work_order.completed": "작업 완료",
+        "inspection.completed": "점검 결과 기록",
+        "recommendation.proposed": "정비안 제안",
+        "recommendation.decided": "정비안 판단",
+        "maintenance.started": "정비 시작",
+        "maintenance.completed": "정비 완료",
+        "maintenance.replay_requested": "재평가 요청",
+    }
+    return labels.get(activity_type, activity_type.replace("_", " ").replace(".", " "))
+
+
+def _sorted_by_time(
+    items: list[dict[str, Any]],
+    *,
+    keys: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    return sorted(
+        items,
+        key=lambda item: max([str(item.get(key) or "") for key in keys] or [""]),
+        reverse=True,
+    )
 
 
 def _review_priority(

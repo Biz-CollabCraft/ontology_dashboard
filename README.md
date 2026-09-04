@@ -145,6 +145,41 @@ PostgreSQL 기반 live runtime과 Closed-loop 작업요청까지 확인:
 bash scripts/run_local_live.sh
 ```
 
+gen_data의 모든 설비 Tick부터 Generator Runtime Prediction, Backend
+Product Result/Evidence 승격, Maintenance Replay Overlay, Frontend 자동 갱신까지
+한 번에 실행하려면 다음 명령을 사용합니다. 최초 실행에서는 Canonical V3.1로
+CNC/Compressor Model Artifact를 발행하므로 몇 분이 걸릴 수 있으며, 이후에는
+검증된 로컬 Artifact를 재사용합니다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_local_realtime.py
+```
+
+```bash
+.venv/bin/python scripts/run_local_realtime.py
+```
+
+이 실행은 `Backend 직접 추론` 우회 경로를 사용하지 않습니다. Canonical/Live와
+정비 후 Overlay Observation 모두 불변 snapshot으로 Generator에 전달되고,
+Generator의 Prediction Result Batch를 Backend가 최종 판정으로 승격합니다.
+실행 로그와 세션 출력은 Git에서 제외되는
+`data_preprocessed/local-realtime/sessions/` 아래에 저장됩니다.
+깨끗한 DB에서 처음 실행할 때는 전 설비의 최근 7일 이력인 1008틱을 먼저
+fast-forward한 뒤 Frontend를 시작합니다. 이 워밍업은 그래프 표시용 초기 이력이며,
+Simulation 종료 시각과 분리되어 있습니다. 기본 Run 수명은 720시간이므로 워밍업
+뒤에도 Simulation은 계속 실행됩니다. 모델 입력과 정비 후 Overlay가 요구하는
+이력은 별도의 36틱 계약을 그대로 사용합니다. 초기 이력과 Run 수명은 각각
+`--initial-history-ticks`, `--simulation-hours`로 조정할 수 있으며 Run 수명은 반드시
+초기 이력 시간보다 길어야 합니다.
+로컬 실행기는 가속된 합성 Simulation Clock을 명시적으로 활성화합니다. 일반
+Backend 실행은 계속해서 현재 시각보다 2분 이상 미래인 센서 Observation을
+거부하므로 실제 센서 운영 경계에는 영향을 주지 않습니다.
+또한 Operations 화면이 정적 Canonical V3.1 또는 과거 Live Dataset에 고정되지
+않도록 초기 이력 전체의 DB 적재와 그 마지막 시점의 Product Result까지 확인한 뒤
+Frontend를 시작합니다. 그 다음 데모 사용자들의 명시적 선택을 제거하여 자동 Live
+Dataset 선택 정책으로 복구합니다. 기존 선택을 유지하려면
+`--keep-dataset-selection`을 사용합니다.
+
 V3.1 예지보전 데모 패키지가
 `data/raw/predictive_maintenance_canonical_v3.1`에 있으면 자동으로 감지해
 PostgreSQL에 적재하고 Product Result를 물질화합니다. 이 로컬 데이터 패키지는

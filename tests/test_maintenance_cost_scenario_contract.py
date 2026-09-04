@@ -35,7 +35,7 @@ def test_tool_replacement_example_passes_typed_and_json_schema_contracts() -> No
         for option in result.options
     } == {
         "immediate": "calculated",
-        "planned_window": "insufficient",
+        "planned_window": "calculated",
         "reinspect_after": "insufficient",
         "no_action_baseline": "calculated",
     }

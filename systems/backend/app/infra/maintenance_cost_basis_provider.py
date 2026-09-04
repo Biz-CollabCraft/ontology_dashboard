@@ -72,7 +72,7 @@ def _rate_band(value: dict[str, int] | None) -> dict[str, int] | None:
 def _expected_loss(
     consequence: dict[str, int], probability_source: dict[str, Any] | None
 ) -> dict[str, int] | None:
-    """Derive expected loss without creating or interpolating a Prediction value."""
+    """Derive expected loss from a governed cost-scenario probability input."""
 
     if probability_source is None:
         return None
@@ -195,9 +195,39 @@ class JsonMaintenanceCostBasisProvider:
             "sensitivity"
         ]
         failure_consequence = policy["failure_consequence_cost_minor"]["sensitivity"]
-        scenario_probabilities = policy["expected_failure_loss_minor"][
-            "scenario_probabilities"
-        ]
+        failure_loss_policy = policy["expected_failure_loss_minor"]
+        scenario_probabilities = failure_loss_policy["scenario_probabilities"]
+        if (
+            context.source_product_result_id is None
+            or context.source_evidence_id is None
+            or context.source_failure_probability is None
+        ):
+            raise ValueError(
+                "TOOL_REPLACEMENT cost basis requires source Product Result probability lineage"
+            )
+        immediate_probability = Decimal(
+            str(
+                scenario_probabilities[ExecutionTiming.IMMEDIATE.value][
+                    "failure_probability"
+                ]
+            )
+        )
+        source_probability = Decimal(str(context.source_failure_probability))
+        planned_probability = (
+            source_probability + immediate_probability
+        ) / Decimal("2")
+        probability_by_timing: dict[ExecutionTiming, dict[str, Any] | None] = {
+            ExecutionTiming.IMMEDIATE: {
+                "failure_probability": immediate_probability,
+            },
+            ExecutionTiming.PLANNED_WINDOW: {
+                "failure_probability": planned_probability,
+            },
+            ExecutionTiming.REINSPECT_AFTER: None,
+            ExecutionTiming.NO_ACTION_BASELINE: {
+                "failure_probability": source_probability,
+            },
+        }
         scenarios = []
         for timing in ExecutionTiming:
             incurs_replacement = timing in {
@@ -247,7 +277,7 @@ class JsonMaintenanceCostBasisProvider:
                     ),
                     "expected_failure_loss": _expected_loss(
                         failure_consequence,
-                        scenario_probabilities[timing.value],
+                        probability_by_timing[timing],
                     ),
                     "confidence": "low",
                 }
@@ -264,7 +294,12 @@ class JsonMaintenanceCostBasisProvider:
                 "438원/분은 공개 조사노임에 단일 야간 가산을 적용한 데모 참고값이며 실제 통상임금·연장/휴일 중복 가산을 계산하지 않는다.",
                 "작업시간, 정지시간, 생산손실률과 고장 결과비용은 출처를 연결한 합성 데모 민감도 값이다.",
                 "외주비 0원은 사내 작업, 예비 인서트 보유, 외부 출동 없음 조건에서만 유효하다.",
-                "미래 위험확률이 없는 계획정비·재점검은 임의 추정하지 않고 insufficient로 처리한다.",
+                f"미조치 고장확률 {source_probability}는 Product Result "
+                f"{context.source_product_result_id}의 failure_probability를 사용한다.",
+                f"12시간 후 계획정비 고장확률 {planned_probability}는 미조치 확률 "
+                f"{source_probability}와 정비 후 What-if 가정 {immediate_probability}의 "
+                "산술 중간값이며 모델 Prediction이 아니다.",
+                "재점검은 위험확률과 실행 기준이 없어 insufficient로 처리한다.",
                 "비용 분석은 의사결정 참고값이며 추천·승인·실행 명령이 아니다.",
             ),
             input_sources=(
@@ -311,14 +346,41 @@ class JsonMaintenanceCostBasisProvider:
                     "confidence": "low",
                 },
                 {
-                    "input_name": "synthetic_failure_consequence_and_probability",
+                    "input_name": "synthetic_failure_consequence_cost",
                     "source_kind": "assumption",
-                    "source_reference": f"{reference}#demo_policy_inputs/expected_failure_loss_minor",
+                    "source_reference": f"{reference}#demo_policy_inputs/failure_consequence_cost_minor",
+                    "confidence": "low",
+                },
+                {
+                    "input_name": "source_product_result_failure_probability",
+                    "source_kind": "calculated",
+                    "source_reference": (
+                        f"product-result:{context.source_product_result_id}"
+                        "#/failure_probability"
+                    ),
+                    "confidence": "medium",
+                },
+                {
+                    "input_name": "tool_replacement_intervention_probability",
+                    "source_kind": "assumption",
+                    "source_reference": (
+                        f"{reference}#demo_policy_inputs/expected_failure_loss_minor/"
+                        "scenario_probabilities/immediate"
+                    ),
+                    "confidence": "low",
+                },
+                {
+                    "input_name": "planned_window_midpoint_probability_policy",
+                    "source_kind": "policy",
+                    "source_reference": (
+                        f"{reference}#demo_policy_inputs/expected_failure_loss_minor/"
+                        "scenario_probabilities/planned_window"
+                    ),
                     "confidence": "low",
                 },
             ),
             price_version=document["basis_id"],
-            calculation_policy_version="maintenance-cost-policy-v2",
+            calculation_policy_version="maintenance-cost-policy-v3",
         )
 
     def cooling_system_restore_basis(

@@ -47,6 +47,10 @@ class AuditRepositoryPort(Protocol):
     def reset(self) -> None: ...
 
 
+class MaintenanceLineageQueryPort(Protocol):
+    def event_lineage(self, **identity: Any) -> dict[str, Any]: ...
+
+
 class RoleWorkflowRepositoryPort(Protocol):
     def list_field_actions(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]: ...
 
@@ -105,6 +109,7 @@ __all__ = [
     "AuditRepositoryPort",
     "FactorySignalApplicationPort",
     "LayoutPlannerPort",
+    "MaintenanceLineageQueryPort",
     "ReportAgentPort",
     "RoleWorkflowRepositoryPort",
 ]

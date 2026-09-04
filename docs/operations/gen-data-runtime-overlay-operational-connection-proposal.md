@@ -185,6 +185,11 @@ Runtime Overlay를 소비하려면 `source_kind=simulation` run에서
 `simulation_session_id`가 Backend maintenance event의 `simulation_session_id`와 같아야
 한다.
 
+Live 경로에서는 실행기가 Source Session ID를 Live Prediction enqueue lineage에 넣고,
+Generator와 Backend가 이를 Product Result까지 보존한다. Maintenance WorkOrder 승인 시
+Frontend가 새 Replay Session을 만들지 않으며, Diagnosis가 승인된 Product Result에서
+이 Source Session ID를 검증해 Maintenance에 반환한다.
+
 예시:
 
 ```bash

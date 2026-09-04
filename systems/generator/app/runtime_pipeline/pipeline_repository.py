@@ -6,6 +6,8 @@ import json
 import logging
 import os
 import shutil
+import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -26,6 +28,20 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
 )
 
 logger = logging.getLogger(__name__)
+_REPOSITORY_FILE_LOCK = threading.RLock()
+
+
+def _replace_with_retry(temp_path: Path, target_path: Path) -> None:
+    """Replace a file atomically, tolerating transient Windows sharing violations."""
+    delays = (0.01, 0.05, 0.1)
+    for attempt in range(len(delays) + 1):
+        try:
+            os.replace(temp_path, target_path)
+            return
+        except PermissionError:
+            if attempt == len(delays):
+                raise
+            time.sleep(delays[attempt])
 
 
 class PipelineRepository:
@@ -46,21 +62,22 @@ class PipelineRepository:
         self.events_dir.mkdir(parents=True, exist_ok=True)
 
     def _atomic_write_json(self, target_path: Path, data: dict[str, Any]) -> None:
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = target_path.parent / f".tmp_{uuid.uuid4().hex}_{target_path.name}"
-        try:
-            with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-                f.flush()
-                os.fsync(f.fileno())
-            temp_path.replace(target_path)
-        except Exception as exc:
-            if temp_path.exists():
-                try:
-                    temp_path.unlink()
-                except Exception:
-                    pass
-            raise exc
+        with _REPOSITORY_FILE_LOCK:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = target_path.parent / f".tmp_{uuid.uuid4().hex}_{target_path.name}"
+            try:
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+                _replace_with_retry(temp_path, target_path)
+            except Exception:
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except Exception:
+                        pass
+                raise
 
     def save_run_state(self, state: PipelineRunState) -> None:
         """Atomically persist PipelineRunState to disk."""
@@ -75,15 +92,16 @@ class PipelineRepository:
         """Fetch PipelineRunState by run ID."""
         clean_id = Path(run_id).name
         target_file = self.runs_dir / f"{clean_id}.json"
-        if not target_file.is_file():
-            return None
-        try:
-            with open(target_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return PipelineRunState.model_validate(data)
-        except Exception as exc:
-            logger.warning(f"[PipelineRepository] Failed to load run state '{run_id}': {exc}")
-            return None
+        with _REPOSITORY_FILE_LOCK:
+            if not target_file.is_file():
+                return None
+            try:
+                with open(target_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return PipelineRunState.model_validate(data)
+            except Exception as exc:
+                logger.warning(f"[PipelineRepository] Failed to load run state '{run_id}': {exc}")
+                return None
 
     def save_event(self, event: PredictionResultBatchPayload) -> None:
         """Atomically persist PredictionResultBatchPayload to disk."""
@@ -138,19 +156,37 @@ class PipelineRepository:
         last_error_message: Optional[str] = None,
     ) -> Optional[PipelineRunState]:
         """Atomically update a specific prediction delivery event state and aggregate overall status."""
-        state = self.get_run_state(run_id)
-        if not state:
-            return None
+        with _REPOSITORY_FILE_LOCK:
+            state = self.get_run_state(run_id)
+            if not state:
+                return None
 
-        found = False
-        updated_events = []
-        for ev in state.prediction_events:
-            if ev.event_id == event_id:
-                found = True
+            found = False
+            updated_events = []
+            for ev in state.prediction_events:
+                if ev.event_id == event_id:
+                    found = True
+                    updated_events.append(
+                        PredictionDeliveryEventState(
+                            event_id=event_id,
+                            asset_id=asset_id or ev.asset_id,
+                            status=status,
+                            attempt=attempt,
+                            max_attempts=max_attempts,
+                            next_retry_at=next_retry_at,
+                            last_error_code=last_error_code,
+                            last_error_message=last_error_message,
+                            updated_at=now_utc_iso(),
+                        )
+                    )
+                else:
+                    updated_events.append(ev)
+
+            if not found:
                 updated_events.append(
                     PredictionDeliveryEventState(
                         event_id=event_id,
-                        asset_id=asset_id or ev.asset_id,
+                        asset_id=asset_id,
                         status=status,
                         attempt=attempt,
                         max_attempts=max_attempts,
@@ -160,42 +196,25 @@ class PipelineRepository:
                         updated_at=now_utc_iso(),
                     )
                 )
+
+            state.prediction_events = updated_events
+
+            # Re-aggregate overall prediction_delivery_status
+            if not state.prediction_events:
+                state.prediction_delivery_status = "not_required"
             else:
-                updated_events.append(ev)
+                statuses = {ev.status for ev in state.prediction_events}
+                if len(state.prediction_events) < len(state.prediction_event_ids):
+                    state.prediction_delivery_status = "pending"
+                elif any(s == "failed" for s in statuses):
+                    state.prediction_delivery_status = "failed"
+                elif all(s == "sent" for s in statuses):
+                    state.prediction_delivery_status = "sent"
+                else:
+                    state.prediction_delivery_status = "pending"
 
-        if not found:
-            updated_events.append(
-                PredictionDeliveryEventState(
-                    event_id=event_id,
-                    asset_id=asset_id,
-                    status=status,
-                    attempt=attempt,
-                    max_attempts=max_attempts,
-                    next_retry_at=next_retry_at,
-                    last_error_code=last_error_code,
-                    last_error_message=last_error_message,
-                    updated_at=now_utc_iso(),
-                )
-            )
-
-        state.prediction_events = updated_events
-
-        # Re-aggregate overall prediction_delivery_status
-        if not state.prediction_events:
-            state.prediction_delivery_status = "not_required"
-        else:
-            statuses = {ev.status for ev in state.prediction_events}
-            if len(state.prediction_events) < len(state.prediction_event_ids):
-                state.prediction_delivery_status = "pending"
-            elif any(s == "failed" for s in statuses):
-                state.prediction_delivery_status = "failed"
-            elif all(s == "sent" for s in statuses):
-                state.prediction_delivery_status = "sent"
-            else:
-                state.prediction_delivery_status = "pending"
-
-        self.save_run_state(state)
-        return state
+            self.save_run_state(state)
+            return state
 
     def save_checkpoint(self, checkpoint: PipelineCheckpoint) -> None:
         """Atomically persist PipelineCheckpoint to disk."""
@@ -267,6 +286,11 @@ class PipelineRepository:
             (self.base_dir / "pipeline_datasets").resolve(),
             (self.base_dir / "predictions").resolve(),
             (getattr(PATHS, "models_store", Path("models_store")) / "cache").resolve(),
+            getattr(
+                PATHS,
+                "runtime_feature_root",
+                Path("models_store") / "cache" / "runtime_features",
+            ).resolve(),
         ]
 
         forbidden_names = {

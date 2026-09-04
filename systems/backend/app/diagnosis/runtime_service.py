@@ -1197,14 +1197,22 @@ class PredictiveMaintenanceRuntimeService:
         artifact = _dict(row.get("prediction_result_payload"))
         if not isinstance(artifact.get("evidence_payload"), dict):
             return None
+        provenance = _dict(artifact.get("provenance"))
+        if provenance.get("source_type") != "product_runtime_inference":
+            return None
         validate_product_result_artifact(artifact)
         for field in ("artifact_id", "asset_id", "asset_type", "schema_version"):
             if str(artifact.get(field)) != str(row[field]):
                 raise ValueError(f"stored Product Result Artifact {field} does not match runtime index")
-        provenance = _dict(artifact.get("provenance"))
         if str(provenance.get("prediction_id")) != str(row["prediction_id"]):
             raise ValueError("stored Product Result Artifact prediction_id does not match runtime index")
-        return artifact
+        # The producer payload deliberately does not claim the persistence-row
+        # checksum.  Add that governed index fact to the read projection so the
+        # AssetDetail stale-view guard and Maintenance authorization query
+        # compare the same stored Product Result identity.
+        enriched = dict(artifact)
+        enriched["source_sha256"] = str(row["source_sha256"])
+        return enriched
 
     @staticmethod
     def _product_result_evidence_summary(
@@ -1216,6 +1224,7 @@ class PredictiveMaintenanceRuntimeService:
         provenance = _dict(producer_artifact.get("provenance"))
         lineage = _dict(producer_artifact.get("lineage"))
         source_context = _dict(lineage.get("source_context"))
+        source_lineage = _dict(source_context.get("lineage"))
         model_artifact = _dict(provenance.get("model_artifact"))
         sensor_evidence = _dict(payload.get("sensor_evidence"))
         sensor_window = _dict(sensor_evidence.get("window"))
@@ -1248,6 +1257,12 @@ class PredictiveMaintenanceRuntimeService:
                     if provenance.get("source_reference") is None
                     else str(provenance.get("source_reference"))
                 ),
+                simulation_session_id=source_lineage.get("simulation_session_id"),
+                overlay_branch_id=source_lineage.get("overlay_branch_id"),
+                history_segment_id=source_lineage.get("history_segment_id"),
+                maintenance_action_id=source_lineage.get("maintenance_action_id"),
+                maintenance_event_id=source_lineage.get("maintenance_event_id"),
+                state_version=source_lineage.get("state_version"),
             ),
             evidence_payload_reference=_dict(
                 provenance.get("evidence_payload_reference")
@@ -1316,6 +1331,7 @@ class PredictiveMaintenanceRuntimeService:
     ) -> GovernedProductResult:
         factors = self._factor_models(row.get("top_factors"))
         producer_artifact: dict[str, Any] | None = None
+        provenance: dict[str, Any] = {}
         if source_contract == "result_artifact":
             producer_artifact = self._stored_producer_artifact(row)
         if source_contract == "result_artifact":
@@ -1382,6 +1398,14 @@ class PredictiveMaintenanceRuntimeService:
             prediction_task=prediction_task,
             model_version=model_version,
         )
+        producer_lineage = _dict(
+            _dict(_dict(producer_artifact).get("lineage")).get("source_context")
+        )
+        producer_lineage = _dict(producer_lineage.get("lineage"))
+
+        def runtime_lineage_value(field: str) -> Any:
+            return producer_lineage.get(field, provenance.get(field))
+
         return GovernedProductResult(
             source_contract=source_contract,
             artifact_id=(
@@ -1416,6 +1440,12 @@ class PredictiveMaintenanceRuntimeService:
                 prediction_task=prediction_task,
                 source_type=source_type,
                 canonical_source_mutated=False,
+                simulation_session_id=runtime_lineage_value("simulation_session_id"),
+                overlay_branch_id=runtime_lineage_value("overlay_branch_id"),
+                history_segment_id=runtime_lineage_value("history_segment_id"),
+                maintenance_action_id=runtime_lineage_value("maintenance_action_id"),
+                maintenance_event_id=runtime_lineage_value("maintenance_event_id"),
+                state_version=runtime_lineage_value("state_version"),
             ),
             governance=context.governance,
             graph=context.graph,
@@ -1472,6 +1502,36 @@ class PredictiveMaintenanceRuntimeService:
             offset=offset,
             limit=limit,
             latest_product_contract=source_contract,
+        )
+
+    def post_maintenance_result(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        maintenance_event_id: str,
+    ) -> GovernedProductResult | None:
+        row = self.repository.post_maintenance_result_row(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            maintenance_event_id=maintenance_event_id,
+        )
+        if row is None:
+            return None
+        context = self.context(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=str(row["dataset_version_id"]),
+        )
+        return self._product_result(
+            context=context,
+            row=row,
+            source_contract="result_artifact",
         )
 
     @staticmethod
@@ -2253,7 +2313,7 @@ class PredictiveMaintenanceRuntimeService:
         workspace_id: str,
         session_id: str,
         equipment_id: str,
-    ) -> dict[str, str]:
+    ) -> dict[str, str] | None:
         """Validate a replay selector for a downstream Maintenance workflow.
 
         Diagnosis owns Replay Session eligibility and Dataset membership.  The
@@ -2297,6 +2357,56 @@ class PredictiveMaintenanceRuntimeService:
             "workspace_id": workspace_id,
             "equipment_id": equipment_id,
             "simulation_session_id": record.id,
+        }
+
+    def resolve_maintenance_source_session(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        source_product_result_id: str,
+        equipment_id: str,
+    ) -> dict[str, str]:
+        """Resolve the source simulation session recorded by a Product Result.
+
+        Live Maintenance must continue the exact ``gen_data`` run that produced
+        the authorized diagnosis.  A historical UI Replay Session is a separate
+        cursor and must not be substituted for this source lineage.
+        """
+
+        row = self.repository.result_artifact_row(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            artifact_id=source_product_result_id,
+        )
+        if row is None:
+            raise KeyError(source_product_result_id)
+        context = self.context(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=str(row["dataset_version_id"]),
+        )
+        result = self._product_result(
+            context=context,
+            row=row,
+            source_contract="result_artifact",
+        )
+        if result.artifact_id != source_product_result_id:
+            raise ValueError("Product Result canonical identity does not match the selector")
+        if result.asset_id != equipment_id:
+            raise ValueError("Product Result equipment identity mismatch")
+        simulation_session_id = result.provenance.simulation_session_id
+        if simulation_session_id is None or not simulation_session_id.strip():
+            return None
+        return {
+            "organization_id": organization_id,
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+            "equipment_id": equipment_id,
+            "simulation_session_id": simulation_session_id,
         }
 
     def control_replay(

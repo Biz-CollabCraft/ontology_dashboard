@@ -334,6 +334,7 @@ export interface OperationsClosedLoopWorkOrder {
   workType: OperationsClosedLoopWorkType;
   status: OperationsClosedLoopWorkOrderStatus;
   assignedTo?: string | null;
+  assignedAt?: string | null;
   actorDisplayName?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -913,6 +914,7 @@ export interface AssetDetailViewModel {
       work_type: OperationsClosedLoopWorkType;
       status: OperationsClosedLoopWorkOrderStatus;
       assigned_to?: string | null;
+      assigned_at?: string | null;
       actor_display_name?: string | null;
       created_at?: string | null;
       updated_at?: string | null;

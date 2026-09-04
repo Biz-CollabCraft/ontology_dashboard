@@ -67,6 +67,18 @@ export function OperationsApplication({ projectId }: { projectId: string }) {
 }
 export default OperationsApplication;
 
+export function resolveMonitoringEvent(
+  model: OperationsBootstrapModel | null,
+  assetId: string | null,
+): OperationsEvent | null {
+  if (!model || !assetId) return null;
+  const asset = model.assets.find((item) => item.assetId === assetId) ?? null;
+  if (!asset) return null;
+  return model.events.find((item) => item.eventId === asset.eventId)
+    ?? model.events.find((item) => item.assetId === assetId)
+    ?? null;
+}
+
 function OperationsApplicationController({ projectId }: { projectId: string }) {
   const { user, logout } = useAuth();
   const { selection, updateSelection } = useOperationsSelection();
@@ -78,6 +90,9 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailVersion, setDetailVersion] = useState(0);
+  const [monitoringDetail, setMonitoringDetail] = useState<OperationsEventDetailModel | null>(null);
+  const [monitoringDetailLoading, setMonitoringDetailLoading] = useState(false);
+  const [monitoringDetailError, setMonitoringDetailError] = useState<string | null>(null);
   const [sensorWindow, setSensorWindow] = useState<OperationsSensorWindowId>("24h");
 
   const refresh = useCallback(() => setRefreshVersion((value) => value + 1), []);
@@ -111,9 +126,6 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
         const selectedAsset = payload.assets.find((item) => item.assetId === selection.assetId) ?? null;
         const patch: Parameters<typeof updateSelection>[0] = {};
         if (!selection.workspaceId) patch.workspaceId = payload.context.workspaceId;
-        if (selection.eventId && !selectedEvent && selectedAsset?.eventId) {
-          patch.eventId = selectedAsset.eventId;
-        }
         if (!selection.eventId && selectedAsset?.eventId) patch.eventId = selectedAsset.eventId;
         if (!selection.assetId && selectedEvent) patch.assetId = selectedEvent.assetId;
         if (!selection.assetId && !selection.eventId && payload.events[0]) {
@@ -130,9 +142,18 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
     return () => { cancelled = true; };
   }, [projectId, refreshVersion, selection.workspaceId]);
 
-  const selectedEvent = useMemo(
-    () => model?.events.find((item) => item.eventId === selection.eventId) ?? null,
-    [model, selection.eventId],
+  const selectedEvent = useMemo(() => {
+    const exact = model?.events.find((item) => item.eventId === selection.eventId) ?? null;
+    if (exact || !selection.eventId || !selection.assetId) return exact;
+    const currentAssetEvent = model?.events.find((item) => item.assetId === selection.assetId) ?? null;
+    return currentAssetEvent
+      ? { ...currentAssetEvent, eventId: selection.eventId }
+      : null;
+  }, [model, selection.assetId, selection.eventId]);
+
+  const monitoringEvent = useMemo(
+    () => resolveMonitoringEvent(model, selection.assetId),
+    [model, selection.assetId],
   );
 
   useEffect(() => {
@@ -163,6 +184,36 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
       .finally(() => !cancelled && setDetailLoading(false));
     return () => { cancelled = true; };
   }, [detailVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selection.role, sensorWindow]);
+
+  useEffect(() => {
+    if (!model || !monitoringEvent) {
+      setMonitoringDetail(null);
+      setMonitoringDetailError(null);
+      setMonitoringDetailLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setMonitoringDetail(null);
+    setMonitoringDetailLoading(true);
+    setMonitoringDetailError(null);
+    loadOperationsEventDetail({
+      projectId,
+      workspaceId: model.context.workspaceId,
+      datasetVersionId: model.context.datasetVersionId,
+      event: monitoringEvent,
+      role: selection.role,
+      historyWindow: sensorWindow,
+      metrics: model.metrics,
+    })
+      .then((payload) => !cancelled && setMonitoringDetail(payload))
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setMonitoringDetail(null);
+        setMonitoringDetailError(reason instanceof Error ? reason.message : "최신 센서 관측을 불러오지 못했습니다.");
+      })
+      .finally(() => !cancelled && setMonitoringDetailLoading(false));
+    return () => { cancelled = true; };
+  }, [model?.context.datasetVersionId, model?.context.workspaceId, monitoringEvent?.eventId, monitoringEvent?.observedAt, projectId, selection.role, sensorWindow]);
 
   const openView = useCallback((view: OperationsView) => {
     const patch: Parameters<typeof updateSelection>[0] = { view };
@@ -285,7 +336,7 @@ function OperationsApplicationController({ projectId }: { projectId: string }) {
       ? <OperationsSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />
       : <OperationsState kind="error" title="시스템 관리자 권한 필요" detail="AI 요약 처리 로그는 관리자 감사 권한이 있는 사용자만 조회할 수 있습니다." />;
   } else {
-    content = <OperationsOverviewPage model={model} role={selection.role} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <OperationsOverviewPage model={model} role={selection.role} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} monitoringDetail={monitoringDetail} monitoringDetailLoading={monitoringDetailLoading} monitoringDetailError={monitoringDetailError} sensorWindow={sensorWindow} currentUserId={user?.user_id ?? ""} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
   const body = <>{error ? <div className="operations-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}{content}</>;

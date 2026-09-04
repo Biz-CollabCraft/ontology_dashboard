@@ -594,6 +594,8 @@ export interface MaintenanceEventLineageReadModel {
     work_order_id: string;
     work_type: "inspection" | "maintenance";
     status: string;
+    assigned_to?: string | null;
+    assigned_at?: string | null;
   }>;
   inspection_results: MaintenanceInspectionResultReadModel[];
   cost_analyses: MaintenanceCostAnalysisReadModel[];
@@ -624,6 +626,31 @@ export interface MaintenanceEventLineageReadModel {
   activities?: Array<Record<string, unknown>>;
 }
 
+export interface OpenInspectionWorkOrderReadModel {
+  work_order_id: string;
+  event_id: string;
+  asset_id: string;
+  equipment_id: string;
+  asset_type: string;
+  work_type: "inspection";
+  status: "requested" | "approved" | "in_progress" | "completed";
+  assigned_to?: string | null;
+  assigned_at?: string | null;
+  inspection_outcome?: "no_action_required" | "maintenance_recommended" | "data_check_required" | null;
+  current_step?:
+    | "inspection_requested"
+    | "inspection_approved"
+    | "inspection_in_progress"
+    | "inspection_completed"
+    | "recommendation_proposed"
+    | "maintenance_requested"
+    | "maintenance_approved"
+    | "maintenance_in_progress"
+    | "maintenance_completed"
+    | "post_maintenance_observation_pending"
+    | "ready_for_reprediction";
+}
+
 export interface MaintenanceCostAnalysisRequest {
   action_code: MaintenanceActionCode;
   sop_id: string;
@@ -644,6 +671,17 @@ export function getMaintenanceEventLineage(
 ): Promise<MaintenanceEventLineageReadModel> {
   return request<MaintenanceEventLineageReadModel>(
     `${maintenanceBase(projectId, workspaceId)}/events/${encodeURIComponent(eventId)}/lineage`,
+    { signal },
+  );
+}
+
+export function getOpenInspectionWorkOrders(
+  projectId: string,
+  workspaceId: string,
+  signal?: AbortSignal,
+): Promise<{ items: OpenInspectionWorkOrderReadModel[] }> {
+  return request<{ items: OpenInspectionWorkOrderReadModel[] }>(
+    `${maintenanceBase(projectId, workspaceId)}/inspection-work-orders`,
     { signal },
   );
 }
@@ -1200,7 +1238,7 @@ export async function getEvents(): Promise<EventSummary[]> {
 }
 
 export function getEvidence(eventId: string): Promise<Evidence> {
-  return request<Evidence>(`/api/events/${eventId}/evidence`);
+  return request<Evidence>(`/api/events/${encodeURIComponent(eventId)}/evidence`);
 }
 
 export async function getReport(
@@ -1209,7 +1247,7 @@ export async function getReport(
   useLlm = true,
   locale: "ko-KR" | "en-US" = "ko-KR",
 ): Promise<Report> {
-  const payload = await request<{ report: Report }>(`/api/events/${eventId}/report`, {
+  const payload = await request<{ report: Report }>(`/api/events/${encodeURIComponent(eventId)}/report`, {
     method: "POST",
     body: JSON.stringify({ role, locale, use_llm: useLlm }),
   });
@@ -1223,7 +1261,7 @@ export async function getLayout(
   useLlm = true,
   locale: "ko-KR" | "en-US" = "ko-KR",
 ): Promise<Layout> {
-  const payload = await request<{ layout: Layout }>(`/api/events/${eventId}/layout`, {
+  const payload = await request<{ layout: Layout }>(`/api/events/${encodeURIComponent(eventId)}/layout`, {
     method: "POST",
     body: JSON.stringify({ role, locale, intent, use_llm: useLlm }),
   });
@@ -1231,14 +1269,14 @@ export async function getLayout(
 }
 
 export function recordDecision(eventId: string, actor: string, decision: string, note: string) {
-  return request(`/api/events/${eventId}/decision`, {
+  return request(`/api/events/${encodeURIComponent(eventId)}/decision`, {
     method: "POST",
     body: JSON.stringify({ actor, decision, note }),
   });
 }
 
 export function addNote(eventId: string, actor: string, body: string) {
-  return request(`/api/events/${eventId}/notes`, {
+  return request(`/api/events/${encodeURIComponent(eventId)}/notes`, {
     method: "POST",
     body: JSON.stringify({ actor, body }),
   });
@@ -1276,14 +1314,14 @@ function maintenanceCommand(
   });
 }
 
-export function approveInspectionWorkOrder(input: {
+export function acceptInspectionWorkOrder(input: {
   projectId: string;
   workspaceId: string;
   workOrderId: string;
   idempotencyKey: string;
 }) {
   return maintenanceCommand(
-    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/accept`,
     {},
     input.idempotencyKey,
   );
@@ -1321,6 +1359,8 @@ export function createOperationsManualRecommendation(input: {
   workspaceId: string;
   inspectionResultId: string;
   actionCode: MaintenanceActionCode;
+  costAnalysisId: string;
+  actionCandidateId: string;
   idempotencyKey: string;
 }) {
   return maintenanceCommand(
@@ -1328,6 +1368,8 @@ export function createOperationsManualRecommendation(input: {
     buildOperationsManualRecommendationPayload(
       input.inspectionResultId,
       input.actionCode,
+      input.costAnalysisId,
+      input.actionCandidateId,
     ),
     input.idempotencyKey,
   );
@@ -1336,10 +1378,14 @@ export function createOperationsManualRecommendation(input: {
 export function buildOperationsManualRecommendationPayload(
   inspectionResultId: string,
   actionCode: MaintenanceActionCode,
+  costAnalysisId: string,
+  actionCandidateId: string,
 ) {
   return {
     action_code: actionCode,
     basis: [`inspection_result:${inspectionResultId}`],
+    cost_analysis_id: costAnalysisId,
+    action_candidate_id: actionCandidateId,
   };
 }
 
@@ -1361,16 +1407,11 @@ export async function approveMaintenanceWorkOrder(input: {
   projectId: string;
   workspaceId: string;
   workOrderId: string;
-  datasetVersionId: string;
   idempotencyKey: string;
 }) {
-  const replay = await startPredictiveMaintenanceReplay(input.projectId, input.workspaceId, {
-    dataset_version_id: input.datasetVersionId,
-    speed_minutes_per_second: 60,
-  });
   return maintenanceCommand(
     `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
-    { simulation_session_id: replay.cursor.session_id },
+    {},
     input.idempotencyKey,
   );
 }
@@ -1425,7 +1466,7 @@ export function followUp(
   question: string,
   locale: "ko-KR" | "en-US" = "ko-KR",
 ): Promise<FollowUp> {
-  return request<FollowUp>(`/api/events/${eventId}/follow-up`, {
+  return request<FollowUp>(`/api/events/${encodeURIComponent(eventId)}/follow-up`, {
     method: "POST",
     body: JSON.stringify({ role, locale, question }),
   });

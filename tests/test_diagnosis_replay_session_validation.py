@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -154,3 +155,72 @@ def test_resolve_maintenance_replay_session_preserves_not_found_failure() -> Non
         _resolve(repository)
 
     assert repository.asset_calls == []
+
+
+def test_resolve_maintenance_source_session_uses_product_result_lineage(
+    monkeypatch,
+) -> None:
+    repository = ReplayValidationRepository()
+    repository.result_artifact_row = lambda **_values: {
+        "artifact_id": "RESULT-001",
+        "dataset_version_id": "dataset-version-test",
+    }
+    service = PredictiveMaintenanceRuntimeService(repository)
+    monkeypatch.setattr(service, "context", lambda **_values: object())
+    monkeypatch.setattr(
+        service,
+        "_product_result",
+        lambda **_values: SimpleNamespace(
+            artifact_id="RESULT-001",
+            asset_id="CNC-001",
+            provenance=SimpleNamespace(simulation_session_id="local-realtime-001"),
+        ),
+    )
+
+    binding = service.resolve_maintenance_source_session(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        source_product_result_id="RESULT-001",
+        equipment_id="CNC-001",
+    )
+
+    assert binding == {
+        "organization_id": "org-test",
+        "project_id": "project-test",
+        "workspace_id": "workspace-test",
+        "equipment_id": "CNC-001",
+        "simulation_session_id": "local-realtime-001",
+    }
+
+
+def test_resolve_maintenance_source_session_reports_missing_lineage(
+    monkeypatch,
+) -> None:
+    repository = ReplayValidationRepository()
+    repository.result_artifact_row = lambda **_values: {
+        "artifact_id": "RESULT-001",
+        "dataset_version_id": "dataset-version-test",
+    }
+    service = PredictiveMaintenanceRuntimeService(repository)
+    monkeypatch.setattr(service, "context", lambda **_values: object())
+    monkeypatch.setattr(
+        service,
+        "_product_result",
+        lambda **_values: SimpleNamespace(
+            artifact_id="RESULT-001",
+            asset_id="CNC-001",
+            provenance=SimpleNamespace(simulation_session_id=None),
+        ),
+    )
+
+    assert (
+        service.resolve_maintenance_source_session(
+            organization_id="org-test",
+            project_id="project-test",
+            workspace_id="workspace-test",
+            source_product_result_id="RESULT-001",
+            equipment_id="CNC-001",
+        )
+        is None
+    )
