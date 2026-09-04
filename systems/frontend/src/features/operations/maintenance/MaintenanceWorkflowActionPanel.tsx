@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
-  approveInspectionWorkOrder,
+  acceptInspectionWorkOrder,
   approveMaintenanceWorkOrder,
   completeInspectionWorkOrder,
   completeMaintenanceAction,
@@ -112,6 +112,7 @@ export function MaintenanceWorkflowActionPanel({
   assetId,
   assetType,
   role,
+  currentUserId,
   snapshotBasis,
   canManage,
   canFieldExecute,
@@ -126,6 +127,7 @@ export function MaintenanceWorkflowActionPanel({
   assetId: string;
   assetType: string;
   role: OperationsRoleLens;
+  currentUserId: string;
   snapshotBasis: OperationsEvidenceSnapshotBasis | null;
   canManage: boolean;
   canFieldExecute: boolean;
@@ -391,13 +393,8 @@ export function MaintenanceWorkflowActionPanel({
         idempotencyKey: commandKey(eventId, "inspection-request", snapshotBasis.artifactId ?? eventId),
       }) : null;
     } else if (state.inspectionWorkOrder.status === "requested") {
-      label = "점검 작업요청 승인";
-      helper = "승인 후 현장 관리자가 점검을 시작할 수 있습니다.";
-      enabled = canManage;
-      command = () => approveInspectionWorkOrder({
-        projectId, workspaceId, workOrderId: state.inspectionWorkOrder!.work_order_id,
-        idempotencyKey: commandKey(eventId, "inspection-approve", state.inspectionWorkOrder!.work_order_id),
-      });
+      label = "현장 관리자 수락 대기";
+      helper = "현장 담당자가 요청을 수락하면 해당 담당자에게 자동 배정됩니다.";
     } else if (state.inspectionResult?.outcome === "no_action_required") {
       label = "점검 완료 · 정비 불필요";
       helper = "현장 점검 결과 추가 정비가 필요하지 않은 것으로 기록됐습니다.";
@@ -419,10 +416,12 @@ export function MaintenanceWorkflowActionPanel({
         workspaceId,
         inspectionResultId: state.inspectionResult!.inspection_result_id,
         actionCode: state.selectedActionCandidate!.action_code,
+        costAnalysisId: state.costAnalysis!.analysis_id,
+        actionCandidateId: state.selectedActionCandidate!.action_candidate_id,
         idempotencyKey: commandKey(
           eventId,
           "recommendation-create",
-          state.selectedActionCandidate!.action_candidate_id,
+          `${state.selectedActionCandidate!.action_candidate_id}:${state.costAnalysis!.analysis_id}`,
         ),
       }) : null;
     } else if (state.recommendation && !state.maintenanceWorkOrder) {
@@ -438,7 +437,7 @@ export function MaintenanceWorkflowActionPanel({
       });
     } else if (state.maintenanceWorkOrder?.status === "requested") {
       label = "정비 WorkOrder 승인";
-      helper = "Runtime Replay session을 만든 뒤 정비 Action을 계획합니다.";
+      helper = "승인된 Product Result의 source runtime lineage를 이어 정비 Action을 계획합니다.";
       enabled = canManage;
       command = () => approveMaintenanceWorkOrder({
         projectId,
@@ -449,10 +448,24 @@ export function MaintenanceWorkflowActionPanel({
       });
     }
   } else {
-    if (state.inspectionWorkOrder?.status === "approved") {
-      label = "점검 시작";
-      helper = "SOP를 확인한 뒤 현장 점검을 시작합니다.";
+    if (!state.inspectionWorkOrder) {
+      label = "운영 관리자 점검 요청 대기";
+      helper = "현재 Case의 근거는 준비되어 있습니다. 운영 관리자가 점검 작업요청을 생성하면 이 화면에서 수락할 수 있습니다.";
+    } else if (state.inspectionWorkOrder?.status === "requested") {
+      label = "요청 수락·내게 배정";
+      helper = "수락과 동시에 이 점검 요청의 담당자로 배정됩니다.";
       enabled = canFieldExecute;
+      command = () => acceptInspectionWorkOrder({
+        projectId, workspaceId, workOrderId: state.inspectionWorkOrder!.work_order_id,
+        idempotencyKey: commandKey(eventId, "inspection-accept", state.inspectionWorkOrder!.work_order_id),
+      });
+    } else if (state.inspectionWorkOrder?.status === "approved") {
+      label = "점검 시작";
+      const assignedToCurrentUser = state.inspectionWorkOrder.assigned_to === currentUserId;
+      helper = assignedToCurrentUser
+        ? "SOP를 확인한 뒤 현장 점검을 시작합니다."
+        : `이 요청은 ${state.inspectionWorkOrder.assigned_to ?? "다른 담당자"}에게 배정되었습니다.`;
+      enabled = canFieldExecute && assignedToCurrentUser;
       command = () => startInspectionWorkOrder({
         projectId, workspaceId, workOrderId: state.inspectionWorkOrder!.work_order_id,
         idempotencyKey: commandKey(eventId, "inspection-start", state.inspectionWorkOrder!.work_order_id),
@@ -521,8 +534,8 @@ export function MaintenanceWorkflowActionPanel({
   }
 
   return (
-    <section className="operations-maintenance-workflow-panel" aria-label="Closed-loop 작업 실행">
-      <header><div><span>Closed-loop</span><strong>{role === "process_manager" ? "생산 관리자 작업" : "현장 관리자 작업"}</strong></div><button type="button" className="operations-icon-button" onClick={() => void refresh()} aria-label="작업 상태 새로고침">↻</button></header>
+    <section className="operations-maintenance-workflow-panel" aria-label="Closed-loop 작업 실행" data-event-id={eventId}>
+      <header><div><span>Closed-loop</span><strong>{role === "process_manager" ? "운영 관리자 작업" : "현장 점검 작업"}</strong></div><button type="button" className="operations-icon-button" onClick={() => void refresh()} aria-label="작업 상태 새로고침">↻</button></header>
       <p>{loading ? "작업 상태를 확인하고 있습니다." : helper}</p>
       {role === "process_manager"
         && state.inspectionResult?.outcome === "maintenance_recommended"

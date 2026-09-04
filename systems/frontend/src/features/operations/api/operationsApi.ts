@@ -12,8 +12,9 @@ import {
   recordDecision,
   requestInspectionWorkOrder,
 } from "../../../api";
-import type { Evidence, Report } from "../../../types";
+import type { Evidence, Report, ReportType, Role } from "../../../types";
 import {
+  adaptReport,
   adaptEvent,
   applyAssetDetailViewModel,
   composeEventDetail,
@@ -26,6 +27,7 @@ import {
 import type {
   AssetDetailViewModel,
   OperationsBootstrapModel,
+  OperationsCompanyContext,
   OperationsDecision,
   OperationsEvent,
   OperationsEventDetailModel,
@@ -34,6 +36,26 @@ import type {
   OperationsRoleLens,
   OperationsSensorWindowId,
 } from "./operationsContracts";
+
+export async function loadOperationsCompanyContext(
+  projectId: string,
+  workspaceId: string,
+): Promise<OperationsCompanyContext> {
+  const params = new URLSearchParams({ workspace_id: workspaceId });
+  const response = await fetch(
+    `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/company-context?${params.toString()}`,
+    { credentials: "include", headers: { Accept: "application/json" } },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      payload?.error?.code ?? "company_context_failed",
+      payload?.error?.message ?? `Company context request failed: ${response.status}`,
+    );
+  }
+  return payload as OperationsCompanyContext;
+}
 
 function idempotencyPart(value: string | null | undefined): string {
   return String(value ?? "none").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80);
@@ -72,14 +94,23 @@ async function getEventActivity(eventId: string): Promise<unknown> {
 
 async function getAssetDetailViewModel(
   projectId: string,
+  workspaceId: string,
   assetId: string,
+  eventId: string,
   datasetVersionId: string,
   historyWindow: OperationsSensorWindowId,
 ): Promise<AssetDetailViewModel> {
+  const backendHistoryWindow = historyWindow === "30d"
+    ? "30d"
+    : historyWindow === "7d"
+      ? "7d"
+      : "24h";
   const params = new URLSearchParams({
     project_id: projectId,
+    workspace_id: workspaceId,
+    event_id: eventId,
     dataset_version_id: datasetVersionId,
-    history_window: historyWindow,
+    history_window: backendHistoryWindow,
   });
   const response = await fetch(
     `${API_BASE}/api/objects/${encodeURIComponent(assetId)}/detail-view?${params.toString()}`,
@@ -104,7 +135,10 @@ function staleFrom(observedAt: string | null): boolean {
   const value = Date.parse(observedAt);
   if (!Number.isFinite(value)) return false;
   const now = Date.now();
-  return now - value > 24 * 60 * 60 * 1000 || value - now > 15 * 60 * 1000;
+  // "stale" means that no recent Observation has arrived. An accelerated
+  // Simulation Clock may legitimately be ahead of wall time, so a future
+  // timestamp must not be presented as an observation delay.
+  return now - value > 24 * 60 * 60 * 1000;
 }
 
 function warningMessage(reason: unknown, fallback: string): string {
@@ -147,9 +181,15 @@ export async function loadOperationsBootstrap(
   const [dashboardState, resultState] = await Promise.allSettled([dashboardPromise, resultPromise]);
 
   const warnings: string[] = [];
+  let selectionRestoreError: string | null = null;
   let rawEvents = dashboardState.status === "fulfilled" ? dashboardState.value.events : [];
   if (dashboardState.status === "rejected") {
-    warnings.push(`운영 현황 일부 지연: ${warningMessage(dashboardState.reason, "사용 불가")}`);
+    if (selectedEventId) {
+      selectionRestoreError = `선택 snapshot 복원 불가 · ${selectedEventId}`;
+      warnings.push(selectionRestoreError);
+    } else {
+      warnings.push(`운영 현황 일부 지연: ${warningMessage(dashboardState.reason, "사용 불가")}`);
+    }
     try {
       rawEvents = await getProjectEvents(projectId);
     } catch (reason) {
@@ -172,6 +212,10 @@ export async function loadOperationsBootstrap(
     .at(-1) ?? null;
 
   const canonical = dashboardState.status === "fulfilled" ? dashboardState.value : null;
+  if (selectedEventId && canonical?.selected_event_id !== selectedEventId) {
+    selectionRestoreError = `선택 snapshot 복원 불가 · ${selectedEventId}`;
+    if (!warnings.includes(selectionRestoreError)) warnings.push(selectionRestoreError);
+  }
   const resultContext = resultState.status === "fulfilled" ? resultState.value.context : null;
   const dataSource = canonical?.data_source;
   const context = canonical?.context ?? resultContext;
@@ -183,13 +227,14 @@ export async function loadOperationsBootstrap(
     ?? events[0]?.datasetVersionId
     ?? "dsv-canonical-v3-1";
   const sourceVersion = dataSource?.source_version ?? context?.source_version ?? "Canonical V3.1";
+  const isHanbitReferenceProject = project.id === "manufacturing-demo-project";
 
   return {
     context: {
       projectId: project.id,
-      projectName: project.display_name,
+      projectName: isHanbitReferenceProject ? "Smart Factory A" : project.display_name,
       workspaceId: workspace.id,
-      workspaceName: workspace.display_name,
+      workspaceName: isHanbitReferenceProject ? "Production Reliability" : workspace.display_name,
       datasetVersionId,
       datasetLabel: dataSource?.dataset_name
         ? `${dataSource.dataset_name} · ${sourceVersion}`
@@ -210,15 +255,16 @@ export async function loadOperationsBootstrap(
     events,
     metrics,
     lineRisk,
+    selectionRestoreError,
   };
 }
 
-async function loadLegacyReport(eventId: string): Promise<{ report: Report | null; warning: string | null }> {
+async function loadLegacyReport(eventId: string, role: Role, reportType?: ReportType): Promise<{ report: Report | null; warning: string | null }> {
   try {
-    return { report: await getReport(eventId, "manager", true, "ko-KR"), warning: null };
+    return { report: await getReport(eventId, role, true, "ko-KR", reportType), warning: null };
   } catch (llmReason) {
     try {
-      const report = await getReport(eventId, "manager", false, "ko-KR");
+      const report = await getReport(eventId, role, false, "ko-KR", reportType);
       return {
         report,
         warning: `자동 보고서 생성 일부 지연, 검증된 기본 보고서 사용: ${warningMessage(llmReason, "unknown error")}`,
@@ -238,15 +284,19 @@ export async function loadOperationsEventDetail(input: {
   datasetVersionId: string;
   event: OperationsEvent;
   role: OperationsRoleLens;
+  reportRole?: Role;
+  reportType?: ReportType;
   historyWindow: OperationsSensorWindowId;
   metrics?: OperationsMetrics;
 }): Promise<OperationsEventDetailModel> {
   const usesRuntimeProductResult = input.event.eventId.startsWith("RESULT#");
+  const reportRole: Role = input.reportRole ?? (input.role === "process_manager" ? "manager" : "engineer");
   const predictivePromise = getPredictiveMaintenanceDashboard(input.projectId, input.workspaceId, {
     dataset_version_id: input.datasetVersionId,
     selected_event_id: input.event.eventId,
-    role: input.role === "process_manager" ? "manager" : "engineer",
-    intent: input.role === "process_manager" ? "summarize-manager" : "detail-engineer",
+    role: reportRole,
+    report_type: input.reportType,
+    intent: reportRole === "executive" ? "summarize-manager" : input.role === "process_manager" ? "summarize-manager" : "detail-engineer",
     locale: "ko-KR",
   });
   const evidencePromise: Promise<Evidence | null> = usesRuntimeProductResult
@@ -254,13 +304,15 @@ export async function loadOperationsEventDetail(input: {
     : getEvidence(input.event.eventId);
   const reportPromise: Promise<{ report: Report | null; warning: string | null }> = usesRuntimeProductResult
     ? Promise.resolve({ report: null, warning: null })
-    : loadLegacyReport(input.event.eventId);
+    : loadLegacyReport(input.event.eventId, reportRole, input.reportType);
   const activityPromise: Promise<unknown | null> = usesRuntimeProductResult
     ? Promise.resolve(null)
     : getEventActivity(input.event.eventId);
   const assetDetailPromise = getAssetDetailViewModel(
     input.projectId,
+    input.workspaceId,
     input.event.assetId,
+    input.event.eventId,
     input.datasetVersionId,
     input.historyWindow,
   );
@@ -281,7 +333,7 @@ export async function loadOperationsEventDetail(input: {
   const report = legacyReport.report ?? predictiveDetail?.report ?? null;
   const activity = activityState.status === "fulfilled" ? activityState.value : null;
   const warnings = [
-    legacyReport.warning,
+    legacyReport.warning && !predictiveDetail?.report ? legacyReport.warning : null,
     evidenceState.status === "rejected" && !predictiveDetail?.evidence
       ? `상세 근거 조회 지연: ${warningMessage(evidenceState.reason, "사용 불가")}`
       : null,
@@ -303,6 +355,33 @@ export async function loadOperationsEventDetail(input: {
   return assetDetailState.status === "fulfilled"
     ? applyAssetDetailViewModel(detail, assetDetailState.value)
     : detail;
+}
+
+export async function loadOperationsReportVariant(input: {
+  projectId: string;
+  workspaceId: string;
+  datasetVersionId: string;
+  event: OperationsEvent;
+  role: Role;
+  reportType: ReportType;
+}): Promise<ReturnType<typeof adaptReport>> {
+  if (!input.event.eventId.startsWith("RESULT#")) {
+    const report = await getReport(input.event.eventId, input.role, true, "ko-KR", input.reportType);
+    return adaptReport(report);
+  }
+  const dashboard = await getPredictiveMaintenanceDashboard(input.projectId, input.workspaceId, {
+    dataset_version_id: input.datasetVersionId,
+    selected_event_id: input.event.eventId,
+    role: input.role,
+    report_type: input.reportType,
+    intent: input.role === "engineer" ? "detail-engineer" : "summarize-manager",
+    locale: "ko-KR",
+  });
+  const report = dashboard.selected_event_detail?.report;
+  if (!report || dashboard.selected_event_id !== input.event.eventId) {
+    throw new Error("선택 Case의 보고 artifact를 불러오지 못했습니다.");
+  }
+  return adaptReport(report);
 }
 
 export async function submitOperationsDecision(input: {

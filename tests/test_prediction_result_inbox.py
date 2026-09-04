@@ -276,7 +276,7 @@ def test_prediction_batch_promotion_creates_product_result_artifact() -> None:
     assert artifact["provenance"]["source_type"] == "product_runtime_inference"
     assert artifact["provenance"]["canonical_source_mutated"] is False
     assert artifact["evidence_payload"]["recommended_actions"][0]["action_id"] == (
-        "request_inspection"
+        "review_shutdown"
     )
     assert artifact["evidence_payload"]["evidence_gaps"]
     summary = service._product_result_evidence_summary(artifact)
@@ -304,6 +304,25 @@ def test_prediction_batch_promotion_creates_product_result_artifact() -> None:
     ]
     assert summary.recommended_actions[0].requires_human_approval is True
     assert summary.evidence_gaps[0].display_policy == "show_limitation"
+
+    overlay_artifact = copy.deepcopy(artifact)
+    overlay_artifact["lineage"]["source_context"]["source_kind"] = (
+        "maintenance_replay_overlay"
+    )
+    overlay_artifact["lineage"]["source_context"]["lineage"] = {
+        "simulation_session_id": "simulation-session-1",
+        "overlay_branch_id": "overlay-branch-1",
+        "history_segment_id": "history-segment-1",
+        "maintenance_event_id": "maintenance-event-1",
+        "maintenance_action_id": "maintenance-action-1",
+        "state_version": 3,
+    }
+    overlay_summary = service._product_result_evidence_summary(overlay_artifact)
+    assert overlay_summary is not None
+    assert overlay_summary.batch_lineage is not None
+    assert overlay_summary.batch_lineage.maintenance_event_id == "maintenance-event-1"
+    assert overlay_summary.batch_lineage.overlay_branch_id == "overlay-branch-1"
+    assert overlay_summary.batch_lineage.state_version == 3
 
 
 def test_prediction_batch_promotion_absorbs_optional_generator_explanation() -> None:
@@ -371,7 +390,7 @@ def test_prediction_batch_promotion_absorbs_optional_generator_explanation() -> 
         for field in artifact["evidence_payload"]["source_fields"]
     }
     assert "generator_explanation.1.torque_nm_6h_mean" in source_field_ids
-    assert artifact["recommended_action"]["action"] == "request_inspection"
+    assert artifact["recommended_action"]["action"] == "review_shutdown"
 
 
 def test_product_result_materialization_exposes_shared_evidence_projection() -> None:
@@ -463,7 +482,7 @@ def test_prediction_batch_promotion_applies_high_criticality_warning_adjustment(
     assert receipt.promotion_status == "promoted"
     artifact = repository.promotions[0]["artifact"]
     assert artifact["status_grade"] == "warning"
-    assert artifact["predicted_failure_type"] == "none"
+    assert artifact["predicted_failure_type"] == "no_significant_risk"
     assert artifact["recommended_action"]["action"] == "request_inspection"
     assert artifact["evidence_payload"]["recommended_actions"][0]["kind"] == (
         "request_inspection"

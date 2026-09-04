@@ -52,7 +52,7 @@ function historyWindowLabel(value: string | null): string {
 }
 
 function datasetLabel(value: string | null): string {
-  if (value === "fixture-compatibility") return "데모 기준 데이터";
+  if (value === "fixture-compatibility") return "호환 기준 데이터";
   if (value === "dsv-canonical-v3-1") return "Canonical V3.1";
   return value || "데이터 기준 미기록";
 }

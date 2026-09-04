@@ -306,7 +306,10 @@ def test_workflow_eval_gate_covers_minimum_release_axes(tmp_path: Path) -> None:
         "workflow_stages",
         "summary_reuse",
         "fallback_retry",
+        "domain_context_grounding",
         "closed_loop_boundary",
+        "baseline_comparison",
+        "stability_evaluation_output",
     }
     assert set(gate["minimum_release_gates"]) == set(gate["evaluation_scope"])
     assert {
@@ -319,6 +322,11 @@ def test_workflow_eval_gate_covers_minimum_release_axes(tmp_path: Path) -> None:
     assert workflow_result["workflow"]["attempt_count"] >= 1
     assert workflow_result["workflow"]["max_attempts"] == 1
     assert "summary_materialization" in workflow_result["workflow"]["retry_policy"]
+    assert {
+        "db_backed_maintenance_history_reaches_role_summary",
+        "future_inventory_mes_schedule_claims_are_blocked_until_source_contract",
+        "adapter_source_refs_remain_inside_packet_scope",
+    }.issubset(set(gate["minimum_release_gates"]["domain_context_grounding"]))
 
 
 def test_workflow_eval_gate_defers_langgraph_until_tool_trajectory_pressure() -> None:
@@ -336,6 +344,7 @@ def test_workflow_eval_gate_defers_langgraph_until_tool_trajectory_pressure() ->
         gate["defer_langgraph_when_all"]
     )
     assert len(gate["current_context_facets"]) >= 3
+    assert "maintenance_history_context" in gate["current_context_facets"]
     assert gate["independent_runtime_tool_definition"][
         "requires_separate_retry_policy"
     ] is True
@@ -352,6 +361,34 @@ def test_workflow_eval_gate_defers_langgraph_until_tool_trajectory_pressure() ->
         "azure_agent_and_rag_evals",
         "ragas_rag_metrics",
     }
+
+
+def test_workflow_eval_gate_defers_production_rag_runtime_until_retrieval_metrics() -> None:
+    gate = _load_workflow_gate()
+    retrieval_gate = gate["retrieval_runtime_decision_gate"]
+
+    assert retrieval_gate["current_decision"] == (
+        "defer_production_graphrag_vector_db_llamaindex"
+    )
+    assert retrieval_gate["current_runtime_source"] == (
+        "structured_adapter_context_inside_agent_review_packet"
+    )
+    assert set(retrieval_gate["candidate_stack"]) == {
+        "GraphRAG",
+        "Vector DB",
+        "LlamaIndex",
+    }
+    assert {
+        "context_precision_recall_not_yet_measured",
+        "retrieval_freshness_contract_not_yet_release_gated",
+        "packet_snapshot_alignment_is_the_primary_current_gate",
+    }.issubset(set(retrieval_gate["defer_when_all"]))
+    assert {
+        "retrieval_context_precision_recall_becomes_release_gate",
+        "retrieved_chunks_have_source_sha256_and_freshness_metadata",
+        "retrieval_results_are_bound_to_agent_review_packet_snapshot",
+        "llm_summary_validation_rejects_uncited_retrieval_claims",
+    }.issubset(set(retrieval_gate["adopt_when_all"]))
 
 
 def _answer_from_packet(packet: dict[str, Any]) -> dict[str, Any]:

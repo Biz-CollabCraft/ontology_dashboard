@@ -1,7 +1,8 @@
-"""Canonical manufacturing demonstration application service."""
+"""Canonical manufacturing operations application service."""
 
 from __future__ import annotations
 
+import json
 import os
 import time
 import uuid
@@ -10,6 +11,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+from app.common.company_context import load_company_context, public_company_context, retrieve_company_documents
 from app.diagnosis.contracts import derive_features, load_fixture
 from app.diagnosis.domain import (
     build_evidence_package,
@@ -26,11 +28,27 @@ from app.operations.agent_review_summary_materialization import (
     summary_key_payload,
 )
 from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider
-from app.operations.asset_detail_view_model import compose_asset_detail_view_model
+from app.operations.asset_detail_view_model import (
+    AssetDetailViewModelService,
+    compose_asset_detail_view_model,
+)
 from app.operations.domain_context_adapters import (
     DomainReviewContextAdapter,
     ManufacturingFixtureReviewContextAdapter,
 )
+from app.operations.operational_context_contract import OperationalRequestIdentity
+from app.operations.operational_context_ports import (
+    FixtureMaintenanceReadinessContextReadPort,
+    FixtureProductionDecisionContextReadPort,
+    FixtureQualityDeliveryContextReadPort,
+)
+from app.operations.operational_evidence_selection import (
+    EvidenceSelectionStrategy,
+    evaluate_evidence_selection,
+    project_evidence_candidates,
+    select_evidence_candidates,
+)
+from app.operations.operational_relation_resolver import resolve_operational_relations
 
 from .context import ContextProviderFactory
 from .contracts import (
@@ -45,7 +63,13 @@ from .contracts import (
     UILayout,
 )
 from app.planner.contracts import IntentRouter, deterministic_answer
-from .ports import AuditRepositoryPort, LayoutPlannerPort, ReportAgentPort
+from .ports import (
+    AuditRepositoryPort,
+    CompanyContextQueryPort,
+    LayoutPlannerPort,
+    MaintenanceLineageQueryPort,
+    ReportAgentPort,
+)
 
 RISK_PRIORITY = {"critical": 0, "warning": 1, "attention": 2, "data_quality_hold": 3, "normal": 4}
 AGENT_REVIEW_RUNNING_LEASE_SECONDS = 120
@@ -68,8 +92,13 @@ class ManufacturingPredictiveMaintenanceService:
         layout_planner: LayoutPlannerPort,
         context_provider_factory: ContextProviderFactory,
         agent_review_summary_provider: AgentReviewSummaryProvider | None = None,
+        agent_answer_provider: Any | None = None,
         agent_review_context_registry: AgentReviewContextRegistry | None = None,
         domain_review_context_adapter: DomainReviewContextAdapter | None = None,
+        maintenance_lineage_query: MaintenanceLineageQueryPort | None = None,
+        company_context_query: CompanyContextQueryPort | None = None,
+        runtime_asset_detail_service: AssetDetailViewModelService | None = None,
+        workspace_id: str = "manufacturing-demo",
     ) -> None:
         self.root = Path(root)
         fixture_root = self.root / "data" / "fixtures"
@@ -96,12 +125,95 @@ class ManufacturingPredictiveMaintenanceService:
         self.layout_planner = layout_planner
         self.context_provider_factory = context_provider_factory
         self.agent_review_summary_provider = agent_review_summary_provider
+        self.agent_answer_provider = agent_answer_provider
         self.agent_review_context_registry = agent_review_context_registry
+        self.maintenance_lineage_query = maintenance_lineage_query
+        self.company_context_query = company_context_query
+        self.runtime_asset_detail_service = runtime_asset_detail_service
+        self.workspace_id = workspace_id
         self.domain_review_context_adapter = (
             domain_review_context_adapter
             or ManufacturingFixtureReviewContextAdapter(self.root)
         )
         self.intent_router = IntentRouter()
+
+    def company_context(self, *, project_id: str, workspace_id: str) -> dict[str, Any]:
+        """Return stable company masters with DB-backed operational records overlaid by id.
+
+        Static reference data remains the bootstrap for stable masters. Once a record
+        exists in persistence, the DB copy is authoritative for that project/workspace.
+        """
+        base = public_company_context(load_company_context())
+        if self.company_context_query is None:
+            return base
+        try:
+            records = self.company_context_query.list_records(project_id=project_id, workspace_id=workspace_id)
+        except Exception:
+            return base
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for record in records:
+            record_type = str(record.get("record_type") or "")
+            payload = record.get("payload")
+            if not record_type or not isinstance(payload, dict):
+                continue
+            payload = {
+                **payload,
+                "context_source": "team_db",
+                "source_updated_at": record.get("source_updated_at"),
+            }
+            grouped.setdefault(record_type, []).append(payload)
+        for record_type, persisted in grouped.items():
+            existing = [dict(item) for item in base.get(record_type) or [] if isinstance(item, dict)]
+            persisted_by_id = {
+                str(item.get("id") or item.get("variant") or item.get("name")): item
+                for item in persisted
+            }
+            merged = []
+            seen: set[str] = set()
+            for item in existing:
+                key = str(item.get("id") or item.get("variant") or item.get("name"))
+                merged.append(persisted_by_id.get(key, item))
+                seen.add(key)
+            merged.extend(item for key, item in persisted_by_id.items() if key not in seen)
+            base[record_type] = merged
+        base["context_storage"] = {
+            "mode": "team_db_overlay" if records else "reference_bootstrap",
+            "persisted_record_count": len(records),
+        }
+        return base
+
+    def company_context_documents(
+        self,
+        query: str,
+        *,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str | None = None,
+        top_k: int = 4,
+    ) -> list[dict[str, Any]]:
+        return retrieve_company_documents(
+            query,
+            asset_id=asset_id,
+            top_k=top_k,
+            context=self.company_context(project_id=project_id, workspace_id=workspace_id),
+        )
+
+    def _closed_loop_context_for_fixture(
+        self,
+        fixture: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        event_id = str(fixture.get("event_id") or "")
+        if not event_id or self.maintenance_lineage_query is None:
+            return fixture.get("closed_loop")
+        try:
+            lineage = self.maintenance_lineage_query.event_lineage(
+                workspace_id=self.workspace_id,
+                event_id=event_id,
+            )
+        except Exception:
+            return fixture.get("closed_loop")
+        context = _closed_loop_context_from_lineage(lineage)
+        return context if _has_closed_loop_records(context) else fixture.get("closed_loop")
 
     def _fixture(self, event_id: str) -> dict[str, Any]:
         try:
@@ -144,11 +256,13 @@ class ManufacturingPredictiveMaintenanceService:
             package["lineage"]["dataset_version"] = str(fixture["dataset_version"])
         return package
 
-    def event_evidence_projection(self, event_id: str) -> dict[str, Any]:
+    def event_evidence_projection(self, event_id: str, **_: Any) -> dict[str, Any]:
         fixture = self._fixture(event_id)
         projection = self._event_evidence_projection(fixture)
         projection["event_id"] = fixture["event_id"]
+        projection["evidence_id"] = f"EVD-{fixture['event_id']}"
         projection["scenario_id"] = fixture["scenario_id"]
+        projection["artifact_reference"]["event_id"] = fixture["event_id"]
         return projection
 
     def evidence(self, event_id: str, *, view: str = "legacy") -> dict[str, Any]:
@@ -224,7 +338,7 @@ class ManufacturingPredictiveMaintenanceService:
                 artifact=artifact,
                 project_id=self._fixture_project_id(fixture),
             ) or fixture.get("operation_context"),
-            closed_loop=fixture.get("closed_loop"),
+            closed_loop=self._closed_loop_context_for_fixture(fixture),
             inspection_guidance=self.domain_review_context_adapter.inspection_guidance(
                 fixture=fixture,
                 artifact=artifact,
@@ -278,6 +392,98 @@ class ManufacturingPredictiveMaintenanceService:
             ),
         )
 
+    def runtime_agent_review_packet(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
+        dataset_version_id: str | None,
+        event_id: str,
+        history_window: str = "24h",
+    ) -> dict[str, Any]:
+        return self._runtime_agent_review_packet_for_candidate(
+            {
+                "source_kind": "live_result",
+                "asset_id": asset_id,
+                "event_id": event_id,
+                "dataset_version_id": dataset_version_id,
+            },
+            project_id=project_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+            history_window=history_window,
+        )
+
+    def agent_review_evidence_selection(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        organization_id: str = "ORG-001",
+        workspace_id: str = "manufacturing-demo",
+        dataset_version_id: str | None = None,
+        decision_as_of: datetime | None = None,
+        retrieved_at: datetime | None = None,
+        role: str = "process_manager",
+        max_candidates: int = 8,
+        required_evidence_ids: set[str] | None = None,
+        required_limitation_ids: set[str] | None = None,
+    ) -> dict[str, Any]:
+        """Return S0/S1 evidence selection trace for versioned operation context."""
+
+        fixture = self._fixture_for_asset(asset_id, project_id, dataset_version_id=dataset_version_id)
+        artifact = self._product_result_artifact(fixture)
+        now = datetime.now(timezone.utc)
+        identity = OperationalRequestIdentity(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            evidence_snapshot_id=str(artifact["artifact_id"]),
+            decision_as_of=decision_as_of or now,
+        )
+        contexts = self._operational_selection_contexts(
+            identity=identity,
+            retrieved_at=retrieved_at or now,
+        )
+        relations = resolve_operational_relations(identity=identity, contexts=contexts)
+        candidates = project_evidence_candidates(
+            identity=identity,
+            contexts=contexts,
+            relation_resolution=relations,
+        )
+        full = select_evidence_candidates(
+            candidates,
+            strategy=EvidenceSelectionStrategy.FULL_CONTEXT,
+        )
+        selected = select_evidence_candidates(
+            candidates,
+            strategy=EvidenceSelectionStrategy.DETERMINISTIC,
+            role=role,
+            max_candidates=max_candidates,
+        )
+        metrics = evaluate_evidence_selection(
+            full_context=full,
+            selected=selected,
+            required_evidence_ids=required_evidence_ids or set(),
+            required_limitation_ids=required_limitation_ids or set(),
+        )
+        return {
+            "schema_version": "agent-review-evidence-selection-v1.0",
+            "asset_id": asset_id,
+            "project_id": project_id,
+            "identity": identity.model_dump(mode="json"),
+            "relation_resolution": relations.model_dump(mode="json"),
+            "strategies": {
+                "S0": full.model_dump(mode="json"),
+                "S1": selected.model_dump(mode="json"),
+            },
+            "metrics": metrics.model_dump(mode="json"),
+            "mutation_allowed": False,
+        }
+
     def agent_review_summary(
         self,
         asset_id: str,
@@ -298,6 +504,27 @@ class ManufacturingPredictiveMaintenanceService:
             dataset_version_id=dataset_version_id,
             history_window=history_window,
         )
+        return self._materialize_agent_review_packet(
+            packet=packet,
+            project_id=project_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+            history_window=history_window,
+            trigger=trigger,
+            engine=engine,
+        )
+
+    def _materialize_agent_review_packet(
+        self,
+        *,
+        packet: dict[str, Any],
+        project_id: str,
+        organization_id: str,
+        workspace_id: str,
+        history_window: str,
+        trigger: str,
+        engine: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         materializer = AgentReviewSummaryMaterializer(
             self.repository,
             self.agent_review_summary_provider,
@@ -417,6 +644,26 @@ class ManufacturingPredictiveMaintenanceService:
                 trace = {**trace, "workflow_run": _workflow_run_trace(run)}
         return summary, trace
 
+    def cached_agent_review_summary_for_packet(
+        self,
+        *,
+        packet: dict[str, Any],
+        project_id: str = "manufacturing-demo-project",
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
+        history_window: str = "24h",
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        return AgentReviewSummaryMaterializer(
+            self.repository,
+            self.agent_review_summary_provider,
+        ).lookup(
+            packet=packet,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            history_window=history_window,
+        )
+
     def agent_review_workflow_runs(
         self,
         project_id: str = "manufacturing-demo-project",
@@ -453,40 +700,60 @@ class ManufacturingPredictiveMaintenanceService:
         workspace_id: str = "manufacturing-demo",
         history_window: str = "24h",
         limit: int | None = None,
+        source: str = "fixture",
     ) -> dict[str, Any]:
-        """Materialize missing Agent Review Summaries for project fixtures."""
+        """Materialize missing Agent Review Summaries from explicit candidates."""
 
         items: list[dict[str, Any]] = []
-        fixtures = [
-            fixture
-            for fixture in self.project_fixtures.values()
-            if self._fixture_project_id(fixture) == project_id
-        ]
-        fixtures = sorted(
-            fixtures,
-            key=lambda fixture: str((fixture.get("equipment") or {}).get("equipment_id") or ""),
+        candidates = self._agent_review_summary_candidates(
+            project_id=project_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+            limit=limit,
+            source=source,
         )
-        if limit is not None:
-            fixtures = fixtures[: max(0, limit)]
 
-        for fixture in fixtures:
-            asset_id = str((fixture.get("equipment") or {}).get("equipment_id") or "")
+        for candidate in candidates:
+            asset_id = str(candidate.get("asset_id") or "")
             if not asset_id:
                 continue
-            summary, trace = self.agent_review_summary(
-                asset_id,
-                project_id,
-                organization_id=organization_id,
-                workspace_id=workspace_id,
-                dataset_version_id=fixture.get("dataset_version"),
-                history_window=history_window,
-                trigger="polling_watcher",
-            )
+            if candidate.get("source_kind") == "fixture":
+                summary, trace = self.agent_review_summary(
+                    asset_id,
+                    project_id,
+                    organization_id=organization_id,
+                    workspace_id=workspace_id,
+                    dataset_version_id=candidate.get("dataset_version_id"),
+                    history_window=history_window,
+                    trigger="polling_watcher",
+                )
+            else:
+                packet = self._runtime_agent_review_packet_for_candidate(
+                    candidate,
+                    project_id=project_id,
+                    organization_id=organization_id,
+                    workspace_id=workspace_id,
+                    history_window=history_window,
+                )
+                summary, trace = self._materialize_agent_review_packet(
+                    packet=packet,
+                    project_id=project_id,
+                    organization_id=organization_id,
+                    workspace_id=workspace_id,
+                    history_window=history_window,
+                    trigger="polling_watcher",
+                    engine="simple",
+                )
             materialization = trace.get("materialization") or {}
             items.append(
                 {
+                    "source_kind": candidate.get("source_kind"),
                     "asset_id": asset_id,
-                    "event_id": fixture.get("event_id"),
+                    "event_id": candidate.get("event_id"),
+                    "dataset_version_id": candidate.get("dataset_version_id"),
+                    "source_sha256": candidate.get("source_sha256"),
+                    "lineage_event_id": candidate.get("lineage_event_id"),
+                    "stale_reason": candidate.get("stale_reason"),
                     "summary_id": materialization.get("summary_id"),
                     "summary_key": materialization.get("summary_key"),
                     "status": materialization.get("status"),
@@ -505,11 +772,145 @@ class ManufacturingPredictiveMaintenanceService:
         return {
             "project_id": project_id,
             "history_window": history_window,
+            "source": source,
             "materialized_count": len(items),
             "created_count": sum(1 for item in items if not item.get("reused")),
             "reused_count": sum(1 for item in items if item.get("reused")),
             "items": items,
         }
+
+    def _agent_review_summary_candidates(
+        self,
+        *,
+        project_id: str,
+        organization_id: str,
+        workspace_id: str,
+        limit: int | None,
+        source: str,
+    ) -> list[dict[str, Any]]:
+        normalized_source = source.replace("_", "-")
+        if normalized_source not in {"fixture", "live", "post-maintenance", "auto"}:
+            raise ValueError(f"unsupported agent review watcher source: {source}")
+
+        live_candidates = (
+            self._runtime_agent_review_summary_candidates(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                limit=limit,
+            )
+            if self.runtime_asset_detail_service is not None
+            else []
+        )
+        if normalized_source == "post-maintenance":
+            return [
+                candidate
+                for candidate in live_candidates
+                if candidate.get("source_kind") == "post_maintenance_feedback"
+            ]
+        if normalized_source == "live":
+            return live_candidates
+        if normalized_source == "auto" and live_candidates:
+            return live_candidates
+        return self._fixture_agent_review_summary_candidates(
+            project_id=project_id,
+            limit=limit,
+        )
+
+    def _fixture_agent_review_summary_candidates(
+        self,
+        *,
+        project_id: str,
+        limit: int | None,
+    ) -> list[dict[str, Any]]:
+        fixtures = [
+            fixture
+            for fixture in self.project_fixtures.values()
+            if self._fixture_project_id(fixture) == project_id
+        ]
+        fixtures = sorted(
+            fixtures,
+            key=lambda fixture: str((fixture.get("equipment") or {}).get("equipment_id") or ""),
+        )
+        if limit is not None:
+            fixtures = fixtures[: max(0, limit)]
+        return [
+            {
+                "source_kind": "fixture",
+                "asset_id": str((fixture.get("equipment") or {}).get("equipment_id") or ""),
+                "event_id": fixture.get("event_id"),
+                "dataset_version_id": fixture.get("dataset_version"),
+                "source_sha256": None,
+                "lineage_event_id": None,
+                "stale_reason": "fixture_project_snapshot",
+            }
+            for fixture in fixtures
+        ]
+
+    def _runtime_agent_review_summary_candidates(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        limit: int | None,
+    ) -> list[dict[str, Any]]:
+        assert self.runtime_asset_detail_service is not None
+        return self.runtime_asset_detail_service.latest_result_artifact_references(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=None,
+            limit=limit or 20,
+        )
+
+    def _runtime_agent_review_packet_for_candidate(
+        self,
+        candidate: dict[str, Any],
+        *,
+        project_id: str,
+        organization_id: str,
+        workspace_id: str,
+        history_window: str,
+    ) -> dict[str, Any]:
+        if self.runtime_asset_detail_service is None:
+            raise RuntimeError("runtime AssetDetail service is not configured")
+        view_model = self.runtime_asset_detail_service.latest_detail_view(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=str(candidate["asset_id"]),
+            dataset_version_id=(
+                str(candidate["dataset_version_id"])
+                if candidate.get("dataset_version_id") is not None
+                else None
+            ),
+            event_id=str(candidate["event_id"]),
+            history_window=history_window,
+        )
+        return compose_agent_review_packet(
+            project_id=project_id,
+            view_model=view_model,
+            sop_retrieval={
+                "provider": "runtime_product_result",
+                "query": {
+                    "asset_id": candidate["asset_id"],
+                    "event_id": candidate["event_id"],
+                    "dataset_version_id": candidate["dataset_version_id"],
+                },
+                "top_k": 0,
+                "returned_count": 0,
+                "results": [],
+            },
+            ontology_context=None,
+            context=(
+                self.agent_review_context_registry.context_for_packet(
+                    view_model=view_model,
+                )
+                if self.agent_review_context_registry
+                else None
+            ),
+        )
 
     def patch_equipment_state(
         self,
@@ -537,6 +938,32 @@ class ManufacturingPredictiveMaintenanceService:
             "history": fixture["history"],
             "runtime": fixture["runtime"],
             "activity": self.repository.event_activity(event_id),
+        }
+
+    def _operational_selection_contexts(
+        self,
+        *,
+        identity: OperationalRequestIdentity,
+        retrieved_at: datetime,
+    ) -> dict[str, Any]:
+        fixture_root = self.root / "data" / "fixtures" / "operation_context"
+
+        def load_context(name: str) -> dict[str, Any]:
+            return json.loads((fixture_root / name).read_text(encoding="utf-8"))
+
+        return {
+            "production": FixtureProductionDecisionContextReadPort(
+                context=load_context("operational-decision-context-v1.json"),
+                source_ref="fixture:production",
+            ).lookup(identity=identity, retrieved_at=retrieved_at),
+            "maintenance_readiness": FixtureMaintenanceReadinessContextReadPort(
+                context=load_context("maintenance-readiness-context-v1.json"),
+                source_ref="fixture:maintenance",
+            ).lookup(identity=identity, retrieved_at=retrieved_at),
+            "quality_delivery": FixtureQualityDeliveryContextReadPort(
+                context=load_context("quality-delivery-context-v1.json"),
+                source_ref="fixture:quality",
+            ).lookup(identity=identity, retrieved_at=retrieved_at),
         }
 
     def _fixture_for_asset(
@@ -568,7 +995,7 @@ class ManufacturingPredictiveMaintenanceService:
             "asset_id": artifact["asset_id"],
             "asset_type": equipment.get("asset_type") or artifact["asset_type"],
             "display_name": equipment.get("display_name") or artifact["asset_id"],
-            "site_id": equipment.get("site_id") or artifact.get("site_id") or "Manufacturing Demo",
+            "site_id": equipment.get("site_id") or artifact.get("site_id") or "Hanbit Tech Plant",
             "cell_id": equipment.get("cell_id") or equipment.get("line") or artifact.get("cell_id") or "unknown",
             "observed_at": artifact["observed_at"],
             "criticality": equipment.get("criticality"),
@@ -688,20 +1115,50 @@ class ManufacturingPredictiveMaintenanceService:
     def report(self, event_id: str, request: ReportRequest) -> tuple[GroundedReport, dict[str, Any]]:
         fixture = self._fixture(event_id)
         evidence = self._projected_legacy_evidence(fixture)
+        self._attach_report_context(evidence, fixture, request.role)
         report, trace = self.report_agent.generate(
             evidence,
             request.role,
             locale=request.locale,
             use_llm=request.use_llm,
             provider_available=fixture["runtime"]["llm_available"],
+            report_type=request.report_type,
         )
         self._audit(
             event_id,
             "report.generated",
             evidence["model"]["model_version"],
-            {"report_id": report.report_id, "role": request.role, "locale": request.locale, **trace},
+            {"report_id": report.report_id, "role": request.role, "report_type": report.report_type, "locale": request.locale, **trace},
         )
         return report, trace
+
+    def _attach_report_context(self, evidence: dict[str, Any], fixture: dict[str, Any], role: str) -> None:
+        equipment_id = str((fixture.get("equipment") or {}).get("equipment_id") or "")
+        project_id = self._fixture_project_id(fixture)
+        workspace_id = str(fixture.get("workspace_id") or self.workspace_id)
+        goal = (
+            "생산 영향 매출 공헌이익 자재 재고 운영 의사결정 회의 정비 이력"
+            if role == "manager"
+            else "설비 센서 점검 정비 이력 원인 근거 자재 작업 기록"
+        )
+        documents = self.company_context_documents(
+            goal,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=equipment_id or None,
+            top_k=8,
+        )
+        evidence["company_context_documents"] = [
+            {
+                "evidence_field_id": f"company_context.{item['id']}",
+                "title": item.get("title"),
+                "document_type": item.get("document_type"),
+                "content": item.get("content"),
+                "source_ref": item.get("source_ref"),
+                "related_asset_ids": item.get("related_asset_ids") or [],
+            }
+            for item in documents
+        ]
 
     def _event_evidence_projection(self, fixture: dict[str, Any]) -> dict[str, Any]:
         artifact = self._product_result_artifact(fixture)
@@ -729,6 +1186,7 @@ class ManufacturingPredictiveMaintenanceService:
     def layout(self, event_id: str, request: LayoutRequest) -> tuple[UILayout, dict[str, Any]]:
         fixture = self._fixture(event_id)
         evidence = build_evidence_package(fixture, context_provider=self._context_provider(fixture))
+        self._attach_report_context(evidence, fixture, request.role)
         report, report_trace = self.report_agent.generate(
             evidence,
             request.role,
@@ -1004,6 +1462,65 @@ def _production_impact(estimated_downtime_minutes: Any) -> str | None:
     if estimated_downtime_minutes > 0:
         return "low"
     return "none"
+
+
+def _closed_loop_context_from_lineage(lineage: dict[str, Any]) -> dict[str, Any]:
+    work_orders = [_work_order_context(item) for item in lineage.get("work_orders") or []]
+    return {
+        "work_orders": work_orders,
+        "inspection_results": list(lineage.get("inspection_results") or []),
+        "maintenance_actions": list(lineage.get("maintenance_actions") or []),
+        "maintenance_events": list(lineage.get("maintenance_events") or []),
+        "activities": list(lineage.get("activities") or []),
+        "available_actions": _available_closed_loop_actions(work_orders),
+        "runtime_status": lineage.get("runtime_status"),
+        "runtime_state": lineage.get("runtime_state"),
+    }
+
+
+def _has_closed_loop_records(context: dict[str, Any]) -> bool:
+    return any(
+        context.get(key)
+        for key in (
+            "work_orders",
+            "inspection_results",
+            "maintenance_actions",
+            "maintenance_events",
+            "activities",
+        )
+    )
+
+
+def _work_order_context(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "work_order_id": str(item.get("work_order_id") or ""),
+        "work_type": str(item.get("work_type") or ""),
+        "status": str(item.get("status") or ""),
+        "assigned_to": item.get("assigned_to"),
+        "actor_display_name": item.get("actor_display_name"),
+        "created_at": item.get("created_at"),
+        "updated_at": item.get("updated_at"),
+    }
+
+
+def _available_closed_loop_actions(work_orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    actions = []
+    for work_order in work_orders:
+        if work_order.get("work_type") != "inspection" or work_order.get("status") != "requested":
+            continue
+        work_order_id = str(work_order.get("work_order_id") or "")
+        actions.append(
+            {
+                "action_id": "approve_inspection_work_order",
+                "target_type": "work_order",
+                "target_id": work_order_id,
+                "label": "점검 승인",
+                "disabled_reason": (
+                    "데모 ViewModel은 읽기 전용입니다. 실제 승인은 Closed-loop mutation API 연결 후 처리합니다."
+                ),
+            }
+        )
+    return actions
 
 
 # Temporary compatibility alias for integrations that still import the historical

@@ -179,8 +179,9 @@ Generator raw 산출
 - Product Result / Evidence 저장 원자성은 후속 repository 구현과 rollback 테스트가 필요하다.
 - ViewModel은 여러 read source를 조합하므로 완전한 동일 시점 snapshot 보장은 후속 `as_of` 또는
   Closed-loop `snapshot_basis` guard 정책이 필요하다.
-- Agent Review Summary materialization은 이 ADR의 결정 방향이며, 현재 구현 완료를 의미하지 않는다.
-  후속 구현에서는 summary repository, watcher retry, stale/error status, validation/fallback 저장 계약,
-  UI의 summary status 표시를 별도 테스트로 검증해야 한다.
+- Agent Review Summary materialization은 SQLite/PostgreSQL schema, summary repository, workflow run
+  trace, watcher retry, stale running-run recovery, validation/fallback 저장 계약, UI status 표시,
+  persona별 read/materialize 권한, MVP browser e2e로 검증했다. PostgreSQL 서버 replay/integration
+  경로도 로컬 Docker PostgreSQL에서 migration을 적용해 검증했다.
 - Outbox 기반 후속 projection은 실제 consumer가 생긴 뒤 별도 PR에서 다룬다.
 - 외부 JD 레퍼런스는 역할 요구를 해석하기 위한 참고이며, 프로젝트 구현 완료 증거가 아니다.

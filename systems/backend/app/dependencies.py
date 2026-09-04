@@ -18,7 +18,8 @@ from argon2 import PasswordHasher
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from app.common.rate_limit import RateLimiter
-from app.common.runtime_settings import project_root, trust_proxy_headers, trusted_proxy_networks
+from app.common.company_context import load_company_context
+from app.common.runtime_settings import app_environment, project_root, trust_proxy_headers, trusted_proxy_networks
 from app.dashboard import DashboardService
 from app.dashboard.dashboard_schema import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
 from app.dashboard.visualizations import (
@@ -35,7 +36,11 @@ from app.dashboard.visualizations import (
     validate_override_channel_mapping,
 )
 from app.dataset import DatasetCatalogService
-from app.diagnosis.evidence import FixtureContextProvider, build_product_result_artifact
+from app.diagnosis.evidence import (
+    FixtureContextProvider,
+    build_product_result_artifact,
+    validate_product_result_artifact,
+)
 from app.diagnosis.predictor import configured_predictor
 from app.diagnosis.runtime_service import (
     PredictiveMaintenanceRuntimeService,
@@ -47,6 +52,7 @@ from app.diagnosis.contracts import load_fixture
 from app.governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
 from app.infra.db.dashboard_repository import DashboardRepository
+from app.infra.db.company_context_repository import CompanyContextRepository
 from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from app.infra.db.dataset_repository import DatasetRepository
 from app.infra.db.diagnosis_runtime_repository import PredictiveMaintenanceRuntimeRepository
@@ -72,10 +78,12 @@ from app.infra.db.report_repository import ReportRepository
 from app.infra.db.settings import database_location
 from app.infra.context import Project3HttpContextProvider, ResilientContextProvider
 from app.infra.llm import configured_provider
+from app.operations.agent_answer_provider import GroundedAgentAnswerProvider
 from app.infra.maintenance_cost_basis_provider import JsonMaintenanceCostBasisProvider
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.maintenance.live_service import LivePredictiveMaintenanceService
 from app.maintenance.service import MaintenanceLoopService
+from app.operations.asset_detail_view_model import AssetDetailViewModelService
 from app.ontology import OntologyService
 from app.planner import LayoutPlanner, OntologyDashboardPlannerService
 from app.project import ProjectService
@@ -100,6 +108,9 @@ from app.infra.db.postgresql_repositories import (
     seed_runtime_reference_data,
 )
 from app.infra.db.project_repository import SQLiteProjectContextResolver as RuntimeProjectContextResolver
+from app.infra.db.operational_decision_support_service import (
+    PersistedOperationalDecisionSupportService,
+)
 from app.infra.db.role_workflow_repository import RoleWorkflowRepository
 from app.infra.db.operations_audit_repository import AuditRepository
 from app.operations.role_workflow_service import RoleWorkflowService
@@ -107,6 +118,7 @@ from app.operations.agent_review_summary_provider import AgentReviewSummaryProvi
 from app.operations.context_providers import default_agent_review_context_registry
 from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.operations.service import ManufacturingPredictiveMaintenanceService
+from app.operations.operational_decision_support_port import OperationalDecisionSupportService
 
 
 ROOT = project_root()
@@ -161,7 +173,47 @@ def build_manufacturing_service(
         if is_postgresql(target)
         else AuditRepository(target)
     )
+    maintenance_lineage_query = (
+        PostgreSQLMaintenanceRepository(
+            target,
+            project_context=PostgreSQLProjectContextResolver(target),
+            connection_factory=postgres_repository_connection,
+        )
+        if is_postgresql(target)
+        else MaintenanceRepository(
+            target,
+            project_context=RuntimeProjectContextResolver(target),
+        )
+    )
     provider = configured_provider()
+    company_context_repository = CompanyContextRepository(target)
+    runtime_asset_detail_service = None
+    if is_postgresql(target):
+        from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
+
+        runtime_asset_detail_service = AssetDetailViewModelService(
+            PostgreSQLAssetDetailReadAdapter(
+                PredictiveMaintenanceRuntimeRepository(target),
+                validate_artifact=validate_product_result_artifact,
+            )
+        )
+    try:
+        if is_postgresql(target):
+            company_scope = PostgreSQLProjectContextResolver(target).resolve(MANUFACTURING_WORKSPACE)
+            company_organization_id = company_scope.organization_id
+        else:
+            company_organization_id = "org-ontology-demo"
+        company_context_repository.seed_records(
+            organization_id=company_organization_id,
+            project_id="manufacturing-demo-project",
+            workspace_id=MANUFACTURING_WORKSPACE,
+            context=load_company_context(),
+        )
+    except Exception:
+        # Context persistence is an enrichment path. Core Operations must remain
+        # available while an older DB is being migrated or a read-only Team DB
+        # connection is intentionally used.
+        pass
     equipment_service = EquipmentService(
         FixtureEquipmentRepository(_operations_fixture_masters(root))
     )
@@ -173,8 +225,13 @@ def build_manufacturing_service(
         layout_planner=LayoutPlanner(root, provider),
         context_provider_factory=_operations_context_provider,
         agent_review_summary_provider=AgentReviewSummaryProvider(provider),
+        agent_answer_provider=GroundedAgentAnswerProvider(provider),
         agent_review_context_registry=default_agent_review_context_registry(),
         domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
+        maintenance_lineage_query=maintenance_lineage_query,
+        company_context_query=company_context_repository,
+        runtime_asset_detail_service=runtime_asset_detail_service,
+        workspace_id=MANUFACTURING_WORKSPACE,
     )
 
 
@@ -191,6 +248,15 @@ def get_service() -> ManufacturingPredictiveMaintenanceService:
     # first service is cached, exhausting low-limit Team DB roles.
     with _SERVICE_BUILD_LOCK:
         return _cached_manufacturing_service(database_target())
+
+
+@lru_cache(maxsize=1)
+def get_operational_decision_support_service() -> OperationalDecisionSupportService:
+    target = database_target()
+    if is_postgresql(target):
+        return PersistedOperationalDecisionSupportService(ROOT, database_url=str(target))
+    return PersistedOperationalDecisionSupportService(ROOT, Path(target))
+
 
 def _password_hasher() -> PasswordHasher:
     return PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1, hash_len=32, salt_len=16)
@@ -269,16 +335,31 @@ def build_live_predictive_maintenance_service(
     from app.infra.generator_runtime_pipeline import GeneratorRuntimePipelineClient
 
     target = database_url or database_target()
+    enqueue_client = GeneratorRuntimePipelineClient()
     shared = {
         "predictor_factory": configured_predictor,
         "artifact_builder": build_product_result_artifact,
     }
     return LivePredictiveMaintenanceService(
-        dataset=LiveDatasetIngestionAdapter(target, **shared),
-        diagnosis=LiveDiagnosisApplicationAdapter(**shared),
+        dataset=LiveDatasetIngestionAdapter(
+            target,
+            **shared,
+            allow_accelerated_simulation=os.getenv(
+                "ONTOLOGY_DASHBOARD_ALLOW_ACCELERATED_SIMULATION", "0"
+            ).lower()
+            in {"1", "true", "yes"},
+        ),
+        diagnosis=LiveDiagnosisApplicationAdapter(
+            snapshot_root=runtime_pipeline_input_root,
+            enqueue_client=enqueue_client,
+            simulation_session_id=(
+                os.getenv("ONTOLOGY_DASHBOARD_SIMULATION_SESSION_ID", "").strip()
+                or None
+            ),
+        ),
         maintenance=LiveMaintenanceOverlayAdapter(
             snapshot_root=runtime_pipeline_input_root,
-            enqueue_client=GeneratorRuntimePipelineClient(),
+            enqueue_client=enqueue_client,
         ),
         ontology=LiveOntologyProjectionAdapter(),
     )
@@ -434,6 +515,59 @@ def get_predictive_maintenance_runtime_service() -> PredictiveMaintenanceRuntime
 
 
 @lru_cache(maxsize=1)
+def get_runtime_asset_detail_service() -> AssetDetailViewModelService | None:
+    """Return the authoritative PostgreSQL AssetDetail read boundary when available."""
+
+    target = database_target()
+    if not is_postgresql(target):
+        return None
+    from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
+
+    return AssetDetailViewModelService(
+        PostgreSQLAssetDetailReadAdapter(
+            PredictiveMaintenanceRuntimeRepository(target),
+            validate_artifact=validate_product_result_artifact,
+        )
+    )
+
+
+class _RuntimeThenDemoEvidenceProjection:
+    """Resolve production runtime evidence first and local MVP fixtures second.
+
+    The fallback is deliberately restricted to the local demonstration scope.
+    It lets the two-role MVP exercise the real Maintenance command boundary
+    without teaching Maintenance how fixture Product Results are built.
+    """
+
+    def __init__(
+        self,
+        runtime: PredictiveMaintenanceRuntimeService,
+        demo: ManufacturingPredictiveMaintenanceService,
+    ) -> None:
+        self.runtime = runtime
+        self.demo = demo
+
+    def event_evidence_projection(self, **scope: Any) -> dict[str, Any] | None:
+        projection = self.runtime.event_evidence_projection(**scope)
+        if projection is not None:
+            return projection
+        if app_environment() not in {"development", "demo", "test"}:
+            return None
+        if (
+            scope.get("project_id") != "manufacturing-demo-project"
+            or scope.get("workspace_id") != MANUFACTURING_WORKSPACE
+        ):
+            return None
+        event_id = str(scope.get("event_id") or "")
+        try:
+            if self.demo.project_id_for_event(event_id) != scope.get("project_id"):
+                return None
+            return self.demo.event_evidence_projection(event_id)
+        except KeyError:
+            return None
+
+
+@lru_cache(maxsize=1)
 def get_maintenance_loop_service() -> MaintenanceLoopService:
     """Compose the canonical Maintenance command/read boundary."""
 
@@ -454,7 +588,10 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
     diagnosis_runtime = get_predictive_maintenance_runtime_service()
     return MaintenanceLoopService(
         repository,
-        event_evidence_query=diagnosis_runtime,
+        event_evidence_query=_RuntimeThenDemoEvidenceProjection(
+            diagnosis_runtime,
+            get_service(),
+        ),
         replay_session_query=diagnosis_runtime,
         cost_basis_provider=JsonMaintenanceCostBasisProvider(
             ROOT

@@ -156,10 +156,11 @@ class ActiveModelSetService:
         return model_set
 
     def _resolve_model_id(self, base_or_id: str) -> str:
+        """Resolve legacy algorithm aliases while preserving explicit artifact IDs."""
         clean = base_or_id.strip()
-        if clean.startswith("pdm-"):
-            return clean
-        return f"pdm-{clean}"
+        if clean in {"lightgbm", "xgboost", "random_forest"}:
+            return f"pdm-{clean}"
+        return clean
 
     def update_active_model_set(
         self,
@@ -188,11 +189,16 @@ class ActiveModelSetService:
                     retryable=False,
                 )
 
-            registered_allowlist = {"lightgbm", "xgboost", "random_forest", "pdm-lightgbm", "pdm-xgboost", "pdm-random_forest"}
             for base_or_id, config in new_set.models.items():
-                if base_or_id not in registered_allowlist and self._resolve_model_id(base_or_id) not in registered_allowlist:
+                model_id = self._resolve_model_id(base_or_id)
+                if (
+                    not model_id
+                    or ".." in model_id
+                    or "/" in model_id
+                    or "\\" in model_id
+                ):
                     raise ModelSetModelNotRegisteredError(
-                        f"Model Set에 등록되지 않은 모델이 포함되어 있습니다: {base_or_id}",
+                        f"Model Set에 안전하지 않은 Model Artifact ID가 포함되어 있습니다: {base_or_id}",
                         details=[{"model": base_or_id}],
                         retryable=False,
                     )
@@ -212,7 +218,6 @@ class ActiveModelSetService:
                             details=[{"model_id": base_or_id, "version": config.model_version}],
                         )
 
-                    model_id = self._resolve_model_id(base_or_id)
                     artifact_dir = self.artifacts_dir / model_id / config.model_version
                     from systems.generator.model.publisher import (
                         ModelArtifactContractValidationError,

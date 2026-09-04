@@ -11,6 +11,8 @@ from app.infra import live_predictive_maintenance_runtime as live_runtime
 from app.infra.live_predictive_maintenance_runtime import (
     LIVE_SOURCE_VERSION,
     LiveDatasetIngestionAdapter,
+    LiveDiagnosisApplicationAdapter,
+    _materialize_live_pipeline_snapshot,
     _materialize_runtime_results,
     active_overlay_asset_ids,
     read_complete_ticks,
@@ -20,12 +22,42 @@ from app.infra.runtime_overlay_contract import expected_storage_reference
 from app.maintenance.live_service import LivePredictiveMaintenanceService
 
 
+def test_live_ingestion_adapter_keeps_wall_clock_guard_by_default() -> None:
+    adapter = LiveDatasetIngestionAdapter(
+        "postgresql://example.invalid/test",
+        predictor_factory=lambda _asset_type: None,
+        artifact_builder=lambda **_kwargs: {},
+    )
+
+    assert adapter.allow_accelerated_simulation is False
+
+
+def test_live_ingestion_adapter_can_explicitly_enable_accelerated_simulation() -> None:
+    adapter = LiveDatasetIngestionAdapter(
+        "postgresql://example.invalid/test",
+        predictor_factory=lambda _asset_type: None,
+        artifact_builder=lambda **_kwargs: {},
+        allow_accelerated_simulation=True,
+    )
+
+    assert adapter.allow_accelerated_simulation is True
+
+
 def test_macmini_compose_runs_canonical_live_worker() -> None:
     root = Path(__file__).resolve().parents[1]
     compose = (root / "infra" / "macmini" / "docker-compose.yml").read_text(encoding="utf-8")
 
     assert 'command: ["python", "-m", "app.live_predictive_maintenance"]' in compose
     assert "ontology_dashboard.live_predictive_maintenance" not in compose
+    assert "generator-runtime:" in compose
+    assert 'entrypoint: ["python", "-m", "uvicorn"]' in compose
+    assert 'command: ["systems.generator.app.main:app", "--host", "0.0.0.0", "--port", "8000"]' in compose
+    assert 'GENERATOR_RUNTIME_PREDICTION_ENABLED: "true"' in compose
+    assert "GENERATOR_PIPELINE_INPUT_ROOTS: /runtime-pipeline-input" in compose
+    assert "GENERATOR_PREDICTION_RESULT_URL: http://backend:8000/internal/prediction-results" in compose
+    assert "PREDICTION_RESULT_INGEST_TOKEN is required" in compose
+    assert "http://generator-runtime:8000/internal/runtime-pipeline/enqueue" in compose
+    assert "generator-active-model-set.json:/data/models/active-model-set.json:ro" in compose
     assert "${GEN_DATA_RUNTIME_OUTPUT_ROOT}:/gen-data-runtime:ro" in compose
     assert "${RUNTIME_PIPELINE_INPUT_ROOT}:/runtime-pipeline-input" in compose
     assert "${RUNTIME_PIPELINE_INPUT_ROOT}:/runtime-pipeline-input:ro" in compose
@@ -47,12 +79,159 @@ def test_runtime_product_result_materialization_never_deletes_history() -> None:
         assert f"DELETE FROM {table}" not in implementation
 
 
+def test_live_pipeline_snapshot_uses_only_cadence_aligned_observations() -> None:
+    implementation = inspect.getsource(live_runtime._live_pipeline_observation_rows)
+
+    assert "MOD(EXTRACT(EPOCH FROM observed_at)::bigint, 600) = 0" in implementation
+    assert "lookback_rows = max(minimum_history_rows, minimum_history_rows * 8)" in implementation
+    assert "latest_continuous_window" in implementation
+
+
+def test_macmini_generator_active_model_set_pins_both_equipment_families() -> None:
+    root = Path(__file__).resolve().parents[1]
+    payload = json.loads(
+        (root / "infra" / "macmini" / "generator-active-model-set.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert payload["model_set_id"] == "hanbit-live-reliability"
+    assert payload["models"] == {
+        "cnc-failure-risk": {
+            "model_version": "cnc-random-forest-v3-f898a33ade7f",
+            "required": True,
+        },
+        "compressor-failure-risk": {
+            "model_version": "compressor-random-forest-v3-138e75c0f721",
+            "required": True,
+        },
+    }
+
+
 def _write(path, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
         encoding="utf-8",
     )
+
+
+def test_live_pipeline_snapshot_is_content_addressed_and_immutable(tmp_path):
+    rows = [
+        {
+            "contract_version": "gen-data-sensor-observation-v2",
+            "schema_version": "2",
+            "source_kind": "live_sensor",
+            "asset_id": "CNC-1",
+            "asset_type": "cnc",
+            "observed_at": "2026-08-18T05:30:00+00:00",
+            "tool_wear_min": 10.0,
+        }
+    ]
+
+    first = _materialize_live_pipeline_snapshot(tmp_path, rows)
+    second = _materialize_live_pipeline_snapshot(tmp_path, rows)
+
+    assert first == second
+    assert first["job_id"].startswith("live-sensor-")
+    assert Path(first["source_uri"]).read_text(encoding="utf-8").count("\n") == 1
+
+
+def test_live_diagnosis_adapter_enqueues_ready_snapshot(tmp_path, monkeypatch):
+    rows = [
+        {
+            "contract_version": "gen-data-sensor-observation-v2",
+            "schema_version": "2",
+            "source_kind": "live_sensor",
+            "asset_id": "CNC-1",
+            "asset_type": "cnc",
+            "observed_at": "2026-08-18T05:30:00+00:00",
+            "tool_wear_min": 10.0,
+        }
+    ]
+    monkeypatch.setattr(
+        live_runtime,
+        "_live_pipeline_observation_rows",
+        lambda *_args, **_kwargs: (rows, {"CNC-1": 36}),
+    )
+
+    class EnqueueClient:
+        def __init__(self):
+            self.payload = None
+
+        def enqueue(self, payload):
+            self.payload = payload
+            return {"job_id": payload["job_id"], "status": "queued"}
+
+    client = EnqueueClient()
+    adapter = LiveDiagnosisApplicationAdapter(
+        snapshot_root=tmp_path,
+        enqueue_client=client,
+    )
+    result = adapter.materialize_live_results(
+        {
+            "database_url": "postgresql://backend/live",
+            "dataset_id": "dataset-1",
+            "dataset_version_id": "version-1",
+            "active_overlay_assets": set(),
+        }
+    )
+
+    assert result["status"] == "queued"
+    assert result["ready_assets"] == 1
+    assert client.payload["source_kind"] == "live_sensor"
+    assert client.payload["lineage"] == {}
+
+
+def test_live_diagnosis_adapter_preserves_source_simulation_session(
+    tmp_path, monkeypatch
+):
+    rows = [
+        {
+            "contract_version": "gen-data-sensor-observation-v2",
+            "schema_version": "2",
+            "source_kind": "live_sensor",
+            "asset_id": "CNC-1",
+            "asset_type": "cnc",
+            "observed_at": "2026-08-18T05:30:00+00:00",
+            "tool_wear_min": 10.0,
+        }
+    ]
+    monkeypatch.setattr(
+        live_runtime,
+        "_live_pipeline_observation_rows",
+        lambda *_args, **_kwargs: (rows, {"CNC-1": 36}),
+    )
+
+    class EnqueueClient:
+        def __init__(self):
+            self.payload = None
+
+        def enqueue(self, payload):
+            self.payload = payload
+            return {"job_id": payload["job_id"], "status": "queued"}
+
+    client = EnqueueClient()
+    adapter = LiveDiagnosisApplicationAdapter(
+        snapshot_root=tmp_path,
+        enqueue_client=client,
+        simulation_session_id="local-realtime-20260903T010203Z",
+    )
+
+    adapter.materialize_live_results(
+        {
+            "database_url": "postgresql://backend/live",
+            "dataset_id": "dataset-1",
+            "dataset_version_id": "version-1",
+            "active_overlay_assets": set(),
+        }
+    )
+
+    assert client.payload["lineage"] == {
+        "simulation_session_id": "local-realtime-20260903T010203Z"
+    }
+    assert client.payload["job_id"].startswith("live-sensor-")
+    assert "-session-" in client.payload["job_id"]
 
 
 def test_read_complete_ticks_ignores_half_written_cross_line_tick(tmp_path):
@@ -74,6 +253,41 @@ def test_read_complete_ticks_ignores_half_written_cross_line_tick(tmp_path):
 
     assert [tick[0] for tick in ticks] == [datetime(2026, 8, 18, 5, 30, tzinfo=timezone.utc)]
     assert {row["asset_id"] for row in ticks[0][1]} == {"CMP-1", "CNC-1"}
+
+
+def test_read_complete_ticks_supports_current_gen_data_run_output(tmp_path):
+    observed_at = "2026-08-18T05:30:00+00:00"
+    _write(
+        tmp_path / "runs/run-1/source/sensor_records.jsonl",
+        [
+            {
+                "schema_version": "2",
+                "run_id": "run-1",
+                "sequence": 1,
+                "asset_id": "CNC-1",
+                "asset_type": "cnc",
+                "site_id": "S01",
+                "cell_id": "L01",
+                "observed_at": observed_at,
+                "generator_version": "test",
+                "measurements": {
+                    "is_operating": 1,
+                    "operating_state": "running",
+                    "product_type": "M",
+                    "air_temperature_k": 300.0,
+                    "process_temperature_k": 310.0,
+                    "rotational_speed_rpm": 1500.0,
+                    "torque_nm": 40.0,
+                    "tool_wear_min": 10.0,
+                },
+            }
+        ],
+    )
+
+    ticks = read_complete_ticks(tmp_path, expected_asset_ids={"CNC-1"})
+
+    assert ticks[0][1][0]["tool_wear_min"] == 10.0
+    assert "measurements" not in ticks[0][1][0]
 
 
 def test_read_complete_ticks_respects_ingestion_checkpoint(tmp_path):

@@ -14,6 +14,7 @@ import {
 import { useState, type ReactNode } from "react";
 import type { OperationsContextModel, OperationsDashboardMode, OperationsRoleLens, OperationsView } from "../api/operationsContracts";
 import { OperationsFreshness } from "../components/OperationsUi";
+import { HanbitLogo } from "../../../ui/foundry/HanbitLogo";
 
 const VIEW_LABELS: Record<OperationsView, { label: string; description: string }> = {
   overview: { label: "Overview", description: "운영 상황판" },
@@ -48,6 +49,12 @@ const WORKFLOW_SYSTEM_ITEM = {
   icon: TerminalSquare,
 };
 
+export function operationsNavigationItems(dashboard: OperationsDashboardMode) {
+  return dashboard === "workflow"
+    ? [...ROLE_SCREENS, WORKFLOW_SYSTEM_ITEM]
+    : NAV_ITEMS;
+}
+
 export function OperationsShell({
   context,
   activeView,
@@ -58,7 +65,7 @@ export function OperationsShell({
   onRefresh,
   refreshing,
   refreshIntervalSeconds,
-  canReadSystemLogs,
+  canReadSystemLogs: _canReadSystemLogs,
   onLogout,
   children,
 }: {
@@ -77,9 +84,7 @@ export function OperationsShell({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const workflowMode = dashboard === "workflow";
-  const navItems = canReadSystemLogs
-    ? NAV_ITEMS
-    : NAV_ITEMS.filter((item) => item.id !== "system");
+  const navItems = operationsNavigationItems(dashboard);
   const roleMeta = ROLE_LABELS[role];
   const active = workflowMode && activeView === "overview" ? roleMeta : VIEW_LABELS[activeView];
   const headingDetail = workflowMode && activeView === "overview"
@@ -99,13 +104,13 @@ export function OperationsShell({
     <main className="operations-app">
       <header className="operations-global-header">
         <div className="operations-brand">
-          <span className="operations-brand-mark"><LayoutDashboard size={19} /></span>
+          <span className="operations-brand-mark hanbit-brand-mark"><HanbitLogo /></span>
           <div><span>Ontology Dashboard</span><strong>Predictive Maintenance</strong></div>
         </div>
         <div className="operations-header-context" aria-label="현재 운영 문맥">
           <div><span>Project</span><strong>{context.projectName}</strong></div>
           <div><span>Workspace</span><strong>{context.workspaceName}</strong></div>
-          <div className="is-dataset"><span>Dataset</span><strong title={context.datasetLabel}>Canonical V3.1 · {context.datasetVersionId}</strong></div>
+          <div className="is-dataset"><span>Dataset</span><strong title={context.datasetLabel}>{context.sourceVersion ?? "Dataset"} · {context.datasetVersionId}</strong></div>
         </div>
         <div className="operations-header-actions">
           {!workflowMode ? (
@@ -146,9 +151,11 @@ export function OperationsShell({
             <p>{workflowMode ? "역할별 화면 안에서 Overview, Assets, 작업요청 흐름을 한 번에 처리합니다." : "Analysis 없이 운영 판단부터 점검 보고까지 연결합니다."}</p>
           </div>
           <nav>
-            {(workflowMode ? ROLE_SCREENS : navItems).map((item) => {
+            {navItems.map((item) => {
               const Icon = item.icon;
-              const activeItem = workflowMode ? activeView === "overview" && role === item.id : activeView === item.id;
+              const activeItem = workflowMode && item.id !== "system"
+                ? activeView === "overview" && role === item.id
+                : activeView === item.id;
               return (
                 <button
                   type="button"
@@ -156,7 +163,7 @@ export function OperationsShell({
                   className={activeItem ? "is-active" : ""}
                   aria-current={activeItem ? "page" : undefined}
                   onClick={() => {
-                    if (workflowMode) {
+                    if (workflowMode && item.id !== "system") {
                       onRoleChange(item.id as OperationsRoleLens);
                     } else {
                       onNavigate(item.id as OperationsView);
@@ -169,20 +176,6 @@ export function OperationsShell({
                 </button>
               );
             })}
-            {workflowMode && canReadSystemLogs ? (
-              <button
-                type="button"
-                className={activeView === "system" ? "is-active" : ""}
-                aria-current={activeView === "system" ? "page" : undefined}
-                onClick={() => {
-                  onNavigate(WORKFLOW_SYSTEM_ITEM.id);
-                  setMobileOpen(false);
-                }}
-              >
-                <WORKFLOW_SYSTEM_ITEM.icon size={17} />
-                <div><strong>{WORKFLOW_SYSTEM_ITEM.label}</strong><span>{WORKFLOW_SYSTEM_ITEM.description}</span></div>
-              </button>
-            ) : null}
           </nav>
           <div className="operations-nav-footnote"><strong>{workflowMode ? "업무 흐름" : "Analysis 제외"}</strong><span>{workflowMode ? "역할별 업무판은 하나의 화면에서 설비, 근거, 작업요청을 연결합니다." : "모델 탐색·Canvas·관리자 Surface는 현재 운영 화면 범위가 아닙니다."}</span></div>
         </aside>

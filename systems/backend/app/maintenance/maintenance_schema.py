@@ -163,7 +163,7 @@ class OperationalRecommendedAction(ScopedRecord):
             self.authored_by,
             self.authored_at,
         )
-        cost_selection_fields = (
+        cost_reference_fields = (
             self.source_cost_analysis_id,
             self.source_cost_option_id,
             self.source_action_candidate_id,
@@ -171,7 +171,7 @@ class OperationalRecommendedAction(ScopedRecord):
         if self.recommendation_origin == "product_result_projection":
             if any(
                 value is not None
-                for value in (*manual_required_fields, *cost_selection_fields)
+                for value in (*manual_required_fields, *cost_reference_fields)
             ):
                 raise ValueError(
                     "product_result_projection cannot contain operations_manual lineage"
@@ -181,11 +181,18 @@ class OperationalRecommendedAction(ScopedRecord):
             raise ValueError(
                 "operations_manual requires inspection, action, and author lineage"
             )
-        if any(value is not None for value in cost_selection_fields) and any(
-            value is None for value in cost_selection_fields
+        if (self.source_cost_analysis_id is None) != (
+            self.source_action_candidate_id is None
         ):
             raise ValueError(
-                "cost-selected operations_manual requires complete cost lineage"
+                "cost-referenced operations_manual requires analysis and action candidate lineage"
+            )
+        if (
+            self.source_cost_option_id is not None
+            and self.source_cost_analysis_id is None
+        ):
+            raise ValueError(
+                "cost-selected operations_manual requires analysis and action candidate lineage"
             )
         if self.kind != self.action_code:
             raise ValueError("operations_manual kind must match action_code")
@@ -271,6 +278,8 @@ class WorkOrder(ScopedRecord):
     asset_type: str = Field(min_length=1, max_length=160)
     work_type: WorkOrderType
     status: WorkOrderStatus = WorkOrderStatus.REQUESTED
+    assigned_to: str | None = Field(default=None, min_length=1, max_length=240)
+    assigned_at: datetime | None = None
     idempotency_key: str = Field(min_length=8, max_length=200)
     authorization: WorkOrderAuthorization
 
@@ -280,6 +289,16 @@ class WorkOrder(ScopedRecord):
             raise ValueError("work order type must match its authorization")
         if self.asset_id != self.equipment_id:
             raise ValueError("Operations work order requires equipment_id = asset_id")
+        if self.work_type is WorkOrderType.INSPECTION:
+            if self.status is WorkOrderStatus.REQUESTED:
+                if self.assigned_to is not None or self.assigned_at is not None:
+                    raise ValueError("requested inspection work order cannot be assigned")
+            elif self.status in {WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS} and (
+                self.assigned_to is None or self.assigned_at is None
+            ):
+                raise ValueError("accepted inspection work order requires an assignee")
+            elif (self.assigned_to is None) != (self.assigned_at is None):
+                raise ValueError("inspection assignment identity and timestamp must be paired")
         return self
 
 

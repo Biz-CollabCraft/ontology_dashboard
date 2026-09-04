@@ -82,6 +82,12 @@ class _FixtureOperationContextAdapter:
             return None
 
         for context in self.contexts:
+            if not {
+                "source_type",
+                "production_plan",
+                "capacity_model",
+            }.issubset(context):
+                continue
             scope = context.get("scope") or {}
             if str(scope.get("project_id") or "") != project_id:
                 continue
@@ -394,7 +400,7 @@ class _FixtureOntologyContextAdapter:
 
 
 class ManufacturingFixtureReviewContextAdapter:
-    """Fixture-backed manufacturing domain adapter used by the Operations demo."""
+    """Reference-backed manufacturing domain adapter used by Operations."""
 
     adapter_id = "manufacturing-fixture-review-context"
 

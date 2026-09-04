@@ -22,6 +22,8 @@ from .api_schema import (
     MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
+    RecommendationInput,
+    RecommendationInputSource,
     ToolReplacementCostAnalysisCreateRequest,
 )
 from .cost_analysis_schema import (
@@ -41,6 +43,7 @@ from .integration import (
     ToolReplacementStatePatch,
 )
 from .maintenance_domain import (
+    SourceSimulationSessionUnavailable,
     apply_recommendation_decision,
     create_inspection_work_order,
     create_operations_manual_recommendation,
@@ -151,14 +154,14 @@ class MaintenanceLoopService:
         }
 
     @classmethod
-    def _require_snapshot_basis_match(
+    def _snapshot_basis_mismatches(
         cls,
         *,
         expected: EvidenceSnapshotBasis | None,
         projection: Mapping[str, Any],
-    ) -> None:
+    ) -> list[str]:
         if expected is None:
-            return
+            return []
         current = cls._projection_snapshot_basis(projection)
         mismatched = []
         for field, expected_value in expected.model_dump(mode="json").items():
@@ -166,9 +169,22 @@ class MaintenanceLoopService:
                 continue
             if current.get(field) != expected_value:
                 mismatched.append(field)
+        return sorted(mismatched)
+
+    @classmethod
+    def _require_snapshot_basis_match(
+        cls,
+        *,
+        expected: EvidenceSnapshotBasis | None,
+        projection: Mapping[str, Any],
+    ) -> None:
+        mismatched = cls._snapshot_basis_mismatches(
+            expected=expected,
+            projection=projection,
+        )
         if mismatched:
             raise ValueError(
-                f"snapshot_basis mismatch: {', '.join(sorted(mismatched))}"
+                f"snapshot_basis mismatch: {', '.join(mismatched)}"
             )
 
     @classmethod
@@ -210,7 +226,7 @@ class MaintenanceLoopService:
             decision_id=cls._required_text(record, "recommendation_decision_id"),
         )
 
-    def _inspection_source(
+    def _event_evidence_projection(
         self,
         *,
         organization_id: str,
@@ -218,7 +234,7 @@ class MaintenanceLoopService:
         workspace_id: str,
         event_id: str,
         snapshot_basis: EvidenceSnapshotBasis | None = None,
-    ) -> tuple[EquipmentIdentity, OperationalDecisionKind, dict[str, str]]:
+    ) -> Mapping[str, Any]:
         projection = self.event_evidence_query.event_evidence_projection(
             organization_id=organization_id,
             project_id=project_id,
@@ -234,6 +250,45 @@ class MaintenanceLoopService:
         if self._required_text(projection, "event_id") != event_id:
             raise ValueError("Event Evidence Projection event_id mismatch")
 
+        if snapshot_basis is not None:
+            mismatched = self._snapshot_basis_mismatches(
+                expected=snapshot_basis,
+                projection=projection,
+            )
+            if mismatched:
+                projection = self.event_evidence_query.event_evidence_projection(
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    event_id=event_id,
+                )
+                if projection is None:
+                    raise KeyError(event_id)
+                if projection.get("contract_type") != "event_evidence_projection":
+                    raise ValueError(
+                        "Diagnosis query returned a non-canonical evidence contract"
+                    )
+                if projection.get("schema_version") != "event-evidence-projection-v1":
+                    raise ValueError(
+                        "unsupported Event Evidence Projection schema version"
+                    )
+                if self._required_text(projection, "event_id") != event_id:
+                    raise ValueError("Event Evidence Projection event_id mismatch")
+                self._require_snapshot_basis_match(
+                    expected=snapshot_basis,
+                    projection=projection,
+                )
+        return projection
+
+    def _recommendation_input_from_projection(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        event_id: str,
+        projection: Mapping[str, Any],
+    ) -> RecommendationInput:
         subject = projection.get("subject")
         artifact = projection.get("artifact_reference")
         assessment = projection.get("assessment")
@@ -288,25 +343,12 @@ class MaintenanceLoopService:
         lineage = provenance.get("lineage")
         if not isinstance(lineage, Mapping):
             raise ValueError("Event Evidence Projection provenance.lineage is required")
-        self._require_snapshot_basis_match(
-            expected=snapshot_basis,
-            projection={
-                **projection,
-                "artifact_reference": artifact,
-                "provenance": provenance,
-            },
-        )
-        source = {
-            "source_product_result_id": self._required_text(artifact, "artifact_id"),
-            "source_evidence_id": self._required_text(projection, "evidence_id"),
-            "source_action_id": source_action_id,
-            "source_schema_version": self._required_text(
-                artifact, "artifact_schema_version"
+        return RecommendationInput(
+            event_id=event_id,
+            snapshot_basis=EvidenceSnapshotBasis.model_validate(
+                self._projection_snapshot_basis(projection)
             ),
-            "source_policy_version": self._required_text(lineage, "policy_version"),
-        }
-        return (
-            EquipmentIdentity(
+            equipment=EquipmentIdentity(
                 organization_id=organization_id,
                 project_id=project_id,
                 workspace_id=workspace_id,
@@ -314,8 +356,64 @@ class MaintenanceLoopService:
                 equipment_id=equipment_id,
                 asset_type=asset_type,
             ),
-            decision,
-            source,
+            operational_decision_kind=decision,
+            source_context=RecommendationInputSource(
+                source_product_result_id=self._required_text(artifact, "artifact_id"),
+                source_evidence_id=self._required_text(projection, "evidence_id"),
+                source_action_id=source_action_id,
+                source_schema_version=self._required_text(
+                    artifact, "artifact_schema_version"
+                ),
+                source_policy_version=self._required_text(lineage, "policy_version"),
+            ),
+        )
+
+    def recommendation_input(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        event_id: str,
+        snapshot_basis: EvidenceSnapshotBasis | None = None,
+    ) -> dict[str, Any]:
+        projection = self._event_evidence_projection(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            event_id=event_id,
+            snapshot_basis=snapshot_basis,
+        )
+        return self._recommendation_input_from_projection(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            event_id=event_id,
+            projection=projection,
+        ).model_dump(mode="json")
+
+    def _inspection_source(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        event_id: str,
+        snapshot_basis: EvidenceSnapshotBasis | None = None,
+    ) -> tuple[EquipmentIdentity, OperationalDecisionKind, dict[str, str]]:
+        recommendation_input = RecommendationInput.model_validate(
+            self.recommendation_input(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                event_id=event_id,
+                snapshot_basis=snapshot_basis,
+            )
+        )
+        return (
+            recommendation_input.equipment,
+            recommendation_input.operational_decision_kind,
+            recommendation_input.source_context.model_dump(mode="json"),
         )
 
     def request_inspection(
@@ -396,14 +494,22 @@ class MaintenanceLoopService:
         )
         if work_order.work_type is not WorkOrderType.INSPECTION:
             raise ValueError("work order is not an inspection")
+        transition_time = transitioned_at or datetime.now(timezone.utc)
+        updates: dict[str, Any] = {
+            "status": transition_work_order(work_order.status, target)
+        }
+        if target is WorkOrderStatus.APPROVED:
+            updates.update(assigned_to=actor_id, assigned_at=transition_time)
+        elif work_order.assigned_to != actor_id:
+            raise PermissionError("only the assigned field operator can start this inspection")
         transitioned = work_order.model_copy(
-            update={"status": transition_work_order(work_order.status, target)}
+            update=updates
         )
         return self.repository.transition_inspection_work_order(
             work_order=transitioned,
             actor_id=actor_id,
             actor_display_name=actor_display_name,
-            transitioned_at=transitioned_at or datetime.now(timezone.utc),
+            transitioned_at=transition_time,
             request_idempotency_key=idempotency_key,
             request_fingerprint=self._fingerprint(
                 f"inspection.{target.value}",
@@ -414,6 +520,27 @@ class MaintenanceLoopService:
                 },
             ),
         )
+
+    def list_open_inspection_work_orders(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+    ) -> dict[str, Any]:
+        work_orders = self.repository.list_open_inspection_work_orders(
+            workspace_id=workspace_id,
+        )
+        for work_order in work_orders:
+            self._require_scope(
+                work_order,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+            )
+        return {
+            "items": [item.model_dump(mode="json") for item in work_orders]
+        }
 
     def complete_inspection(
         self,
@@ -440,6 +567,8 @@ class MaintenanceLoopService:
             project_id=project_id,
             workspace_id=workspace_id,
         )
+        if work_order.assigned_to != actor_id:
+            raise PermissionError("only the assigned field operator can complete this inspection")
         completed_at = recorded_at or datetime.now(timezone.utc)
         completed = work_order.model_copy(
             update={
@@ -500,9 +629,6 @@ class MaintenanceLoopService:
         actor_display_name: str,
         idempotency_key: str,
         authored_at: datetime | None = None,
-        source_cost_analysis_id: str | None = None,
-        source_cost_option_id: str | None = None,
-        source_action_candidate_id: str | None = None,
     ) -> dict[str, Any]:
         inspection_result = self.repository.get_inspection_result(
             workspace_id=workspace_id,
@@ -521,7 +647,49 @@ class MaintenanceLoopService:
                 "operations manual recommendation requires maintenance_recommended inspection outcome"
             )
         action_code = MaintenanceActionCode(payload.action_code)
-        self._derive_action_candidate(inspection_result, action_code)
+        action_candidate = self._derive_action_candidate(inspection_result, action_code)
+        source_cost_analysis_id = payload.cost_analysis_id
+        source_cost_option_id = payload.cost_option_id
+        source_action_candidate_id = payload.action_candidate_id
+        if (source_cost_analysis_id is None) != (source_action_candidate_id is None):
+            raise ValueError(
+                "manual recommendation cost reference requires analysis and action candidate"
+            )
+        if source_cost_option_id is not None and source_cost_analysis_id is None:
+            raise ValueError(
+                "manual recommendation cost option requires analysis and action candidate"
+            )
+        if source_cost_analysis_id is not None:
+            if source_action_candidate_id != action_candidate.action_candidate_id:
+                raise ValueError("manual recommendation action candidate mismatch")
+            cost_analysis = self.repository.get_cost_analysis(
+                workspace_id=workspace_id,
+                analysis_id=str(source_cost_analysis_id),
+            )
+            if cost_analysis is None:
+                raise KeyError(source_cost_analysis_id)
+            self._require_scope(
+                cost_analysis,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+            )
+            if cost_analysis.based_on.inspection_result_id != inspection_result_id:
+                raise ValueError("manual recommendation cost analysis lineage mismatch")
+            matching_options = tuple(
+                option
+                for option in cost_analysis.options
+                if option.action_candidate_id == action_candidate.action_candidate_id
+                and option.action_code is action_code
+            )
+            if not matching_options:
+                raise ValueError("manual recommendation cost analysis action mismatch")
+            if source_cost_option_id is not None and not any(
+                option.option_id == source_cost_option_id for option in matching_options
+            ):
+                raise ValueError(
+                    "manual recommendation cost option does not exist or mismatches action"
+                )
         inspection_work_order = self.repository.get_work_order(
             workspace_id=workspace_id,
             work_order_id=inspection_result.work_order_id,
@@ -949,13 +1117,40 @@ class MaintenanceLoopService:
         if self.replay_session_query is None:
             raise ValueError("Diagnosis replay session validation is unavailable")
 
-        replay_binding = self.replay_session_query.resolve_maintenance_replay_session(
+        recommendation_id = work_order.authorization.recommendation_id
+        if recommendation_id is None:
+            raise ValueError("maintenance work order has no recommendation authorization")
+        recommendation = self.repository.get_recommendation(
+            workspace_id=workspace_id,
+            recommendation_id=recommendation_id,
+        )
+        if recommendation is None or recommendation.action_code is None:
+            raise ValueError("authorized maintenance recommendation is unavailable")
+
+        source_binding = self.replay_session_query.resolve_maintenance_source_session(
             organization_id=organization_id,
             project_id=project_id,
             workspace_id=workspace_id,
-            session_id=payload.simulation_session_id,
+            source_product_result_id=recommendation.source_product_result_id,
             equipment_id=work_order.equipment_id,
         )
+        if source_binding is not None:
+            replay_binding = source_binding
+        elif payload.simulation_session_id is not None:
+            # Historical Product Results may predate source-session lineage.
+            # Compatibility never overrides lineage already recorded by a
+            # current live Product Result.
+            replay_binding = self.replay_session_query.resolve_maintenance_replay_session(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                session_id=payload.simulation_session_id,
+                equipment_id=work_order.equipment_id,
+            )
+        else:
+            raise SourceSimulationSessionUnavailable(
+                "Product Result does not contain source simulation session lineage"
+            )
         if not isinstance(replay_binding, Mapping):
             raise ValueError("Diagnosis returned an invalid replay session binding")
         self._require_row_scope(
@@ -969,7 +1164,10 @@ class MaintenanceLoopService:
         simulation_session_id = self._required_text(
             replay_binding, "simulation_session_id"
         )
-        if simulation_session_id != payload.simulation_session_id:
+        if (
+            payload.simulation_session_id is not None
+            and simulation_session_id != payload.simulation_session_id
+        ):
             raise ValueError("replay session canonical identity mismatch")
 
         # Build the requested target without trusting caller-supplied lineage.
@@ -977,15 +1175,6 @@ class MaintenanceLoopService:
         # and handles an identical Idempotency-Key replay before transition
         # validation.
         approved = work_order.model_copy(update={"status": WorkOrderStatus.APPROVED})
-        recommendation_id = work_order.authorization.recommendation_id
-        if recommendation_id is None:
-            raise ValueError("maintenance work order has no recommendation authorization")
-        recommendation = self.repository.get_recommendation(
-            workspace_id=workspace_id,
-            recommendation_id=recommendation_id,
-        )
-        if recommendation is None or recommendation.action_code is None:
-            raise ValueError("authorized maintenance recommendation is unavailable")
         action_code = MaintenanceActionCode(recommendation.action_code)
         action = plan_maintenance_action(
             work_order=approved,
@@ -1216,6 +1405,44 @@ class MaintenanceLoopService:
             ),
         )
 
+    def _post_maintenance_runtime_state(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        lineage: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        maintenance_events = list(lineage.get("maintenance_events") or [])
+        if not maintenance_events or self.replay_session_query is None:
+            return None
+        resolver = getattr(
+            self.replay_session_query,
+            "post_maintenance_runtime_status",
+            None,
+        )
+        if not callable(resolver):
+            return None
+        maintenance_event_id = maintenance_events[-1].get("maintenance_event_id")
+        work_orders = list(lineage.get("work_orders") or [])
+        asset_id = next(
+            (
+                item.get("asset_id") or item.get("equipment_id")
+                for item in reversed(work_orders)
+                if item.get("asset_id") or item.get("equipment_id")
+            ),
+            None,
+        )
+        if not maintenance_event_id or not asset_id:
+            return None
+        return resolver(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=str(asset_id),
+            maintenance_event_id=str(maintenance_event_id),
+        )
+
     def event_lineage(
         self,
         *,
@@ -1246,6 +1473,16 @@ class MaintenanceLoopService:
                 ):
                     if record.get(field) != expected:
                         raise ValueError(f"{field} scope mismatch")
+        runtime_state = self._post_maintenance_runtime_state(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            lineage=lineage,
+        )
+        lineage["runtime_state"] = runtime_state
+        lineage["runtime_status"] = (
+            runtime_state.get("status") if runtime_state else None
+        )
         return lineage
 
 

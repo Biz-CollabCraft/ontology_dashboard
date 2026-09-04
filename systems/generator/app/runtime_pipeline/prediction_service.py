@@ -32,6 +32,23 @@ logger = logging.getLogger(__name__)
 REGISTERED_BASE_MODELS = ["lightgbm", "xgboost", "random_forest"]
 
 
+def _fallback_history_requirement_version(model_id: str, model_version: str) -> str:
+    """Return a stable history-contract version for legacy runtime artifacts.
+
+    The Mac mini runtime model artifacts published before the generator strict
+    contract included feature/label versions and history requirement checksum,
+    but some omitted the textual history_requirement_version.  Preserve the
+    strict checksum validation downstream while filling only that missing version
+    label from the model family.
+    """
+    identity = f"{model_id} {model_version}".lower()
+    if "cnc" in identity:
+        return "cnc-history-requirement-v1"
+    if "compressor" in identity:
+        return "compressor-history-requirement-v1"
+    return "pdm-history-v1"
+
+
 @dataclass
 class LoadedModelArtifact:
     model_id: str
@@ -71,9 +88,9 @@ class PredictionService:
 
     def resolve_model_id(self, base_or_id: str) -> str:
         clean = base_or_id.strip()
-        if clean.startswith("pdm-"):
-            return clean
-        return f"pdm-{clean}"
+        if clean in {"lightgbm", "xgboost", "random_forest"}:
+            return f"pdm-{clean}"
+        return clean
 
     def load_active_artifact(
         self,
@@ -168,7 +185,7 @@ class PredictionService:
         asset_ids: Optional[list[str]] = None,
         active_model_set: Optional[ActiveModelSet] = None,
     ) -> list[InternalModelPredictionResult]:
-        """Run pure model inference for each equipment over all active models without thresholding."""
+        """Run pure inference for the applicable models pinned by the Active Model Set."""
         from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelSet
         results: list[InternalModelPredictionResult] = []
 
@@ -184,7 +201,27 @@ class PredictionService:
         if active_model_set:
             model_set_id = active_model_set.model_set_id
             model_set_version = active_model_set.model_set_version
-            for bm, cfg in active_model_set.models.items():
+            for bm in base_models:
+                cfg = active_model_set.models.get(bm)
+                if cfg is None:
+                    resolved = self.resolve_model_id(bm)
+                    for configured_name, candidate in active_model_set.models.items():
+                        if self.resolve_model_id(configured_name) == resolved:
+                            cfg = candidate
+                            break
+                if cfg is None:
+                    raise PipelineModelPredictionFailedError(
+                        f"요청된 모델 '{bm}'이 Active Model Set에 포함되어 있지 않습니다.",
+                        details=[
+                            {
+                                "base_model": bm,
+                                "model_set_id": model_set_id,
+                                "model_set_version": model_set_version,
+                                "active_models": sorted(active_model_set.models),
+                            }
+                        ],
+                        retryable=False,
+                    )
                 model_items.append((bm, cfg.model_version, cfg.required))
         else:
             raise PipelineModelPredictionFailedError(
@@ -247,6 +284,7 @@ class PredictionService:
                 artifact.manifest.get("history_requirement_version")
                 or artifact.history_requirement.get("history_requirement_version")
                 or artifact.history_requirement.get("version")
+                or _fallback_history_requirement_version(model_id, artifact.model_version)
             )
 
             missing_versions = [

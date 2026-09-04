@@ -45,16 +45,16 @@
       "assumed_execution_at": "2026-08-31T18:00:00Z",
       "labor_rate_type": "night",
       "labor_rate_base_minor_per_minute": 438,
-      "calculation_status": "insufficient",
+      "calculation_status": "calculated",
       "parts_cost": {"low_minor": 12251, "base_minor": 12251, "high_minor": 12251},
       "labor_cost": {"low_minor": 2190, "base_minor": 4380, "high_minor": 6570},
       "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
       "production_loss": {"low_minor": 12690, "base_minor": 31740, "high_minor": 57105},
-      "expected_failure_loss": null,
-      "total_expected_cost": null,
+      "expected_failure_loss": {"low_minor": 34706, "base_minor": 76205, "high_minor": 172180},
+      "total_expected_cost": {"low_minor": 61837, "base_minor": 124576, "high_minor": 248106},
       "expected_downtime": {"low_minutes": 15, "base_minutes": 30, "high_minutes": 45},
-      "confidence": "insufficient",
-      "missing_inputs": ["expected_failure_loss"]
+      "confidence": "low",
+      "missing_inputs": []
     },
     {
       "option_id": "option-tool-reinspect",
@@ -104,7 +104,9 @@
     "External service cost is zero only for an in-house replacement with a spare insert and no vendor dispatch.",
     "Immediate and planned cost-calculation assumptions are derived from Backend calculated_at; the planned window assumption is 12 hours later and is not an approved Work Order schedule.",
     "Asia/Seoul 22:00-06:00 uses a single 50% night-work demo premium (438 KRW/min) without overtime or holiday stacking.",
-    "Planned and reinspect scenarios remain insufficient because no authoritative future probability is available."
+    "The no-action probability 0.82 comes from the source Product Result, not a fixed cost fixture.",
+    "The 12-hour planned-window probability 0.515 is the arithmetic midpoint of the source Product Result probability 0.82 and the intervention What-if assumption 0.21; it is not a model Prediction.",
+    "Reinspect remains insufficient because no governed probability or execution policy is available."
   ],
   "input_sources": [
     {
@@ -150,15 +152,33 @@
       "confidence": "low"
     },
     {
-      "input_name": "synthetic_failure_consequence_and_probability",
+      "input_name": "synthetic_failure_consequence_cost",
       "source_kind": "assumption",
-      "source_reference": "data/fixtures/maintenance_cost/tool-insert-cost-basis-v1.json#demo_policy_inputs/expected_failure_loss_minor",
+      "source_reference": "data/fixtures/maintenance_cost/tool-insert-cost-basis-v1.json#demo_policy_inputs/failure_consequence_cost_minor",
+      "confidence": "low"
+    },
+    {
+      "input_name": "source_product_result_failure_probability",
+      "source_kind": "calculated",
+      "source_reference": "product-result:product-result-cnc-001#/failure_probability",
+      "confidence": "medium"
+    },
+    {
+      "input_name": "tool_replacement_intervention_probability",
+      "source_kind": "assumption",
+      "source_reference": "data/fixtures/maintenance_cost/tool-insert-cost-basis-v1.json#demo_policy_inputs/expected_failure_loss_minor/scenario_probabilities/immediate",
+      "confidence": "low"
+    },
+    {
+      "input_name": "planned_window_midpoint_probability_policy",
+      "source_kind": "policy",
+      "source_reference": "data/fixtures/maintenance_cost/tool-insert-cost-basis-v1.json#demo_policy_inputs/expected_failure_loss_minor/scenario_probabilities/planned_window",
       "confidence": "low"
     }
   ],
   "missing_inputs": ["expected_downtime", "expected_failure_loss", "labor_duration"],
   "price_version": "tool-insert-demo-economic-basis-2026-09",
-  "calculation_policy_version": "maintenance-cost-policy-v2",
+  "calculation_policy_version": "maintenance-cost-policy-v3",
   "limitations": [
     "DECISION_SUPPORT_ONLY",
     "NOT_RECOMMENDATION",

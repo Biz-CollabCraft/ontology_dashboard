@@ -9,7 +9,10 @@
     "workflow_stages",
     "summary_reuse",
     "fallback_retry",
-    "closed_loop_boundary"
+    "domain_context_grounding",
+    "closed_loop_boundary",
+    "baseline_comparison",
+    "stability_evaluation_output"
   ],
   "minimum_release_gates": {
     "output_contract": [
@@ -38,10 +41,29 @@
       "invalid_llm_output_falls_back_to_deterministic_summary",
       "fallback_reason_is_observable"
     ],
+    "domain_context_grounding": [
+      "db_backed_maintenance_history_reaches_role_summary",
+      "future_inventory_mes_schedule_claims_are_blocked_until_source_contract",
+      "adapter_source_refs_remain_inside_packet_scope"
+    ],
     "closed_loop_boundary": [
       "ai_summary_is_read_only",
       "closed_loop_recommendation_input_is_derived_from_same_packet_snapshot",
       "no_approval_or_work_order_mutation_tool"
+    ],
+    "baseline_comparison": [
+      "B1_direct_llm_uses_minimally_normalized_raw_input",
+      "B2_uses_evidence_packet_without_workflow_orchestration",
+      "B3_uses_current_workflow_controls",
+      "same_provider_model_generation_schema_rubric_and_permissions",
+      "not_measured_and_not_applicable_are_null_and_distinct",
+      "quality_and_fault_injection_are_reported_separately"
+    ],
+    "stability_evaluation_output": [
+      "reuse_fallback_failed_stale_recovery_and_blocked_side_effect_are_separate",
+      "fallback_reason_and_validation_errors_are_counted",
+      "unmeasured_latency_token_and_cost_are_null_safe_not_measured",
+      "evaluation_row_links_summary_key_and_workflow_run_id"
     ]
   },
   "adopt_langgraph_when_any": [
@@ -58,16 +80,53 @@
   ],
   "current_context_facets": [
     "operation_context",
+    "maintenance_history_context",
     "inspection_location",
     "sop_retrieval",
     "spare_part_context",
     "similar_event_context"
   ],
+  "adoption_gate_policy": {
+    "meaning": "LangGraph, GraphRAG, Vector DB, and LlamaIndex remain eligible for production adoption when their release gates pass; they are deferred by current evidence, not rejected.",
+    "current_production_default": {
+      "workflow_engine": "simple",
+      "retrieval_source": "structured_adapter_context_inside_agent_review_packet",
+      "authority_model": "ai_read_only_closed_loop_mutation_forbidden"
+    },
+    "current_limitations": [
+      "langgraph_gate_measures_tool_trajectory_not_final_summary_quality",
+      "rag_gate_does_not_yet_measure_context_precision_recall_or_source_freshness",
+      "runtime_rag_not_bound_to_packet_snapshot_yet"
+    ]
+  },
   "independent_runtime_tool_definition": {
     "meaning": "a domain source called as a separately authorized and observable runtime tool or service, not a method on the same fixture adapter",
     "requires_separate_failure_boundary": true,
     "requires_separate_retry_policy": true,
     "requires_tool_trajectory_eval": true
+  },
+  "retrieval_runtime_decision_gate": {
+    "current_decision": "defer_production_graphrag_vector_db_llamaindex",
+    "current_runtime_source": "structured_adapter_context_inside_agent_review_packet",
+    "defer_when_all": [
+      "sop_context_is_structured_fixture_metadata",
+      "ontology_context_is_projected_as_packet_source_refs",
+      "context_precision_recall_not_yet_measured",
+      "retrieval_freshness_contract_not_yet_release_gated",
+      "packet_snapshot_alignment_is_the_primary_current_gate"
+    ],
+    "adopt_when_all": [
+      "unstructured_or_multi_version_sop_documents_enter_runtime",
+      "retrieval_context_precision_recall_becomes_release_gate",
+      "retrieved_chunks_have_source_sha256_and_freshness_metadata",
+      "retrieval_results_are_bound_to_agent_review_packet_snapshot",
+      "llm_summary_validation_rejects_uncited_retrieval_claims"
+    ],
+    "candidate_stack": [
+      "GraphRAG",
+      "Vector DB",
+      "LlamaIndex"
+    ]
   },
   "forbidden_runtime_shortcuts": [
     "direct_llm_domain_database_reads",

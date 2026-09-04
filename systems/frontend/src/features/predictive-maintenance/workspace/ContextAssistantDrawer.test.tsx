@@ -129,7 +129,8 @@ describe("ContextAssistantDrawer", () => {
   it("shows grounded live sources and cannot execute or approve work", async () => {
     await renderDrawer();
     expect(container.textContent).toContain("LLM 근거 요약");
-    expect(container.textContent).toContain("local_sop_metadata_retriever");
+    expect(container.textContent).toContain("검증된 SOP 안내 · 2");
+    expect(container.textContent).not.toContain("local_sop_metadata_retriever");
     expect(container.textContent).toContain("업무를 승인·실행하거나 workflow 상태를 변경하지 않습니다");
     expect(deterministicReliabilityAssistantAnswer(selectedContext)).toContain("규칙 기반");
     expect(deterministicReliabilityAssistantAnswer(selectedContext)).toContain("승인이나 실행 판단이 아닙니다");
@@ -146,6 +147,7 @@ describe("ContextAssistantDrawer", () => {
   it("answers priority and evidence questions from Agent Review grounding", () => {
     expect(groundedReliabilityAssistantAnswer(selectedContext, "왜 이 설비가 우선인가?")).toContain("진동 기여도가 가장 큼");
     expect(groundedReliabilityAssistantAnswer(selectedContext, "현재 핵심 근거 요약")).toContain("진동 RMS 6.2 mm/s");
-    expect(groundedReliabilityAssistantAnswer(selectedContext, "현재 핵심 근거 요약")).toContain("SOP guidance 2건");
+    expect(groundedReliabilityAssistantAnswer(selectedContext, "현재 핵심 근거 요약")).toContain("검증된 SOP 안내 2건");
+    expect(groundedReliabilityAssistantAnswer(selectedContext, "현재 핵심 근거 요약")).not.toContain("local_sop_metadata_retriever");
   });
 });

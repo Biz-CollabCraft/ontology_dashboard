@@ -1,7 +1,7 @@
 {
   "schema_version": "operation-context-v1.0",
   "context_id": "production-planning-context-v1",
-  "source_type": "synthetic_capacity_model",
+  "source_type": "capacity_model",
   "scope": {
     "project_id": "manufacturing-demo-project",
     "dataset_version": "canonical-ai4i-physics-v3.1",

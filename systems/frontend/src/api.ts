@@ -11,6 +11,8 @@ import type {
 import type { AgentQueryInput, AgentRunPage, AgentRunResponse } from "./features/agent/types";
 import type {
   EvidenceSnapshotBasisWire,
+  OperationsDecisionBriefRole,
+  OperationsDecisionSupportResponse,
   OperationsAgentReviewPacket,
   OperationsAgentReviewSummaryResponse,
   OperationsAgentReviewWorkflowRunsResponse,
@@ -231,6 +233,7 @@ export interface ServerDisplayPreferences {
   version: 3;
   textSize: "small" | "default" | "large" | "extra-large";
   density: "compact" | "standard" | "comfortable";
+  theme: "light" | "dark" | "system";
   showTechnicalMetadata: boolean;
   updated_at?: string;
 }
@@ -594,6 +597,8 @@ export interface MaintenanceEventLineageReadModel {
     work_order_id: string;
     work_type: "inspection" | "maintenance";
     status: string;
+    assigned_to?: string | null;
+    assigned_at?: string | null;
   }>;
   inspection_results: MaintenanceInspectionResultReadModel[];
   cost_analyses: MaintenanceCostAnalysisReadModel[];
@@ -624,6 +629,18 @@ export interface MaintenanceEventLineageReadModel {
   activities?: Array<Record<string, unknown>>;
 }
 
+export interface OpenInspectionWorkOrderReadModel {
+  work_order_id: string;
+  event_id: string;
+  asset_id: string;
+  equipment_id: string;
+  asset_type: string;
+  work_type: "inspection";
+  status: "requested" | "approved" | "in_progress";
+  assigned_to?: string | null;
+  assigned_at?: string | null;
+}
+
 export interface MaintenanceCostAnalysisRequest {
   action_code: MaintenanceActionCode;
   sop_id: string;
@@ -644,6 +661,17 @@ export function getMaintenanceEventLineage(
 ): Promise<MaintenanceEventLineageReadModel> {
   return request<MaintenanceEventLineageReadModel>(
     `${maintenanceBase(projectId, workspaceId)}/events/${encodeURIComponent(eventId)}/lineage`,
+    { signal },
+  );
+}
+
+export function getOpenInspectionWorkOrders(
+  projectId: string,
+  workspaceId: string,
+  signal?: AbortSignal,
+): Promise<{ items: OpenInspectionWorkOrderReadModel[] }> {
+  return request<{ items: OpenInspectionWorkOrderReadModel[] }>(
+    `${maintenanceBase(projectId, workspaceId)}/inspection-work-orders`,
     { signal },
   );
 }
@@ -730,7 +758,8 @@ export function getPredictiveMaintenanceDashboard(
   input: {
     dataset_version_id?: string;
     selected_event_id?: string;
-    role?: "manager" | "engineer";
+    role?: "manager" | "engineer" | "executive";
+    report_type?: import("./types").ReportType;
     intent?: string;
     locale?: "ko-KR" | "en-US";
   } = {},
@@ -740,6 +769,7 @@ export function getPredictiveMaintenanceDashboard(
   if (input.dataset_version_id) params.set("dataset_version_id", input.dataset_version_id);
   if (input.selected_event_id) params.set("selected_event_id", input.selected_event_id);
   if (input.role) params.set("role", input.role);
+  if (input.report_type) params.set("report_type", input.report_type);
   if (input.intent) params.set("intent", input.intent);
   if (input.locale) params.set("locale", input.locale);
   const query = params.size ? `?${params.toString()}` : "";
@@ -926,6 +956,7 @@ export function getOperationsAgentReviewPacket(input: {
   assetId: string;
   projectId?: string;
   datasetVersionId?: string | null;
+  eventId?: string | null;
   historyWindow?: string;
 }): Promise<OperationsAgentReviewPacket> {
   const params = new URLSearchParams({
@@ -933,6 +964,7 @@ export function getOperationsAgentReviewPacket(input: {
     history_window: input.historyWindow ?? "24h",
   });
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewPacket>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-packet?${params.toString()}`,
   );
@@ -942,6 +974,7 @@ export function getOperationsAgentReviewSummary(input: {
   assetId: string;
   projectId?: string;
   datasetVersionId?: string | null;
+  eventId?: string | null;
   historyWindow?: string;
 }): Promise<OperationsAgentReviewSummaryResponse> {
   const params = new URLSearchParams({
@@ -949,6 +982,7 @@ export function getOperationsAgentReviewSummary(input: {
     history_window: input.historyWindow ?? "24h",
   });
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
   );
@@ -958,6 +992,7 @@ export function createOperationsAgentReviewSummary(input: {
   assetId: string;
   projectId?: string;
   datasetVersionId?: string | null;
+  eventId?: string | null;
   historyWindow?: string;
   trigger?: "manual_materialization" | "ui_manual_regeneration";
 }): Promise<OperationsAgentReviewSummaryResponse> {
@@ -967,8 +1002,53 @@ export function createOperationsAgentReviewSummary(input: {
     trigger: input.trigger ?? "ui_manual_regeneration",
   });
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
+    { method: "POST" },
+  );
+}
+
+export function getOperationsDecisionSupportBrief(input: {
+  assetId: string;
+  projectId: string;
+  workspaceId: string;
+  evidenceSnapshotId: string;
+  decisionAsOf: string;
+  role: OperationsDecisionBriefRole;
+}): Promise<OperationsDecisionSupportResponse> {
+  const params = new URLSearchParams({
+    project_id: input.projectId,
+    workspace_id: input.workspaceId,
+    evidence_snapshot_id: input.evidenceSnapshotId,
+    decision_as_of: input.decisionAsOf,
+    role: input.role,
+  });
+  return request<OperationsDecisionSupportResponse>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/decision-support-brief?${params.toString()}`,
+  );
+}
+
+export function createOperationsDecisionSupportBrief(input: {
+  assetId: string;
+  projectId: string;
+  workspaceId: string;
+  evidenceSnapshotId: string;
+  decisionAsOf: string;
+  role: OperationsDecisionBriefRole;
+  riskStatus: string;
+}): Promise<OperationsDecisionSupportResponse> {
+  const params = new URLSearchParams({
+    project_id: input.projectId,
+    workspace_id: input.workspaceId,
+    evidence_snapshot_id: input.evidenceSnapshotId,
+    decision_as_of: input.decisionAsOf,
+    role: input.role,
+    risk_status: input.riskStatus,
+    trigger: "ui_manual_regeneration",
+  });
+  return request<OperationsDecisionSupportResponse>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/decision-support-brief?${params.toString()}`,
     { method: "POST" },
   );
 }
@@ -1200,7 +1280,7 @@ export async function getEvents(): Promise<EventSummary[]> {
 }
 
 export function getEvidence(eventId: string): Promise<Evidence> {
-  return request<Evidence>(`/api/events/${eventId}/evidence`);
+  return request<Evidence>(`/api/events/${encodeURIComponent(eventId)}/evidence`);
 }
 
 export async function getReport(
@@ -1208,10 +1288,11 @@ export async function getReport(
   role: Role,
   useLlm = true,
   locale: "ko-KR" | "en-US" = "ko-KR",
+  reportType?: import("./types").ReportType,
 ): Promise<Report> {
-  const payload = await request<{ report: Report }>(`/api/events/${eventId}/report`, {
+  const payload = await request<{ report: Report }>(`/api/events/${encodeURIComponent(eventId)}/report`, {
     method: "POST",
-    body: JSON.stringify({ role, locale, use_llm: useLlm }),
+    body: JSON.stringify({ role, report_type: reportType, locale, use_llm: useLlm }),
   });
   return payload.report;
 }
@@ -1223,7 +1304,7 @@ export async function getLayout(
   useLlm = true,
   locale: "ko-KR" | "en-US" = "ko-KR",
 ): Promise<Layout> {
-  const payload = await request<{ layout: Layout }>(`/api/events/${eventId}/layout`, {
+  const payload = await request<{ layout: Layout }>(`/api/events/${encodeURIComponent(eventId)}/layout`, {
     method: "POST",
     body: JSON.stringify({ role, locale, intent, use_llm: useLlm }),
   });
@@ -1231,14 +1312,14 @@ export async function getLayout(
 }
 
 export function recordDecision(eventId: string, actor: string, decision: string, note: string) {
-  return request(`/api/events/${eventId}/decision`, {
+  return request(`/api/events/${encodeURIComponent(eventId)}/decision`, {
     method: "POST",
     body: JSON.stringify({ actor, decision, note }),
   });
 }
 
 export function addNote(eventId: string, actor: string, body: string) {
-  return request(`/api/events/${eventId}/notes`, {
+  return request(`/api/events/${encodeURIComponent(eventId)}/notes`, {
     method: "POST",
     body: JSON.stringify({ actor, body }),
   });
@@ -1276,14 +1357,14 @@ function maintenanceCommand(
   });
 }
 
-export function approveInspectionWorkOrder(input: {
+export function acceptInspectionWorkOrder(input: {
   projectId: string;
   workspaceId: string;
   workOrderId: string;
   idempotencyKey: string;
 }) {
   return maintenanceCommand(
-    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
+    `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/accept`,
     {},
     input.idempotencyKey,
   );
@@ -1321,6 +1402,8 @@ export function createOperationsManualRecommendation(input: {
   workspaceId: string;
   inspectionResultId: string;
   actionCode: MaintenanceActionCode;
+  costAnalysisId: string;
+  actionCandidateId: string;
   idempotencyKey: string;
 }) {
   return maintenanceCommand(
@@ -1328,6 +1411,8 @@ export function createOperationsManualRecommendation(input: {
     buildOperationsManualRecommendationPayload(
       input.inspectionResultId,
       input.actionCode,
+      input.costAnalysisId,
+      input.actionCandidateId,
     ),
     input.idempotencyKey,
   );
@@ -1336,10 +1421,14 @@ export function createOperationsManualRecommendation(input: {
 export function buildOperationsManualRecommendationPayload(
   inspectionResultId: string,
   actionCode: MaintenanceActionCode,
+  costAnalysisId: string,
+  actionCandidateId: string,
 ) {
   return {
     action_code: actionCode,
     basis: [`inspection_result:${inspectionResultId}`],
+    cost_analysis_id: costAnalysisId,
+    action_candidate_id: actionCandidateId,
   };
 }
 
@@ -1364,15 +1453,26 @@ export async function approveMaintenanceWorkOrder(input: {
   datasetVersionId: string;
   idempotencyKey: string;
 }) {
-  const replay = await startPredictiveMaintenanceReplay(input.projectId, input.workspaceId, {
-    dataset_version_id: input.datasetVersionId,
-    speed_minutes_per_second: 60,
-  });
-  return maintenanceCommand(
-    `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-work-orders/${encodeURIComponent(input.workOrderId)}/approve`,
-    { simulation_session_id: replay.cursor.session_id },
-    input.idempotencyKey,
-  );
+  const endpoint = `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-work-orders/${encodeURIComponent(input.workOrderId)}/approve`;
+  try {
+    return await maintenanceCommand(endpoint, {}, input.idempotencyKey);
+  } catch (reason) {
+    if (!(reason instanceof ApiError) || reason.code !== "source_simulation_session_unavailable") {
+      throw reason;
+    }
+    // Historical Product Results can predate source-session provenance. Only
+    // in that compatibility case do we create a replay selector; current live
+    // Results stay bound to the immutable source session resolved server-side.
+    const replay = await startPredictiveMaintenanceReplay(input.projectId, input.workspaceId, {
+      dataset_version_id: input.datasetVersionId,
+      speed_minutes_per_second: 60,
+    });
+    return maintenanceCommand(
+      endpoint,
+      { simulation_session_id: replay.cursor.session_id },
+      input.idempotencyKey,
+    );
+  }
 }
 
 export function startMaintenanceAction(input: {
@@ -1425,7 +1525,7 @@ export function followUp(
   question: string,
   locale: "ko-KR" | "en-US" = "ko-KR",
 ): Promise<FollowUp> {
-  return request<FollowUp>(`/api/events/${eventId}/follow-up`, {
+  return request<FollowUp>(`/api/events/${encodeURIComponent(eventId)}/follow-up`, {
     method: "POST",
     body: JSON.stringify({ role, locale, question }),
   });

@@ -47,7 +47,7 @@ def compose_agent_review_packet(
     evidence_ref = str((view_model.get("evidence") or {}).get("evidence_payload_reference") or "")
     if evidence_ref:
         source_refs.append(evidence_ref)
-    source_refs.extend(agent_context.source_refs)
+    source_refs.extend(_operation_context_source_refs(agent_context))
 
     for target in view_model.get("inspection_targets") or []:
         inspection_targets.append(_agent_inspection_target(target))
@@ -103,8 +103,12 @@ def compose_agent_review_packet(
     closed_loop = view_model.get("closed_loop") or {}
     model_expression_context = _model_expression_context(view_model)
     maintenance_history_summary = (
-        agent_context.maintenance_history_summary
-        or _maintenance_history_summary(
+        _merge_maintenance_history_summary(
+            agent_context.maintenance_history_summary,
+            ontology_context=ontology_context,
+        )
+        if agent_context.maintenance_history_summary
+        else _maintenance_history_summary(
             view_model=view_model,
             closed_loop=closed_loop,
             ontology_context=ontology_context,
@@ -112,6 +116,7 @@ def compose_agent_review_packet(
     )
     source_refs.extend(model_expression_context.get("source_refs") or [])
     source_refs.extend(maintenance_history_summary.get("source_refs") or [])
+    source_refs.extend(_non_operation_context_source_refs(agent_context))
     available_actions = closed_loop.get("available_actions") or []
     evidence_gaps = _packet_evidence_gaps(
         view_model=view_model,
@@ -183,6 +188,20 @@ def compose_agent_review_packet(
         },
         "limitations": list(dict.fromkeys(limitations)),
     }
+
+
+def _operation_context_source_refs(context: AgentReviewContext) -> list[str]:
+    source_ref = (context.operation_context_summary or {}).get("source_ref")
+    return [str(source_ref)] if source_ref else []
+
+
+def _non_operation_context_source_refs(context: AgentReviewContext) -> list[str]:
+    operation_refs = set(_operation_context_source_refs(context))
+    return [
+        str(ref)
+        for ref in context.source_refs
+        if ref and str(ref) not in operation_refs
+    ]
 
 
 def _domain_sections(
@@ -310,6 +329,43 @@ def _domain_sections(
     )
 
     return sections
+
+
+def _merge_maintenance_history_summary(
+    summary: dict[str, Any],
+    *,
+    ontology_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    merged = dict(summary)
+    similar_events = [
+        *[
+            item
+            for item in merged.get("similar_events") or []
+            if isinstance(item, dict)
+        ],
+        *_similar_events_from_ontology(ontology_context),
+    ]
+    merged["similar_events"] = list(
+        {
+            str(item.get("similar_event_id") or ""): item
+            for item in similar_events
+        }.values()
+    )[:5]
+    merged["source_refs"] = list(
+        dict.fromkeys(
+            ref
+            for ref in [
+                *[str(item) for item in merged.get("source_refs") or []],
+                *[
+                    str(item.get("source_ref") or "")
+                    for item in merged["similar_events"]
+                    if isinstance(item, dict)
+                ],
+            ]
+            if ref
+        )
+    )
+    return merged
 
 
 def _model_expression_context(view_model: dict[str, Any]) -> dict[str, Any]:
@@ -448,18 +504,26 @@ def _maintenance_history_summary(
 
 
 def _closed_loop_record(item: dict[str, Any], *, source_prefix: str) -> dict[str, Any]:
+    record_type = source_prefix.removeprefix("closed-loop://")
+    preferred_ids = {
+        "work-order": ("work_order_id",),
+        "inspection-result": ("inspection_result_id", "work_order_id"),
+        "maintenance-action": ("maintenance_action_id", "work_order_id"),
+        "maintenance-event": (
+            "maintenance_event_id",
+            "maintenance_action_id",
+            "work_order_id",
+        ),
+        "activity": ("activity_id", "id", "work_order_id"),
+    }.get(record_type, ())
     record_id = str(
-        item.get("work_order_id")
-        or item.get("inspection_result_id")
-        or item.get("maintenance_action_id")
-        or item.get("maintenance_event_id")
-        or item.get("activity_id")
+        next((item.get(key) for key in preferred_ids if item.get(key)), None)
         or item.get("id")
         or ""
     )
     return {
         "record_id": record_id,
-        "record_type": source_prefix.removeprefix("closed-loop://"),
+        "record_type": record_type,
         "status": str(item.get("status") or item.get("outcome") or ""),
         "activity_type": str(item.get("activity_type") or ""),
         "recorded_at": str(

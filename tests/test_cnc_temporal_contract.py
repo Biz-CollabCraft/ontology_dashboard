@@ -12,6 +12,9 @@ from systems.generator.model.cnc_training import (
     SENSORS,
     build_temporal_feature_table,
 )
+from systems.generator.app.runtime_pipeline.cnc_temporal_features import (
+    derive_cnc_temporal_feature_rows,
+)
 
 
 def _frames() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -72,8 +75,34 @@ def test_backend_reproduces_generator_cnc_temporal_features() -> None:
     }
 
     runtime = derive_cnc_temporal_features(fixture, schema)
+    runtime_frame = pd.DataFrame(
+        [
+            {
+                "asset_id": "CNC-TEST-01",
+                "observed_at": item["timestamp"],
+                **{sensor: item[sensor] for sensor in SENSORS},
+            }
+            for item in [*fixture["history"], fixture["observation"]]
+        ]
+    )
+    generator_matrix, generator_columns, generator_metadata = (
+        derive_cnc_temporal_feature_rows(
+            runtime_frame,
+            feature_schema=schema,
+            id_column="asset_id",
+            time_column="observed_at",
+        )
+    )
+    assert generator_columns == FEATURE_COLUMNS
+    assert generator_metadata == [
+        ("CNC-TEST-01", timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    ]
     for feature in FEATURE_COLUMNS:
         assert runtime[feature] == pytest.approx(float(target[feature]), rel=1e-10, abs=1e-10)
+        feature_index = FEATURE_COLUMNS.index(feature)
+        assert generator_matrix[0, feature_index] == pytest.approx(
+            float(target[feature]), rel=1e-10, abs=1e-10
+        )
 
 
 def test_cnc_right_censor_and_failure_window_semantics() -> None:

@@ -67,6 +67,14 @@ const QUICK_NOTES: Record<OperationsDecision, string[]> = {
   continue_monitoring: ["추가 조치 없이 관찰", "다음 관측까지 유지", "이상 변화 시 재검토"],
 };
 
+const QUEUE_STATUS_WEIGHT: Record<OperationsEvent["status"], number> = {
+  critical: 5,
+  data_quality_hold: 4,
+  warning: 3,
+  attention: 2,
+  normal: 1,
+};
+
 export function OperationsOperationsPage({
   model,
   selectedEventId,
@@ -103,7 +111,13 @@ export function OperationsOperationsPage({
   const [savingDecision, setSavingDecision] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-  const queue = useMemo(() => model.events.filter((item) => item.recommendedDecision !== "continue_monitoring" || item.status !== "normal"), [model.events]);
+  const queue = useMemo(() => model.events
+    .filter((item) => item.recommendedDecision !== "continue_monitoring" || item.status !== "normal")
+    .sort((left, right) => (
+      QUEUE_STATUS_WEIGHT[right.status] - QUEUE_STATUS_WEIGHT[left.status]
+      || (right.failureProbability ?? -1) - (left.failureProbability ?? -1)
+      || String(right.observedAt ?? "").localeCompare(String(left.observedAt ?? ""))
+    )), [model.events]);
   const selectedAsset = selectedEvent ? model.assets.find((asset) => asset.assetId === selectedEvent.assetId) ?? null : null;
   const suspectedPart = selectedAsset?.topFactors[0]?.label ?? selectedEvent?.predictedFailureType ?? "부품 근거 없음";
   const latestDecision = detail?.activity.find((activity) => activity.kind === "decision") ?? null;
@@ -111,6 +125,9 @@ export function OperationsOperationsPage({
   const SelectedDecisionIcon = selectedDecisionOption.Icon;
   const isInspectionRequestDecision = decision === "request_inspection" || decision === "review_shutdown";
   const canSubmitDecision = canDecide && (!isInspectionRequestDecision || Boolean(detail?.snapshotBasis));
+  const snapshotBasisFailed = Boolean(
+    detail?.warnings.some((warning) => warning.startsWith("설비 상세 조회 지연:")),
+  );
   const decisionActionLabel = isInspectionRequestDecision ? "작업요청 생성" : `${DECISION_LABEL[decision]} 기록`;
   const recommendedOption = selectedEvent
     ? DECISION_OPTIONS.find((option) => option.decision === selectedEvent.recommendedDecision) ?? DECISION_OPTIONS[0]
@@ -118,7 +135,7 @@ export function OperationsOperationsPage({
   const gapCount = detail?.evidenceGaps.length ?? 0;
   const evidenceStatus = detailLoading
     ? "근거 확인 중"
-    : detailError
+    : detailError || snapshotBasisFailed
       ? "근거 확인 실패"
       : detail
         ? "근거 연결됨"
@@ -131,6 +148,9 @@ export function OperationsOperationsPage({
   const decisionStatus = latestDecision?.decision
     ? DECISION_LABEL[latestDecision.decision]
     : "사람 결정 대기";
+  const queueRank = selectedEvent ? queue.findIndex((item) => item.eventId === selectedEvent.eventId) + 1 : 0;
+  const nextOwnerLabel = detail?.closedLoop?.primaryAction?.ownerLabel ?? "다음 책임 역할 미확정";
+  const nextActionLabel = detail?.closedLoop?.primaryAction?.label ?? DECISION_LABEL[selectedEvent?.recommendedDecision ?? "continue_monitoring"];
   const planningContext = detail?.operationContext ?? null;
   const eventImpact = planningContext?.eventImpact ?? null;
   const plannedUnits = planningContext?.productionPlan?.plannedUnits ?? null;
@@ -209,9 +229,13 @@ export function OperationsOperationsPage({
                 </section>
                 <div className="operations-guided-action">
                   <div>
-                    <span>다음 처리</span>
+                    <span>{queueRank > 0 ? `DECISION CASE · 우선순위 #${queueRank}` : "DECISION CASE"}</span>
                     <strong>{recommendedOption.title}</strong>
-                    <p>{gapCount > 0 ? `${gapCount}개 제한을 확인한 뒤 기록하세요.` : "현재 Product Result/Evidence snapshot과 생산 영향 근거를 함께 확인한 뒤 판단을 기록합니다."}</p>
+                    <p>{snapshotBasisFailed
+                      ? "현재 선택한 예측의 정본 근거를 불러오지 못했습니다. 상세 조회를 다시 시도하세요."
+                      : gapCount > 0
+                        ? `${gapCount}개 제한을 확인한 뒤 기록하세요.`
+                        : "현재 Product Result/Evidence snapshot과 생산 영향 근거를 함께 확인한 뒤 판단을 기록합니다."}</p>
                   </div>
                   <div>
                     {canDecide ? (
@@ -224,6 +248,12 @@ export function OperationsOperationsPage({
                     <button type="button" className="operations-button secondary" onClick={() => onOpenReport(selectedEvent)}><FileText size={14} />보고서 보기</button>
                   </div>
                 </div>
+                <section className="operations-decision-routing" aria-label="Decision Case 책임과 다음 액션">
+                  <div><span>현재 담당</span><strong>{selectedEvent.assignedEngineer ?? "미배정"}</strong><small>현재 기록된 owner</small></div>
+                  <div><span>검토 우선순위</span><strong>{detail?.reviewPriority?.level ?? selectedEvent.status}</strong><small>위험·운영 맥락 기반</small></div>
+                  <div><span>다음 책임 역할</span><strong>{nextOwnerLabel}</strong><small>Backend Closed-loop policy</small></div>
+                  <div><span>다음 허용 액션</span><strong>{nextActionLabel}</strong><small>가짜 배정/우선순위 변경 없음</small></div>
+                </section>
                 <div className="operations-operation-hero">
                   <div><OperationsStatusBadge status={selectedEvent.status} /><OperationsConfidenceBadge confidence={selectedEvent.confidence} /></div>
                   <dl><div><dt>대상 설비</dt><dd>{displayEventAssetName(selectedEvent)}</dd></div><div><dt>의심 부품</dt><dd>{suspectedPart}</dd></div><div><dt>고장 확률</dt><dd>{formatProbability(selectedEvent.failureProbability)}</dd></div><div><dt>추천 상태</dt><dd>{DECISION_LABEL[selectedEvent.recommendedDecision]}</dd></div><div><dt>최근 사람 결정</dt><dd>{latestDecision?.decision ? DECISION_LABEL[latestDecision.decision] : "기록 없음"}</dd></div><div><dt>담당자</dt><dd>{selectedEvent.assignedEngineer ?? "미배정"}</dd></div><div><dt>부품</dt><dd>{selectedEvent.sparePartAvailable === null ? "확인 필요" : selectedEvent.sparePartAvailable ? "확보" : "미확보"}</dd></div></dl>
@@ -237,7 +267,7 @@ export function OperationsOperationsPage({
                   </div>
                 </section>
                 <ol className="operations-decision-flow" aria-label="업무 진행 상태">
-                  <li className={detailError ? "is-warning" : "is-complete"}><span>1</span><div><strong>{evidenceStatus}</strong><small>근거 확인</small></div></li>
+                  <li className={detailError || snapshotBasisFailed ? "is-warning" : "is-complete"}><span>1</span><div><strong>{evidenceStatus}</strong><small>근거 확인</small></div></li>
                   <li className={gapCount > 0 ? "is-warning" : "is-complete"}><span>2</span><div><strong>{limitationStatus}</strong><small>제한 확인</small></div></li>
                   <li className={latestDecision ? "is-complete" : "is-current"}><span>3</span><div><strong>{decisionStatus}</strong><small>판단 기록</small></div></li>
                 </ol>

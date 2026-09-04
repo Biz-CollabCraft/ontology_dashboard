@@ -64,6 +64,9 @@ services:
       ENABLE_PUBLIC_BLUEPRINT_COMPARISON: ${ENABLE_PUBLIC_BLUEPRINT_COMPARISON:-1}
       ONTOLOGY_DASHBOARD_SEED_REFERENCE_DATA: ${ONTOLOGY_DASHBOARD_SEED_REFERENCE_DATA:-false}
       ONTOLOGY_DASHBOARD_DATABASE_URL: ${ONTOLOGY_DASHBOARD_DATABASE_URL}
+      ONTOLOGY_DASHBOARD_DB_POOL_MIN: ${ONTOLOGY_DASHBOARD_DB_POOL_MIN:-1}
+      ONTOLOGY_DASHBOARD_DB_POOL_MAX: ${ONTOLOGY_DASHBOARD_DB_POOL_MAX:-2}
+      ONTOLOGY_DASHBOARD_DB_POOL_TIMEOUT: ${ONTOLOGY_DASHBOARD_DB_POOL_TIMEOUT:-10}
       ONTOLOGY_DASHBOARD_REDIS_URL: redis://redis:6379/0
       ONTOLOGY_DASHBOARD_ALLOWED_ORIGINS: ${ONTOLOGY_DASHBOARD_ALLOWED_ORIGINS:-}
       ONTOLOGY_DASHBOARD_ALLOWED_ORIGIN_REGEX: ${ONTOLOGY_DASHBOARD_ALLOWED_ORIGIN_REGEX}
@@ -74,6 +77,7 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
       MAINTENANCE_CONTEXT_PROVIDER: ${MAINTENANCE_CONTEXT_PROVIDER:-fixture}
+      PREDICTION_RESULT_INGEST_TOKEN: ${PREDICTION_RESULT_INGEST_TOKEN:?PREDICTION_RESULT_INGEST_TOKEN is required}
     volumes:
       - ${ONTOLOGY_DATA_ROOT}/artifacts:/artifacts:ro
     ports:
@@ -126,6 +130,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      generator-runtime:
+        condition: service_healthy
     environment:
       APP_ENV: production
       ONTOLOGY_DASHBOARD_DATABASE_URL: ${ONTOLOGY_DASHBOARD_DATABASE_URL}
@@ -134,7 +140,7 @@ services:
       ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK: "0"
       GEN_DATA_RUNTIME_OUTPUT_ROOT: /gen-data-runtime
       ONTOLOGY_DASHBOARD_RUNTIME_PIPELINE_INPUT_ROOT: /runtime-pipeline-input
-      ONTOLOGY_DASHBOARD_GENERATOR_RUNTIME_ENQUEUE_URL: ${ONTOLOGY_DASHBOARD_GENERATOR_RUNTIME_ENQUEUE_URL:-}
+      ONTOLOGY_DASHBOARD_GENERATOR_RUNTIME_ENQUEUE_URL: ${ONTOLOGY_DASHBOARD_GENERATOR_RUNTIME_ENQUEUE_URL:-http://generator-runtime:8000/internal/runtime-pipeline/enqueue}
       LIVE_PM_POLL_SECONDS: ${LIVE_PM_POLL_SECONDS:-5}
       LOG_LEVEL: ${LIVE_PM_LOG_LEVEL:-INFO}
     command: ["python", "-m", "app.live_predictive_maintenance"]
@@ -142,6 +148,49 @@ services:
       - ${ONTOLOGY_DATA_ROOT}/artifacts:/artifacts:ro
       - ${GEN_DATA_RUNTIME_OUTPUT_ROOT}:/gen-data-runtime:ro
       - ${RUNTIME_PIPELINE_INPUT_ROOT}:/runtime-pipeline-input
+    networks: [private]
+
+  generator-runtime:
+    build:
+      context: ../..
+      dockerfile: systems/generator/Dockerfile
+    restart: unless-stopped
+    cpus: 1.5
+    mem_limit: 2g
+    depends_on:
+      backend:
+        condition: service_healthy
+    entrypoint: ["python", "-m", "uvicorn"]
+    command: ["systems.generator.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      APP_ENV: production
+      GENERATOR_RUNTIME_PREDICTION_ENABLED: "true"
+      GENERATOR_EXTRACTION_ENABLED: "false"
+      GENERATOR_RUNTIME_VERSION: ${GENERATOR_RUNTIME_VERSION:-hanbit-generator-runtime-v1}
+      GENERATOR_PIPELINE_INPUT_ROOTS: /runtime-pipeline-input
+      GENERATOR_PREDICTION_RESULT_URL: http://backend:8000/internal/prediction-results
+      GENERATOR_PREDICTION_RESULT_PROJECT_ID: manufacturing-demo-project
+      GENERATOR_PREDICTION_RESULT_WORKSPACE_ID: manufacturing-demo
+      GENERATOR_PREDICTION_RESULT_TOKEN: ${PREDICTION_RESULT_INGEST_TOKEN:?PREDICTION_RESULT_INGEST_TOKEN is required}
+      DATA_DIR: /data/source
+      DATA_PREPROCESSED_DIR: /data/preprocessed
+      ONTOLOGY_DIR: /data/ontology
+      MODELS_STORE_DIR: /data/models
+      MODEL_ARTIFACT_URI: /data/models/artifacts
+      LOG_LEVEL: ${GENERATOR_LOG_LEVEL:-INFO}
+    volumes:
+      - ${ONTOLOGY_DATA_ROOT}/generator/source:/data/source
+      - ${ONTOLOGY_DATA_ROOT}/generator/data_preprocessed:/data/preprocessed
+      - ${ONTOLOGY_DATA_ROOT}/generator/ontology:/data/ontology
+      - ${ONTOLOGY_DATA_ROOT}/artifacts:/data/models/artifacts:ro
+      - ./generator-active-model-set.json:/data/models/active-model-set.json:ro
+      - ${RUNTIME_PIPELINE_INPUT_ROOT}:/runtime-pipeline-input:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
     networks: [private]
 
   generator:

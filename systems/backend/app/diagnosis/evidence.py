@@ -140,7 +140,7 @@ def build_product_result_artifact(
     is generated from the current observation at product runtime.
     """
 
-    model = predictor or configured_predictor()
+    model = predictor or configured_predictor(str(fixture.get("asset_type") or "cnc"))
     prediction = model.predict(fixture)
     observation = fixture["observation"]
     derived = {}

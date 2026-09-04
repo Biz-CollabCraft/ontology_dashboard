@@ -192,11 +192,11 @@ def test_agent_review_summary_validator_rejects_available_action_echo_as_command
     packet = json.loads((GOLD_ROOT / "GS-004.json").read_text(encoding="utf-8"))
     summary = compose_deterministic_agent_review_summary(packet)
     summary["mode"] = "llm"
-    summary["summary"] = "approve_inspection_work_order 를 실행해 승인하십시오."
+    summary["summary"] = "accept_inspection_work_order 를 실행해 수락하십시오."
 
     errors = validate_agent_review_summary_contract(summary, packet=packet)
 
-    assert "available_action_echo:approve_inspection_work_order" in errors
+    assert "available_action_echo:accept_inspection_work_order" in errors
 
 
 def test_agent_review_summary_validator_rejects_invented_history_summary() -> None:
@@ -210,6 +210,21 @@ def test_agent_review_summary_validator_rejects_invented_history_summary() -> No
     errors = validate_agent_review_summary_contract(summary, packet=PACKET)
 
     assert "history_summary_mismatch" in errors
+
+
+def test_agent_review_summary_validator_rejects_uncontracted_domain_claims() -> None:
+    summary = _valid_summary()
+    summary["role_summaries"] = [
+        {
+            **summary["role_summaries"][0],
+            "quote": "재고 확보 상태라 현재 교대 내 교체 가능하며 납기 보장됩니다.",
+        },
+        summary["role_summaries"][1],
+    ]
+
+    errors = validate_agent_review_summary(summary, packet=PACKET)
+
+    assert any(error.startswith("forbidden_prose_claims:") for error in errors)
 
 
 def test_deterministic_summary_allows_packet_history_completion_language() -> None:

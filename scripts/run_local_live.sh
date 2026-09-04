@@ -53,6 +53,8 @@ AGENT_SUMMARY_WATCHER_LIMIT="${AGENT_SUMMARY_WATCHER_LIMIT:-10}"
 AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS="${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS:-2}"
 AGENT_SUMMARY_WATCHER_MAX_ITERATIONS="${AGENT_SUMMARY_WATCHER_MAX_ITERATIONS:-}"
 AGENT_SUMMARY_WATCHER_STALE_POLICY="${AGENT_SUMMARY_WATCHER_STALE_POLICY:-summary_key}"
+AGENT_SUMMARY_WATCHER_SOURCE="${AGENT_SUMMARY_WATCHER_SOURCE:-auto}"
+AGENT_SUMMARY_WATCHER_REQUIRE_LIVE_PROVIDER="${AGENT_SUMMARY_WATCHER_REQUIRE_LIVE_PROVIDER:-0}"
 
 API_LOG="${API_LOG:-/tmp/ontology-dashboard-live-api.log}"
 WEB_LOG="${WEB_LOG:-/tmp/ontology-dashboard-live-web.log}"
@@ -251,14 +253,18 @@ for _ in $(seq 1 90); do
         --limit "${AGENT_SUMMARY_WATCHER_LIMIT}" \
         --max-attempts "${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS}" \
         --interval-seconds "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" \
-        --stale-policy "${AGENT_SUMMARY_WATCHER_STALE_POLICY}"
+        --stale-policy "${AGENT_SUMMARY_WATCHER_STALE_POLICY}" \
+        --source "${AGENT_SUMMARY_WATCHER_SOURCE}"
       )
       if [[ -n "${AGENT_SUMMARY_WATCHER_MAX_ITERATIONS}" ]]; then
         WATCHER_ARGS+=(--max-iterations "${AGENT_SUMMARY_WATCHER_MAX_ITERATIONS}")
       fi
+      if [[ "${AGENT_SUMMARY_WATCHER_REQUIRE_LIVE_PROVIDER}" == "1" ]]; then
+        WATCHER_ARGS+=(--require-live-provider)
+      fi
       PYTHONUNBUFFERED=1 "${VENV_DIR}/bin/python" "${WATCHER_ARGS[@]}" > "${AGENT_SUMMARY_WATCHER_LOG}" 2>&1 &
       WATCHER_PID=$!
-      printf '  Agent Summary Watcher: pid %s, interval %ss, limit %s, max attempts %s, stale policy %s\n' "${WATCHER_PID}" "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" "${AGENT_SUMMARY_WATCHER_LIMIT}" "${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS}" "${AGENT_SUMMARY_WATCHER_STALE_POLICY}"
+      printf '  Agent Summary Watcher: pid %s, interval %ss, limit %s, max attempts %s, stale policy %s, source %s, require live provider %s\n' "${WATCHER_PID}" "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" "${AGENT_SUMMARY_WATCHER_LIMIT}" "${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS}" "${AGENT_SUMMARY_WATCHER_STALE_POLICY}" "${AGENT_SUMMARY_WATCHER_SOURCE}" "${AGENT_SUMMARY_WATCHER_REQUIRE_LIVE_PROVIDER}"
       if [[ -n "${AGENT_SUMMARY_WATCHER_MAX_ITERATIONS}" ]]; then
         printf '  Agent Summary Watcher max iterations: %s\n' "${AGENT_SUMMARY_WATCHER_MAX_ITERATIONS}"
       fi

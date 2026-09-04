@@ -39,7 +39,9 @@ def enriched_critical_artifact() -> dict:
 
 def test_product_result_artifact_to_event_evidence_projection_matches_expected_reference_slice() -> None:
     expected = load_projection_fixture("expected-event-evidence-projection-critical.json")
-    projection = product_result_artifact_to_event_evidence_projection(enriched_critical_artifact())
+    artifact = enriched_critical_artifact()
+    artifact["source_sha256"] = "a" * 64
+    projection = product_result_artifact_to_event_evidence_projection(artifact)
 
     assert projection["schema_version"] == expected["schema_version"] == EVENT_EVIDENCE_SCHEMA_VERSION
     assert projection["contract_type"] == expected["contract_type"] == EVENT_EVIDENCE_CONTRACT_TYPE
@@ -49,6 +51,7 @@ def test_product_result_artifact_to_event_evidence_projection_matches_expected_r
     assert projection["artifact_reference"]["evidence_payload_reference"] == expected["artifact_reference"][
         "evidence_payload_reference"
     ]
+    assert projection["artifact_reference"]["source_sha256"] == "a" * 64
     assert projection["assessment"]["status"] == expected["assessment"]["status"]
     assert projection["assessment"]["recommended_decision"] == expected["assessment"]["recommended_decision"]
     assert projection["assessment"]["operational_decision_kind"] == expected["assessment"][

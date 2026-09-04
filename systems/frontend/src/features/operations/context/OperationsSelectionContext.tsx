@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { operationsProjectPath, navigate } from "../../../routing";
+import { matchOperationsProjectPath, operationsSurfacePath, navigate } from "../../../routing";
 import type { OperationsDashboardMode, OperationsReportTab, OperationsRoleLens, OperationsSelection, OperationsView } from "../api/operationsContracts";
 
 const SESSION_PREFIX = "ontology-dashboard:operations-selection:";
@@ -50,6 +50,8 @@ export function parseOperationsSelection(input: {
   search: string;
   defaultRole: OperationsRoleLens;
   defaultView?: OperationsView;
+  defaultSurface?: string | null;
+  pathSurface?: string | null;
   defaultReportTab?: OperationsReportTab;
   sessionValue?: string | null;
 }): OperationsSelection {
@@ -64,17 +66,32 @@ export function parseOperationsSelection(input: {
   const params = new URLSearchParams(input.search);
   const queryHasView = params.has("view");
   const queryView = params.get("view");
+  const queryHasSurface = params.has("surface");
   const queryHasReportTab = params.has("report");
   const queryHasDashboard = params.has("dashboard");
   const queryHasRole = params.has("role");
   const queryHasWorkspace = params.has("workspace_id");
   const queryHasAsset = params.has("asset_id");
   const queryHasEvent = params.has("event_id");
+  const routeHasSurface = Boolean(input.pathSurface);
+  const explicitNavigation = Boolean(
+    routeHasSurface
+    || queryHasView
+    || queryHasSurface
+    || queryHasReportTab
+    || queryHasDashboard
+    || queryHasRole
+    || queryHasWorkspace,
+  );
+  const shouldRestoreSessionSelection = !explicitNavigation || queryHasAsset || queryHasEvent;
   const defaultView = input.defaultView ?? "overview";
   const sessionView = typeof session.view === "string" ? validView(session.view) : null;
   return {
     projectId: input.projectId,
     view: queryHasView ? validView(queryView) : sessionView ?? defaultView,
+    surface: queryHasSurface
+      ? optionalValue(params.get("surface"))
+      : optionalValue(input.pathSurface ?? session.surface ?? input.defaultSurface ?? null),
     dashboard: queryHasDashboard
       ? validDashboard(params.get("dashboard"))
       : validDashboard(typeof session.dashboard === "string" ? session.dashboard : null),
@@ -89,8 +106,16 @@ export function parseOperationsSelection(input: {
       ? validRole(params.get("role"), input.defaultRole)
       : validRole(typeof session.role === "string" ? session.role : null, input.defaultRole),
     workspaceId: queryHasWorkspace ? optionalValue(params.get("workspace_id")) : optionalValue(session.workspaceId ?? null),
-    assetId: queryHasAsset ? optionalValue(params.get("asset_id")) : optionalValue(session.assetId ?? null),
-    eventId: queryHasEvent ? optionalValue(params.get("event_id")) : optionalValue(session.eventId ?? null),
+    assetId: queryHasAsset
+      ? optionalValue(params.get("asset_id"))
+      : shouldRestoreSessionSelection
+        ? optionalValue(session.assetId ?? null)
+        : null,
+    eventId: queryHasEvent
+      ? optionalValue(params.get("event_id"))
+      : shouldRestoreSessionSelection
+        ? optionalValue(session.eventId ?? null)
+        : null,
   };
 }
 
@@ -110,26 +135,32 @@ export function OperationsSelectionProvider({
   projectId,
   defaultRole,
   defaultView = "overview",
+  defaultSurface = null,
   defaultReportTab = "status-map",
   storageScope = "anonymous",
+  navigationBasePath = null,
   children,
 }: {
   projectId: string;
   defaultRole: OperationsRoleLens;
   defaultView?: OperationsView;
+  defaultSurface?: string | null;
   defaultReportTab?: OperationsReportTab;
   storageScope?: string;
+  navigationBasePath?: string | null;
   children: ReactNode;
 }) {
   const storageKey = `${SESSION_PREFIX}${storageScope}:${projectId}`;
   const readSelection = useCallback(() => parseOperationsSelection({
     projectId,
     search: window.location.search,
+    pathSurface: navigationBasePath ? null : matchOperationsProjectPath(window.location.pathname)?.surfaceId ?? null,
     defaultRole,
     defaultView,
+    defaultSurface,
     defaultReportTab,
     sessionValue: window.sessionStorage.getItem(storageKey),
-  }), [defaultReportTab, defaultRole, defaultView, projectId, storageKey]);
+  }), [defaultReportTab, defaultRole, defaultSurface, defaultView, navigationBasePath, projectId, storageKey]);
   const [selection, setSelection] = useState<OperationsSelection>(readSelection);
 
   useEffect(() => {
@@ -148,13 +179,20 @@ export function OperationsSelectionProvider({
   ) => {
     const current = readSelection();
     const next: OperationsSelection = { ...current, ...patch, projectId };
+    // Keep React state authoritative immediately. Relying only on the
+    // synthetic popstate below is racy because the application-level router
+    // may process that event first and replace/remount route content before
+    // this provider's popstate listener observes it.
+    setSelection(next);
     window.sessionStorage.setItem(storageKey, JSON.stringify(next));
     const params = new URLSearchParams(selectionSearch(next));
+    if (navigationBasePath && next.surface) params.set("surface", next.surface);
     const currentParams = new URLSearchParams(window.location.search);
     const workspaceShell = currentParams.get("workspace_shell");
     if (workspaceShell) params.set("workspace_shell", workspaceShell);
-    navigate(`${operationsProjectPath(projectId)}?${params.toString()}`, { replace: options?.replace });
-  }, [projectId, readSelection, storageKey]);
+    const targetPath = navigationBasePath ?? operationsSurfacePath(projectId, next.surface);
+    navigate(`${targetPath}?${params.toString()}`, { replace: options?.replace });
+  }, [navigationBasePath, projectId, readSelection, storageKey]);
 
   const value = useMemo(() => ({ selection, updateSelection }), [selection, updateSelection]);
   return <OperationsSelectionContext.Provider value={value}>{children}</OperationsSelectionContext.Provider>;

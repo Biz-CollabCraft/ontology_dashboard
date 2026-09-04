@@ -325,11 +325,11 @@ class IdentityRepository:
             (
                 project_id,
                 "manufacturing-demo",
-                "Manufacturing Demo Project",
+                "Hanbit Tech Reliability Operations",
                 "Gold/E2E regression baseline for the manufacturing domain pack.",
                 "manufacturing-predictive-maintenance",
                 workspace_id,
-                "Manufacturing Demo",
+                "Hanbit Tech Operations Workspace",
             ),
             (
                 "azure-fleet-maintenance-project",
@@ -464,6 +464,11 @@ class IdentityRepository:
                         )
                 else:
                     user_id = str(existing["id"])
+                for role_code in account["roles"]:
+                    connection.execute(
+                        "INSERT OR IGNORE INTO user_roles (user_id,role_code) VALUES (?,?)",
+                        (user_id, role_code),
+                    )
                 for permission_code, allowed in account.get("permission_overrides", {}).items():
                     connection.execute(
                         """

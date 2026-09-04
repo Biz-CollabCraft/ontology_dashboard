@@ -13,6 +13,7 @@ import type { ReliabilityExperienceKind } from "../../predictive-maintenance/wor
 export function OperationsOverviewPage({
   model,
   role,
+  currentUserId,
   experienceKind,
   dashboard,
   selectedAssetId,
@@ -32,6 +33,7 @@ export function OperationsOverviewPage({
 }: {
   model: OperationsBootstrapModel;
   role: OperationsRoleLens;
+  currentUserId: string;
   experienceKind: ReliabilityExperienceKind;
   dashboard: OperationsDashboardMode;
   selectedAssetId: string | null;
@@ -63,6 +65,7 @@ export function OperationsOverviewPage({
         <OperationsWorkflowOverviewPage
           model={model}
           role={role}
+          currentUserId={currentUserId}
           experienceKind={experienceKind}
           selectedAssetId={selectedAssetId}
           detail={detail}

@@ -162,6 +162,12 @@ def client_for(role: str) -> tuple[TestClient, Service]:
 BASE = "/api/projects/project-1/workspaces/workspace-1/maintenance"
 INSPECTION = {
     "event_id": "EVT-1",
+    "snapshot_basis": {
+        "artifact_id": "RESULT-1",
+        "evidence_payload_reference": "RESULT-1",
+        "asset_id": "CNC-1",
+        "event_id": "EVT-1",
+    },
 }
 RESULT = {
     "outcome": "maintenance_recommended",

@@ -71,7 +71,7 @@
         "runtime_hours_7d": {"type": ["number", "null"]},
         "production_impact": {"type": ["string", "null"], "enum": ["none", "low", "medium", "high", null]},
         "context_id": {"type": "string"},
-        "source_type": {"enum": ["synthetic_capacity_model"]},
+        "source_type": {"enum": ["capacity_model"]},
         "temporal_scope": {
           "type": "object",
           "additionalProperties": false,
@@ -163,6 +163,7 @@
               "work_type": {"enum": ["inspection", "maintenance"]},
               "status": {"enum": ["requested", "approved", "in_progress", "completed", "blocked", "failed", "cancelled"]},
               "assigned_to": {"type": ["string", "null"]},
+              "assigned_at": {"type": ["string", "null"], "format": "date-time"},
               "actor_display_name": {"type": ["string", "null"]},
               "created_at": {"type": ["string", "null"], "format": "date-time"},
               "updated_at": {"type": ["string", "null"], "format": "date-time"}

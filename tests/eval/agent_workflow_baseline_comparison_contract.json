@@ -1,0 +1,244 @@
+{
+  "contract_id": "agent-workflow-baseline-comparison-v1",
+  "status": "planned",
+  "execution_status": "unverified",
+  "execution_profile": {
+    "name": "presentation_minimum",
+    "case_count": 8,
+    "case_source": "GS-001..GS-008",
+    "arms": [
+      "B1",
+      "B2",
+      "B3"
+    ],
+    "iterations_per_case": 3,
+    "total_llm_runs": 72,
+    "randomize_execution_order": true
+  },
+  "arms": {
+    "B1": {
+      "label": "direct_llm",
+      "input": "minimally_normalized_raw_input",
+      "uses": [
+        "same_read_only_output_schema",
+        "empty_role_shape_hint_only"
+      ],
+      "excludes": [
+        "deterministic_summary_answer_prose",
+        "evidence_packet",
+        "workflow_orchestration",
+        "saved_summary_reuse",
+        "retry",
+        "fallback",
+        "db_workflow_trace"
+      ]
+    },
+    "B2": {
+      "label": "evidence_packet_llm",
+      "input": "agent_review_packet",
+      "uses": [
+        "evidence_packet",
+        "same_read_only_output_schema"
+      ],
+      "excludes": [
+        "workflow_orchestration",
+        "saved_summary_reuse",
+        "retry",
+        "fallback",
+        "db_workflow_trace"
+      ]
+    },
+    "B3": {
+      "label": "current_workflow",
+      "input": "agent_review_packet",
+      "uses": [
+        "evidence_packet",
+        "output_validation",
+        "saved_summary_reuse",
+        "bounded_retry",
+        "deterministic_fallback",
+        "db_workflow_trace",
+        "snapshot_consistency",
+        "side_effect_blocking"
+      ],
+      "excludes": []
+    }
+  },
+  "controls": [
+    "same_case",
+    "same_provider",
+    "same_model",
+    "same_temperature",
+    "same_generation_settings",
+    "same_output_schema",
+    "same_rubric",
+    "same_read_only_permissions"
+  ],
+  "primary_comparison": "B3-B1",
+  "secondary_diagnostic_comparisons": [
+    "B2-B1",
+    "B3-B2"
+  ],
+  "value_deltas": {
+    "B2-B1": "evidence_packet_and_structuring",
+    "B3-B2": "validation_reuse_fallback_trace",
+    "B3-B1": "llm_only_vs_full_pipeline_total_effect"
+  },
+  "core_metrics": {
+    "response_quality": [
+      "schema_validation_pass_rate",
+      "unsupported_claim_rate",
+      "critical_evidence_omission_rate",
+      "core_judgment_agreement_rate"
+    ],
+    "operational_control": [
+      "fallback",
+      "retry_count",
+      "saved_summary_reuse",
+      "workflow_trace_completeness"
+    ],
+    "cost": [
+      "input_tokens",
+      "output_tokens",
+      "estimated_cost_per_run",
+      "estimated_cost_per_valid_output"
+    ]
+  },
+  "deferred_metrics": [
+    "latency_p50_p95",
+    "fine_grained_field_variance",
+    "evidence_reference_agreement",
+    "abnormal_running_row_rate"
+  ],
+  "temporal_consistency_extension": {
+    "harness": "scripts/evaluate_temporal_consistency.py",
+    "fault_scenarios": [
+      "risk_escalation",
+      "risk_recovery",
+      "artifact_replacement",
+      "evidence_history_update"
+    ],
+    "primary_metrics": [
+      "stale_candidate_accepted_rate",
+      "snapshot_mismatch_detection_rate",
+      "stale_output_block_rate",
+      "fresh_state_recovery_rate"
+    ],
+    "boundary": "B3 uses production MaintenanceLoopService snapshot mismatch/requery logic; B1/B2 acceptance-side side effects are simulated only."
+  },
+  "fault_injection": {
+    "primary_arm": "B3",
+    "execution_scope": [
+      "malformed_output",
+      "provider_timeout",
+      "snapshot_mismatch"
+    ],
+    "contract_test_only": [
+      "429",
+      "transient_5xx",
+      "concurrent_same_summary_key",
+      "stale_running",
+      "db_trace_write_failure"
+    ],
+    "combined_with_quality_score": false
+  },
+  "value_states": {
+    "measured": "value was observed by an executed evaluation",
+    "not_measured": "metric applies but no trustworthy measurement was captured; value must be null",
+    "not_applicable": "feature or metric does not exist for the comparison arm; value must be null",
+    "planned": "evaluation is designed but has not run",
+    "unverified": "contract or fixture exists without live repeated LLM evidence"
+  },
+  "row_contract": {
+    "required": [
+      "case_id",
+      "iteration",
+      "arm",
+      "execution_order",
+      "provider",
+      "model",
+      "generation_config",
+      "output_schema_version",
+      "rubric_version",
+      "execution_status",
+      "metrics"
+    ],
+    "nullable_metric_shape": {
+      "value": null,
+      "state": "not_measured",
+      "reason": "required when state is not_measured or not_applicable"
+    }
+  },
+  "aggregate_contract": {
+    "group_by": [
+      "arm",
+      "execution_status"
+    ],
+    "report_separately": [
+      "quality",
+      "operational_control",
+      "fault_injection"
+    ],
+    "missing_value_policy": "exclude null values from numeric denominators and report state counts",
+    "cost_policy": "use provider-reported token usage and versioned configured rates; otherwise value=null and state=not_measured; never synthesize zero",
+    "comparison_columns": [
+      "B1",
+      "B2",
+      "B3",
+      "B2-B1",
+      "B3-B2",
+      "B3-B1"
+    ]
+  },
+  "review_split": {
+    "automated": [
+      "schema_validation_pass_rate",
+      "required_field_presence",
+      "source_reference_membership",
+      "input_tokens",
+      "output_tokens",
+      "estimated_cost",
+      "retry_count",
+      "saved_summary_reuse",
+      "fallback",
+      "workflow_trace_completeness"
+    ],
+    "human": [
+      "unsupported_claim_severity",
+      "critical_evidence_omission",
+      "core_judgment_consistency"
+    ],
+    "human_sampling": "review one final output per case and arm; expand only when an error is found"
+  },
+  "sample_row": {
+    "case_id": "GS-001",
+    "iteration": 1,
+    "arm": "B1",
+    "execution_order": null,
+    "provider": "TBD",
+    "model": "TBD",
+    "generation_config": {
+      "temperature": "TBD"
+    },
+    "output_schema_version": "agent-review-summary-v1.0",
+    "rubric_version": "baseline-rubric-v1",
+    "execution_status": "planned",
+    "metrics": {
+      "schema_validation_pass_rate": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "72-run evaluation not run"
+      },
+      "estimated_cost_per_run": {
+        "value": null,
+        "state": "not_measured",
+        "reason": "provider token usage and versioned price rates have not been captured"
+      },
+      "saved_summary_reuse": {
+        "value": null,
+        "state": "not_applicable",
+        "reason": "B1 has no saved-summary layer"
+      }
+    }
+  }
+}

@@ -28,7 +28,7 @@ export function ReliabilityRoutePlaceholder() {
   return (
     <main className={`reliability-route-placeholder is-${theme}`} aria-busy="true" aria-label="Reliability workspace 준비 중">
       <header className="reliability-route-placeholder__topbar">
-        <strong>Reliability Operations</strong>
+        <strong>Hanbit Tech</strong>
         <span />
       </header>
       <div className="reliability-route-placeholder__body">

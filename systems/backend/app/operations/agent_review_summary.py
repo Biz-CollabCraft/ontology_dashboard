@@ -64,6 +64,10 @@ FORBIDDEN_PROSE_CLAIMS = (
     "생산 손실이 예상됩니다",
     "마지막 정비는",
     "재발 주기는",
+    "재고 확보",
+    "납기 보장",
+    "현재 교대 내 교체 가능",
+    "실제 생산 실적 기준",
     "repair success",
     "execute approval",
     "auto approval",
@@ -267,9 +271,10 @@ def _role_summaries(
 
     quotes = {
         "field_operator": (
-            f"{asset_label}은 {status} 알림이며 {component_text}{_object_particle(component_text)} "
-            f"{location_text}에서 먼저 확인할 대상으로 잡습니다. "
-            f"근거 지표는 {factor_text}이고, {work_request_text} {part_text}"
+            f"{asset_label}: {status} 알림. {location_text}에서 "
+            f"{component_text}{_object_particle(component_text)} 확인합니다. "
+            f"{factor_text}와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. "
+            f"{work_request_text} {part_text}"
         ),
         "process_manager": (
             f"{asset_label} 위험 감지 건은 현재 생산 영향이 {production_impact}이며, "
@@ -493,6 +498,8 @@ def _confidence_label(packet: dict[str, Any]) -> str:
     risk = packet.get("risk_summary") or {}
     if risk.get("status_grade") is None or risk.get("failure_probability") is None:
         return "data_quality_hold"
+    if risk.get("status_grade") == "critical" and packet.get("evidence_gaps"):
+        return "partial"
     if packet.get("sop_guidance") and packet.get("inspection_targets"):
         return "grounded"
     if packet.get("inspection_targets") or packet.get("evidence_gaps"):

@@ -156,7 +156,7 @@ class ProductResultMaterializationService:
     @staticmethod
     @lru_cache(maxsize=1)
     def _threshold_policy() -> dict[str, Any]:
-        path = project_root() / "systems" / "backend" / "app" / "diagnosis" / "threshold_policy.json"
+        path = project_root() / "systems" / "backend" / "app" / "diagnosis" / "v31_threshold_policy.json"
         return json.loads(path.read_text(encoding="utf-8"))
 
     @classmethod
@@ -268,7 +268,9 @@ class ProductResultMaterializationService:
         )
         threshold = float(policy_decision["selected_threshold"])
         status = str(policy_decision["status"])
-        predicted_type = "failure_risk" if score >= threshold else "none"
+        predicted_type = (
+            "failure_risk" if score >= threshold else "no_significant_risk"
+        )
         prediction_id = f"GEN-{uuid.uuid5(uuid.NAMESPACE_URL, f'{batch.batch_id}:{item.event_id}')}"
         artifact_id = f"RESULT#{prediction_id}"
         action = cls._promotion_action(status, criticality)
@@ -416,7 +418,7 @@ class ProductResultMaterializationService:
         source_fields.append(
             {
                 "field_id": "backend_policy.severity_rules",
-                "source_path": "systems/backend/app/diagnosis/threshold_policy.json",
+                "source_path": "systems/backend/app/diagnosis/v31_threshold_policy.json",
                 "label": "Backend severity policy",
                 "description": "Backend-owned severity and criticality adjustment policy applied during Product Result promotion.",
             }

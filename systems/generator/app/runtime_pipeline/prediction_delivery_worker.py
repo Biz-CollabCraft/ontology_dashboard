@@ -40,6 +40,10 @@ class PredictionDeliveryWorker:
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
 
+    @property
+    def is_running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
     def recover_interrupted_items(self) -> int:
         """Startup recovery hook: recover any outbox items left in 'sending' state due to prior shutdown."""
         items = self.service.list_outbox_items(status="sending")
@@ -196,32 +200,93 @@ class PredictionDeliveryWorker:
 
             return False
 
+    @staticmethod
+    def _is_ready(item: PredictionOutboxItem, now_dt: datetime) -> bool:
+        if item.status == "pending":
+            return True
+        if item.status != "retry_wait":
+            return False
+        if not item.next_retry_at:
+            return True
+        try:
+            due_dt = datetime.fromisoformat(item.next_retry_at)
+            if due_dt.tzinfo is None:
+                due_dt = due_dt.replace(tzinfo=timezone.utc)
+            return now_dt >= due_dt
+        except (TypeError, ValueError):
+            return True
+
+    def _ordered_ready_items(
+        self,
+        items: list[PredictionOutboxItem],
+        now_dt: datetime,
+    ) -> tuple[list[PredictionOutboxItem], set[str]]:
+        """Promote one ready result per not-yet-delivered maintenance event."""
+        delivered_maintenance_events = {
+            maintenance_event_id
+            for item in items
+            if item.status == "sent"
+            if (
+                maintenance_event_id := self.service.maintenance_event_id(item)
+            ) is not None
+        }
+        ready = sorted(
+            (item for item in items if self._is_ready(item, now_dt)),
+            key=lambda item: (item.created_at, item.event_id),
+        )
+        promoted: list[PredictionOutboxItem] = []
+        regular: list[PredictionOutboxItem] = []
+        promoted_events: set[str] = set()
+        for item in ready:
+            maintenance_event_id = self.service.maintenance_event_id(item)
+            if (
+                maintenance_event_id is not None
+                and maintenance_event_id not in delivered_maintenance_events
+                and maintenance_event_id not in promoted_events
+            ):
+                promoted.append(item)
+                promoted_events.add(maintenance_event_id)
+            else:
+                regular.append(item)
+        return promoted + regular, delivered_maintenance_events
+
     def process_pending(self) -> int:
-        """Scan and process all ready pending/retry_wait items. Returns count of processed items."""
+        """Process ready items while allowing first replay results to preempt backlog.
+
+        Only one result per not-yet-delivered maintenance event is promoted.
+        Subsequent snapshots preserve creation-order FIFO. A lightweight
+        in-process signal interrupts a stale live backlog snapshot when a new
+        maintenance event arrives, avoiding a full outbox rescan after every
+        ordinary delivery.
+        """
         from systems.generator.generator_config import PATHS
         if not PATHS.runtime_prediction_enabled:
             return 0
+        # Clear signals for records already persisted before this snapshot.
+        # Registrations racing after this point remain visible to the loop.
+        self.service.consume_pending_maintenance_event_ids()
         items = self.service.list_outbox_items()
+        ordered_items, delivered_maintenance_events = self._ordered_ready_items(
+            items,
+            datetime.now(timezone.utc),
+        )
         processed_count = 0
-        now_dt = datetime.now(timezone.utc)
 
-        for item in items:
-            if item.status == "pending":
-                self.process_item(item)
-                processed_count += 1
-            elif item.status == "retry_wait":
-                if item.next_retry_at:
-                    try:
-                        due_dt = datetime.fromisoformat(item.next_retry_at)
-                        if now_dt >= due_dt:
-                            self.process_item(item)
-                            processed_count += 1
-                    except Exception:
-                        self.process_item(item)
-                        processed_count += 1
-                else:
-                    self.process_item(item)
-                    processed_count += 1
+        for item in ordered_items:
+            delivered = self.process_item(item)
+            processed_count += 1
+            maintenance_event_id = self.service.maintenance_event_id(item)
+            if delivered and maintenance_event_id is not None:
+                delivered_maintenance_events.add(maintenance_event_id)
+
+            newly_registered = self.service.consume_pending_maintenance_event_ids()
+            if newly_registered - delivered_maintenance_events:
+                logger.info(
+                    "[PredictionDeliveryWorker] New maintenance replay result "
+                    "registered; refreshing delivery order before draining the "
+                    "remaining live backlog"
+                )
+                break
 
         return processed_count
 

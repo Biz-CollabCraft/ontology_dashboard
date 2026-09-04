@@ -94,18 +94,20 @@ describe("inspection completion payload", () => {
 });
 
 describe("operations manual recommendation payload", () => {
-  it("keeps cost results out of the recommendation command", () => {
+  it("preserves the consulted analysis and selected action without selecting a cost option", () => {
     const payload = buildOperationsManualRecommendationPayload(
       "inspection-result-001",
       "TOOL_REPLACEMENT",
+      "cost-analysis-001",
+      "action-candidate-001",
     );
 
     expect(payload).toEqual({
       action_code: "TOOL_REPLACEMENT",
       basis: ["inspection_result:inspection-result-001"],
+      cost_analysis_id: "cost-analysis-001",
+      action_candidate_id: "action-candidate-001",
     });
-    expect(payload).not.toHaveProperty("cost_analysis_id");
     expect(payload).not.toHaveProperty("cost_option_id");
-    expect(payload).not.toHaveProperty("action_candidate_id");
   });
 });

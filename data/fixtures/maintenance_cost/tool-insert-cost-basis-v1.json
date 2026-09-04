@@ -116,14 +116,20 @@
       "source_kind": "runtime_derived_synthetic_scenario",
       "confidence": "low",
       "formula": "round(failure_probability * failure_consequence_cost_minor)",
-      "reasoning": "Expected failure loss is a calculated output, not a site master value. Only probabilities already present in the governed demo What-if contract are used. Cost What-if does not interpolate or create future Prediction values.",
+      "reasoning": "Expected failure loss is a calculated output, not a site master value. No-action uses the source Product Result failure_probability. The 12-hour planned-window probability is the arithmetic midpoint of that value and the governed TOOL_REPLACEMENT intervention assumption; it is a cost-scenario policy value, not a model Prediction.",
       "scenario_probabilities": {
         "immediate": {"failure_probability": 0.21, "source_reference": "data/fixtures/what_if/tool-replacement-contract-fixture.json#/effect/intervention_probability"},
-        "planned_window": null,
+        "planned_window": {
+          "formula": "(source_product_result.failure_probability + immediate.failure_probability) / 2",
+          "source_reference": "maintenance-cost-policy-v3#planned-window-midpoint"
+        },
         "reinspect_after": null,
-        "no_action_baseline": {"failure_probability": 0.82, "source_reference": "data/fixtures/what_if/tool-replacement-contract-fixture.json#/effect/baseline_probability"}
+        "no_action_baseline": {
+          "source_field": "source_product_result.failure_probability",
+          "source_reference": "maintenance-inspection-lineage#source_product_result_id"
+        }
       },
-      "missing_probability_behavior": "Return insufficient for that timing; do not estimate, interpolate, or substitute a probability."
+      "missing_probability_behavior": "Return insufficient when the source Product Result probability is unavailable or invalid. Reinspect remains insufficient because no governed probability or execution policy exists."
     }
   },
   "sources": [
@@ -220,14 +226,14 @@
       "source_kind": "internal_contract_fixture",
       "title": "TOOL_REPLACEMENT What-if contract fixture",
       "url": "data/fixtures/what_if/tool-replacement-contract-fixture.json",
-      "evidence": "The contract fixture records 30 minutes of preventive downtime, baseline probability 0.82, intervention probability 0.21, and synthetic counterfactual limitations.",
+      "evidence": "The contract fixture records 30 minutes of preventive downtime and intervention probability 0.21. Its fixed baseline probability is not used for cost analysis; no-action uses the source Product Result probability.",
       "accessed_at": "2026-08-31"
     }
   ],
   "usage_policy": {
     "allowed": "Demo decision-support calculation and sensitivity analysis with exact source and assumption provenance.",
     "forbidden": "Representing synthetic policy values as an actual site quote, payroll, MES/ERP result, guaranteed saving, recommendation, approval, or execution command.",
-    "missing_future_probability_behavior": "Return insufficient for planned_window and reinspect_after until an authoritative probability or an explicitly governed sensitivity input is provided.",
+    "missing_future_probability_behavior": "Use the explicit maintenance-cost-policy-v3 arithmetic-midpoint assumption for planned_window. Return insufficient for reinspect_after and whenever the source Product Result probability is unavailable or invalid.",
     "replacement_policy": "Replace public and synthetic references with versioned site quote, payroll, MES, ERP, and observed maintenance-history inputs before operational use."
   }
 }

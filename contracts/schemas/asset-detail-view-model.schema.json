@@ -308,7 +308,7 @@
         "runtime_hours_7d": {"type": ["number", "null"], "minimum": 0},
         "production_impact": {"type": ["string", "null"], "enum": ["none", "low", "medium", "high", null]},
         "context_id": {"type": "string"},
-        "source_type": {"const": "synthetic_capacity_model"},
+        "source_type": {"const": "capacity_model"},
         "temporal_scope": {
           "type": "object",
           "additionalProperties": false,
@@ -410,6 +410,7 @@
               "work_type": {"enum": ["inspection", "maintenance"]},
               "status": {"enum": ["requested", "approved", "in_progress", "completed", "blocked", "failed", "cancelled"]},
               "assigned_to": {"type": ["string", "null"]},
+              "assigned_at": {"type": ["string", "null"], "format": "date-time"},
               "actor_display_name": {"type": ["string", "null"]},
               "created_at": {"type": ["string", "null"], "format": "date-time"},
               "updated_at": {"type": ["string", "null"], "format": "date-time"}
@@ -430,6 +431,13 @@
               "started_at": {"type": ["string", "null"], "format": "date-time"},
               "completed_at": {"type": ["string", "null"], "format": "date-time"}
             }
+          }
+        },
+        "inspection_results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
           }
         },
         "maintenance_events": {
@@ -479,6 +487,107 @@
               "target_id": {"type": ["string", "null"]},
               "label": {"type": "string"},
               "disabled_reason": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "lifecycle_summary": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["current_step", "current_step_label", "completed_steps", "source"],
+          "properties": {
+            "current_step": {
+              "enum": [
+                "prediction",
+                "evidence",
+                "decision",
+                "inspection_requested",
+                "inspection_approved",
+                "inspection_in_progress",
+                "inspection_completed",
+                "recommendation_proposed",
+                "maintenance_requested",
+                "maintenance_approved",
+                "maintenance_in_progress",
+                "maintenance_completed",
+                "post_maintenance_observation_pending",
+                "ready_for_reprediction"
+              ]
+            },
+            "current_step_label": {"type": "string"},
+            "completed_steps": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "prediction",
+                  "evidence",
+                  "decision",
+                  "inspection_requested",
+                  "inspection_approved",
+                  "inspection_in_progress",
+                  "inspection_completed",
+                  "recommendation_proposed",
+                  "maintenance_requested",
+                  "maintenance_approved",
+                  "maintenance_in_progress",
+                  "maintenance_completed",
+                  "post_maintenance_observation_pending",
+                  "ready_for_reprediction"
+                ]
+              }
+            },
+            "next_step": {
+              "type": ["string", "null"],
+              "enum": [
+                "prediction",
+                "evidence",
+                "decision",
+                "inspection_requested",
+                "inspection_approved",
+                "inspection_in_progress",
+                "inspection_completed",
+                "recommendation_proposed",
+                "maintenance_requested",
+                "maintenance_approved",
+                "maintenance_in_progress",
+                "maintenance_completed",
+                "post_maintenance_observation_pending",
+                "ready_for_reprediction",
+                null
+              ]
+            },
+            "source": {"const": "backend_closed_loop_policy"}
+          }
+        },
+        "primary_action": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["action_id", "target_type", "label", "owner_role", "owner_label", "requires_input"],
+          "properties": {
+            "action_id": {"type": "string"},
+            "target_type": {"enum": ["recommendation", "work_order", "maintenance_action", "inspection_result", "event"]},
+            "target_id": {"type": ["string", "null"]},
+            "label": {"type": "string"},
+            "owner_role": {"enum": ["process_manager", "process_engineer", "maintenance_technician", "unassigned"]},
+            "owner_label": {"type": "string"},
+            "disabled_reason": {"type": ["string", "null"]},
+            "requires_input": {"type": "boolean"}
+          }
+        },
+        "timeline": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["timeline_id", "event_type", "label", "status"],
+            "properties": {
+              "timeline_id": {"type": "string"},
+              "event_type": {"type": "string"},
+              "label": {"type": "string"},
+              "status": {"enum": ["completed", "pending", "blocked", "failed"]},
+              "actor_display_name": {"type": ["string", "null"]},
+              "occurred_at": {"type": ["string", "null"], "format": "date-time"},
+              "target_type": {"type": ["string", "null"]},
+              "target_id": {"type": ["string", "null"]}
             }
           }
         },

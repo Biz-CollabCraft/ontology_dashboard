@@ -1197,14 +1197,18 @@ class PredictiveMaintenanceRuntimeService:
         artifact = _dict(row.get("prediction_result_payload"))
         if not isinstance(artifact.get("evidence_payload"), dict):
             return None
+        provenance = _dict(artifact.get("provenance"))
+        if provenance.get("source_type") != "product_runtime_inference":
+            return None
         validate_product_result_artifact(artifact)
         for field in ("artifact_id", "asset_id", "asset_type", "schema_version"):
             if str(artifact.get(field)) != str(row[field]):
                 raise ValueError(f"stored Product Result Artifact {field} does not match runtime index")
-        provenance = _dict(artifact.get("provenance"))
         if str(provenance.get("prediction_id")) != str(row["prediction_id"]):
             raise ValueError("stored Product Result Artifact prediction_id does not match runtime index")
-        return artifact
+        enriched = dict(artifact)
+        enriched["source_sha256"] = str(row["source_sha256"])
+        return enriched
 
     @staticmethod
     def _product_result_evidence_summary(
@@ -1216,6 +1220,7 @@ class PredictiveMaintenanceRuntimeService:
         provenance = _dict(producer_artifact.get("provenance"))
         lineage = _dict(producer_artifact.get("lineage"))
         source_context = _dict(lineage.get("source_context"))
+        source_lineage = _dict(source_context.get("lineage"))
         model_artifact = _dict(provenance.get("model_artifact"))
         sensor_evidence = _dict(payload.get("sensor_evidence"))
         sensor_window = _dict(sensor_evidence.get("window"))
@@ -1248,6 +1253,12 @@ class PredictiveMaintenanceRuntimeService:
                     if provenance.get("source_reference") is None
                     else str(provenance.get("source_reference"))
                 ),
+                simulation_session_id=source_lineage.get("simulation_session_id"),
+                overlay_branch_id=source_lineage.get("overlay_branch_id"),
+                history_segment_id=source_lineage.get("history_segment_id"),
+                maintenance_action_id=source_lineage.get("maintenance_action_id"),
+                maintenance_event_id=source_lineage.get("maintenance_event_id"),
+                state_version=source_lineage.get("state_version"),
             ),
             evidence_payload_reference=_dict(
                 provenance.get("evidence_payload_reference")
@@ -1316,6 +1327,7 @@ class PredictiveMaintenanceRuntimeService:
     ) -> GovernedProductResult:
         factors = self._factor_models(row.get("top_factors"))
         producer_artifact: dict[str, Any] | None = None
+        provenance: dict[str, Any] = {}
         if source_contract == "result_artifact":
             producer_artifact = self._stored_producer_artifact(row)
         if source_contract == "result_artifact":
@@ -1382,6 +1394,14 @@ class PredictiveMaintenanceRuntimeService:
             prediction_task=prediction_task,
             model_version=model_version,
         )
+        producer_lineage = _dict(
+            _dict(_dict(producer_artifact).get("lineage")).get("source_context")
+        )
+        producer_lineage = _dict(producer_lineage.get("lineage"))
+
+        def runtime_lineage_value(field: str) -> Any:
+            return producer_lineage.get(field, provenance.get(field))
+
         return GovernedProductResult(
             source_contract=source_contract,
             artifact_id=(
@@ -1416,6 +1436,12 @@ class PredictiveMaintenanceRuntimeService:
                 prediction_task=prediction_task,
                 source_type=source_type,
                 canonical_source_mutated=False,
+                simulation_session_id=runtime_lineage_value("simulation_session_id"),
+                overlay_branch_id=runtime_lineage_value("overlay_branch_id"),
+                history_segment_id=runtime_lineage_value("history_segment_id"),
+                maintenance_action_id=runtime_lineage_value("maintenance_action_id"),
+                maintenance_event_id=runtime_lineage_value("maintenance_event_id"),
+                state_version=runtime_lineage_value("state_version"),
             ),
             governance=context.governance,
             graph=context.graph,
@@ -1474,9 +1500,74 @@ class PredictiveMaintenanceRuntimeService:
             latest_product_contract=source_contract,
         )
 
+    def post_maintenance_result(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        maintenance_event_id: str,
+    ) -> GovernedProductResult | None:
+        row = self.repository.post_maintenance_result_row(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            maintenance_event_id=maintenance_event_id,
+        )
+        if row is None:
+            return None
+        context = self.context(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=str(row["dataset_version_id"]),
+        )
+        return self._product_result(
+            context=context,
+            row=row,
+            source_contract="result_artifact",
+        )
+
     @staticmethod
     def _dashboard_event_id(result: GovernedProductResult) -> str:
         return result.artifact_id or result.provenance.prediction_id
+
+    def _historical_selected_result(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        selected_event_id: str,
+    ) -> tuple[GovernedProductResult, DatasetVersionRuntimeContext] | None:
+        """Resolve a frozen historical Result Artifact for an explicit Case.
+
+        Latest-result collections intentionally advance with new observations.
+        A Decision Case must instead retain the exact Result Artifact selected
+        by the user, while remaining scoped to the active Project/Workspace and
+        Dataset Version.
+        """
+        selected_row = self.repository.result_artifact_row(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            artifact_id=selected_event_id,
+        )
+        if selected_row is None:
+            return None
+        historical_context = self.context(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=str(selected_row["dataset_version_id"]),
+        )
+        return self._product_result(
+            context=historical_context,
+            row=selected_row,
+            source_contract="result_artifact",
+        ), historical_context
 
     def event_evidence_projection(
         self,
@@ -1561,6 +1652,7 @@ class PredictiveMaintenanceRuntimeService:
         equipment: DashboardEquipment,
         maintenance: list[dict[str, Any]],
         role: str,
+        report_type: str | None = None,
         intent: str,
         locale: AppLocale,
         view: Literal["legacy", "canonical"] = "legacy",
@@ -1647,10 +1739,14 @@ class PredictiveMaintenanceRuntimeService:
         )
         evidence = canonical_evidence if view == "canonical" else legacy_evidence
         factors = legacy_evidence["top_factors"]
+        resolved_report_type = report_type or (
+            "executive-brief" if role == "executive" else "inspection-summary" if role == "engineer" else "operations-decision"
+        )
         report = {
-            "report_id": f"pm-report:{event_id}:{role}:{locale}",
+            "report_id": f"pm-report:{event_id}:{role}:{resolved_report_type}:{locale}",
             "event_id": event_id,
             "role": role,
+            "report_type": resolved_report_type,
             "locale": locale,
             "mode": "deterministic_result_artifact",
             "headline": (
@@ -1732,6 +1828,49 @@ class PredictiveMaintenanceRuntimeService:
             ),
             "generated_at": result.observed_at.isoformat(),
         }
+        if role == "executive":
+            risk_text = f"{result.failure_probability * 100:.1f}%"
+            criticality_label = {
+                "high": "높음" if locale == "ko-KR" else "high",
+                "medium": "중간" if locale == "ko-KR" else "medium",
+                "low": "낮음" if locale == "ko-KR" else "low",
+            }.get(equipment.criticality, "확인 필요" if locale == "ko-KR" else "not provided")
+            if resolved_report_type == "operations-decision":
+                report["headline"] = f"{result.asset_id} · 경영 의사결정 요청"
+                report["summary"] = f"현재 위험도 {risk_text}, 상태 {status_label}입니다. 현재 요청된 판단은 '{action_label}'이며 자동 실행되지 않습니다."
+                report["sections"] = [
+                    {"section_id": "decision-request", "title": "의사결정 요청", "body": action_label, "evidence_field_ids": ["recommended_decision"]},
+                    {"section_id": "operational-exposure", "title": "운영 노출", "body": f"설비 중요도 {criticality_label} · 예상 정지 노출 {equipment.estimated_downtime_minutes}분", "evidence_field_ids": ["equipment.criticality", "equipment.estimated_downtime_minutes"]},
+                ]
+            elif resolved_report_type == "inspection-summary":
+                report["headline"] = f"{result.asset_id} · 현장 확인 필요"
+                report["summary"] = f"현재 위험도 {risk_text}입니다. 예측 결과는 고장 확정이 아니며 '{action_label}'을 통해 현장 확인이 필요합니다."
+                report["sections"] = [
+                    {"section_id": "inspection-request", "title": "확인 요청", "body": action_label, "evidence_field_ids": ["recommended_decision"]},
+                    {"section_id": "inspection-limit", "title": "판단 경계", "body": "현장 점검 전에는 원인과 정비 필요성을 확정하지 않습니다.", "evidence_field_ids": ["status"]},
+                ]
+            elif resolved_report_type == "maintenance-effect":
+                report["headline"] = f"{result.asset_id} · 정비 효과 확인 대기"
+                report["summary"] = "이 Event에 직접 연결된 Maintenance Event와 정비 후 관측이 확인되기 전에는 정비 효과를 현재 Case의 Outcome으로 표시하지 않습니다."
+                report["sections"] = [
+                    {"section_id": "maintenance-state", "title": "현재 상태", "body": "정비 완료와 후속 관측의 인과 연결을 확인해야 합니다.", "evidence_field_ids": ["status"]},
+                ]
+            elif resolved_report_type == "weekly-risk":
+                report["headline"] = f"주간 리스크 참고 · {result.asset_id}"
+                report["summary"] = f"선택 Case snapshot의 위험도는 {risk_text}, 상태는 {status_label}입니다. 전체 주간 포트폴리오 집계와는 구분합니다."
+                report["sections"] = [
+                    {"section_id": "case-risk", "title": "선택 Case", "body": report["summary"], "evidence_field_ids": ["status", "failure_probability"]},
+                ]
+            else:
+                report["headline"] = f"Executive Brief · {result.asset_id}"
+                report["summary"] = f"현재 위험도 {risk_text}, 상태 {status_label}입니다. 고장 유형은 현장 확인 전 가설이며 현재 경영 판단 요청은 '{action_label}'입니다."
+                report["sections"] = [
+                    {"section_id": "executive-status", "title": "경영 판단 요약", "body": report["summary"], "evidence_field_ids": ["status", "failure_probability", "recommended_decision"]},
+                    {"section_id": "executive-exposure", "title": "운영 노출", "body": f"예상 정지 노출 {equipment.estimated_downtime_minutes}분 · 설비 중요도 {criticality_label}", "evidence_field_ids": ["equipment.estimated_downtime_minutes", "equipment.criticality"]},
+                ]
+            # Raw feature identifiers and release provenance remain available
+            # through Evidence details, not the normal executive narrative.
+            report["citations"] = ["status", "failure_probability", "recommended_decision", "equipment.estimated_downtime_minutes"]
         block_types = [
             "StatusSummary",
             "RiskKpi",
@@ -1783,6 +1922,7 @@ class PredictiveMaintenanceRuntimeService:
         dataset_version_id: str | None,
         selected_event_id: str | None,
         role: str,
+        report_type: str | None = None,
         intent: str,
         locale: AppLocale = "ko-KR",
         view: Literal["legacy", "canonical"] = "legacy",
@@ -1816,6 +1956,7 @@ class PredictiveMaintenanceRuntimeService:
         events: list[DashboardEventSummary] = []
         equipment_by_event: dict[str, DashboardEquipment] = {}
         result_by_event: dict[str, GovernedProductResult] = {}
+        context_by_event: dict[str, DatasetVersionRuntimeContext] = {}
         for result in results.items:
             event_id = self._dashboard_event_id(result)
             # Evidence for a prediction must not include maintenance completed
@@ -1849,6 +1990,53 @@ class PredictiveMaintenanceRuntimeService:
             )
             equipment_by_event[event_id] = equipment
             result_by_event[event_id] = result
+            context_by_event[event_id] = context
+
+        # A Decision Case is a frozen prediction snapshot, not an alias for the
+        # latest prediction of the same asset.  The latest-results collection
+        # intentionally advances as new observations arrive, so explicitly
+        # requested historical Result Artifacts have to be re-hydrated from the
+        # artifact repository instead of silently falling forward to a newer
+        # event.
+        if selected_event_id and selected_event_id not in result_by_event:
+            historical = self._historical_selected_result(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                selected_event_id=selected_event_id,
+            )
+            if historical is not None:
+                selected_result, selected_context = historical
+                selected_maintenance = [
+                    item
+                    for item in maintenance_by_asset.get(selected_result.asset_id, [])
+                    if item.get("completed_at") is not None
+                    and item["completed_at"] <= selected_result.observed_at
+                ]
+                selected_equipment = self._dashboard_equipment(selected_result, selected_maintenance)
+                canonical_selected_id = self._dashboard_event_id(selected_result)
+                events.append(
+                    DashboardEventSummary(
+                        event_id=canonical_selected_id,
+                        scenario_id=f"{selected_result.asset_type}:{selected_result.site_id}:{selected_result.cell_id}",
+                        ontology_object_id=ontology_by_asset.get(selected_result.asset_id),
+                        equipment=selected_equipment,
+                        status=selected_result.status_grade,
+                        failure_probability=selected_result.failure_probability,
+                        confidence=f"{selected_result.confidence * 100:.1f}% · calibrated",
+                        predicted_failure_type=selected_result.predicted_failure_type,
+                        recommended_decision=(
+                            selected_result.recommended_action.action
+                            if selected_result.recommended_action
+                            else "Review governed prediction"
+                        ),
+                        observed_at=selected_result.observed_at,
+                        dataset_version_id=selected_context.dataset_version_id,
+                    )
+                )
+                equipment_by_event[canonical_selected_id] = selected_equipment
+                result_by_event[canonical_selected_id] = selected_result
+                context_by_event[canonical_selected_id] = selected_context
         events.sort(
             key=lambda item: (
                 {"critical": 0, "warning": 1, "attention": 2, "normal": 3}.get(
@@ -1859,7 +2047,9 @@ class PredictiveMaintenanceRuntimeService:
         )
         selected_id = (
             selected_event_id
-            if selected_event_id in result_by_event
+            if selected_event_id and selected_event_id in result_by_event
+            else None
+            if selected_event_id
             else events[0].event_id
             if events
             else None
@@ -1867,6 +2057,7 @@ class PredictiveMaintenanceRuntimeService:
         detail = None
         if selected_id:
             selected_result = result_by_event[selected_id]
+            selected_context = context_by_event[selected_id]
             selected_maintenance = [
                 item
                 for item in maintenance_by_asset.get(selected_result.asset_id, [])
@@ -1881,11 +2072,12 @@ class PredictiveMaintenanceRuntimeService:
                     organization_id=organization_id,
                     project_id=project_id,
                     workspace_id=workspace_id,
-                    context=context,
+                    context=selected_context,
                     result=selected_result,
                     equipment=equipment_by_event[selected_id],
                     maintenance=selected_maintenance,
                     role=role,
+                    report_type=report_type,
                     intent=intent,
                     locale=locale,
                     view=view,
@@ -2297,6 +2489,51 @@ class PredictiveMaintenanceRuntimeService:
             "workspace_id": workspace_id,
             "equipment_id": equipment_id,
             "simulation_session_id": record.id,
+        }
+
+    def resolve_maintenance_source_session(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        source_product_result_id: str,
+        equipment_id: str,
+    ) -> dict[str, str] | None:
+        """Resolve the source simulation session recorded by a Product Result."""
+
+        row = self.repository.result_artifact_row(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            artifact_id=source_product_result_id,
+        )
+        if row is None:
+            raise KeyError(source_product_result_id)
+        context = self.context(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=str(row["dataset_version_id"]),
+        )
+        result = self._product_result(
+            context=context,
+            row=row,
+            source_contract="result_artifact",
+        )
+        if result.artifact_id != source_product_result_id:
+            raise ValueError("Product Result canonical identity does not match the selector")
+        if result.asset_id != equipment_id:
+            raise ValueError("Product Result equipment identity mismatch")
+        simulation_session_id = result.provenance.simulation_session_id
+        if simulation_session_id is None or not simulation_session_id.strip():
+            return None
+        return {
+            "organization_id": organization_id,
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+            "equipment_id": equipment_id,
+            "simulation_session_id": simulation_session_id,
         }
 
     def control_replay(
