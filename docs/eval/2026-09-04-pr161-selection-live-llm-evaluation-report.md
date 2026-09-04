@@ -68,8 +68,10 @@ Verification passed:
 - ontology-dashboard local realtime orchestration tests: `tests/test_local_realtime_orchestration.py` -> 10 passed
 - feedback refresh / post-maintenance closed-loop tests: `tests/test_maintenance_loop_router.py tests/test_maintenance_loop_application.py tests/test_live_predictive_maintenance.py tests/test_closed_loop_integration_contract.py` -> 69 passed; `src/features/operations/maintenance/inspectionCompletionPayload.test.ts src/features/operations/maintenance/MaintenanceWorkflowActionPanel.test.ts` -> 7 passed
 - Agent Review Summary watcher contract: `tests/test_agent_review_summary_watcher_cli.py` -> 2 passed
-- Actual PostgreSQL watcher trigger: `scripts/watch_agent_review_summaries.py --database postgresql://... --limit 1 --max-attempts 1` -> `trigger=polling_watcher`, `packet_build=completed`, `summary_materialization=completed`, `consumer_ready=completed`, `materialized_count=1`, `read_only=true`, `mutation_allowed=false`
+- Actual PostgreSQL watcher trigger: `scripts/watch_agent_review_summaries.py --database postgresql://... --source auto --limit 1 --max-attempts 1` -> `trigger=polling_watcher`, `source_kind=live_result`, `packet_build=completed`, `summary_materialization=completed`, `consumer_ready=completed`, `materialized_count=1`, `read_only=true`, `mutation_allowed=false`
+- Required live-provider watcher trigger: `source .env` with the PostgreSQL URL pinned back to `postgresql://ontology:ontology-local-only@127.0.0.1:5432/ontology_dashboard`, then `scripts/watch_agent_review_summaries.py --database postgresql://... --source auto --limit 1 --max-attempts 1 --require-live-provider` -> exit code 0, `live_provider_ready=true`, `mode=llm`, `status=ready`, `fallback_reason=null`, `model_version=openai-compatible:gpt-4o-mini`
 - PR 163 live browser smoke: `systems/frontend/e2e/pr163-live-smoke.spec.ts --project=chromium` -> 1 passed
+- Closed-loop feedback/replay backend test: `tests/test_operations.py -k "api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context"` -> 1 passed, 65 deselected after the test harness explicitly pinned the intended test fallback environment
 
 The PR 163 smoke covers the live generator-to-database-to-screen path: canonical V3.1 release build, PostgreSQL bootstrap, backend health, generator health, gen-data readiness, authenticated operations screen rendering, 100 factory asset nodes, dashboard API source version `gen-data-wall-clock-live-v2`, non-empty dashboard events, and positive live record count.
 
@@ -91,9 +93,10 @@ Compatibility fixes made before the passing smoke:
 
 Agent Review watcher boundary:
 
-- The actual PostgreSQL watcher run created summary `4095506c-ad6a-4253-88d8-3ef3da50acb0` for `CNC-S01-L01-01` / `EVT-GS-001` with workflow run `87ed5e59-f278-4caf-af2e-ece51c2926bf`.
-- The watcher did rebuild the packet and deliver a persisted Agent Review Summary to the consumer contract (`role_workflow_ui`, `executive_brief_report`).
-- The persisted summary status was `fallback`, `fallback_reason=ProviderUnavailable`, `summary_mode=deterministic_fallback`; this run proves watcher trigger, packet build, persistence, and consumer readiness, but it is not a live-provider AI-generation pass.
+- The fallback PostgreSQL watcher run selected live candidate `source_kind=live_result` for `CNC-S04-L04-01` / `RESULT#GEN-3cc23e9a-450c-5c6f-92fb-31dd0357d751` on dataset version `dsv-8db96cf9-c174-5dfc-b17f-3fdf680b3825`, with `summary_id=a640acc6-ed6e-463d-9317-dbc504950f5c` and `summary_key=agent-review-summary:a57f530e025c9bd80cf8e00cd7c3513356fe9a3ea2c1654486a8da17f5a2176a`. Because project `.env` was not loaded, it reported `fallback_reason=ProviderUnavailable`; this proves fallback materialization and consumer delivery only.
+- The required live-provider PostgreSQL watcher run loaded project `.env`, pinned the PostgreSQL URL explicitly because `.env` leaves `ONTOLOGY_DASHBOARD_DATABASE_URL` blank, and created `summary_id=296808a6-75e1-4b2b-b6b9-c983a0571a86` with `summary_key=agent-review-summary:2b7eb29e320f28e91d5bfc30c387647446a6635532f392aa3929c14e62bc33c2`.
+- The live-provider run returned `live_provider_ready=true`, `mode=llm`, `status=ready`, `fallback_reason=null`, and `model_version=openai-compatible:gpt-4o-mini`; therefore actual LLM summary generation is verified for this one live DB candidate.
+- Consumer GET for the same `asset_id`, `event_id`, and `dataset_version_id` returned the same live-provider `summary_id` and `summary_key` with `trace.fallback=false`, so watcher materialization and UI consumer identity match.
 
 Regression boundary:
 
@@ -102,6 +105,12 @@ Regression boundary:
 - These failures are kept out of the PR 163 live-smoke pass claim. They are current regression-suite alignment work, mostly around historical screen copy, route/test-id expectations, and workflow/classic UI contracts, not evidence that the live gen-data -> PostgreSQL -> operations smoke path failed.
 
 ## Root-cause corrections before the final run
+
+### Closed-loop Product Result Artifact predictor env
+
+The earlier Closed-loop feedback/replay pytest failure was not a missing gen_data artifact. The detail-view test path builds a backend Product Result Artifact from an in-memory fixture dict and resolves a predictor in that separate pytest process. Without an explicit test fallback env or model artifact URI, `APP_ENV=development` disabled heuristic fallback and `configured_predictor()` looked for `CNC_MODEL_ARTIFACT_URI`.
+
+The fix has two parts: `build_product_result_artifact()` now passes the fixture `asset_type` into predictor resolution, and the Closed-loop test pins `APP_ENV=test` plus `ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK=1` so the fixture/test fallback path is explicit. The same original pytest command now passes without external env injection.
 
 ### Post-maintenance lifecycle regression
 

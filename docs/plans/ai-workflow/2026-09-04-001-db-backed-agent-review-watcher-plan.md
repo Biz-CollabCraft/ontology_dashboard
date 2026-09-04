@@ -166,18 +166,62 @@ Implemented on PR 163 branch:
 
 Verified on 2026-09-04:
 
-- `pytest -q tests/test_agent_review_summary_watcher_cli.py tests/test_operations.py`
-  -> 69 passed
-- PR 163 live smoke E2E on backend `8100` and frontend `3100`:
-  `pr163-live-smoke.spec.ts --project=chromium` -> 1 passed
-- local realtime topology started PostgreSQL, Backend, Generator Runtime,
-  gen_data, live ingestor, maintenance dispatcher, and Frontend
+- Target: PR #163 head `d34c51025fc811f1252785ca6acbd4cc3dcfb78f`
+  on head branch `enjoylonelines/pr161-llm-eval-integration`, base
+  `feat/predictive-maintenance-decision-workspace`; working tree was clean
+  before verification.
+- Runtime topology command:
+  `GEN_DATA_ROOT=/private/tmp/gen_data .venv/bin/python scripts/run_local_realtime.py --api-port 8100 --web-port 3100 --generator-port 8200 --gen-data-port 8300 --postgres-port 5432 --simulation-hours 169 --history-hours 168`.
+  Existing listeners on `3100`, `8100`, `8200`, `8300`, and `5432` were cleared
+  first; PostgreSQL used
+  `postgresql://ontology:ontology-local-only@127.0.0.1:5432/ontology_dashboard`.
+- Health checks: Backend `http://127.0.0.1:8100/health` -> 200 OK,
+  Frontend `http://127.0.0.1:3100/` -> 200 OK, Generator
+  `http://127.0.0.1:8200/health` -> 200 OK. The gen_data service was reachable
+  at the run URL printed by the launcher; `/health` on `8300` is not implemented
+  and returned 404.
+- gen_data source boundary: bootstrap/reference source version
+  `canonical-ai4i-physics-v3.1`; selected live dashboard source version
+  `gen-data-wall-clock-live-v2`; live `dataset_version_id`
+  `dsv-8db96cf9-c174-5dfc-b17f-3fdf680b3825`; dashboard API source kind
+  `postgresql_result_artifact`.
+- UI smoke E2E:
+  `PLAYWRIGHT_EXTERNAL_SERVERS=1 PLAYWRIGHT_API_URL=http://127.0.0.1:8100 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 npm --prefix systems/frontend run test:e2e -- pr163-live-smoke.spec.ts --project=chromium`
+  -> 1 passed.
+- Closed-loop feedback/replay backend test:
+  `.venv/bin/python -m pytest -q tests/test_operations.py -k "api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context"`
+  -> 1 passed, 65 deselected after making the test harness explicitly use the
+  intended test/heuristic fallback path.
+- Root-cause fix for the earlier Closed-loop test failure: the Product Result
+  Artifact builder now passes the fixture `asset_type` into predictor resolution,
+  and the Closed-loop test pins `APP_ENV=test` plus
+  `ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK=1`. The earlier failure was
+  an env/test-harness contract issue, not missing gen_data output.
 - watcher live DB trigger:
-  `source=auto`, candidate `source_kind=live_result`,
-  `event_id=RESULT#GEN-3cc23e9a-450c-5c6f-92fb-31dd0357d751`,
-  `summary_id=a640acc6-ed6e-463d-9317-dbc504950f5c`
-- consumer GET for the same runtime `event_id` returned the same
-  `summary_id` and `summary_key`
-- `--require-live-provider` failed with exit code `2` because the current local
-  environment returned `ProviderUnavailable`; therefore live DB packet delivery
-  is verified, but actual LLM generation is not claimed for this run
+  `.venv/bin/python scripts/watch_agent_review_summaries.py --database postgresql://ontology:ontology-local-only@127.0.0.1:5432/ontology_dashboard --source auto --limit 1 --max-attempts 1`
+  selected `source_kind=live_result`, `event_id=RESULT#GEN-3cc23e9a-450c-5c6f-92fb-31dd0357d751`,
+  `asset_id=CNC-S04-L04-01`, `dataset_version_id=dsv-8db96cf9-c174-5dfc-b17f-3fdf680b3825`.
+- Fallback run boundary: without loading project `.env`, watcher returned
+  `mode=deterministic_fallback`, `fallback_reason=ProviderUnavailable`,
+  `summary_id=a640acc6-ed6e-463d-9317-dbc504950f5c`,
+  `summary_key=agent-review-summary:a57f530e025c9bd80cf8e00cd7c3513356fe9a3ea2c1654486a8da17f5a2176a`.
+  This proves fallback materialization and consumer delivery only.
+- Live-provider run:
+  `set -a; source .env; ONTOLOGY_DASHBOARD_DATABASE_URL=postgresql://ontology:ontology-local-only@127.0.0.1:5432/ontology_dashboard; LLM_BASE_URL=https://api.openai.com/v1; set +a; .venv/bin/python scripts/watch_agent_review_summaries.py --database postgresql://ontology:ontology-local-only@127.0.0.1:5432/ontology_dashboard --source auto --limit 1 --max-attempts 1 --require-live-provider`
+  -> exit code 0, `live_provider_ready=true`, `mode=llm`, `status=ready`,
+  `fallback_reason=null`, `source_kind=live_result`, `summary_id=296808a6-75e1-4b2b-b6b9-c983a0571a86`,
+  `summary_key=agent-review-summary:2b7eb29e320f28e91d5bfc30c387647446a6635532f392aa3929c14e62bc33c2`,
+  `model_version=openai-compatible:gpt-4o-mini`.
+- consumer GET for the same `asset_id`, `event_id`, and `dataset_version_id`
+  returned the same live-provider `summary_id` and `summary_key` with
+  `trace.fallback=false`.
+- Confirmed: live gen_data -> PostgreSQL Product Result -> Agent Review Summary
+  watcher -> live LLM summary materialization -> UI consumer API; UI smoke E2E;
+  Closed-loop feedback/replay backend test under the explicit test fallback
+  harness.
+- Not claimed: the Closed-loop pytest is not a live PostgreSQL browser-to-replay
+  proof; it verifies the backend feedback/replay test harness path. The fallback
+  watcher run remains separate from the live-provider run and must not be used as
+  live AI quality evidence.
+- Cleanup: local runtime processes and the PostgreSQL container were stopped;
+  ports `3100`, `8100`, `8200`, `8300`, and `5432` were empty after verification.

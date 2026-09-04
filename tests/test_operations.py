@@ -1853,7 +1853,11 @@ def test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context(
     client: TestClient,
     database_path: Path,
     service: FactorySignalService,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK", "1")
+
     class ReplayAwareEvidenceQuery:
         def __init__(self, delegate: FactorySignalService) -> None:
             self.delegate = delegate
