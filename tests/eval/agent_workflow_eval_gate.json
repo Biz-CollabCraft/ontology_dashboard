@@ -96,8 +96,7 @@
     "current_limitations": [
       "langgraph_gate_measures_tool_trajectory_not_final_summary_quality",
       "rag_gate_does_not_yet_measure_context_precision_recall_or_source_freshness",
-      "runtime_rag_not_bound_to_packet_snapshot_yet",
-      "pr_154_cost_basis_main_recheck_pending"
+      "runtime_rag_not_bound_to_packet_snapshot_yet"
     ]
   },
   "independent_runtime_tool_definition": {
