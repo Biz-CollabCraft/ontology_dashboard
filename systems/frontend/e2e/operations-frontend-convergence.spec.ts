@@ -330,7 +330,7 @@ test("keeps workflow role dashboards ordered around each role's first task", asy
 });
 
 test("lets a permitted manager explicitly regenerate the AI review summary", async ({ page }) => {
-  await login(page, `${Operations_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`, "manager");
+  await login(page, `${OPERATIONS_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`, "manager");
   await materializeAgentSummary(page, "CNC-S04-L04-01");
   await expect(page.getByTestId("operations-overview")).toBeVisible();
   await page.getByRole("button", { name: /공구\/금형 마모 의심 제안 #02/ }).click();
@@ -350,7 +350,7 @@ test("lets a permitted manager explicitly regenerate the AI review summary", asy
 });
 
 test("shows stored AI review summaries to engineers as read-only", async ({ page }) => {
-  const returnTo = `${Operations_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`;
+  const returnTo = `${OPERATIONS_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`;
   await login(page, returnTo, "engineer");
   await expect(page.getByTestId("operations-overview")).toBeVisible();
   await page.getByRole("button", { name: /공구\/금형 마모 의심 제안 #02/ }).click();
@@ -366,7 +366,7 @@ test("shows stored AI review summaries to engineers as read-only", async ({ page
 });
 
 test("keeps system administrator logs behind the admin persona", async ({ page }) => {
-  await login(page, `${Operations_PATH}?view=system&dashboard=workflow`, "admin");
+  await login(page, `${OPERATIONS_PATH}?view=system&dashboard=workflow`, "admin");
   await expect(page.locator(".operations-page-heading").getByRole("heading", { name: "AI 요약 처리 로그", exact: true })).toBeVisible();
   await expect(page.locator(".operations-navigation nav").getByRole("button", { name: /시스템 관리자/ })).toBeVisible();
 });
@@ -416,7 +416,7 @@ test("completes Overview to Objects to Operations to Reports Executive Brief wit
 });
 
 test("covers Reports side-tab flow with summary graphs and report types", async ({ page }) => {
-  await login(page, `${Operations_PATH}?view=reports&dashboard=classic&report=inspection-request`);
+  await login(page, `${OPERATIONS_PATH}?view=reports&dashboard=classic&report=inspection-request`);
   await expect(page.getByTestId("operations-reports")).toBeVisible();
   await expect(page.getByRole("tab", { name: /상태 요약/ })).toBeVisible();
   await expect(page.getByRole("tab", { name: /점검 요청/ })).toBeVisible();
@@ -479,7 +479,7 @@ test("loads the Objects inspector through the AssetDetailViewModel API", async (
     }
   });
 
-  await login(page, `${Operations_PATH}?view=objects&dashboard=classic&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`);
+  await login(page, `${OPERATIONS_PATH}?view=objects&dashboard=classic&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`);
   await expect(page.getByTestId("operations-objects")).toBeVisible();
   await expect.poll(() => detailViewResponses.length).toBeGreaterThan(0);
   await expect(page.locator(".operations-object-inspector")).toContainText("4구역 · 4셀 · CNC 가공기 1");
@@ -488,7 +488,7 @@ test("loads the Objects inspector through the AssetDetailViewModel API", async (
 });
 
 test("separates manager decisions from field-operator notes using real permissions", async ({ page }) => {
-  await login(page, `${Operations_PATH}?view=operations&dashboard=classic`, "engineer");
+  await login(page, `${OPERATIONS_PATH}?view=operations&dashboard=classic`, "engineer");
   await expect(page.getByTestId("operations-operations")).toBeVisible();
   await expect(page.getByText("현재 역할에는 결정 기록 권한이 없습니다.", { exact: true })).toBeVisible();
   await expect(page.getByText("메모 기록 가능", { exact: true })).toBeVisible();
@@ -499,7 +499,7 @@ test("separates manager decisions from field-operator notes using real permissio
 });
 
 test("keeps direct links reproducible and renders invalid IDs as safe empty states", async ({ page }) => {
-  const invalid = `${Operations_PATH}?view=objects&dashboard=classic&asset_id=missing-asset&event_id=missing-event&role=process_manager`;
+  const invalid = `${OPERATIONS_PATH}?view=objects&dashboard=classic&asset_id=missing-asset&event_id=missing-event&role=process_manager`;
   await login(page, invalid);
   await expect(page).toHaveURL(/asset_id=missing-asset/);
   await expect(page.getByTestId("operations-objects")).toBeVisible();
@@ -528,7 +528,7 @@ test("uses the verified report template when both LLM and deterministic report A
   await page.route("**/api/projects/*/workspaces/*/predictive-maintenance/dashboard**", async (route) => {
     await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "runtime_unavailable", message: "runtime unavailable in test" } }) });
   });
-  await login(page, `${Operations_PATH}?view=reports&dashboard=classic&report=executive-brief`);
+  await login(page, `${OPERATIONS_PATH}?view=reports&dashboard=classic&report=executive-brief`);
   await expect(page.getByTestId("operations-executive-report")).toBeVisible();
   await expect(page.getByText("근거 기반 보고서", { exact: true })).toBeVisible();
   await expect(page.locator(".operations-report-document")).toBeVisible();
@@ -545,7 +545,7 @@ test("keeps Reports inspection request available when predictive or report APIs 
   await page.route("**/api/events/*/report", async (route) => {
     await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "report_unavailable", message: "report unavailable in test" } }) });
   });
-  await login(page, `${Operations_PATH}?view=reports&dashboard=classic&report=inspection-request`);
+  await login(page, `${OPERATIONS_PATH}?view=reports&dashboard=classic&report=inspection-request`);
   await expect(page.getByTestId("operations-reports")).toBeVisible();
   await expect(page.getByTestId("operations-static-report")).toBeVisible();
   await expect(page.getByRole("heading", { name: "예지보전 점검 요청 보고서", exact: true })).toBeVisible();
@@ -569,6 +569,6 @@ test("keeps all Operations views inside a 390px mobile viewport and exposes comp
 test("redirects a legacy project surface to the official Week 2 Operations", async ({ page }) => {
   await login(page, CLASSIC_OVERVIEW_PATH);
   await page.goto(`/app/projects/${PROJECT}/blueprint-v2`);
-  await expect(page).toHaveURL(new RegExp(`${Operations_PATH}$`));
+  await expect(page).toHaveURL(new RegExp(`${OPERATIONS_PATH}$`));
   await expect(page.getByTestId("operations-overview")).toBeVisible({ timeout: 15_000 });
 });

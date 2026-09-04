@@ -50,6 +50,47 @@ The deterministic Product Result, Evidence, selection, lifecycle, authorization,
 | Ready for live 120-run gate | true |
 | Batch wall-clock | 410,309.039 ms |
 
+## Local gen-data, DB, and screen E2E result
+
+Run date: 2026-09-04
+
+Local ports:
+
+- Frontend: `http://127.0.0.1:3100`
+- Backend API: `http://127.0.0.1:8100`
+- Generator API: `http://127.0.0.1:8200`
+- gen-data API: `http://127.0.0.1:8300`
+- PostgreSQL: `127.0.0.1:5432`
+
+Verification passed:
+
+- `gen-data` FastAPI/runtime tests: `tests/test_fastapi_control.py tests/test_runtime_manager.py` -> 3 passed
+- ontology-dashboard local realtime orchestration tests: `tests/test_local_realtime_orchestration.py` -> 10 passed
+- PR 163 live browser smoke: `systems/frontend/e2e/pr163-live-smoke.spec.ts --project=chromium` -> 1 passed
+
+The PR 163 smoke covers the live generator-to-database-to-screen path: canonical V3.1 release build, PostgreSQL bootstrap, backend health, generator health, gen-data readiness, authenticated operations screen rendering, 100 factory asset nodes, dashboard API source version `gen-data-wall-clock-live-v2`, non-empty dashboard events, and positive live record count.
+
+Observed local PostgreSQL counts after the live run:
+
+| Table | Rows |
+| --- | ---: |
+| `pm_result_artifacts` | 233 |
+| `pm_cnc_observations` | 391,712 |
+| `pm_compressor_observations` | 97,920 |
+| `prediction_results` | 233 |
+| `pm_prediction_timeline` | 68,341 |
+
+Compatibility fixes made before the passing smoke:
+
+- `gen-data` now exposes `POST /api/runs/{run_id}/simulation/fast-forward`, matching the ontology-dashboard local realtime runner contract.
+- The local realtime runner now resolves sibling `gen-data` and `gen_data` checkout names, or an explicit `GEN_DATA_ROOT`.
+- The operations convergence E2E file no longer references the undefined `Operations_PATH` identifier.
+
+Regression boundary:
+
+- Full frontend E2E was attempted against the same external local servers. It did not complete as a pass: an earlier full run stopped at `adaptive-modeling-validator` with 2 failed, 1 interrupted, and 185 not run; `mvp-decision-support.spec.ts` failed 4 tests on the historical `mvp-overview` surface; `operations-frontend-convergence.spec.ts` currently reports 17 failed / 1 passed after the identifier fix.
+- These failures are kept out of the PR 163 live-smoke pass claim. They are current regression-suite alignment work, mostly around historical screen copy, route/test-id expectations, and workflow/classic UI contracts, not evidence that the live gen-data -> PostgreSQL -> operations smoke path failed.
+
 ## Root-cause corrections before the final run
 
 ### Post-maintenance lifecycle regression

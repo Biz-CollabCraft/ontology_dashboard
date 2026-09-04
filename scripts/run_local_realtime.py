@@ -22,7 +22,27 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-GEN_DATA_ROOT = ROOT.parent / "gen_data"
+
+
+def _resolve_gen_data_root() -> Path:
+    candidates = []
+    if os.getenv("GEN_DATA_ROOT"):
+        candidates.append(Path(os.environ["GEN_DATA_ROOT"]).expanduser())
+    candidates.extend([ROOT.parent / "gen_data", ROOT.parent / "gen-data"])
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if (resolved / "app" / "main.py").is_file() and (
+            resolved / "canonical" / "dataset" / "dataset_manifest.json"
+        ).is_file():
+            return resolved
+    checked = ", ".join(str(candidate) for candidate in candidates)
+    raise RuntimeError(
+        "gen_data runtime root not found. Set GEN_DATA_ROOT or place it next to "
+        f"ontology-dashboard as gen-data/gen_data. Checked: {checked}"
+    )
+
+
+GEN_DATA_ROOT = _resolve_gen_data_root()
 LIVE_SOURCE_VERSION = "gen-data-wall-clock-live-v2"
 OBSERVATION_INTERVAL_MINUTES = 10
 MODEL_MINIMUM_HISTORY_ROWS = 36
