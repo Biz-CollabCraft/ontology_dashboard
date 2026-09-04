@@ -66,6 +66,7 @@ Verification passed:
 
 - `gen-data` FastAPI/runtime tests: `tests/test_fastapi_control.py tests/test_runtime_manager.py` -> 3 passed
 - ontology-dashboard local realtime orchestration tests: `tests/test_local_realtime_orchestration.py` -> 10 passed
+- feedback refresh / post-maintenance closed-loop tests: `tests/test_maintenance_loop_router.py tests/test_maintenance_loop_application.py tests/test_live_predictive_maintenance.py tests/test_closed_loop_integration_contract.py` -> 69 passed; `src/features/operations/maintenance/inspectionCompletionPayload.test.ts src/features/operations/maintenance/MaintenanceWorkflowActionPanel.test.ts` -> 7 passed
 - PR 163 live browser smoke: `systems/frontend/e2e/pr163-live-smoke.spec.ts --project=chromium` -> 1 passed
 
 The PR 163 smoke covers the live generator-to-database-to-screen path: canonical V3.1 release build, PostgreSQL bootstrap, backend health, generator health, gen-data readiness, authenticated operations screen rendering, 100 factory asset nodes, dashboard API source version `gen-data-wall-clock-live-v2`, non-empty dashboard events, and positive live record count.
