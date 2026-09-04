@@ -15,8 +15,9 @@ date: 2026-09-03
 
 기술 구현 계약은 `2026-09-02-002-operational-domain-extension-plan.md`, API/UI/E2E 실행 상세는
 `2026-09-03-001-decision-support-api-ui-e2e-foundation-plan.md`, 평가 방법은
-`2026-09-01-004-feat-agent-workflow-stability-evaluation-plan.md`를 따른다. 이 문서는 새 기능 계약이나
-별도 평가 수치를 만들지 않는다.
+`2026-09-01-004-feat-agent-workflow-stability-evaluation-plan.md`를 따른다. 최신 발표 수치는
+`docs/eval/2026-09-03-agent-workflow-final-evaluation-report-960f4713.md`와
+`docs/eval/2026-09-03-selection-live-llm-model-comparison-brief.md`를 정본으로 사용한다.
 
 ## Presentation Thesis
 
@@ -47,10 +48,12 @@ date: 2026-09-03
 | Reasoning boundary | 관계·gap·blocker 해석, 결정론적 선택지 비교 | LLM의 새 사실 생성, 자동 최적 행동 선택 |
 | Output | Evidence Packet에서 AI Brief와 작업 요청 추천까지 | WorkOrder 자동 생성과 Maintenance 자동 승인 |
 | Trust | Brief 생성에 사용한 Evidence/context의 identity, as-of, version 재검증 | 사람 승인 이후 Closed-loop 실행 소유 |
-| Verification | contract, API/UI vertical E2E, B1/B2/B3, failure isolation | production load/soak와 전체 조직 E2E 완료의 선행 주장 |
+| Verification | contract, API/UI vertical E2E, B1/B2/B3, failure isolation, API-only Closed-loop feedback 2단계 재현 | production load/soak, 실제 외부 시스템 연결, browser UI까지 포함한 전체 조직 E2E 완료의 선행 주장 |
 
-Closed-loop는 개인 구현의 중심 서사가 아니다. 마지막 통합 경계에서만 별도 소유 영역으로 표시하고,
-연동 증거가 없으면 전체 E2E 완료를 주장하지 않는다.
+Closed-loop는 개인 구현의 중심 서사가 아니다. 다만 최신 candidate extension에서는 UI를 생략한
+API-only 경로로 replay readiness와 post-maintenance Product Result promotion까지 재현했다. 이 증거는
+Closed-loop 담당 경계와의 연동 가능성을 보여주는 통합 검증이며, browser UI 상태표시나 실제 외부
+시스템 연결까지 완료됐다는 주장으로 확장하지 않는다.
 
 ## Solution Architecture Story
 
@@ -60,9 +63,10 @@ Closed-loop는 개인 구현의 중심 서사가 아니다. 마지막 통합 경
 flowchart TB
   A["Product Result / Evidence"] --> B["Domain read ports + context envelope"]
   B --> C["Relation resolver"]
-  C --> D["Deterministic impact simulation"]
-  D --> E["Evidence Packet"]
-  E --> F["AI Decision Support Brief"]
+  C --> D["Deterministic Evidence Selection"]
+  D --> E["Impact / readiness context"]
+  E --> F["Evidence Packet"]
+  F --> G["AI Decision Support Brief"]
 ```
 
 설명 순서는 다음과 같다.
@@ -71,9 +75,11 @@ flowchart TB
 2. 각 운영 도메인은 공통 envelope의 `owner_domain`, `source_version`, `source_updated_at`,
    `retrieved_at`, `as_of`, `source_refs`를 제공한다.
 3. Relation Resolver는 기존 ID 관계를 연결하고 missing/conflict를 노출할 뿐 새 운영 사실을 만들지 않는다.
-4. Impact Simulation은 공개된 가정과 식으로 "지금 정지/계획 정비/계속 운전" 조건을 비교한다.
-5. LLM은 검증된 사실·관계·계산 결과를 역할별 문장으로 설명한다.
-6. 저장 전 Evidence와 동적 context version을 재확인하고 바뀌면 후보를 폐기한다.
+4. Evidence Selection은 relation-aware context, freshness/as-of eligibility, required evidence recall을
+   결정론적으로 처리한다.
+5. Impact Simulation은 공개된 가정과 식으로 "지금 정지/계획 정비/계속 운전" 조건을 비교한다.
+6. LLM은 검증된 사실·관계·계산 결과를 역할별 문장으로 설명한다.
+7. 저장 전 Evidence와 동적 context version을 재확인하고 바뀌면 후보를 폐기한다.
 
 ## Extensibility Argument
 
@@ -100,14 +106,15 @@ KG, LangGraph, multi-agent는 현재 규모에서 선행 도입하지 않는다.
 | 2 | 기존 한계 | 기존 Agent는 packet section 선택은 가능했지만 실행 시점 운영 조회와 관계·시간 계약은 부족했다 | As-Is/To-Be 경계 표 |
 | 3 | My Role | Evidence에서 AI Brief와 작업 요청 추천까지 통합 경계를 맡았다 | 개인 책임/비책임 표 |
 | 4 | 확장 가능한 구조 | adapter와 공통 envelope로 도메인 추가 비용을 제한했다 | architecture + extension point |
-| 5 | 맥락·관계 표현 | 단일 값이 아니라 영향 관계, blocker, missing context를 보존했다 | 관계 카드 또는 relation graph |
-| 6 | AI 판단 경계 | 계산은 결정론적으로, LLM은 근거 기반 설명만 수행한다 | Impact Simulation 식/가정/결과 |
-| 7 | Context 품질 | B1/B2/B3로 구조화와 workflow 계층의 기여를 분리했다 | 품질 지표 grouped bar |
-| 8 | 시간 정합성 | stale/mismatch 후보는 저장 전에 폐기한다 | version mismatch timeline |
-| 9 | 실행 신뢰성 | retry/fallback/reuse/side-effect 차단을 품질 점수와 별도로 검증했다 | fault-injection heatmap |
-| 10 | API/UI/E2E | 실제 사용자 경로에서 source, gap, version, 선택지를 확인한다 | UI screenshot + run evidence |
-| 11 | 한계와 확장 조건 | external adapter와 전체 통합 E2E는 증거 상태를 분리한다 | Verified/Not measured/Risk 표 |
-| 12 | 결론 | 데이터를 더 생성한 것이 아니라 판단 가능한 신뢰 맥락으로 연결했다 | 역할 문장과 3개 핵심 성과 |
+| 5 | Ontology-aware Selection | 관계 기반 context resolution 뒤 필요한 evidence만 결정론적으로 선택했다 | S0/S1 후보 수와 recall |
+| 6 | 맥락·관계 표현 | 단일 값이 아니라 영향 관계, blocker, missing context를 보존했다 | 관계 카드 또는 relation graph |
+| 7 | AI 판단 경계 | 계산은 결정론적으로, LLM은 근거 기반 설명만 수행한다 | Impact Simulation 식/가정/결과 |
+| 8 | Context 품질 | B1/B2/B3로 구조화와 workflow 계층의 기여를 분리했다 | 품질 지표 grouped bar |
+| 9 | 모델 선택 근거 | 같은 조건 smoke와 선택 모델 120-run을 분리해 평가했다 | model comparison 표 |
+| 10 | 시간·실행 신뢰성 | stale/retry/fallback/reuse/side-effect 차단을 품질 점수와 별도로 검증했다 | timeline + fault heatmap |
+| 11 | Closed-loop feedback | API-only로 replay readiness와 정비 후 Result 승격을 2단계 재현했다 | verified path + test result |
+| 12 | 한계와 확장 조건 | external adapter, browser UI 상태표시, production soak는 증거 상태를 분리한다 | Verified/Not measured/Risk 표 |
+| 13 | 결론 | 데이터를 더 생성한 것이 아니라 판단 가능한 신뢰 맥락으로 연결했다 | 역할 문장과 3개 핵심 성과 |
 
 ## Required Graphs and Screens
 
@@ -115,13 +122,26 @@ KG, LangGraph, multi-agent는 현재 규모에서 선행 도입하지 않는다.
 
 B1 Direct LLM, B2 Evidence Packet + LLM, B3 Current Workflow를 grouped bar로 비교한다.
 
-- Gold mean
-- schema pass rate
+- Gold mean: B1 `0.3009`, B2 `0.6568`, B3 `0.7656` for final report `960f4713`
+- Schema pass rate: B1 `0.7917`, B2 `0.7083`, B3 `1.0000` for final report `960f4713`
+- Reuse: B1 `0`, B2 `0`, B3 `16`
 - groundedness 또는 unsupported claim rate
 - core judgment agreement
 
 같은 candidate/provider/fixture/rubric 실행만 한 그래프에 넣는다. 품질과 실행 신뢰성을 한 총점으로
 합치지 않는다.
+
+### 1.1 Selection S0/S1 Evidence Chart
+
+Selection 병합 candidate `d8d357f3`의 최소 비교 수치를 별도 그래프로 둔다.
+
+- Required evidence recall: `1.0`
+- Limitation preservation: `1.0`
+- Context reduction: `0.7241`
+- Candidate count: `29 -> 8`
+
+이 수치는 live LLM 품질 점수가 아니라 ontology-aware context resolution과 deterministic evidence
+selection의 입력 축소/보존 평가다.
 
 ### 2. Temporal Consistency Timeline
 
@@ -151,6 +171,21 @@ sequenceDiagram
 권한 없는 요청으로 둔다. 열은 detected, retried, fallback, terminal trace, invalid persistence,
 side-effect delta로 둔다. 셀은 pass/fail/not applicable/not measured를 구분한다.
 
+### 3.1 Live Model Comparison Table
+
+모델 비교는 "동일 120-run"이 아니라 2층 평가였음을 슬라이드에 명시한다.
+
+| Model | Scope | Accepted | Fallback | Gold accuracy | Boundary |
+|---|---|---:|---:|---:|---|
+| `gpt-4o-mini` | selected 120-run | 120 / 120 | 0 | 1.0 | passed |
+| `gpt-5.6-luna` | 8-case smoke | 8 / 8 | 0 | 0.773727 | not promoted |
+| `gpt-5-mini` | 8-case smoke | 0 / 8 | 8 | not measured | failed smoke |
+
+발표 문장:
+
+> 같은 조건의 8-case smoke로 후보 모델을 먼저 거르고, 통과한 `gpt-4o-mini`만 120-run release gate로
+> 반복 안정성을 확인했습니다.
+
 ### 4. Decision Support UI Evidence
 
 한 화면에서 다음을 식별할 수 있어야 한다.
@@ -171,6 +206,21 @@ side-effect delta로 둔다. 셀은 pass/fail/not applicable/not measured를 구
 candidate SHA, run ID, recorded time, test mode, scenario result, side-effect delta, external connection state를
 보여준다. Playwright 화면 통과만으로 실제 MES/CMMS/WMS/QMS 연결이나 production 안정성을 주장하지 않는다.
 
+### 6. Closed-loop Feedback Evidence Card
+
+candidate extension `5ab93f66`의 API-only 결과를 별도 카드로 둔다. 상세 근거는 final evaluation report
+addendum을 참조한다.
+
+- Stage 1 replay readiness:
+  `tests/test_mvp.py::test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context` passed
+- Stage 2 post-maintenance Product Result promotion:
+  `tests/test_predictive_maintenance_postgresql.py::test_closed_loop_feedback_promotes_post_maintenance_product_result` passed
+- PostgreSQL regression: `tests/test_predictive_maintenance_postgresql.py` = `9 passed, 1 skipped`
+- Fast API/Closed-loop regression: targeted subset = `19 passed`
+
+이 카드는 "UI 없이 API로 빠르게 재현 가능한 통합 근거"로 설명하고, 사용자 화면 상태표시와 실제 generator
+재예측 실행은 후속 verified state로 분리한다.
+
 ## Metric Source Contract
 
 슬라이드에는 값을 직접 복사해 고정하지 않고 최종 보고서의 필드와 연결한다.
@@ -186,10 +236,17 @@ candidate SHA, run ID, recorded time, test mode, scenario result, side-effect de
 | `{{final_report.reliability.invalid_persistence_count}}` | service/DB reliability | 목표는 0 |
 | `{{final_report.safety.side_effect_delta}}` | E2E safety artifact | WorkOrder/Action/command별 표시 |
 | `{{final_report.e2e.candidate_sha}}` | E2E evidence artifact | run ID와 함께 표시 |
+| `{{selection.required_evidence_recall}}` | selection model comparison brief | S0/S1 비교와 함께 표시 |
+| `{{selection.context_reduction}}` | selection model comparison brief | 후보 수 29 -> 8과 함께 표시 |
+| `{{llm.selected_model_120.accepted}}` | model comparison brief | 120/120, fallback 0, contract error 0 |
+| `{{closed_loop_api.stage2_result_promotion}}` | final evaluation addendum | UI omitted/API-only로 표시 |
 
 현재 존재하는 `2026-09-03-agent-workflow-final-evaluation-report.md`의 수치는 해당 candidate의 기존
-Agent Workflow 평가 증거다. Operational Decision Support 확장 후보의 최종 평가가 끝나기 전에는 이를
-확장 구현 전체의 성과 수치로 재라벨링하지 않는다.
+Agent Workflow 평가 증거다. 발표에서는 상세 최신 리포트
+`docs/eval/2026-09-03-agent-workflow-final-evaluation-report-960f4713.md`를 우선 사용하고,
+Selection/model comparison은 `docs/eval/2026-09-03-selection-live-llm-model-comparison-brief.md`,
+Closed-loop API-only extension은 같은 최종 리포트의 addendum을 사용한다. 서로 다른 candidate의 결과를
+한 총점으로 합치지 않는다.
 
 ## Evidence State Rules
 
@@ -212,8 +269,10 @@ Agent Workflow 평가 증거다. Operational Decision Support 확장 후보의 �
 
 > 초기 평가는 8개 Gold fixture에 B1·B2·B3 세 경로를 적용하고 각 3회 반복한 72-run으로, 통계적
 > 일반화보다 비교 harness, schema, 계층별 기여와 반복 변동을 확인하는 최소 계약 평가였습니다.
-> 이후 별도 120-run 품질 평가와 장애 주입을 보강했습니다. 서로 다른 candidate나 rubric의 결과는
-> 합산하지 않았고, 운영 일반화는 external adapter와 production-like 평가 전까지 주장하지 않습니다.
+> 이후 선택 모델에 대해 별도 120-run 품질 평가와 장애 주입을 보강했습니다. 모든 모델을 동일하게
+> 120번 돌린 것이 아니라, 같은 조건 smoke gate를 통과한 모델만 120-run release gate로 승격했습니다.
+> 서로 다른 candidate나 rubric의 결과는 합산하지 않았고, 운영 일반화는 external adapter와
+> production-like 평가 전까지 주장하지 않습니다.
 
 ## AI Solution Engineer Competencies to Make Visible
 

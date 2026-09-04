@@ -157,6 +157,25 @@ Claim boundary for this addendum:
 - Not verified here: real generator execution from live sensor history.
 - Not verified here: external operational system connectivity.
 
+## 15. Presentation metric mapping
+
+Use these values in presentation slides without merging separate candidate
+scopes into one aggregate score.
+
+| Slide claim | Value | Source boundary |
+|---|---|---|
+| Live LLM quality | `gpt-4o-mini` 120/120 accepted, fallback 0, gold accuracy 1.0 | Selection candidate model comparison; selected-model 120-run only |
+| B1/B2/B3 workflow value | B1 0.3009 / B2 0.6568 / B3 0.7656, B3 schema pass 1.0000 | Original final evaluation candidate `960f4713` |
+| Selection S0/S1 | required evidence recall 1.0, limitation preservation 1.0, context reduction 0.7241, candidates 29 -> 8 | Selection candidate deterministic comparison |
+| Closed-loop feedback | Stage 1 replay readiness passed; Stage 2 post-maintenance Product Result promotion passed | API-only candidate extension `5ab93f66` |
+| Regression evidence | PostgreSQL 9 passed, 1 skipped; targeted API/Closed-loop 19 passed | Local candidate extension regression |
+
+Presentation wording should say that the current system uses
+ontology-aware context resolution and deterministic evidence selection before
+LLM explanation. It should not say that every compared model completed the same
+120-run test, that browser UI status rendering is complete, or that live
+external MES/CMMS/WMS/QMS systems were connected.
+
 ## Artifact references
 
 - quality: `tests/eval/results/agent_summary_llm_eval_live_120_20260903_960f4713.json`
@@ -166,3 +185,5 @@ Claim boundary for this addendum:
 - temporal: `tests/eval/results/decision_support_temporal_20260903_960f4713.json`
 - final summary: `tests/eval/results/agent_workflow_final_summary_20260903_960f4713.json`
 - human review worksheet: `docs/eval/2026-09-03-agent-summary-human-review-sample-960f4713.md`
+- selection/model comparison brief: `docs/eval/2026-09-03-selection-live-llm-model-comparison-brief.md`
+- presentation frame: `docs/plans/ai-workflow/2026-09-03-002-ai-solution-engineer-presentation-frame-plan.md`

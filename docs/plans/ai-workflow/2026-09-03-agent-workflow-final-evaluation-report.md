@@ -1,5 +1,12 @@
 # Agent Workflow Final Evaluation Report
 
+> Note: This file is an earlier compact summary for candidate `748b305f`.
+> Presentation slides should use
+> `docs/eval/2026-09-03-agent-workflow-final-evaluation-report-960f4713.md`
+> as the current detailed final report, plus
+> `docs/eval/2026-09-03-selection-live-llm-model-comparison-brief.md` for
+> selection/model comparison values.
+
 ## 1. Candidate and environment
 
 - Run ID: `final-20260903-748b305f`
@@ -62,6 +69,8 @@
 - Verified: live provider quality only when quality_gate passes
 - Verified: live B1/B2/B3 comparison only when workflow_value_gate passes
 - Verified: read-only side-effect and temporal guards
+- Verified in later candidate extension: API-only Closed-loop feedback flow
+  reaches replay readiness and post-maintenance Product Result promotion
 - Not verified: production load or long-running soak reliability
 - Not verified: actual MES/CMMS/WMS/QMS connectivity
 - Not verified: provider billing reconciliation
@@ -79,9 +88,26 @@
 - Validate actual MES/CMMS/WMS/QMS adapters when connected.
 - Complete the human usefulness sample review.
 
+## Presentation update
+
+Use the following presentation-safe summary:
+
+- Selected-model live LLM release gate: `gpt-4o-mini` 120/120 accepted,
+  fallback 0, gold accuracy 1.0.
+- Model comparison structure: alternate models were checked by same-condition
+  8-case smoke first; not every model received the full 120-run gate.
+- Selection S0/S1: required evidence recall 1.0, limitation preservation 1.0,
+  context reduction 0.7241, candidates 29 -> 8.
+- Closed-loop extension: API-only Stage 1 replay readiness and Stage 2
+  post-maintenance Product Result promotion passed.
+- Still not claimed: browser UI status rendering, real generator execution from
+  live sensor history, external MES/CMMS/WMS/QMS connectivity, production soak.
+
 ## Artifact references
 
 - quality: `tests/eval/results/agent_summary_llm_eval_live_final-20260903-748b305f.json`
 - workflow_value: `tests/eval/results/agent_workflow_baseline_live_final-20260903-748b305f.json`
 - reliability: `tests/eval/results/agent_workflow_reliability_final-20260903-748b305f.json`
 - safety: `tests/eval/results/operational_decision_support_final-20260903-748b305f.json`
+- current detailed final report: `docs/eval/2026-09-03-agent-workflow-final-evaluation-report-960f4713.md`
+- selection/model comparison brief: `docs/eval/2026-09-03-selection-live-llm-model-comparison-brief.md`

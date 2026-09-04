@@ -136,6 +136,11 @@ Decision:
 | Reliability | 11 scenarios, all acceptance checks true |
 | Safety and temporal smoke | temporal validation 3/3, mutation attempts 0, automatic recommendations 0 |
 | B1/B2/B3 live comparison | B3 schema pass 1.0, B3 gold mean 0.703125, B3 tokens 22,055 |
+| Later API-only Closed-loop extension | Stage 1 replay readiness passed; Stage 2 post-maintenance Product Result promotion passed in `5ab93f66` |
+
+The Closed-loop extension is not part of the live model comparison candidate.
+Use it as API-only integration evidence for the presentation, and keep model
+quality claims tied to the live LLM artifacts above.
 
 ## Presentation wording
 

@@ -11,7 +11,7 @@
 | 사람 | 프로젝트 전체를 관통하는 역할 | 최종 책임 | 주요 산출물이 넘어가는 곳 |
 |---|---|---|---|
 | **성민 (`smmini`)** | **ML Lifecycle & Contract Engineering** | Source를 학습 가능한 Feature/Label로 만들고, Model Artifact를 발행하며, 모델 계약·재학습·평가·버전·재현성을 프로젝트 종료까지 유지 | → **호범** Runtime, → **우수** CI/Report provenance |
-| **호범 (`enjoylonelines`)** | **Backend Intelligence & Dynamic Reporting** | Model Artifact를 Product Result/Evidence로 만들고, Evidence-grounded 동적 보고서의 내용·grounding·생성 규칙을 책임 | → **광우** Closed-loop, → **우수** Product/LLM runtime |
+| **호범 (`enjoylonelines`)** | **Backend Intelligence & Dynamic Reporting** | Model Artifact를 Product Result/Evidence로 만들고, ontology-aware context selection과 Evidence-grounded 동적 보고서의 내용·grounding·생성 규칙을 책임 | → **광우** Closed-loop, → **우수** Product/LLM runtime |
 | **광우 (`KOR-GANG`)** | **Ontology Operations & Closed-loop** | 분석 결과를 Recommendation/Decision/Action/Maintenance/Ontology state로 되돌리고 업무 피드백 루프를 실제로 동작시킴 | → **호범** Report operational context, → **우수** Product surface |
 | **우수 (`oosuhada`)** | **Product AI & Integration** | 여러 Domain 결과를 Product API/Report Backend/LLM Runtime/Frontend로 조합하고, CI·E2E·배포·Release까지 실제 사용자 서비스로 완성 | → **전체 팀** Acceptance/Release, → **최종 사용자** |
 
@@ -192,6 +192,8 @@ Model Artifact
 → Product Result Artifact
 → Evidence Payload / Provenance
 → Event Evidence Projection
+→ Ontology-aware Context Resolution
+→ Deterministic Evidence Selection
 → Report Grounding Contract
 → Dynamic Report Content / Prompt Rules
 → Narrative Validation / Limitation Policy
@@ -215,6 +217,10 @@ Model Artifact
 - `evidence_gap` invariant
 - Evidence provenance
 - Event Evidence projection
+- relation-aware context resolution
+- freshness / as-of eligibility
+- deterministic evidence selection
+- required evidence recall과 context/token reduction 평가
 - Product API endpoint 구현
 - DB persistence / query
 - corrupt / unsupported Artifact fail-fast
@@ -262,7 +268,8 @@ LLM provider runtime / orchestration / API / UI / deployment
 - LLM report에서 근거 없는 문장이 발견되면 grounding/prompt/validation 수정
 - API response와 Report source 데이터 consistency 검증
 - Backend 성능 / unavailable / 오류 경로 검증
-- 최종 발표 시 Prediction → Evidence → Dynamic Report lineage 설명
+- 최종 발표 시 Prediction → Evidence → Selection → Dynamic Report lineage 설명
+- Closed-loop feedback 이후 정비 후 Product Result/Evidence lineage가 보존되는지 API-only 통합 근거 확인
 
 ### 하지 않을 일
 
@@ -277,6 +284,18 @@ LLM provider runtime / orchestration / API / UI / deployment
 ### 최종 완료 조건
 
 > **Backend가 Model Artifact를 사용해 Product Result/Evidence를 안정적으로 제공하고, 동적 보고서가 그 Evidence에 근거해 검증 가능한 문장만 생성하도록 규칙과 품질을 보장해야 완료다.**
+
+### 발표에 사용할 검증 수치
+
+최신 발표 수치는 상세 평가 문서를 그대로 참조한다. 서로 다른 candidate의 값을 하나의 총점으로 합산하지 않는다.
+
+| 구분 | 발표 수치 | 근거 문서 |
+|---|---|---|
+| LLM 품질 반복 | `gpt-4o-mini` 120/120 accepted, fallback 0, gold accuracy 1.0 | `docs/eval/2026-09-03-selection-live-llm-model-comparison-brief.md` |
+| B1/B2/B3 workflow value | B1 0.3009 / B2 0.6568 / B3 0.7656, B3 schema pass 1.0000 | `docs/eval/2026-09-03-agent-workflow-final-evaluation-report-960f4713.md` |
+| Selection S0/S1 | required evidence recall 1.0, limitation preservation 1.0, context reduction 0.7241, candidates 29 -> 8 | `docs/eval/2026-09-03-selection-live-llm-model-comparison-brief.md` |
+| Closed-loop API-only feedback | Stage 1 replay readiness passed, Stage 2 post-maintenance Product Result promotion passed | `docs/eval/2026-09-03-agent-workflow-final-evaluation-report-960f4713.md` addendum |
+| PostgreSQL/fast regression | PostgreSQL 9 passed, 1 skipped; targeted API/Closed-loop 19 passed | `docs/eval/2026-09-03-agent-workflow-final-evaluation-report-960f4713.md` addendum |
 
 ---
 
@@ -701,6 +720,9 @@ Raw prediction을 Dashboard/Report/Action이 공통으로 소비할 수 있는 P
 
 > API, Closed-loop, Dashboard, Report가 동일 Result/Evidence를 공유할 수 있다.
 
+발표 근거로는 Product Result/Evidence가 AI와 Closed-loop의 공통 하단 신뢰 경계로 쓰이며, raw score나
+Summary 문장이 직접 mutation 근거가 되지 않는다는 점을 강조한다.
+
 ---
 
 ## Step 6. Ontology Closed-loop 구현
@@ -712,7 +734,7 @@ Raw prediction을 Dashboard/Report/Action이 공통으로 소비할 수 있는 P
 | 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
 |---|---|---|
 | **성민** | Model/Feature 의미 검토와 `gen_data` 대상 설비 Runtime Overlay Observation 지속 생성/available | model constraints + overlay observation availability |
-| **호범** | Action 판단용 Result/Evidence 제공, 정비 후 history readiness 판정·Runtime Prediction 연결 | readiness + evidence + post-maintenance result |
+| **호범** | Action 판단용 Result/Evidence 제공, 정비 후 history readiness 판정·Runtime Prediction 연결, API-only post-maintenance Product Result promotion 검증 | readiness + evidence + post-maintenance result |
 | **광우** | Recommendation → Decision → TOOL_REPLACEMENT → MaintenanceEvent → Ontology state → Integration Outbox 구현 | closed-loop state + maintenance handoff |
 | **우수** | Operations용 Product API/UI, Runtime 준비 상태와 상태 전이 acceptance flow 구현 | usable closed-loop product flow |
 
@@ -721,6 +743,10 @@ Raw prediction을 Dashboard/Report/Action이 공통으로 소비할 수 있는 P
 > 하나의 CNC Event가 Evidence 확인부터 Action 완료까지 동작하고, 대상 설비 Runtime
 > Overlay batch를 Backend가 `history_requirement`으로 검증해 ready로 판정한 뒤 별도
 > Prediction Result를 생성한다.
+
+현재 발표 기준으로는 UI를 생략한 API-only 검증에서 maintenance replay 요청과 post-maintenance
+Product Result append/latest promotion까지 재현했다. 실제 browser UI 상태표시와 외부 generator
+재예측 실행은 후속 검증 상태로 분리한다.
 
 ---
 
@@ -811,7 +837,7 @@ Step 8의 Structured Executive Brief가 먼저 안정화되어야 한다.
 | 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
 |---|---|---|
 | **성민** | 모델 결과/metrics/limitation 문장이 원래 Artifact 의미를 왜곡하지 않는지 검증 | model narrative validation cases |
-| **호범** | **Dynamic Report feature owner**: grounding selection, prompt content, output schema, narrative rule, evidence citation, hallucination guard, limitation/fallback rule, 품질 테스트 | Grounding/Prompt/Output/Validation Contract |
+| **호범** | **Dynamic Report feature owner**: ontology-aware context selection, grounding selection, prompt content, output schema, narrative rule, evidence citation, hallucination guard, limitation/fallback rule, 품질 테스트 | Grounding/Prompt/Output/Validation Contract |
 | **광우** | Decision/Action/Activity 관련 문장이 실제 workflow state와 일치하는지 검증 | operational narrative validation cases |
 | **우수** | LLM provider adapter, runtime invocation, watcher orchestration, summary key/idempotent persistence, structured output parse, timeout/retry, validation pipeline 연결, static fallback, Report/Agent Summary API, Executive Brief/Workflow UI 연결 | deployed materialized LLM summary runtime |
 
@@ -848,6 +874,8 @@ UI 사이드뷰 클릭, 탭 전환, 화면 새로고침은 조회 이벤트이�
 - 생성 결과 source trace 가능
 - 같은 snapshot과 prompt/schema/model version에서는 저장된 Summary 재사용
 - snapshot diff가 없는데 UI 조작만으로 LLM이 재호출되지 않음
+- Selection S0/S1 비교에서 required evidence recall과 limitation preservation이 유지되고 context/token input이 감소함
+- Live model comparison은 같은 조건 smoke gate와 선택 모델 120-run release gate를 구분해 설명 가능함
 
 ---
 
@@ -872,6 +900,7 @@ Source
 → Model Artifact
 → Runtime Inference
 → Product Result / Evidence
+→ Ontology-aware Context Selection
 → Recommendation / Decision / Action
 → Maintenance / Activity / Ontology State
 → 대상 설비 Runtime Overlay / history 준비
@@ -954,9 +983,10 @@ Render의 임시 파일시스템은 Model Artifact 정본으로 사용하지 않
 11. 대상 설비 branch clock Fast-forward, 지속 Observation availability와 Backend history
     준비 상태 확인
 12. Backend가 ready로 판정한 첫 inference-ready Observation의 새로운 Prediction Result 확인
-13. Static Executive Brief 확인
-14. Evidence-grounded Dynamic Report 확인
-15. 동일 근거가 Dashboard / Decision / Action / Report에 일관되게 사용됨을 설명
+13. Ontology-aware selection이 필요한 근거를 유지하면서 context를 줄였는지 확인
+14. Static Executive Brief 확인
+15. Evidence-grounded Dynamic Report 확인
+16. 동일 근거가 Dashboard / Decision / Action / Report에 일관되게 사용됨을 설명
 ```
 
 ---
