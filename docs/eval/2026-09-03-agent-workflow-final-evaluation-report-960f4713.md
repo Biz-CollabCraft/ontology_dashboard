@@ -75,6 +75,9 @@
 - Verified: isolated SQLite service/repository reliability scenarios
 - Verified: containerized PostgreSQL persistence, concurrency guard, stale recovery,
   RLS, partial unique index, and dependency wiring in five direct tests
+- Verified in candidate extension `5ab93f66`: API-only Closed-loop feedback flow
+  reaches maintenance replay and post-maintenance Product Result promotion without
+  UI automation.
 - Verified: live provider quality only when quality_gate passes
 - Verified: live B1/B2/B3 comparison only when workflow_value_gate passes
 - Verified: read-only side-effect and temporal guards
@@ -94,6 +97,65 @@
 - Run production-like pressure and soak tests.
 - Validate actual MES/CMMS/WMS/QMS adapters when connected.
 - Complete the human usefulness sample review.
+
+## 14. Candidate extension: API-only Closed-loop feedback E2E
+
+This addendum records verification performed after the original `960f4713`
+evaluation candidate. It does not change the live LLM quality numbers above.
+
+- Extension candidate SHA: `5ab93f66fdd4d11359837bdbb18b66d1961c72d0`
+- Base extension commit: `c70b5a4c8cc71f7ceedf237c2ba33e52fe6b5047`
+- Branches pushed: `codex/pr156-selection-integration`,
+  `codex/pr156-llm-eval`
+- UI scope: omitted; the flow is verified through service/API-level calls.
+- External source scope: simulated PostgreSQL fixture, not MES/CMMS/WMS/QMS.
+
+Verified path:
+
+```text
+Product Result / Evidence basis
+  -> Agent Review Packet
+  -> read-only Agent Review Summary
+  -> inspection WorkOrder request
+  -> inspection approval/start/completion
+  -> manual maintenance recommendation
+  -> human recommendation decision
+  -> maintenance approval/start/completion
+  -> maintenance replay request
+  -> post-maintenance Product Result append
+  -> latest Product Result promotion
+```
+
+Stage coverage:
+
+| Stage | Test evidence | Status |
+|---|---|---|
+| Stage 1 replay readiness | `tests/test_mvp.py::test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context` | passed |
+| Stage 2 post-maintenance result promotion | `tests/test_predictive_maintenance_postgresql.py::test_closed_loop_feedback_promotes_post_maintenance_product_result` | passed |
+| PostgreSQL result artifact regression | `tests/test_predictive_maintenance_postgresql.py` | 9 passed, 1 skipped |
+| Fast API/Closed-loop regression | targeted `tests/test_mvp.py`, `tests/test_maintenance_loop_router.py`, `tests/test_maintenance_loop_application.py` subset | 19 passed |
+
+The Stage 1 test verifies that Agent Review remains read-only before human
+commands, Closed-loop mutation progresses through replay request, replay is
+idempotent, and the refreshed detail/packet context exposes post-maintenance
+observation state and lineage.
+
+The Stage 2 PostgreSQL test verifies that a completed maintenance event can be
+used as replay lineage for an appended post-maintenance Product Result, that
+the new result satisfies the Result Artifact contract, that latest result
+selection promotes the post-maintenance result, and that completed work no
+longer remains in the open inspection queue.
+
+Claim boundary for this addendum:
+
+- Verified: closed-loop feedback can be reproduced quickly without browser UI.
+- Verified: post-maintenance result is append-only and becomes the latest
+  runtime result for the asset in PostgreSQL.
+- Verified: lineage preserves `maintenance_event_id`, maintenance action,
+  source product result, overlay branch, and history segment.
+- Not verified here: visual UI status rendering.
+- Not verified here: real generator execution from live sensor history.
+- Not verified here: external operational system connectivity.
 
 ## Artifact references
 
