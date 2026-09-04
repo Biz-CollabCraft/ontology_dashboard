@@ -86,7 +86,10 @@ export function parseMvpSelection(input: {
   };
 }
 
-export function selectionSearch(selection: MvpSelection): string {
+export function selectionSearch(
+  selection: MvpSelection,
+  options?: { workspaceShell?: string | null },
+): string {
   const params = new URLSearchParams();
   params.set("view", selection.view);
   params.set("dashboard", selection.dashboard);
@@ -95,6 +98,7 @@ export function selectionSearch(selection: MvpSelection): string {
   if (selection.workspaceId) params.set("workspace_id", selection.workspaceId);
   if (selection.assetId) params.set("asset_id", selection.assetId);
   if (selection.eventId) params.set("event_id", selection.eventId);
+  if (options?.workspaceShell === "reliability") params.set("workspace_shell", "reliability");
   return params.toString();
 }
 
@@ -132,8 +136,9 @@ export function MvpSelectionProvider({
   ) => {
     const current = readSelection();
     const next: MvpSelection = { ...current, ...patch, projectId };
+    const workspaceShell = new URLSearchParams(window.location.search).get("workspace_shell");
     window.sessionStorage.setItem(storageKey, JSON.stringify(next));
-    navigate(`${mvpProjectPath(projectId)}?${selectionSearch(next)}`, { replace: options?.replace });
+    navigate(`${mvpProjectPath(projectId)}?${selectionSearch(next, { workspaceShell })}`, { replace: options?.replace });
   }, [projectId, readSelection, storageKey]);
 
   const value = useMemo(() => ({ selection, updateSelection }), [selection, updateSelection]);

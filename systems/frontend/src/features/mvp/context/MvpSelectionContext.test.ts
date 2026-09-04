@@ -86,4 +86,20 @@ describe("MVP URL selection contract", () => {
     expect(params.get("asset_id")).toBe("CNC S01");
     expect(params.get("event_id")).toBe("EVENT#1");
   });
+
+  it("preserves the opt-in reliability workspace shell while navigating", () => {
+    const query = selectionSearch({
+      projectId: "project-a",
+      view: "objects",
+      dashboard: "workflow",
+      reportTab: "status-map",
+      role: "field_operator",
+      workspaceId: "workspace-a",
+      assetId: "CNC-1",
+      eventId: "EVENT-1",
+    }, { workspaceShell: "reliability" });
+    const params = new URLSearchParams(query);
+    expect(params.get("view")).toBe("objects");
+    expect(params.get("workspace_shell")).toBe("reliability");
+  });
 });
