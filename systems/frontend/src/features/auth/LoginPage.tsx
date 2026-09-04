@@ -12,10 +12,16 @@ const DEMO_ACCOUNTS = [
     password: "Manager!2026",
   },
   {
-    label: "실무 엔지니어",
+    label: "현장 엔지니어",
     description: "Objects · Evidence · 현장 메모",
     email: "engineer@ontology.local",
     password: "Engineer!2026",
+  },
+  {
+    label: "정비 작업자",
+    description: "Operations · 작업 대상 · 실행 기록",
+    email: "technician@ontology.local",
+    password: "Technician!2026",
   },
 ] as const;
 
