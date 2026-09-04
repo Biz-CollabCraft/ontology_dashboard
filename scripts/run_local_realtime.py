@@ -17,6 +17,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -488,6 +489,11 @@ def main() -> int:
         action="store_true",
         help="Do not select the live Dataset Version for local demo project users.",
     )
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="Open the Frontend login page after every service is ready.",
+    )
     args = parser.parse_args()
 
     if args.history_hours < MODEL_MINIMUM_HISTORY_HOURS:
@@ -749,8 +755,9 @@ def main() -> int:
         _wait(f"http://127.0.0.1:{args.web_port}/")
 
         processes.assert_running()
+        web_url = f"http://127.0.0.1:{args.web_port}/login"
         print("\nLocal real-time predictive-maintenance runtime is ready")
-        print(f"  Web:       http://127.0.0.1:{args.web_port}/login")
+        print(f"  Web:       {web_url}")
         print(f"  Backend:   http://127.0.0.1:{args.api_port}/docs")
         print(f"  Generator: http://127.0.0.1:{args.generator_port}/runtime-pipeline/status")
         print(f"  gen_data:  http://127.0.0.1:{args.gen_data_port}/api/runs/{run['run_id']}")
@@ -762,6 +769,10 @@ def main() -> int:
         )
         print(f"  Logs:      {log_root}")
         print("Press Ctrl+C to stop application processes (PostgreSQL is preserved).")
+        if args.open_browser:
+            opened = webbrowser.open(web_url)
+            if not opened:
+                print(f"[browser] could not open automatically; open {web_url}")
 
         while True:
             time.sleep(2)

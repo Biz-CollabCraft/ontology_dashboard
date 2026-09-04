@@ -151,6 +151,12 @@ Product Result/Evidence 승격, Maintenance Replay Overlay, Frontend 자동 갱�
 CNC/Compressor Model Artifact를 발행하므로 몇 분이 걸릴 수 있으며, 이후에는
 검증된 로컬 Artifact를 재사용합니다.
 
+Windows에서는 저장소 루트의 `START_LOCAL_REALTIME_DEMO.cmd`를 더블클릭하면
+동일한 통합 실행기를 시작하고, 모든 준비가 끝난 뒤 로그인 화면을 자동으로 엽니다.
+테스트 후 로컬 PostgreSQL 초기화 절차는
+[`docs/operations/local-realtime-demo-runbook.md`](docs/operations/local-realtime-demo-runbook.md)를
+따릅니다.
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_local_realtime.py
 ```
@@ -160,8 +166,8 @@ CNC/Compressor Model Artifact를 발행하므로 몇 분이 걸릴 수 있으며
 ```
 
 기본 로컬 데모는 과거 7일(168시간)의 Observation을 같은 Simulation Run에서
-먼저 생성한 뒤 현재 시각까지 fast-forward하고, 전체 Run horizon은 14일
-(336시간)로 잡아 정비 전 이력과 정비 후 재관측 시간을 모두 확보합니다. 72시간은
+먼저 생성한 뒤 현재 시각까지 fast-forward하고, 전체 Run horizon은 30일
+(720시간)로 잡아 정비 전 이력과 정비 후 재관측 시간을 모두 확보합니다. 72시간은
 데이터 계약의 상한이 아니라 예전 local runner의 demo 기본값이었습니다. 현재
 gen_data `balanced_demo`, seed 42의 첫 failure schedule은 72시간 horizon에서 3건,
 180시간에서 19건, 336시간에서 34건이 포함되므로 72시간은 Closed-loop 데모 후보를
@@ -172,7 +178,7 @@ gen_data `balanced_demo`, seed 42의 첫 failure schedule은 72시간 horizon에
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_local_realtime.py `
   --history-hours 168 `
-  --simulation-hours 336 `
+  --simulation-hours 720 `
   --speed 60
 ```
 
