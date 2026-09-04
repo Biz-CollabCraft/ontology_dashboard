@@ -67,6 +67,8 @@ Verification passed:
 - `gen-data` FastAPI/runtime tests: `tests/test_fastapi_control.py tests/test_runtime_manager.py` -> 3 passed
 - ontology-dashboard local realtime orchestration tests: `tests/test_local_realtime_orchestration.py` -> 10 passed
 - feedback refresh / post-maintenance closed-loop tests: `tests/test_maintenance_loop_router.py tests/test_maintenance_loop_application.py tests/test_live_predictive_maintenance.py tests/test_closed_loop_integration_contract.py` -> 69 passed; `src/features/operations/maintenance/inspectionCompletionPayload.test.ts src/features/operations/maintenance/MaintenanceWorkflowActionPanel.test.ts` -> 7 passed
+- Agent Review Summary watcher contract: `tests/test_agent_review_summary_watcher_cli.py` -> 2 passed
+- Actual PostgreSQL watcher trigger: `scripts/watch_agent_review_summaries.py --database postgresql://... --limit 1 --max-attempts 1` -> `trigger=polling_watcher`, `packet_build=completed`, `summary_materialization=completed`, `consumer_ready=completed`, `materialized_count=1`, `read_only=true`, `mutation_allowed=false`
 - PR 163 live browser smoke: `systems/frontend/e2e/pr163-live-smoke.spec.ts --project=chromium` -> 1 passed
 
 The PR 163 smoke covers the live generator-to-database-to-screen path: canonical V3.1 release build, PostgreSQL bootstrap, backend health, generator health, gen-data readiness, authenticated operations screen rendering, 100 factory asset nodes, dashboard API source version `gen-data-wall-clock-live-v2`, non-empty dashboard events, and positive live record count.
@@ -87,9 +89,16 @@ Compatibility fixes made before the passing smoke:
 - The local realtime runner now resolves sibling `gen-data` and `gen_data` checkout names, or an explicit `GEN_DATA_ROOT`.
 - The operations convergence E2E file no longer references the undefined `Operations_PATH` identifier.
 
+Agent Review watcher boundary:
+
+- The actual PostgreSQL watcher run created summary `4095506c-ad6a-4253-88d8-3ef3da50acb0` for `CNC-S01-L01-01` / `EVT-GS-001` with workflow run `87ed5e59-f278-4caf-af2e-ece51c2926bf`.
+- The watcher did rebuild the packet and deliver a persisted Agent Review Summary to the consumer contract (`role_workflow_ui`, `executive_brief_report`).
+- The persisted summary status was `fallback`, `fallback_reason=ProviderUnavailable`, `summary_mode=deterministic_fallback`; this run proves watcher trigger, packet build, persistence, and consumer readiness, but it is not a live-provider AI-generation pass.
+
 Regression boundary:
 
 - Full frontend E2E was attempted against the same external local servers. It did not complete as a pass: an earlier full run stopped at `adaptive-modeling-validator` with 2 failed, 1 interrupted, and 185 not run; `mvp-decision-support.spec.ts` failed 4 tests on the historical `mvp-overview` surface; `operations-frontend-convergence.spec.ts` currently reports 17 failed / 1 passed after the identifier fix.
+- Agent Review packet/wider workflow suites were also sampled after the watcher run. `tests/test_agent_review_summary_watcher_cli.py` passed, but the broader packet-golden bundle reported 2 fixture-contract failures around GS-004 SOP/source refs, and `tests/eval/test_agent_workflow_reliability.py` errored on `ModuleNotFoundError: app.operations.operational_context_sqlite`. These are tracked as suite alignment/import issues, not as watcher trigger failures.
 - These failures are kept out of the PR 163 live-smoke pass claim. They are current regression-suite alignment work, mostly around historical screen copy, route/test-id expectations, and workflow/classic UI contracts, not evidence that the live gen-data -> PostgreSQL -> operations smoke path failed.
 
 ## Root-cause corrections before the final run
