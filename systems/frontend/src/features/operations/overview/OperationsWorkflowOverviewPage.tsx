@@ -32,6 +32,7 @@ import type {
   OperationsClosedLoopTimelineItem,
   OperationsEvent,
   OperationsEventDetailModel,
+  OperationsEvidenceContext,
   OperationsFeatureHistoryWindow,
   OperationsInspectionTarget,
   OperationsReportTab,
@@ -117,6 +118,47 @@ interface InspectionTargetView {
   rank: number;
 }
 
+function inspectionMarkerClass(assetType: string, item: InspectionTargetView): string {
+  const haystack = [
+    item.target?.componentId,
+    item.target?.componentLabel,
+    item.target?.locationLabel,
+    item.target?.inspectionMethod,
+    item.factor?.feature,
+    item.factor?.label,
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (assetType.toLowerCase() === "cnc") {
+    if (haystack.includes("bearing") || haystack.includes("베어링")) return "loc-cnc-bearing";
+    if (haystack.includes("tool") || haystack.includes("공구") || haystack.includes("wear")) return "loc-cnc-tool";
+    if (haystack.includes("cool") || haystack.includes("temperature") || haystack.includes("냉각") || haystack.includes("열")) return "loc-cnc-cooling";
+    if (haystack.includes("table") || haystack.includes("workpiece") || haystack.includes("가공물") || haystack.includes("테이블")) return "loc-cnc-table";
+    if (haystack.includes("drive") || haystack.includes("power") || haystack.includes("torque") || haystack.includes("servo") || haystack.includes("구동")) return "loc-cnc-drive";
+    return "loc-cnc-spindle";
+  }
+  if (haystack.includes("filter") || haystack.includes("필터")) return "loc-compressor-filter";
+  if (haystack.includes("inlet") || haystack.includes("흡입")) return "loc-compressor-inlet";
+  if (haystack.includes("oil") || haystack.includes("오일")) return "loc-compressor-oil";
+  if (haystack.includes("cool") || haystack.includes("temperature") || haystack.includes("냉각") || haystack.includes("온도")) return "loc-compressor-cooler";
+  if (haystack.includes("discharge") || haystack.includes("valve") || haystack.includes("토출") || haystack.includes("밸브")) return "loc-compressor-discharge";
+  if (haystack.includes("motor") || haystack.includes("current") || haystack.includes("load") || haystack.includes("모터")) return "loc-compressor-motor";
+  return "loc-compressor-airend";
+}
+
+function defaultInspectionMarkerClass(assetType: string, rank: number): string {
+  if (assetType.toLowerCase() === "cnc") {
+    return [
+      "loc-cnc-spindle",
+      "loc-cnc-cooling",
+      "loc-cnc-drive",
+    ][rank - 1] ?? "loc-cnc-spindle";
+  }
+  return [
+    "loc-compressor-filter",
+    "loc-compressor-oil",
+    "loc-compressor-airend",
+  ][rank - 1] ?? "loc-compressor-airend";
+}
+
 function EquipmentSketchVisual({
   assetType,
   inspectionTargets,
@@ -124,41 +166,49 @@ function EquipmentSketchVisual({
   assetType: string;
   inspectionTargets: InspectionTargetView[];
 }) {
+  const visibleTargets = inspectionTargets.length
+    ? inspectionTargets.slice(0, 3)
+    : [1, 2, 3].map((rank) => ({ target: null, factor: null, rank }));
   if (assetType.toLowerCase() === "cnc") {
-    const toolingTarget = inspectionTargets.find((item) => (
-      item.target?.componentId.includes("tool")
-      || item.target?.componentLabel.includes("공구")
-      || item.factor?.feature.includes("tool")
-    ));
-    const driveTarget = inspectionTargets.find((item) => (
-      item.target?.componentId.includes("drive")
-      || item.target?.componentLabel.includes("동력")
-      || item.factor?.feature.includes("power")
-      || item.factor?.feature.includes("torque")
-    ));
     return (
-      <div className="cnc-visual" aria-hidden="true">
+      <div className="cnc-visual" aria-label="CNC 가공기 단면 점검 위치">
         <span className="cnc-risk-zone" />
+        <span className="cnc-frame">외함</span>
         <span className="cnc-base">베드</span>
         <span className="cnc-column">컬럼</span>
-        <span className="cnc-head">스핀들</span>
-        <span className="cnc-tool">공구대</span>
+        <span className="cnc-head">주축</span>
+        <span className="cnc-bearing">베어링</span>
+        <span className="cnc-tool">공구</span>
         <span className="cnc-table">테이블</span>
         <span className="cnc-workpiece">가공물</span>
-        <span className="cnc-axis x-axis">X축</span>
+        <span className="cnc-axis x-axis">이송축</span>
         <span className="cnc-axis z-axis">Z축</span>
-        <span className="cnc-servo">서보/구동</span>
-        <span className="cnc-coolant">냉각</span>
+        <span className="cnc-servo">구동계</span>
+        <span className="cnc-coolant">절삭유</span>
         <span className="cnc-control">제어반</span>
-        {toolingTarget ? <span className="callout cnc-tool-callout">{toolingTarget.rank}</span> : null}
-        {driveTarget ? <span className="callout cnc-drive-callout">{driveTarget.rank}</span> : null}
+        {visibleTargets.map((item) => (
+          <span
+            key={`cnc-marker-${item.rank}`}
+            className={`callout ${item.target || item.factor ? inspectionMarkerClass(assetType, item) : defaultInspectionMarkerClass(assetType, item.rank)}`}
+          >
+            {item.rank}
+          </span>
+        ))}
       </div>
     );
   }
   return (
-    <div className="compressor-visual" aria-hidden="true">
+    <div className="compressor-visual" aria-label="공기압축기 단면 점검 위치">
       <span className="vibration-zone" /><span className="pipe pipe-1" /><span className="pipe pipe-2" /><span className="pipe pipe-3" /><span className="pipe pipe-4" />
-      <span className="motor">모터</span><span className="shaft drive">축/벨트</span><span className="pump">압축부</span><span className="valve">배관/밸브<br />압력계</span><span className="tank">압력 탱크</span><span className="power-unit">전원부</span>
+      <span className="filter">흡입 필터</span><span className="inlet">흡입 밸브</span><span className="motor">모터</span><span className="shaft drive">커플링</span><span className="pump">스크루<br />압축부</span><span className="oil-separator">오일 분리</span><span className="cooler">냉각기</span><span className="valve">토출 밸브<br />압력계</span><span className="tank">공기 탱크</span><span className="power-unit">전원부</span>
+      {visibleTargets.map((item) => (
+        <span
+          key={`compressor-marker-${item.rank}`}
+          className={`callout ${item.target || item.factor ? inspectionMarkerClass(assetType, item) : defaultInspectionMarkerClass(assetType, item.rank)}`}
+        >
+          {item.rank}
+        </span>
+      ))}
     </div>
   );
 }
@@ -314,7 +364,7 @@ const MODEL_METADATA_FEATURE_KEYS = new Set([
   "selected_threshold",
 ]);
 const LIVE_SIGNAL_LABELS: Record<string, string> = {
-  spindle_load_pct: "스핀들 부하",
+  spindle_load_pct: "주축 부하",
   coolant_delta_c: "냉각 온도 편차",
   vibration_rms_mm_s: "진동 RMS",
   tool_wear_min: "공구 마모",
@@ -528,14 +578,14 @@ function agentSummaryStatusLabel(trace: OperationsAgentReviewSummaryResponse["tr
   if (status === "fallback") return "검증 fallback";
   if (status === "failed") return "생성 실패";
   if (status === "stale") return "갱신 필요";
-  if (summary?.mode === "llm") return "LLM 검증 완료";
-  if (summary?.mode === "deterministic_fallback") return "규칙 기반 요약";
+  if (summary?.mode === "llm") return "LLM 브리핑 검증 완료";
+  if (summary?.mode === "deterministic_fallback") return "규칙 기반 브리핑";
   return "조회 대기";
 }
 
 function agentSummaryModeLabel(summary: OperationsAgentReviewSummary | null): string {
-  if (summary?.mode === "llm") return "LLM 요약";
-  if (summary?.mode === "deterministic_fallback") return "규칙 기반 fallback";
+  if (summary?.mode === "llm") return "LLM 브리핑";
+  if (summary?.mode === "deterministic_fallback") return "규칙 기반 브리핑";
   return "미생성";
 }
 
@@ -714,8 +764,22 @@ function inspectionTopFactorBundleSummary(target: OperationsInspectionTarget): s
   return `위험 판단에 반영된 지표 ${uniqueLabels.length}개: ${uniqueLabels.join(", ")}`;
 }
 
-function inspectionLocationLabel(target: OperationsInspectionTarget | null): string {
-  if (!target) return "위치 근거 미제공";
+function inspectionFactorLocationLabel(factor: OperationsAsset["topFactors"][number] | null): string | null {
+  const normalized = `${factor?.feature ?? ""} ${factor?.label ?? ""}`.toLowerCase();
+  if (!normalized.trim()) return null;
+  if (normalized.includes("pressure_drop") || normalized.includes("차압") || normalized.includes("filter")) return "흡입 필터";
+  if (normalized.includes("oil") || normalized.includes("오일")) return "오일 분리기";
+  if (normalized.includes("airend") || normalized.includes("vibration") || normalized.includes("진동")) return "스크루 압축부";
+  if (normalized.includes("temperature") || normalized.includes("온도")) return "냉각기/열원부";
+  if (normalized.includes("torque") || normalized.includes("power") || normalized.includes("출력")) return "구동계";
+  return null;
+}
+
+function inspectionLocationLabel(
+  target: OperationsInspectionTarget | null,
+  factor: OperationsAsset["topFactors"][number] | null = null,
+): string {
+  if (!target) return inspectionFactorLocationLabel(factor) ?? "위치 근거 미제공";
   return target.locationLabel ?? target.inspectionGuidance?.referenceLocationLabel ?? "점검 위치 근거 미제공";
 }
 
@@ -735,7 +799,7 @@ function inspectionGuidanceSourceLabel(target: OperationsInspectionTarget | null
 
 function replacementReviewTitle(target: OperationsInspectionTarget): string {
   return target.inspectionGuidance?.maintenanceReviewPrerequisites?.label
-    ?? "AI 근거 요약: 교체 시기 검토";
+    ?? "브리핑 근거: 교체 시기 검토";
 }
 
 function maintenanceReviewPrerequisitePreview(target: OperationsInspectionTarget | null): string[] {
@@ -767,7 +831,116 @@ function replacementReviewEvidenceLabel(value: string): string {
 function replacementReviewBoundaryLabel(target: OperationsInspectionTarget): string {
   const boundary = target.inspectionGuidance?.maintenanceReviewPrerequisites?.decisionBoundary;
   if (!boundary) return "";
-  return "AI가 읽은 근거 요약이며, 교체 확정이나 작업요청 생성은 담당자 검토 후 진행합니다.";
+  return "브리핑이 정리한 근거이며, 교체 확정이나 작업요청 생성은 담당자 검토 후 진행합니다.";
+}
+
+function relationPathLabel(path: string): string {
+  if (path === "asset_executes_operation") return "설비-공정";
+  if (path === "operation_assigned_to_order") return "공정-생산오더";
+  if (path === "order_contains_wip") return "오더-WIP";
+  if (path === "wip_quality_state_reported_by_lot") return "WIP-품질로트";
+  if (path === "order_commits_delivery") return "오더-납기";
+  if (path === "asset_has_maintenance_window") return "설비-정비창";
+  if (path === "action_requires_part") return "조치-부품";
+  if (path === "part_requirement_accepts_part") return "부품요건-재고";
+  if (path === "required_skill_has_technician_candidate") return "필요기술-담당자";
+  return path.replaceAll("_", " ");
+}
+
+function evidenceRelationSourceLabel(evidenceContext: OperationsEvidenceContext | null | undefined): string {
+  const relationPaths = evidenceContext?.selectedRelationPaths
+    .flatMap((item) => item.relationPath)
+    .filter(Boolean) ?? [];
+  const uniqueLabels = [...new Set(relationPaths.map(relationPathLabel))];
+  if (!uniqueLabels.length) return "관계 출처 미연결";
+  return uniqueLabels.slice(0, 2).join(" · ");
+}
+
+function evidenceTemporalStatusLabel(evidenceContext: OperationsEvidenceContext | null | undefined): string {
+  if (!evidenceContext) return "시간 기준 미연결";
+  if (evidenceContext.temporalStatus === "aligned") return "시간 정합";
+  if (evidenceContext.temporalStatus === "stale") return "시간 초과";
+  return "시간 불명";
+}
+
+function LocalInspectionBriefingSample({
+  asset,
+  factors,
+  inspectionTargets,
+  planningImpact,
+  workStatus,
+  evidenceContext,
+}: {
+  asset: OperationsAsset;
+  factors: OperationsAsset["topFactors"];
+  inspectionTargets: InspectionTargetView[];
+  planningImpact: PlanningImpactRow | null;
+  workStatus: WorkStatus;
+  evidenceContext: OperationsEvidenceContext | null;
+}) {
+  const firstTarget = inspectionTargets[0] ?? null;
+  const firstFactor = factors[0] ?? firstTarget?.factor ?? null;
+  const targetLabel = firstTarget?.target?.componentLabel
+    ?? (firstFactor ? fieldFactorItem(firstFactor) : fieldFailureLabel(asset.predictedFailureType));
+  const signalLabel = firstFactor ? displaySensorLabel(firstFactor.feature, firstFactor.label) : "핵심 센서";
+  const signalValue = firstFactor ? factorValueLabel(firstFactor) : "값 미제공";
+  const planLabel = planningImpact?.estimatedLossUnits !== null && planningImpact?.estimatedLossUnits !== undefined
+    ? `계획 손실 약 ${planningImpact.estimatedLossUnits.toLocaleString()}건`
+    : "생산 영향 계산 전";
+  const locationLabel = inspectionLocationLabel(firstTarget?.target ?? null, firstTarget?.factor ?? firstFactor);
+  const methodLabel = inspectionMethodLabel(firstTarget?.target ?? null);
+  const relationSourceLabel = evidenceRelationSourceLabel(evidenceContext);
+  const temporalStatusLabel = evidenceTemporalStatusLabel(evidenceContext);
+  const evidenceRows = inspectionTargets.length
+    ? inspectionTargets
+    : factors.slice(0, 3).map((factor, index) => ({ target: null, factor, rank: index + 1 }));
+  const renderedEvidenceRows = evidenceRows.slice(0, 3).map((item) => {
+    const factor = item.factor;
+    const label = item.target?.componentLabel ?? (factor ? fieldFactorItem(factor) : "점검 후보");
+    const value = factor
+      ? `${displaySensorLabel(factor.feature, factor.label)} ${factorValueLabel(factor)}`
+      : item.target ? inspectionBasisSummary(item.target) : "근거 미제공";
+    return { rank: item.rank, label, value };
+  });
+  if (!renderedEvidenceRows.length) {
+    renderedEvidenceRows.push(
+      { rank: 1, label: targetLabel, value: `${fieldFailureLabel(asset.predictedFailureType)} · 위험도 ${formatProbability(asset.failureProbability)}` },
+      { rank: 2, label: signalLabel, value: signalValue },
+      { rank: 3, label: "운영 영향", value: planLabel },
+    );
+  }
+  return (
+    <div className="operations-briefing-sample" aria-label="로컬 샘플 점검 브리핑">
+      <header>
+        <strong>점검 브리핑 샘플</strong>
+        <span>로컬 샘플</span>
+      </header>
+      <p>
+        {displayAssetName(asset)}는 {signalLabel} {signalValue}와 {targetLabel} 근거가 함께 잡혀
+        지금은 교체 확정보다 {locationLabel} 확인을 먼저 보는 편이 안전합니다.
+      </p>
+      <div className="operations-briefing-focus-grid">
+        <span><b>먼저 확인</b><em>{locationLabel}</em></span>
+        <span><b>확인 방법</b><em>{methodLabel}</em></span>
+        <span><b>운영 영향</b><em>{planLabel}</em></span>
+        <span><b>관계 출처</b><em>{relationSourceLabel}</em></span>
+        <span><b>시간 기준</b><em>{temporalStatusLabel}</em></span>
+      </div>
+      <div className="operations-briefing-evidence-stack" aria-label="브리핑 근거 묶음">
+        {renderedEvidenceRows.map((item) => (
+          <span key={`local-briefing-evidence-${item.rank}`}>
+            <b>{item.rank}. {item.label}</b>
+            <em>{item.value}</em>
+          </span>
+        ))}
+      </div>
+      <div className="operations-briefing-decision-strip" aria-label="선택지별 판단 보조">
+        <span><b>계속 운전</b><em>{asset.status === "critical" ? "위험 누적 확인 필요" : "추세 감시 가능"}</em></span>
+        <span><b>현장 점검</b><em>{WORK_STATUS_LABEL[workStatus]}</em></span>
+        <span><b>정비 요청</b><em>담당자 승인 후 생성</em></span>
+      </div>
+    </div>
+  );
 }
 
 function buildLineImpactSummaries(assets: OperationsAsset[]): LineImpactSummary[] {
@@ -2760,7 +2933,7 @@ function AssetPreviewPanel({
     setAgentSummaryRequestKey(agentSummaryKey);
     if (materialize && !canMaterializeAgentSummary) {
       setAgentSummaryMaterializing(false);
-      setAgentSummaryError("AI 요약 재생성 권한이 없습니다. 저장된 요약은 계속 조회할 수 있습니다.");
+      setAgentSummaryError("점검 브리핑 재생성 권한이 없습니다. 저장된 브리핑은 계속 조회할 수 있습니다.");
       return;
     }
     try {
@@ -2778,8 +2951,8 @@ function AssetPreviewPanel({
       setAgentSummaryTrace(summaryResponse.trace);
     } catch (reason: unknown) {
       const fallbackMessage = materialize
-        ? "AI 검토 요약을 생성하지 못했습니다."
-        : "AI 검토 요약을 불러오지 못했습니다.";
+        ? "점검 브리핑을 생성하지 못했습니다."
+        : "점검 브리핑을 불러오지 못했습니다.";
       setAgentSummaryError(reason instanceof Error ? reason.message : fallbackMessage);
     } finally {
       if (materialize) setAgentSummaryMaterializing(false);
@@ -2809,6 +2982,8 @@ function AssetPreviewPanel({
   const latestAgentWorkOrder = latestClosedLoopWorkOrder(detail?.closedLoop);
   const similarAgentHistory = agentHistoryItems.find((item) => item.includes("유사 이벤트"));
   const agentPartCandidate = extractPartCandidateFromQuote(currentRoleQuote);
+  const agentRelationSourceLabel = evidenceRelationSourceLabel(detail?.evidenceContext ?? null);
+  const agentTemporalStatusLabel = evidenceTemporalStatusLabel(detail?.evidenceContext ?? null);
   const agentEvidenceItems = [
     detail?.operationContext?.eventImpact?.estimatedLostUnits !== null && detail?.operationContext?.eventImpact?.estimatedLostUnits !== undefined
       ? { label: "운영 영향", value: `계획 손실 약 ${detail.operationContext.eventImpact.estimatedLostUnits.toLocaleString()}건` }
@@ -3074,39 +3249,40 @@ function AssetPreviewPanel({
 
           {role === "field_operator" && activeTab === "status" ? (
             <>
-              <section className="operations-agent-review-packet" aria-label="AI 검토 요약">
+              <section className="operations-agent-review-packet" aria-label="점검 브리핑">
                 <header>
                   <Bot size={14} />
-                  <strong>AI 검토 요약</strong>
-                  <span>저장 요약</span>
+                  <strong>점검 브리핑</strong>
+                  <span>근거 기반</span>
                   <button
                     type="button"
                     className="operations-agent-review-refresh"
                     onClick={() => void loadAgentSummary(true)}
                     disabled={!canMaterializeAgentSummary || agentSummaryLoading || agentSummaryMaterializing}
-                    aria-label="AI 요약 재생성"
-                    title={canMaterializeAgentSummary ? "AI 요약 재생성" : "AI 요약 재생성 권한 없음"}
+                    aria-label="점검 브리핑 갱신"
+                    title={canMaterializeAgentSummary ? "점검 브리핑 갱신" : "점검 브리핑 갱신 권한 없음"}
                   >
                     <RefreshCw className={agentSummaryMaterializing ? "operations-action-spinner" : ""} size={13} />
-                    <span>{agentSummaryMaterializing ? "생성 중" : canMaterializeAgentSummary ? "요약 재생성" : "재생성 권한 없음"}</span>
+                    <span>{agentSummaryMaterializing ? "생성 중" : canMaterializeAgentSummary ? "브리핑 갱신" : "갱신 권한 없음"}</span>
                   </button>
                 </header>
-                {!canMaterializeAgentSummary ? <p>현재 역할은 저장된 AI 요약만 조회할 수 있습니다.</p> : null}
-                {agentSummaryLoading ? <p>저장된 AI 요약을 조회하는 중입니다.</p> : null}
-                {agentSummaryMaterializing ? <p>현재 snapshot 기준 AI 요약을 다시 생성하는 중입니다.</p> : null}
+                {!canMaterializeAgentSummary ? <p>현재 역할은 저장된 점검 브리핑만 조회할 수 있습니다.</p> : null}
+                {agentSummaryLoading ? <p>저장된 점검 브리핑을 조회하는 중입니다.</p> : null}
+                {agentSummaryMaterializing ? <p>현재 snapshot 기준 점검 브리핑을 다시 생성하는 중입니다.</p> : null}
                 {!agentSummaryLoading ? (
                   <>
-                    {agentSummaryError ? <p>{agentSummaryError}</p> : null}
                     {agentSummary ? (
                       <>
-                        <div className="operations-agent-review-meta" aria-label="AI 요약 상태">
+                        <div className="operations-agent-review-meta" aria-label="점검 브리핑 상태">
                           <span>{agentSummaryStatusLabel(agentSummaryTrace, agentSummary)}</span>
                           <span>{agentSummaryModeLabel(agentSummary)}</span>
                           <span>{agentSummaryWorkflowRunLabel(agentSummaryTrace)}</span>
                           {agentFocusItems.length ? <span>{agentFocusItems.length}개 점검 계통</span> : null}
+                          {detail?.evidenceContext?.selectedRelationPaths.length ? <span>관계 출처 {agentRelationSourceLabel}</span> : null}
+                          {detail?.evidenceContext ? <span>{agentTemporalStatusLabel}</span> : null}
                         </div>
                         {agentEvidenceItems.length ? (
-                          <div className="operations-agent-evidence-grid" aria-label="AI 근거 요약">
+                          <div className="operations-agent-evidence-grid" aria-label="브리핑 근거">
                             {agentEvidenceItems.map((item) => (
                               <span key={`${agentSummary.asset_id}-evidence-${item.label}`}>
                                 <b>{item.label}</b>
@@ -3119,7 +3295,7 @@ function AssetPreviewPanel({
                           <strong>{agentSummary.title}</strong>
                           <p>{agentSummary.summary}</p>
                           {currentRoleAgentSummaries.length ? (
-                            <div className="operations-agent-role-quotes" aria-label="현재 역할 AI 요약">
+                            <div className="operations-agent-role-quotes" aria-label="현재 역할 브리핑">
                               {currentRoleAgentSummaries.map((item) => (
                                 <figure key={`${agentSummary.asset_id}-role-${item.role}`}>
                                   <figcaption>{item.label}</figcaption>
@@ -3159,14 +3335,22 @@ function AssetPreviewPanel({
                           <small>동일 snapshot 기준 저장본을 재사용했습니다.</small>
                         ) : null}
                         {agentSummary.mode === "deterministic_fallback" ? (
-                          <small>LLM 후보가 없거나 검증을 통과하지 못해 검증된 fallback 요약을 저장했습니다.</small>
+                          <small>LLM 후보가 없거나 검증을 통과하지 못해 검증된 fallback 브리핑을 저장했습니다.</small>
                         ) : null}
-                        <small>AI 요약은 검토 전용이며 Closed-loop 상태를 변경하지 않습니다.</small>
+                        <small>브리핑은 검토 전용이며 Closed-loop 상태를 변경하지 않습니다.</small>
                       </>
-                    ) : agentSummaryError ? null : (
-                      <p>
-                        저장된 AI 요약이 아직 없습니다. watcher 또는 생성 API가 같은 snapshot 기준 요약을 만들면 이 화면은 저장본만 재사용합니다.
-                      </p>
+                    ) : (
+                      <>
+                        {agentSummaryError ? <p className="operations-briefing-warning">{agentSummaryError}</p> : null}
+                        <LocalInspectionBriefingSample
+                          asset={asset}
+                          factors={factors}
+                          inspectionTargets={inspectionTargets}
+                          planningImpact={planningImpact}
+                          workStatus={effectiveWorkStatus}
+                          evidenceContext={detail?.evidenceContext ?? null}
+                        />
+                      </>
                     )}
                   </>
                 ) : null}
@@ -3181,7 +3365,7 @@ function AssetPreviewPanel({
                     <ul className="sketch-legend">
                       {inspectionTargets.length ? inspectionTargets.map((target) => (
                         <li key={target.target?.targetId ?? target.factor?.id ?? `inspection-legend-${target.rank}`}>
-                          <b>{target.rank}</b>{inspectionLocationLabel(target.target)}: {target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}
+                          <b>{target.rank}</b>{inspectionLocationLabel(target.target, target.factor)}: {target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}
                           {target.target?.inspectionGuidance ? <small>{inspectionGuidanceSourceLabel(target.target)}</small> : null}
                         </li>
                       )) : <li><b>!</b>위치 근거: 부품 근거 없음</li>}

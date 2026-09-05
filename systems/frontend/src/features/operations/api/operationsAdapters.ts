@@ -9,6 +9,8 @@ import type {
   OperationsEquipmentHistoryItem,
   OperationsEvent,
   OperationsEventDetailModel,
+  OperationsEvidenceContext,
+  OperationsEvidenceContextBasis,
   OperationsEvidenceGap,
   OperationsEvidenceSnapshotBasis,
   OperationsFactor,
@@ -763,6 +765,54 @@ function evidenceGapsFromAssetDetailViewModel(
   }));
 }
 
+function evidenceBasisFromAssetDetailViewModel(
+  item: NonNullable<AssetDetailViewModel["evidence_context"]>["selected_basis"][number]
+    | NonNullable<AssetDetailViewModel["evidence_context"]>["rejected_basis"][number],
+): OperationsEvidenceContextBasis {
+  return {
+    candidateId: item.candidate_id,
+    candidateType: item.candidate_type,
+    sourceRef: item.source_ref,
+    sourceVersion: item.source_version,
+    domain: item.domain,
+    relationPath: item.relation_path,
+    factType: item.fact_type,
+    valueSummary: item.value_summary,
+    requiredForBoundary: item.required_for_boundary,
+    freshnessState: item.freshness_state,
+    asOf: item.as_of,
+    limitationState: item.limitation_state,
+    rejectedReason: "rejected_reason" in item ? item.rejected_reason : undefined,
+  };
+}
+
+function evidenceContextFromAssetDetailViewModel(
+  viewModel: AssetDetailViewModel,
+): OperationsEvidenceContext | null {
+  const context = viewModel.evidence_context;
+  if (!context) return null;
+  return {
+    relationSchemaVersion: context.relation_schema_version,
+    relationResolutionVersion: context.relation_resolution_version,
+    selectionPolicyVersion: context.selection_policy_version,
+    decisionAsOf: context.decision_as_of,
+    relationRetrievedAt: context.relation_retrieved_at,
+    sourceObservedAtMin: context.source_observed_at_min,
+    sourceObservedAtMax: context.source_observed_at_max,
+    maxSourceLagSeconds: context.max_source_lag_seconds,
+    temporalStatus: context.temporal_status,
+    selectedBasis: context.selected_basis.map(evidenceBasisFromAssetDetailViewModel),
+    selectedRelationPaths: context.selected_relation_paths.map((item) => ({
+      candidateId: item.candidate_id,
+      sourceRef: item.source_ref,
+      relationPath: item.relation_path,
+    })),
+    rejectedBasis: context.rejected_basis.map(evidenceBasisFromAssetDetailViewModel),
+    limitations: context.limitations,
+    sourceRefCoverage: context.source_ref_coverage,
+  };
+}
+
 function inspectionTargetsFromAssetDetailViewModel(
   viewModel: AssetDetailViewModel,
 ): OperationsInspectionTarget[] {
@@ -1048,6 +1098,7 @@ export function composeEventDetail(input: {
     dataQualityWarnings: input.evidence?.data_quality_warnings ?? [],
     equipmentHistory: [],
     evidenceGaps: [],
+    evidenceContext: null,
     assetDetailStatus: null,
     operationContext: null,
     closedLoop: null,
@@ -1108,6 +1159,7 @@ export function applyAssetDetailViewModel(
     inspectionTargets: inspectionTargetsFromAssetDetailViewModel(viewModel),
     equipmentHistory: equipmentHistoryFromAssetDetailViewModel(viewModel),
     evidenceGaps: evidenceGapsFromAssetDetailViewModel(viewModel),
+    evidenceContext: evidenceContextFromAssetDetailViewModel(viewModel),
     assetDetailStatus: {
       isStale: viewModel.data_status.is_stale,
       isDataQualityHold: viewModel.data_status.is_data_quality_hold,

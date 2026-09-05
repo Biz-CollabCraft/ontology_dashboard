@@ -280,6 +280,7 @@ def compose_asset_detail_view_model(
     closed_loop: dict[str, Any] | None = None,
     inspection_guidance: dict[str, dict[str, Any]] | None = None,
     inspection_locations: dict[str, dict[str, Any]] | None = None,
+    evidence_context: dict[str, Any] | None = None,
     data_status: dict[str, Any] | None = None,
     history_window: str = DEFAULT_HISTORY_WINDOW,
     event_id: str | None = None,
@@ -394,6 +395,7 @@ def compose_asset_detail_view_model(
         "operation_context": operation_context,
         "review_priority": review_priority,
         **({"closed_loop": closed_loop_read_model} if closed_loop_read_model is not None else {}),
+        "evidence_context": _evidence_context(evidence_context),
         "evidence": {
             "artifact_id": result_artifact.get("artifact_id"),
             "evidence_payload_reference": _evidence_payload_reference(provenance),
@@ -406,6 +408,102 @@ def compose_asset_detail_view_model(
         },
         "data_status": _data_status(result_artifact, provenance, data_status),
     }
+
+
+def _evidence_context(value: dict[str, Any] | None) -> dict[str, Any]:
+    if not value:
+        return {
+            "relation_schema_version": "operational-relation-schema-v1",
+            "relation_resolution_version": None,
+            "selection_policy_version": None,
+            "decision_as_of": None,
+            "relation_retrieved_at": None,
+            "source_observed_at_min": None,
+            "source_observed_at_max": None,
+            "max_source_lag_seconds": None,
+            "temporal_status": "unknown",
+            "selected_basis": [],
+            "selected_relation_paths": [],
+            "rejected_basis": [],
+            "limitations": [
+                "Operational relation selection is not connected to this ViewModel composition path yet."
+            ],
+            "source_ref_coverage": None,
+        }
+    selected_basis = [_evidence_basis_item(item) for item in value.get("selected_basis") or []]
+    rejected_basis = [
+        _evidence_basis_item(item, include_rejected_reason=True)
+        for item in value.get("rejected_basis") or []
+    ]
+    selected_relation_paths = [
+        _relation_path_item(item)
+        for item in value.get("selected_relation_paths") or []
+    ]
+    return {
+        "relation_schema_version": str(
+            value.get("relation_schema_version") or "operational-relation-schema-v1"
+        ),
+        "relation_resolution_version": _optional_str(value.get("relation_resolution_version")),
+        "selection_policy_version": _optional_str(value.get("selection_policy_version")),
+        "decision_as_of": _optional_str(value.get("decision_as_of")),
+        "relation_retrieved_at": _optional_str(value.get("relation_retrieved_at")),
+        "source_observed_at_min": _optional_str(value.get("source_observed_at_min")),
+        "source_observed_at_max": _optional_str(value.get("source_observed_at_max")),
+        "max_source_lag_seconds": _optional_number(value.get("max_source_lag_seconds")),
+        "temporal_status": str(value.get("temporal_status") or "unknown"),
+        "selected_basis": selected_basis,
+        "selected_relation_paths": selected_relation_paths,
+        "rejected_basis": rejected_basis,
+        "limitations": [str(item) for item in value.get("limitations") or []],
+        "source_ref_coverage": _optional_number(value.get("source_ref_coverage")),
+    }
+
+
+def _evidence_basis_item(
+    item: dict[str, Any],
+    *,
+    include_rejected_reason: bool = False,
+) -> dict[str, Any]:
+    result = {
+        "candidate_id": str(item.get("candidate_id") or ""),
+        "candidate_type": str(item.get("candidate_type") or "fact"),
+        "source_ref": str(item.get("source_ref") or ""),
+        "source_version": str(item.get("source_version") or ""),
+        "domain": str(item.get("domain") or "unresolved"),
+        "relation_path": [str(path) for path in item.get("relation_path") or []],
+        "fact_type": str(item.get("fact_type") or "unknown"),
+        "value_summary": str(item.get("value_summary") or ""),
+        "required_for_boundary": bool(item.get("required_for_boundary")),
+        "freshness_state": str(item.get("freshness_state") or "unknown"),
+        "as_of": _optional_str(item.get("as_of")),
+        "limitation_state": _optional_str(item.get("limitation_state")),
+    }
+    if include_rejected_reason:
+        result["rejected_reason"] = _optional_str(item.get("rejected_reason"))
+    return result
+
+
+def _relation_path_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "candidate_id": str(item.get("candidate_id") or ""),
+        "source_ref": str(item.get("source_ref") or ""),
+        "relation_path": [str(path) for path in item.get("relation_path") or []],
+    }
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
+
+
+def _optional_number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
 
 
 def _features_from_artifact(

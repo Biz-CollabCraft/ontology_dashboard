@@ -875,7 +875,7 @@
 .operations-side-map-report .compressor-visual,
 .operations-side-map-report .cnc-visual { --sketch-origin: max(12px, calc(50% - 310px)); position: relative; width: 100%; height: 206px; border: 1px solid rgba(181,196,214,.16); background: linear-gradient(rgba(181,196,214,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(181,196,214,.07) 1px, transparent 1px), #121922; background-size: 18px 18px; overflow: hidden; }
 .operations-side-map-report .compressor-visual span,
-.operations-side-map-report .cnc-visual span { position: absolute; display: grid; place-items: center; border: 2px solid rgba(181,196,214,.68); background: #18212c; color: var(--operations-text); font-size: 10px; font-weight: 900; line-height: 1; }
+.operations-side-map-report .cnc-visual span { position: absolute; display: grid; place-items: center; border: 2px solid rgba(181,196,214,.68); background: #18212c; color: #d8e8ff; font-size: 10px; font-weight: 900; line-height: 1; }
 .operations-side-map-report .compressor-visual .vibration-zone { left: calc(var(--sketch-origin) + 169px); top: 24px; width: 274px; height: 76px; border: 2px dashed rgba(236,91,98,.72); background: transparent; z-index: 0; }
 .operations-side-map-report .compressor-visual .pipe { z-index: 0; border: 0; background: rgba(181,196,214,.62); padding: 0; font-size: 0; }
 .operations-side-map-report .compressor-visual .pipe-1 { left: calc(var(--sketch-origin) + 227px); top: 58px; width: 34px; height: 4px; }
@@ -910,6 +910,52 @@
 .operations-side-map-report .cnc-visual .cnc-control { left: calc(var(--sketch-origin) + 72px); top: 106px; width: 58px; height: 40px; border-color: rgba(181,196,214,.52); font-size: 9px; z-index: 3; }
 .operations-side-map-report .cnc-visual .cnc-tool-callout { left: calc(var(--sketch-origin) + 298px); top: 82px; z-index: 5; transform: none; }
 .operations-side-map-report .cnc-visual .cnc-drive-callout { left: calc(var(--sketch-origin) + 438px); top: 40px; z-index: 5; transform: none; }
+.operations-side-map-report .cnc-visual .cnc-frame { left: calc(var(--sketch-origin) + 106px); top: 22px; width: 442px; height: 160px; border: 2px solid rgba(181,196,214,.28); background: linear-gradient(135deg, rgba(255,255,255,.045), transparent 42%); color: transparent; z-index: 1; }
+.operations-side-map-report .cnc-visual .cnc-bearing { left: calc(var(--sketch-origin) + 306px); top: 66px; width: 48px; height: 18px; border-color: rgba(126,211,134,.68); color: #d8f4d5; background: #14251f; font-size: 8px; z-index: 5; }
+.operations-side-map-report .cnc-visual .cnc-head { border-radius: 4px 4px 14px 14px; }
+.operations-side-map-report .cnc-visual .cnc-tool { width: 34px; height: 42px; clip-path: polygon(20% 0, 80% 0, 66% 100%, 34% 100%); }
+.operations-side-map-report .cnc-visual .cnc-axis.x-axis { display: block; left: calc(var(--sketch-origin) + 262px); top: 127px; width: 226px; height: 4px; border: 0; background: rgba(126,211,134,.58); color: transparent; z-index: 2; }
+.operations-side-map-report .cnc-visual .cnc-axis.z-axis { display: block; left: calc(var(--sketch-origin) + 300px); top: 74px; width: 4px; height: 54px; border: 0; background: rgba(246,189,112,.62); color: transparent; z-index: 2; }
+.operations-side-map-report .cnc-visual .loc-cnc-spindle { left: calc(var(--sketch-origin) + 304px); top: 51px; z-index: 7; }
+.operations-side-map-report .cnc-visual .loc-cnc-bearing { left: calc(var(--sketch-origin) + 354px); top: 75px; z-index: 7; }
+.operations-side-map-report .cnc-visual .loc-cnc-tool { left: calc(var(--sketch-origin) + 319px); top: 111px; z-index: 7; }
+.operations-side-map-report .cnc-visual .loc-cnc-drive { left: calc(var(--sketch-origin) + 487px); top: 43px; z-index: 7; }
+.operations-side-map-report .cnc-visual .loc-cnc-cooling { left: calc(var(--sketch-origin) + 487px); top: 94px; z-index: 7; }
+.operations-side-map-report .cnc-visual .loc-cnc-table { left: calc(var(--sketch-origin) + 415px); top: 129px; z-index: 7; }
+.operations-side-map-report .compressor-visual .filter { left: calc(var(--sketch-origin) + 86px); top: 43px; width: 68px; height: 38px; border-color: rgba(126,211,134,.6); background: #14251f; z-index: 1; }
+.operations-side-map-report .compressor-visual .inlet { left: calc(var(--sketch-origin) + 164px); top: 47px; width: 54px; height: 30px; border-color: rgba(246,189,112,.7); z-index: 1; }
+.operations-side-map-report .compressor-visual .motor { left: calc(var(--sketch-origin) + 229px); width: 58px; border-radius: 999px; }
+.operations-side-map-report .compressor-visual .drive { left: calc(var(--sketch-origin) + 294px); width: 56px; }
+.operations-side-map-report .compressor-visual .pump { left: calc(var(--sketch-origin) + 357px); width: 62px; border-radius: 18px; line-height: 1.12; }
+.operations-side-map-report .compressor-visual .oil-separator { left: calc(var(--sketch-origin) + 428px); top: 36px; width: 52px; height: 54px; border-radius: 20px; border-color: rgba(246,189,112,.7); z-index: 1; }
+.operations-side-map-report .compressor-visual .cooler { left: calc(var(--sketch-origin) + 505px); top: 43px; width: 62px; height: 38px; border-color: rgba(76,144,240,.72); z-index: 1; }
+.operations-side-map-report .compressor-visual .valve { left: calc(var(--sketch-origin) + 424px); width: 92px; }
+.operations-side-map-report .compressor-visual .tank { left: calc(var(--sketch-origin) + 404px); }
+.operations-side-map-report .compressor-visual .loc-compressor-filter { left: calc(var(--sketch-origin) + 120px); top: 36px; }
+.operations-side-map-report .compressor-visual .loc-compressor-inlet { left: calc(var(--sketch-origin) + 191px); top: 55px; }
+.operations-side-map-report .compressor-visual .loc-compressor-motor { left: calc(var(--sketch-origin) + 258px); top: 43px; }
+.operations-side-map-report .compressor-visual .loc-compressor-airend { left: calc(var(--sketch-origin) + 387px); top: 36px; }
+.operations-side-map-report .compressor-visual .loc-compressor-oil { left: calc(var(--sketch-origin) + 454px); top: 36px; }
+.operations-side-map-report .compressor-visual .loc-compressor-cooler { left: calc(var(--sketch-origin) + 536px); top: 36px; }
+.operations-side-map-report .compressor-visual .loc-compressor-discharge { left: calc(var(--sketch-origin) + 471px); top: 112px; }
+.operations-briefing-sample { display: grid; gap: 8px; border-top: 1px solid rgba(181,196,214,.12); padding-top: 8px; }
+.operations-briefing-sample header { display: flex; align-items: center; gap: 6px; }
+.operations-briefing-sample header strong { color: var(--operations-text); font-size: 12px; }
+.operations-briefing-sample header span { margin-left: auto; width: max-content; border: 1px solid rgba(246,189,112,.22); border-radius: 5px; padding: 3px 7px; color: #f6d49b; background: rgba(246,189,112,.08); font-size: 10px; font-weight: 900; }
+.operations-briefing-sample p { margin: 0; color: var(--operations-muted); font-size: 12px; line-height: 1.55; }
+.operations-briefing-focus-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+.operations-briefing-focus-grid span,
+.operations-briefing-decision-strip span { min-width: 0; display: grid; gap: 3px; border: 1px solid rgba(181,196,214,.12); border-radius: 6px; padding: 7px; background: rgba(255,255,255,.018); }
+.operations-briefing-focus-grid b,
+.operations-briefing-decision-strip b { color: #cfe1f7; font-size: 10px; line-height: 1.25; }
+.operations-briefing-focus-grid em,
+.operations-briefing-decision-strip em { overflow: hidden; color: var(--operations-muted); font-size: 11px; font-style: normal; font-weight: 800; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.operations-briefing-evidence-stack { display: grid; gap: 5px; }
+.operations-briefing-evidence-stack span { min-width: 0; display: grid; grid-template-columns: minmax(120px,.75fr) minmax(0,1fr); gap: 8px; align-items: center; border: 1px solid rgba(76,144,240,.14); border-radius: 6px; padding: 7px; background: rgba(76,144,240,.04); }
+.operations-briefing-evidence-stack b { overflow: hidden; color: #d8e8ff; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.operations-briefing-evidence-stack em { overflow: hidden; color: var(--operations-muted); font-size: 11px; font-style: normal; font-weight: 800; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.operations-briefing-decision-strip { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+.operations-briefing-warning { margin: 0; color: #f6bd70 !important; }
 .operations-side-map-report .target-list { display: grid; gap: 8px; }
 .operations-side-map-report .target-list article { min-width: 0; display: grid; grid-template-columns: 30px 30px minmax(0,1fr) auto; gap: 8px; align-items: center; border: 1px solid rgba(181,196,214,.11); border-radius: 6px; background: rgba(255,255,255,.018); padding: 9px; }
 .operations-side-map-report .target-list article > i { width: 28px; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid rgba(76,144,240,.36); border-radius: 4px; background: var(--operations-accent-soft); color: #9cc5fa; font-style: normal; }

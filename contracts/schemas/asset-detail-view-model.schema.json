@@ -4,7 +4,7 @@
   "title": "Asset Detail ViewModel",
   "description": "Operations consumption contract for GET /objects/{asset_id}/detail-view, as documented in docs/operations/api-specification.md. Does not replace the Event Report API; it composes the Asset Detail and Overview snapshot consumed by UI variants. This object name is deliberately not prefixed with `Operations`.",
   "type": "object",
-  "required": ["snapshot_basis", "asset", "risk", "risk_series", "features", "equipment_history", "maintenance_context", "operation_context", "review_priority", "evidence", "data_status"],
+  "required": ["snapshot_basis", "asset", "risk", "risk_series", "features", "equipment_history", "maintenance_context", "operation_context", "review_priority", "evidence_context", "evidence", "data_status"],
   "additionalProperties": false,
   "properties": {
     "snapshot_basis": {"$ref": "#/$defs/evidenceSnapshotBasis"},
@@ -209,6 +209,43 @@
         "source_fields": {"type": "array", "items": {"type": "string"}}
       }
     },
+    "evidence_context": {
+      "type": "object",
+      "description": "Relation schema and deterministic evidence-selection context for this event. This is not a raw producer payload and does not authorize mutations.",
+      "required": ["relation_schema_version", "relation_resolution_version", "selection_policy_version", "decision_as_of", "relation_retrieved_at", "source_observed_at_min", "source_observed_at_max", "max_source_lag_seconds", "temporal_status", "selected_basis", "selected_relation_paths", "rejected_basis", "limitations", "source_ref_coverage"],
+      "additionalProperties": false,
+      "properties": {
+        "relation_schema_version": {"type": "string"},
+        "relation_resolution_version": {"type": ["string", "null"]},
+        "selection_policy_version": {"type": ["string", "null"]},
+        "decision_as_of": {"type": ["string", "null"], "format": "date-time"},
+        "relation_retrieved_at": {"type": ["string", "null"], "format": "date-time"},
+        "source_observed_at_min": {"type": ["string", "null"], "format": "date-time"},
+        "source_observed_at_max": {"type": ["string", "null"], "format": "date-time"},
+        "max_source_lag_seconds": {"type": ["number", "null"], "minimum": 0},
+        "temporal_status": {"enum": ["aligned", "stale", "unknown"]},
+        "selected_basis": {"type": "array", "items": {"$ref": "#/$defs/evidenceContextBasis"}},
+        "selected_relation_paths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["candidate_id", "source_ref", "relation_path"],
+            "additionalProperties": false,
+            "properties": {
+              "candidate_id": {"type": "string"},
+              "source_ref": {"type": "string"},
+              "relation_path": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "rejected_basis": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidenceContextRejectedBasis"}
+        },
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "source_ref_coverage": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    },
     "evidence": {
       "type": "object",
       "required": ["artifact_id", "model_version", "dataset_version", "source_kind", "gaps"],
@@ -251,6 +288,45 @@
     }
   },
   "$defs": {
+    "evidenceContextBasis": {
+      "type": "object",
+      "required": ["candidate_id", "candidate_type", "source_ref", "source_version", "domain", "relation_path", "fact_type", "value_summary", "required_for_boundary", "freshness_state", "as_of", "limitation_state"],
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {"type": "string"},
+        "candidate_type": {"enum": ["fact", "relationship", "limitation"]},
+        "source_ref": {"type": "string"},
+        "source_version": {"type": "string"},
+        "domain": {"type": "string"},
+        "relation_path": {"type": "array", "items": {"type": "string"}},
+        "fact_type": {"type": "string"},
+        "value_summary": {"type": "string"},
+        "required_for_boundary": {"type": "boolean"},
+        "freshness_state": {"type": "string"},
+        "as_of": {"type": ["string", "null"], "format": "date-time"},
+        "limitation_state": {"type": ["string", "null"]}
+      }
+    },
+    "evidenceContextRejectedBasis": {
+      "type": "object",
+      "required": ["candidate_id", "candidate_type", "source_ref", "source_version", "domain", "relation_path", "fact_type", "value_summary", "required_for_boundary", "freshness_state", "as_of", "limitation_state", "rejected_reason"],
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {"type": "string"},
+        "candidate_type": {"enum": ["fact", "relationship", "limitation"]},
+        "source_ref": {"type": "string"},
+        "source_version": {"type": "string"},
+        "domain": {"type": "string"},
+        "relation_path": {"type": "array", "items": {"type": "string"}},
+        "fact_type": {"type": "string"},
+        "value_summary": {"type": "string"},
+        "required_for_boundary": {"type": "boolean"},
+        "freshness_state": {"type": "string"},
+        "as_of": {"type": ["string", "null"], "format": "date-time"},
+        "limitation_state": {"type": ["string", "null"]},
+        "rejected_reason": {"type": ["string", "null"]}
+      }
+    },
     "evidenceSnapshotBasis": {
       "type": "object",
       "description": "Shared evidence basis for sibling read projections. UI, report, and read-only agent packets can compare this object before presenting or acting on derived text.",

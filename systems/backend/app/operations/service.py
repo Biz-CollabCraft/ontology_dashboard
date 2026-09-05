@@ -347,6 +347,12 @@ class ManufacturingPredictiveMaintenanceService:
                 fixture=fixture,
                 artifact=artifact,
             ),
+            evidence_context=self._evidence_context_for_fixture(
+                asset_id=asset_id,
+                artifact=artifact,
+                project_id=project_id,
+                event_id=fixture.get("event_id"),
+            ),
             data_status={
                 "source": "canonical",
                 "last_updated_at": artifact["observed_at"],
@@ -355,6 +361,106 @@ class ManufacturingPredictiveMaintenanceService:
             history_window=history_window,
             event_id=fixture.get("event_id"),
         )
+
+    def _evidence_context_for_fixture(
+        self,
+        *,
+        asset_id: str,
+        artifact: dict[str, Any],
+        project_id: str,
+        event_id: str | None,
+        role: str = "process_manager",
+        max_candidates: int = 8,
+    ) -> dict[str, Any]:
+        observed_at = _timestamp_instant(str(artifact["observed_at"]))
+        identity = OperationalRequestIdentity(
+            organization_id="ORG-001",
+            project_id=project_id,
+            workspace_id="manufacturing-demo",
+            asset_id=asset_id,
+            evidence_snapshot_id=str(artifact.get("artifact_id") or event_id or asset_id),
+            decision_as_of=observed_at,
+        )
+        contexts = self._operational_selection_contexts(
+            identity=identity,
+            retrieved_at=observed_at,
+        )
+        relations = resolve_operational_relations(identity=identity, contexts=contexts)
+        candidates = project_evidence_candidates(
+            identity=identity,
+            contexts=contexts,
+            relation_resolution=relations,
+        )
+        selected = select_evidence_candidates(
+            candidates,
+            strategy=EvidenceSelectionStrategy.DETERMINISTIC,
+            role=role,
+            max_candidates=max_candidates,
+        )
+        selected_basis = [candidate.model_dump(mode="json") for candidate in selected.selected]
+        rejected_basis = [candidate.model_dump(mode="json") for candidate in selected.rejected]
+        selected_relation_paths = [
+            {
+                "candidate_id": candidate.candidate_id,
+                "source_ref": candidate.source_ref,
+                "relation_path": list(candidate.relation_path),
+            }
+            for candidate in selected.selected
+            if candidate.relation_path
+        ]
+        source_ref_count = sum(1 for candidate in selected.selected if candidate.source_ref)
+        source_observed_ats = [
+            envelope.source_updated_at
+            for envelope in contexts.values()
+            if envelope.source_updated_at is not None
+        ]
+        max_source_lag_seconds = (
+            max(
+                abs((observed_at - source_observed_at).total_seconds())
+                for source_observed_at in source_observed_ats
+            )
+            if source_observed_ats
+            else None
+        )
+        freshness_states = {envelope.freshness.state.value for envelope in contexts.values()}
+        if "stale" in freshness_states:
+            temporal_status = "stale"
+        elif "unknown" in freshness_states or len(source_observed_ats) != len(contexts):
+            temporal_status = "unknown"
+        else:
+            temporal_status = "aligned"
+        return {
+            "relation_schema_version": "operational-relation-schema-v1",
+            "relation_resolution_version": relations.schema_version,
+            "selection_policy_version": selected.policy_version,
+            "decision_as_of": observed_at.isoformat(),
+            "relation_retrieved_at": observed_at.isoformat(),
+            "source_observed_at_min": (
+                min(source_observed_ats).isoformat()
+                if source_observed_ats
+                else None
+            ),
+            "source_observed_at_max": (
+                max(source_observed_ats).isoformat()
+                if source_observed_ats
+                else None
+            ),
+            "max_source_lag_seconds": max_source_lag_seconds,
+            "temporal_status": temporal_status,
+            "selected_basis": selected_basis,
+            "selected_relation_paths": selected_relation_paths,
+            "rejected_basis": rejected_basis,
+            "limitations": [
+                candidate.value_summary
+                for candidate in selected.selected
+                if candidate.candidate_type == "limitation"
+            ],
+            "source_ref_coverage": (
+                source_ref_count / len(selected.selected)
+                if selected.selected
+                else None
+            ),
+        }
 
     def agent_review_packet(
         self,

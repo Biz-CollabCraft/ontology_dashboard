@@ -31,6 +31,15 @@ const DEMO_ACCOUNTS = [
     password: "Manager!2026",
   },
   {
+    label: { ko: "현장 작업", en: "Field" },
+    description: {
+      ko: "점검 브리핑 · 설비 단면 · 체크리스트 · 진행 상태",
+      en: "Inspection brief · equipment section · checklist · work status",
+    },
+    email: "technician@ontology.local",
+    password: "Technician!2026",
+  },
+  {
     label: { ko: "경영진", en: "Executive" },
     description: {
       ko: "Executive Brief · 운영 리스크 · KPI · 의사결정 병목",

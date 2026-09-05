@@ -83,6 +83,24 @@
     "production_impact": null
   },
   "review_priority": null,
+  "evidence_context": {
+    "relation_schema_version": "operational-relation-schema-v1",
+    "relation_resolution_version": null,
+    "selection_policy_version": null,
+    "decision_as_of": null,
+    "relation_retrieved_at": null,
+    "source_observed_at_min": null,
+    "source_observed_at_max": null,
+    "max_source_lag_seconds": null,
+    "temporal_status": "unknown",
+    "selected_basis": [],
+    "selected_relation_paths": [],
+    "rejected_basis": [],
+    "limitations": [
+      "Operational relation selection is not connected to this ViewModel composition path yet."
+    ],
+    "source_ref_coverage": null
+  },
   "evidence": {
     "artifact_id": "RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
     "evidence_payload_reference": "producer-enriched-critical",

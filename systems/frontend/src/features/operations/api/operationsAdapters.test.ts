@@ -375,6 +375,53 @@ describe("Operations adapter contract", () => {
           },
         ],
       },
+      evidence_context: {
+        relation_schema_version: "operational-relation-schema-v1",
+        relation_resolution_version: "operational-relation-resolution-v1.0",
+        selection_policy_version: "operational-evidence-selection-v0.1",
+        decision_as_of: "2026-08-01T00:00:00+09:00",
+        relation_retrieved_at: "2026-08-01T00:00:00+09:00",
+        source_observed_at_min: "2026-07-31T23:59:00+09:00",
+        source_observed_at_max: "2026-08-01T00:00:00+09:00",
+        max_source_lag_seconds: 60,
+        temporal_status: "aligned",
+        selected_basis: [{
+          candidate_id: "relationship:order_contains_wip:PO-1->WIP-1",
+          candidate_type: "relationship",
+          source_ref: "fixture:production#/wip/0",
+          source_version: "production-context-v1",
+          domain: "production",
+          relation_path: ["order_contains_wip"],
+          fact_type: "order_contains_wip",
+          value_summary: "production_order:PO-1 order_contains_wip wip:WIP-1",
+          required_for_boundary: false,
+          freshness_state: "fresh",
+          as_of: "2026-08-01T00:00:00+09:00",
+          limitation_state: null,
+        }],
+        selected_relation_paths: [{
+          candidate_id: "relationship:order_contains_wip:PO-1->WIP-1",
+          source_ref: "fixture:production#/wip/0",
+          relation_path: ["order_contains_wip"],
+        }],
+        rejected_basis: [{
+          candidate_id: "fact:fixture:production#/alternative_resources/0",
+          candidate_type: "fact",
+          source_ref: "fixture:production#/alternative_resources/0",
+          source_version: "production-context-v1",
+          domain: "production",
+          relation_path: ["operation_has_alternative_resource"],
+          fact_type: "alternative_resources",
+          value_summary: "alternative_resources: resource_id=CNC-03",
+          required_for_boundary: false,
+          freshness_state: "fresh",
+          as_of: "2026-08-01T00:00:00+09:00",
+          limitation_state: null,
+          rejected_reason: "outside_selection_budget",
+        }],
+        limitations: [],
+        source_ref_coverage: 1,
+      },
       data_status: {
         source: "canonical",
         is_stale: null,
@@ -478,6 +525,18 @@ describe("Operations adapter contract", () => {
       status: "warning",
     }));
     expect(enriched.evidenceGaps[0]).toEqual(expect.objectContaining({ field: "asset.criticality" }));
+    expect(enriched.evidenceContext?.relationSchemaVersion).toBe("operational-relation-schema-v1");
+    expect(enriched.evidenceContext?.selectionPolicyVersion).toBe("operational-evidence-selection-v0.1");
+    expect(enriched.evidenceContext?.decisionAsOf).toBe("2026-08-01T00:00:00+09:00");
+    expect(enriched.evidenceContext?.maxSourceLagSeconds).toBe(60);
+    expect(enriched.evidenceContext?.temporalStatus).toBe("aligned");
+    expect(enriched.evidenceContext?.selectedRelationPaths[0]).toEqual({
+      candidateId: "relationship:order_contains_wip:PO-1->WIP-1",
+      sourceRef: "fixture:production#/wip/0",
+      relationPath: ["order_contains_wip"],
+    });
+    expect(enriched.evidenceContext?.selectedBasis[0].asOf).toBe("2026-08-01T00:00:00+09:00");
+    expect(enriched.evidenceContext?.rejectedBasis[0].rejectedReason).toBe("outside_selection_budget");
     expect(enriched.assetDetailStatus?.isStale).toBeNull();
     expect(enriched.equipmentHistory[0].source).toBe("maintenance-read-model");
     expect(enriched.closedLoop?.workOrders[0]).toEqual(expect.objectContaining({

@@ -313,6 +313,45 @@ export interface OperationsEvidenceGap {
   ownerDomain: string;
 }
 
+export interface OperationsEvidenceContextBasis {
+  candidateId: string;
+  candidateType: "fact" | "relationship" | "limitation";
+  sourceRef: string;
+  sourceVersion: string;
+  domain: string;
+  relationPath: string[];
+  factType: string;
+  valueSummary: string;
+  requiredForBoundary: boolean;
+  freshnessState: string;
+  asOf: string | null;
+  limitationState: string | null;
+  rejectedReason?: string | null;
+}
+
+export interface OperationsEvidenceRelationPath {
+  candidateId: string;
+  sourceRef: string;
+  relationPath: string[];
+}
+
+export interface OperationsEvidenceContext {
+  relationSchemaVersion: string;
+  relationResolutionVersion: string | null;
+  selectionPolicyVersion: string | null;
+  decisionAsOf: string | null;
+  relationRetrievedAt: string | null;
+  sourceObservedAtMin: string | null;
+  sourceObservedAtMax: string | null;
+  maxSourceLagSeconds: number | null;
+  temporalStatus: "aligned" | "stale" | "unknown";
+  selectedBasis: OperationsEvidenceContextBasis[];
+  selectedRelationPaths: OperationsEvidenceRelationPath[];
+  rejectedBasis: OperationsEvidenceContextBasis[];
+  limitations: string[];
+  sourceRefCoverage: number | null;
+}
+
 export interface OperationsAssetDetailStatus {
   isStale: boolean | null;
   isDataQualityHold: boolean;
@@ -955,6 +994,7 @@ export interface OperationsEventDetailModel {
   }>;
   equipmentHistory: OperationsEquipmentHistoryItem[];
   evidenceGaps: OperationsEvidenceGap[];
+  evidenceContext: OperationsEvidenceContext | null;
   assetDetailStatus: OperationsAssetDetailStatus | null;
   operationContext: OperationsOperationContext | null;
   closedLoop: OperationsClosedLoopSummary | null;
@@ -1242,6 +1282,53 @@ export interface AssetDetailViewModel {
     dataset_version: string | null;
     source_kind: "runtime_inference" | "compatibility_fallback";
     gaps: Array<{ field: string; reason: string; owner_domain: string }>;
+  };
+  evidence_context?: {
+    relation_schema_version: string;
+    relation_resolution_version: string | null;
+    selection_policy_version: string | null;
+    decision_as_of: string | null;
+    relation_retrieved_at: string | null;
+    source_observed_at_min: string | null;
+    source_observed_at_max: string | null;
+    max_source_lag_seconds: number | null;
+    temporal_status: "aligned" | "stale" | "unknown";
+    selected_basis: Array<{
+      candidate_id: string;
+      candidate_type: "fact" | "relationship" | "limitation";
+      source_ref: string;
+      source_version: string;
+      domain: string;
+      relation_path: string[];
+      fact_type: string;
+      value_summary: string;
+      required_for_boundary: boolean;
+      freshness_state: string;
+      as_of: string | null;
+      limitation_state: string | null;
+    }>;
+    selected_relation_paths: Array<{
+      candidate_id: string;
+      source_ref: string;
+      relation_path: string[];
+    }>;
+    rejected_basis: Array<{
+      candidate_id: string;
+      candidate_type: "fact" | "relationship" | "limitation";
+      source_ref: string;
+      source_version: string;
+      domain: string;
+      relation_path: string[];
+      fact_type: string;
+      value_summary: string;
+      required_for_boundary: boolean;
+      freshness_state: string;
+      as_of: string | null;
+      limitation_state: string | null;
+      rejected_reason: string | null;
+    }>;
+    limitations: string[];
+    source_ref_coverage: number | null;
   };
   data_status: {
     source: "canonical" | "fallback";
