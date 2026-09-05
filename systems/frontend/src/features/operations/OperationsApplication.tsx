@@ -50,6 +50,11 @@ import "./operations.css";
 
 const Operations_REFRESH_INTERVAL_SECONDS = 10;
 
+// Keep the operations-manager work context in the browser while navigating
+// between role surfaces. Live fleet refreshes continue independently; this
+// cache prevents reopening the same Case from reloading its evidence/history.
+const operationsManagerDetailCache = new Map<string, OperationsEventDetailModel>();
+
 function defaultRoleLens(roles: string[]): OperationsRoleLens {
   return roles.some((role) => role === "process_engineer" || role === "maintenance_technician")
     ? "field_operator"
@@ -133,6 +138,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   const refresh = useCallback(() => setRefreshVersion((value) => value + 1), []);
   const retryDetail = useCallback(() => setDetailVersion((value) => value + 1), []);
   const workflowChanged = useCallback(() => {
+    operationsManagerDetailCache.clear();
     setDetailVersion((value) => value + 1);
     setRefreshVersion((value) => value + 1);
   }, []);
@@ -242,6 +248,17 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       return;
     }
     let cancelled = false;
+    const cacheKey = `${projectId}:${model.context.workspaceId}:${selectedEvent.eventId}:${sensorWindow}`;
+    const canReuseManagerContext = authorizedRole === "process_manager";
+    if (canReuseManagerContext) {
+      const cached = operationsManagerDetailCache.get(cacheKey);
+      if (cached) {
+        setDetail(cached);
+        setDetailError(null);
+        setDetailLoading(false);
+        return () => { cancelled = true; };
+      }
+    }
     setDetailLoading(true);
     setDetailError(null);
     loadOperationsEventDetail({
@@ -255,7 +272,11 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       historyWindow: sensorWindow,
       metrics: model.metrics,
     })
-      .then((payload) => !cancelled && setDetail(payload))
+      .then((payload) => {
+        if (cancelled) return;
+        if (canReuseManagerContext) operationsManagerDetailCache.set(cacheKey, payload);
+        setDetail(payload);
+      })
       .catch((reason: unknown) => {
         if (cancelled) return;
         setDetail(null);
