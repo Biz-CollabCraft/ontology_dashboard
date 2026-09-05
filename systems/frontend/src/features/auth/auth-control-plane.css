@@ -19,7 +19,7 @@
 }
 .auth-brand { display: flex; align-items: center; gap: 11px; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .auth-brand .brand-mark { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid color-mix(in srgb, var(--fd-accent), transparent 62%); border-radius: 8px; color: #fff; background: var(--fd-accent); box-shadow: 0 8px 24px color-mix(in srgb, var(--fd-accent), transparent 72%); font-size: 10px; font-weight: 950; letter-spacing: .05em; }
-.auth-brand .brand-mark.hanbit-brand-mark { overflow: hidden; border-color: transparent; background: transparent; box-shadow: none; }
+.auth-brand .brand-mark.collabcraft-brand-mark { overflow: hidden; border-color: transparent; background: transparent; box-shadow: none; }
 .auth-brand > span:last-child { display: flex; flex-direction: column; gap: 1px; }
 .auth-brand strong { font-size: 13px; letter-spacing: -.01em; }
 .auth-brand small { color: var(--fd-text-muted); font-size: 9px; }

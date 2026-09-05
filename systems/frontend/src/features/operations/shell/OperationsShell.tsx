@@ -14,7 +14,7 @@ import {
 import { useState, type ReactNode } from "react";
 import type { OperationsContextModel, OperationsDashboardMode, OperationsRoleLens, OperationsView } from "../api/operationsContracts";
 import { OperationsFreshness } from "../components/OperationsUi";
-import { HanbitLogo } from "../../../ui/foundry/HanbitLogo";
+import { CollabCraftLogo } from "../../../ui/foundry/CollabCraftLogo";
 
 const VIEW_LABELS: Record<OperationsView, { label: string; description: string }> = {
   overview: { label: "Overview", description: "운영 상황판" },
@@ -104,7 +104,7 @@ export function OperationsShell({
     <main className="operations-app">
       <header className="operations-global-header">
         <div className="operations-brand">
-          <span className="operations-brand-mark hanbit-brand-mark"><HanbitLogo /></span>
+          <span className="operations-brand-mark collabcraft-brand-mark"><CollabCraftLogo /></span>
           <div><span>Ontology Dashboard</span><strong>Predictive Maintenance</strong></div>
         </div>
         <div className="operations-header-context" aria-label="현재 운영 문맥">

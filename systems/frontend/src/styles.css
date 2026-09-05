@@ -43,9 +43,9 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
-.hanbit-logo { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; }
-.brand-mark.hanbit-brand-mark,
-.operations-brand-mark.hanbit-brand-mark { overflow: hidden; border-color: transparent; color: inherit; background: transparent; box-shadow: none; }
+.collabcraft-logo { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.brand-mark.collabcraft-brand-mark,
+.operations-brand-mark.collabcraft-brand-mark { overflow: hidden; border-color: transparent; color: inherit; background: transparent; box-shadow: none; }
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 

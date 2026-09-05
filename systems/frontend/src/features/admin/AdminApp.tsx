@@ -14,7 +14,7 @@ import {
   updateAdminUser,
   type AdminOverview,
 } from "../../api";
-import { HanbitLogo } from "../../ui/foundry/HanbitLogo";
+import { CollabCraftLogo } from "../../ui/foundry/CollabCraftLogo";
 import { navigate } from "../../routing";
 import type { AdminAuditEntry, AdminNotification, AdminUser, AppRole, RoleDefinition, UserStatus, Workspace } from "../../types";
 import { DisplayMenu } from "../../ui/foundry/DisplayMenu";
@@ -224,7 +224,7 @@ export function AdminApp() {
     <div className="admin-shell">
       <aside className="admin-sidebar">
         <div className="brand admin-brand">
-          <span className="brand-mark hanbit-brand-mark"><HanbitLogo /></span>
+          <span className="brand-mark collabcraft-brand-mark"><CollabCraftLogo /></span>
           <div><strong>Ontology Dashboard</strong><small>Administrator control plane</small></div>
         </div>
         <span className="admin-nav-section">CONTROL PLANE</span>

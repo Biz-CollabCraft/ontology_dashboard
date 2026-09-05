@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Activity, ArrowLeft, ArrowRight, BarChart3, ClipboardCheck, FileText, Gauge, LockKeyhole, MapPinned, ShieldCheck, Wrench } from "lucide-react";
 import { DisplayMenu } from "../../ui/foundry/DisplayMenu";
 import { useI18n } from "../../ui/i18n/I18nProvider";
-import { HanbitLogo } from "../../ui/foundry/HanbitLogo";
+import { CollabCraftLogo } from "../../ui/foundry/CollabCraftLogo";
 
 const PRODUCT_STORIES = [
   {
@@ -86,12 +86,12 @@ export function AuthShell({
   return (
     <main className="auth-page">
       <header className="auth-platform-bar">
-        <button className="auth-brand" onClick={() => navigate("/login")}><span className="brand-mark hanbit-brand-mark"><HanbitLogo /></span><span><strong>Hanbit Tech</strong><small>Reliability Operations</small></span></button>
+        <button className="auth-brand" onClick={() => navigate("/login")}><span className="brand-mark collabcraft-brand-mark"><CollabCraftLogo /></span><span><strong>CollabCraft</strong><small>Reliability Operations</small></span></button>
         <div><DisplayMenu className="auth-display-menu" /><span><Activity size={13} /> {english ? "Monitoring live" : "실시간 모니터링"}</span><span><ShieldCheck size={13} /> {english ? "Decision traceable" : "판단 근거 추적"}</span><span>Asia/Seoul</span></div>
       </header>
       <div className="auth-control-plane">
         <aside className="auth-resource-context">
-          <header><span><Activity size={20} /></span><div><small>HANBIT TECH · RELIABILITY OPERATIONS</small><strong>{english ? "Connect equipment risk to operational decisions" : "설비 리스크를 운영 의사결정으로 연결"}</strong><small>Live status → Decision Case → Outcome</small></div></header>
+          <header><span><Activity size={20} /></span><div><small>COLLABCRAFT · RELIABILITY OPERATIONS</small><strong>{english ? "Connect equipment risk to operational decisions" : "설비 리스크를 운영 의사결정으로 연결"}</strong><small>Live status → Decision Case → Outcome</small></div></header>
           <section className="auth-product-story" aria-roledescription="carousel" aria-label={english ? "Product capabilities" : "제품 주요 기능"}>
             <div className="auth-story-copy" key={story.eyebrow}>
               <span className="section-label">{story.eyebrow}</span>

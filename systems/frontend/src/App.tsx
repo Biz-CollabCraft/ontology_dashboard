@@ -24,7 +24,7 @@ import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import { DisplayPreferencesProvider } from "./ui/foundry/displayPreferences";
 import { I18nProvider } from "./ui/i18n/I18nProvider";
 import { WorkbenchState } from "./ui/foundry/WorkbenchState";
-import { HanbitLogo } from "./ui/foundry/HanbitLogo";
+import { CollabCraftLogo } from "./ui/foundry/CollabCraftLogo";
 import { featureFlags } from "./featureFlags";
 import {
   isReliabilityPreviewLocation,
@@ -104,8 +104,8 @@ function RouteLoading({ operation }: { operation: string }) {
   return (
     <div className="route-loading">
       <div className="route-loading__brand" aria-hidden="true">
-        <span><HanbitLogo /></span>
-        <div><strong>Hanbit Tech</strong><small>Reliability Operations</small></div>
+        <span><CollabCraftLogo /></span>
+        <div><strong>CollabCraft</strong><small>Reliability Operations</small></div>
       </div>
       <WorkbenchState
         kind="loading"

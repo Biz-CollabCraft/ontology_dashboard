@@ -130,7 +130,7 @@ export function LoginPage() {
 
   return (
     <AuthShell
-      eyebrow="HANBIT TECH · RELIABILITY OPERATIONS"
+      eyebrow="COLLABCRAFT · RELIABILITY OPERATIONS"
       title={
         english
           ? "From live equipment status to operational decisions and executive reporting"
