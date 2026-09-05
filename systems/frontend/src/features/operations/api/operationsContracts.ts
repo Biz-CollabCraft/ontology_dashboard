@@ -926,6 +926,72 @@ export interface OperationsAgentReviewWorkflowRunsResponse {
   items: OperationsAgentReviewWorkflowRun[];
 }
 
+export type OperationsTraceStage = "prediction" | "decision" | "inspection" | "maintenance" | "reassessment";
+export type OperationsTraceStageStatus =
+  | "completed"
+  | "partial"
+  | "pending"
+  | "maintenance_completed"
+  | "observation_pending"
+  | "re_prediction_requested"
+  | "new_decision_created";
+
+export interface OperationsTraceStatusChange {
+  actor: string;
+  actionType: string;
+  beforeStatus: string | null;
+  afterStatus: string | null;
+  reason: string;
+  createdAt: string | null;
+  relatedWorkOrderId: string | null;
+  relatedMaintenanceActionId: string | null;
+}
+
+export interface OperationsTraceabilityEvidenceItem {
+  evidenceId: string;
+  label: string;
+  sourceRef?: string;
+  reason: string;
+  ownerDomain?: string;
+}
+
+export interface OperationsTraceabilityModel {
+  eventId: string;
+  workflowRunId: string;
+  currentStage: OperationsTraceStage;
+  decisionSnapshot: {
+    asOf: string | null;
+    assetId: string | null;
+    eventId: string | null;
+    workflowRunId: string;
+    modelVersion: string | null;
+    predictionResultId: string | null;
+    usedEvidence: OperationsTraceabilityEvidenceItem[];
+    excludedEvidence: OperationsTraceabilityEvidenceItem[];
+    limitations: string[];
+    sourceHash: string | null;
+    contextHash: string | null;
+  };
+  timeline: Array<{
+    stage: OperationsTraceStage;
+    label: string;
+    status: OperationsTraceStageStatus;
+    occurredAt: string | null;
+    actor: string | null;
+    usedEvidenceCount: number;
+    excludedEvidenceCount: number;
+    relatedWorkOrders: OperationsClosedLoopWorkOrder[];
+    statusChanges: OperationsTraceStatusChange[];
+  }>;
+  statusChanges: OperationsTraceStatusChange[];
+  statusCards: Array<{
+    key: "traceable" | "reassessment_waiting" | "evidence_gap" | "partial_verification" | "unmeasured_included";
+    label: string;
+    state: "ready" | "waiting" | "gap" | "partial" | "clear";
+    count: number;
+  }>;
+}
+
 export interface OperationsEventDetailModel {
   snapshotBasis: OperationsEvidenceSnapshotBasis | null;
   event: OperationsEvent;
@@ -958,6 +1024,7 @@ export interface OperationsEventDetailModel {
   assetDetailStatus: OperationsAssetDetailStatus | null;
   operationContext: OperationsOperationContext | null;
   closedLoop: OperationsClosedLoopSummary | null;
+  traceability: OperationsTraceabilityModel | null;
   reviewPriority: {
     level: "immediate" | "high" | "medium" | "low";
     reasons: string[];
@@ -1135,6 +1202,55 @@ export interface AssetDetailViewModel {
       };
     } | null;
     limitations?: string[];
+  };
+  traceability?: {
+    event_id: string;
+    workflow_run_id: string;
+    current_stage: OperationsTraceStage;
+    decision_snapshot: {
+      as_of: string | null;
+      asset_id: string | null;
+      event_id: string | null;
+      workflow_run_id: string;
+      model_version: string | null;
+      prediction_result_id: string | null;
+      used_evidence: Array<{ evidence_id: string; label: string; source_ref: string; reason: string }>;
+      excluded_evidence: Array<{ evidence_id: string; label: string; reason: string; owner_domain: string }>;
+      limitations: string[];
+      source_hash: string | null;
+      context_hash: string | null;
+    };
+    timeline: Array<{
+      stage: OperationsTraceStage;
+      label: string;
+      status: OperationsTraceStageStatus;
+      occurred_at?: string | null;
+      actor?: string | null;
+      used_evidence_count: number;
+      excluded_evidence_count: number;
+      related_work_orders: Array<Record<string, unknown>>;
+      status_changes: Array<{
+        actor: string;
+        action_type: string;
+        before_status: string | null;
+        after_status: string | null;
+        reason: string;
+        created_at: string | null;
+        related_work_order_id: string | null;
+        related_maintenance_action_id: string | null;
+      }>;
+    }>;
+    status_changes: Array<{
+      actor: string;
+      action_type: string;
+      before_status: string | null;
+      after_status: string | null;
+      reason: string;
+      created_at: string | null;
+      related_work_order_id: string | null;
+      related_maintenance_action_id: string | null;
+    }>;
+    status_cards: OperationsTraceabilityModel["statusCards"];
   };
   closed_loop?: {
     work_orders?: Array<{

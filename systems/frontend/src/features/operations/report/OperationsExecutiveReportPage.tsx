@@ -292,6 +292,7 @@ export function OperationsExecutiveReportPage({
   const generatedAt = snapshot?.generatedAt ?? report.generatedAt;
   const snapshotId = snapshot?.snapshotId ?? report.snapshotId ?? `event:${reportEvent.eventId}`;
   const artifactId = snapshot?.artifactId ?? report.artifactId ?? reportEvent.eventId;
+  const traceStatusCards = reportDetail.traceability?.statusCards ?? [];
 
   return (
     <div className="operations-page operations-report-page" data-testid="operations-executive-report">
@@ -357,6 +358,18 @@ export function OperationsExecutiveReportPage({
             <div><strong>현재 운영 데이터 기준 요약</strong><p>{automaticSummary}</p></div>
           ) : null}
         </section>
+
+        {traceStatusCards.length ? (
+          <section className="operations-trace-status-cards" aria-label="추적 감사 보조 상태">
+            {traceStatusCards.map((card) => (
+              <article className={`is-${card.state}`} key={card.key}>
+                <span>{card.label}</span>
+                <strong>{card.count}</strong>
+                <small>{card.state === "clear" ? "특이 사항 없음" : "상세는 설비 추적 패널에서 확인"}</small>
+              </article>
+            ))}
+          </section>
+        ) : null}
 
         <section className="operations-report-kpis">
           <article><span>생산 계획</span><strong>{plannedUnits === null ? "-" : plannedUnits.toLocaleString()}</strong><small>{eventImpact?.productVariant ? `${eventImpact.productVariant} 제품군 포함` : "계획 맥락"}</small></article>

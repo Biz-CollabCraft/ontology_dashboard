@@ -60,6 +60,7 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
             "0042_company_operational_context",
             "0043_inspection_work_order_assignment",
             "0044_repair_legacy_inspection_assignment",
+            "0045_operational_event_traceability",
         ]
     assert second == []
 
@@ -84,6 +85,8 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
         "closed_loop_idempotency_records",
         "closed_loop_inspection_results",
         "closed_loop_maintenance_cost_analyses",
+        "operational_event_trace_snapshots",
+        "operational_event_trace_status_changes",
     } <= tables
     assert {
         "pm_prediction_result_inbox_batches",
@@ -146,6 +149,45 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
         }
     assert "restart_at" in maintenance_action_columns
     assert "restart_at" not in maintenance_event_columns
+    with sqlite3.connect(database) as connection:
+        trace_snapshot_columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(operational_event_trace_snapshots)"
+            )
+        }
+        trace_status_columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(operational_event_trace_status_changes)"
+            )
+        }
+    assert {
+        "event_id",
+        "workflow_run_id",
+        "prediction_result_id",
+        "model_version",
+        "source_hash",
+        "context_hash",
+        "used_evidence_json",
+        "excluded_evidence_json",
+        "limitations_json",
+        "reassessment_status",
+        "source_export_checkpoint_id",
+    } <= trace_snapshot_columns
+    assert {
+        "event_id",
+        "workflow_run_id",
+        "source_activity_id",
+        "actor_user_id",
+        "actor_display_name",
+        "action_type",
+        "before_status",
+        "after_status",
+        "reason",
+        "related_export_checkpoint_id",
+        "created_at",
+    } <= trace_status_columns
 
 
 def test_operations_manual_migration_preserves_existing_recommendation_lineage(

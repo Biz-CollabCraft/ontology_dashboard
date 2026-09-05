@@ -375,6 +375,78 @@ describe("Operations adapter contract", () => {
           },
         ],
       },
+      traceability: {
+        event_id: "EVT-CNC-001",
+        workflow_run_id: "workflow-run-1",
+        current_stage: "inspection",
+        decision_snapshot: {
+          as_of: "2026-08-06T03:00:00Z",
+          asset_id: "CNC-001",
+          event_id: "EVT-CNC-001",
+          workflow_run_id: "workflow-run-1",
+          model_version: "model-1",
+          prediction_result_id: "RESULT#CNC-001",
+          used_evidence: [{
+            evidence_id: "factor.1.tool_wear_min",
+            label: "공구 마모",
+            source_ref: "features.tool_wear_min",
+            reason: "위험 기여 0.42",
+          }],
+          excluded_evidence: [{
+            evidence_id: "gap.asset.criticality",
+            label: "asset.criticality",
+            reason: "criticality_missing_or_unresolved",
+            owner_domain: "equipment",
+          }],
+          limitations: ["criticality_missing_or_unresolved"],
+          source_hash: "a".repeat(64),
+          context_hash: "b".repeat(64),
+        },
+        timeline: [{
+          stage: "inspection",
+          label: "점검",
+          status: "partial",
+          occurred_at: "2026-08-06T03:10:00Z",
+          actor: "윤하린",
+          used_evidence_count: 1,
+          excluded_evidence_count: 1,
+          related_work_orders: [{
+            work_order_id: "WO-INS-001",
+            work_type: "inspection",
+            status: "requested",
+            assigned_to: null,
+            actor_display_name: "윤하린",
+            created_at: "2026-08-06T03:10:00Z",
+            updated_at: "2026-08-06T03:10:00Z",
+          }],
+          status_changes: [{
+            actor: "윤하린",
+            action_type: "work_order.requested",
+            before_status: null,
+            after_status: "requested",
+            reason: "점검 요청",
+            created_at: "2026-08-06T03:10:00Z",
+            related_work_order_id: "WO-INS-001",
+            related_maintenance_action_id: null,
+          }],
+        }],
+        status_changes: [{
+          actor: "윤하린",
+          action_type: "work_order.requested",
+          before_status: null,
+          after_status: "requested",
+          reason: "점검 요청",
+          created_at: "2026-08-06T03:10:00Z",
+          related_work_order_id: "WO-INS-001",
+          related_maintenance_action_id: null,
+        }],
+        status_cards: [{
+          key: "traceable",
+          label: "추적 가능",
+          state: "ready",
+          count: 1,
+        }],
+      },
       data_status: {
         source: "canonical",
         is_stale: null,
@@ -478,6 +550,35 @@ describe("Operations adapter contract", () => {
       status: "warning",
     }));
     expect(enriched.evidenceGaps[0]).toEqual(expect.objectContaining({ field: "asset.criticality" }));
+    expect(enriched.traceability).toEqual(expect.objectContaining({
+      eventId: "EVT-CNC-001",
+      workflowRunId: "workflow-run-1",
+      currentStage: "inspection",
+    }));
+    expect(enriched.traceability?.decisionSnapshot).toEqual(expect.objectContaining({
+      modelVersion: "model-1",
+      sourceHash: "a".repeat(64),
+      contextHash: "b".repeat(64),
+    }));
+    expect(enriched.traceability?.decisionSnapshot.usedEvidence[0]).toEqual(expect.objectContaining({
+      evidenceId: "factor.1.tool_wear_min",
+      label: "공구 마모",
+    }));
+    expect(enriched.traceability?.decisionSnapshot.excludedEvidence[0]).toEqual(expect.objectContaining({
+      evidenceId: "gap.asset.criticality",
+      ownerDomain: "equipment",
+    }));
+    expect(enriched.traceability?.timeline[0]).toEqual(expect.objectContaining({
+      stage: "inspection",
+      status: "partial",
+      relatedWorkOrders: [expect.objectContaining({ workOrderId: "WO-INS-001" })],
+    }));
+    expect(enriched.traceability?.statusChanges[0]).toEqual(expect.objectContaining({
+      actor: "윤하린",
+      beforeStatus: null,
+      afterStatus: "requested",
+      reason: "점검 요청",
+    }));
     expect(enriched.assetDetailStatus?.isStale).toBeNull();
     expect(enriched.equipmentHistory[0].source).toBe("maintenance-read-model");
     expect(enriched.closedLoop?.workOrders[0]).toEqual(expect.objectContaining({

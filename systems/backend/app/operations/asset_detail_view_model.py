@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -378,12 +380,22 @@ def compose_asset_detail_view_model(
         if closed_loop is not None
         else None
     )
+    snapshot_basis = _evidence_snapshot_basis_from_artifact(
+        result_artifact,
+        event_id=event_id,
+    )
+    deduped_gaps = _dedupe_gaps(gaps)
+    traceability = _event_traceability(
+        snapshot_basis=snapshot_basis,
+        result_artifact=result_artifact,
+        features=features,
+        evidence_gaps=deduped_gaps,
+        operation_context=operation_context,
+        closed_loop=closed_loop_read_model,
+    )
 
     return {
-        "snapshot_basis": _evidence_snapshot_basis_from_artifact(
-            result_artifact,
-            event_id=event_id,
-        ),
+        "snapshot_basis": snapshot_basis,
         "asset": asset_summary,
         "risk": risk,
         "risk_series": risk_series,
@@ -402,9 +414,10 @@ def compose_asset_detail_view_model(
             "source_kind": "runtime_inference"
             if provenance.get("source_type") == "product_runtime_inference"
             else "compatibility_fallback",
-            "gaps": _dedupe_gaps(gaps),
+            "gaps": deduped_gaps,
         },
         "data_status": _data_status(result_artifact, provenance, data_status),
+        "traceability": traceability,
     }
 
 
@@ -1150,9 +1163,283 @@ def _activity_label(activity_type: str) -> str:
         "recommendation.decided": "정비안 판단",
         "maintenance.started": "정비 시작",
         "maintenance.completed": "정비 완료",
-        "maintenance.replay_requested": "재평가 요청",
+        "maintenance.replay_requested": "재예측 요청",
     }
     return labels.get(activity_type, activity_type.replace("_", " ").replace(".", " "))
+
+
+_TRACE_STAGE_LABELS = {
+    "prediction": "예측",
+    "decision": "판단",
+    "inspection": "점검",
+    "maintenance": "정비",
+    "reassessment": "재평가",
+}
+
+
+def _event_traceability(
+    *,
+    snapshot_basis: dict[str, Any],
+    result_artifact: dict[str, Any],
+    features: list[dict[str, Any]],
+    evidence_gaps: list[dict[str, Any]],
+    operation_context: dict[str, Any],
+    closed_loop: dict[str, Any] | None,
+) -> dict[str, Any]:
+    event_id = str(snapshot_basis.get("event_id") or snapshot_basis.get("artifact_id") or "")
+    workflow_run_id = _workflow_run_id(result_artifact, closed_loop, event_id=event_id)
+    snapshot = _decision_snapshot(
+        snapshot_basis=snapshot_basis,
+        result_artifact=result_artifact,
+        features=features,
+        evidence_gaps=evidence_gaps,
+        operation_context=operation_context,
+        workflow_run_id=workflow_run_id,
+    )
+    status_changes = _status_changes(closed_loop)
+    timeline = _same_event_timeline(snapshot=snapshot, closed_loop=closed_loop, status_changes=status_changes)
+    return {
+        "event_id": event_id,
+        "workflow_run_id": workflow_run_id,
+        "current_stage": _current_trace_stage(closed_loop),
+        "decision_snapshot": snapshot,
+        "timeline": timeline,
+        "status_changes": status_changes,
+        "status_cards": _trace_status_cards(snapshot=snapshot, closed_loop=closed_loop, timeline=timeline),
+    }
+
+
+def _workflow_run_id(result_artifact: dict[str, Any], closed_loop: dict[str, Any] | None, *, event_id: str) -> str:
+    provenance = result_artifact.get("provenance") or {}
+    lineage = result_artifact.get("lineage") or {}
+    for source in (provenance, lineage, closed_loop or {}):
+        value = source.get("workflow_run_id") if isinstance(source, dict) else None
+        if value:
+            return str(value)
+    artifact_id = str(result_artifact.get("artifact_id") or event_id or "unresolved")
+    return f"asset-detail:{artifact_id}"
+
+
+def _decision_snapshot(
+    *,
+    snapshot_basis: dict[str, Any],
+    result_artifact: dict[str, Any],
+    features: list[dict[str, Any]],
+    evidence_gaps: list[dict[str, Any]],
+    operation_context: dict[str, Any],
+    workflow_run_id: str,
+) -> dict[str, Any]:
+    provenance = result_artifact.get("provenance") or {}
+    evidence_payload = result_artifact.get("evidence_payload") or {}
+    context_hash = provenance.get("context_sha256") or result_artifact.get("context_sha256") or _stable_snapshot_hash(operation_context)
+    used_evidence = []
+    for feature in features:
+        factor = feature.get("top_factor")
+        if not factor:
+            continue
+        used_evidence.append({
+            "evidence_id": str(factor.get("evidence_field_id") or feature.get("key")),
+            "label": str(feature.get("label") or feature.get("key")),
+            "source_ref": str(factor.get("evidence_field_id") or feature.get("key")),
+            "reason": f"{factor.get('rank')}순위 판단 근거",
+        })
+    excluded = [
+        {
+            "evidence_id": str(gap.get("field") or "unknown"),
+            "label": str(gap.get("field") or "근거 부족"),
+            "reason": str(gap.get("reason") or "unavailable"),
+            "owner_domain": _owner_domain(gap.get("owner_domain"), default="unresolved"),
+        }
+        for gap in evidence_gaps
+    ]
+    limitations = [
+        *[str(item) for item in evidence_payload.get("limitations") or []],
+        *[str(item) for item in operation_context.get("limitations") or []],
+        *[f"{item['field']}: {item['reason']}" for item in evidence_gaps],
+    ]
+    return {
+        "as_of": snapshot_basis.get("observed_at"),
+        "asset_id": snapshot_basis.get("asset_id"),
+        "event_id": snapshot_basis.get("event_id"),
+        "workflow_run_id": workflow_run_id,
+        "model_version": snapshot_basis.get("model_version"),
+        "prediction_result_id": snapshot_basis.get("artifact_id"),
+        "used_evidence": used_evidence,
+        "excluded_evidence": excluded,
+        "limitations": list(dict.fromkeys(limitations)),
+        "source_hash": snapshot_basis.get("source_sha256"),
+        "context_hash": context_hash,
+    }
+
+
+def _status_changes(closed_loop: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not closed_loop:
+        return []
+    changes = []
+    for activity in closed_loop.get("activities") or []:
+        before_status = activity.get("before_status")
+        after_status = activity.get("after_status")
+        if before_status is None and after_status is None:
+            continue
+        changes.append({
+            "actor": str(activity.get("actor_display_name") or "시스템"),
+            "action_type": str(activity.get("activity_type") or "status.changed"),
+            "before_status": before_status,
+            "after_status": after_status,
+            "reason": _activity_reason(activity),
+            "created_at": activity.get("created_at"),
+            "related_work_order_id": activity.get("work_order_id"),
+            "related_maintenance_action_id": activity.get("maintenance_action_id"),
+        })
+    return _sorted_by_time(changes, keys=("created_at",))
+
+
+def _activity_reason(activity: dict[str, Any]) -> str:
+    payload = activity.get("payload") if isinstance(activity.get("payload"), dict) else {}
+    for key in ("reason", "note", "outcome"):
+        value = payload.get(key)
+        if value:
+            return str(value)
+    return _activity_label(str(activity.get("activity_type") or "status.changed"))
+
+
+def _same_event_timeline(
+    *,
+    snapshot: dict[str, Any],
+    closed_loop: dict[str, Any] | None,
+    status_changes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    timeline = [
+        _trace_stage("prediction", "completed", snapshot.get("as_of"), "예측 시스템", snapshot, [], []),
+        _trace_stage("decision", "completed" if snapshot.get("used_evidence") else "partial", snapshot.get("as_of"), "운영 판단", snapshot, [], []),
+    ]
+    for stage, work_type in (("inspection", "inspection"), ("maintenance", "maintenance")):
+        work_orders = [item for item in (closed_loop or {}).get("work_orders") or [] if item.get("work_type") == work_type]
+        work_order_ids = {row.get("work_order_id") for row in work_orders}
+        stage_changes = [item for item in status_changes if item.get("related_work_order_id") in work_order_ids]
+        status = "pending" if not work_orders else "completed" if all(row.get("status") == "completed" for row in work_orders) else "partial"
+        timeline.append(
+            _trace_stage(
+                stage,
+                status,
+                work_orders[-1].get("updated_at") if work_orders else None,
+                work_orders[-1].get("actor_display_name") if work_orders else None,
+                snapshot,
+                work_orders,
+                stage_changes,
+            )
+        )
+    replay_changes = [item for item in status_changes if item.get("action_type") == "maintenance.replay_requested"]
+    timeline.append(
+        _trace_stage(
+            "reassessment",
+            _reassessment_status(closed_loop),
+            _latest_reassessment_time(closed_loop),
+            "재평가 흐름",
+            snapshot,
+            [],
+            replay_changes,
+        )
+    )
+    return timeline
+
+
+def _trace_stage(
+    stage: str,
+    status: str,
+    occurred_at: Any,
+    actor: Any,
+    snapshot: dict[str, Any],
+    related_work_orders: list[dict[str, Any]],
+    status_changes: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "stage": stage,
+        "label": _TRACE_STAGE_LABELS[stage],
+        "status": status,
+        "occurred_at": occurred_at,
+        "actor": actor,
+        "used_evidence_count": len(snapshot.get("used_evidence") or []),
+        "excluded_evidence_count": len(snapshot.get("excluded_evidence") or []),
+        "related_work_orders": related_work_orders,
+        "status_changes": status_changes,
+    }
+
+
+def _reassessment_status(closed_loop: dict[str, Any] | None) -> str:
+    if not closed_loop or not closed_loop.get("maintenance_events"):
+        return "pending"
+    runtime_status = closed_loop.get("runtime_status")
+    replay_requested = any(
+        activity.get("activity_type") == "maintenance.replay_requested"
+        for activity in closed_loop.get("activities") or []
+    )
+    if runtime_status in {"warming_up", "history_insufficient"}:
+        return "observation_pending"
+    if replay_requested:
+        return "re_prediction_requested"
+    if runtime_status in {"ready", "predicted"}:
+        return "new_decision_created" if runtime_status == "predicted" else "re_prediction_requested"
+    return "maintenance_completed"
+
+
+def _latest_reassessment_time(closed_loop: dict[str, Any] | None) -> Any:
+    if not closed_loop:
+        return None
+    candidates = [
+        item.get("created_at")
+        for item in closed_loop.get("activities") or []
+        if item.get("activity_type") == "maintenance.replay_requested"
+    ]
+    candidates.extend(item.get("completed_at") for item in closed_loop.get("maintenance_events") or [])
+    return max([str(item) for item in candidates if item] or [""]) or None
+
+
+def _trace_status_cards(
+    *,
+    snapshot: dict[str, Any],
+    closed_loop: dict[str, Any] | None,
+    timeline: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    excluded = snapshot.get("excluded_evidence") or []
+    limitations = snapshot.get("limitations") or []
+    reassessment = next((item for item in timeline if item["stage"] == "reassessment"), None)
+    waiting = reassessment and reassessment.get("status") in {"observation_pending", "re_prediction_requested"}
+    partial_count = len([item for item in timeline if item.get("status") in {"partial", "pending"}])
+    has_event_anchor = snapshot.get("event_id") or snapshot.get("prediction_result_id")
+    return [
+        {
+            "key": "traceable",
+            "label": "추적 가능",
+            "state": "ready" if has_event_anchor and snapshot.get("workflow_run_id") else "gap",
+            "count": len(timeline),
+        },
+        {"key": "reassessment_waiting", "label": "재평가 대기", "state": "waiting" if waiting else "clear", "count": 1 if waiting else 0},
+        {"key": "evidence_gap", "label": "근거 부족", "state": "gap" if excluded else "clear", "count": len(excluded)},
+        {"key": "partial_verification", "label": "부분 검증", "state": "partial" if closed_loop and partial_count else "clear", "count": partial_count},
+        {"key": "unmeasured_included", "label": "미측정 포함", "state": "gap" if limitations else "clear", "count": len(limitations)},
+    ]
+
+
+def _current_trace_stage(closed_loop: dict[str, Any] | None) -> str:
+    lifecycle = (closed_loop or {}).get("lifecycle_summary") or {}
+    step = lifecycle.get("current_step")
+    if step in {"prediction", "evidence"}:
+        return "prediction"
+    if step == "decision" or step == "recommendation_proposed":
+        return "decision"
+    if str(step).startswith("inspection"):
+        return "inspection"
+    if str(step).startswith("maintenance"):
+        return "maintenance"
+    if step in {"post_maintenance_observation_pending", "ready_for_reprediction"}:
+        return "reassessment"
+    return "decision"
+
+
+def _stable_snapshot_hash(value: Any) -> str:
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _sorted_by_time(
@@ -1257,6 +1544,7 @@ def _evidence_snapshot_basis_from_artifact(
         "source_sha256": (
             artifact.get("source_sha256")
             or provenance.get("source_sha256")
+            or provenance.get("bundle_checksum_sha256")
             or lineage.get("source_sha256")
         ),
     }

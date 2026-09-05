@@ -234,6 +234,7 @@
         }
       }
     },
+    "traceability": {"$ref": "#/$defs/eventTraceability"},
     "data_status": {
       "type": "object",
       "required": ["source", "is_stale", "is_data_quality_hold", "warnings"],
@@ -394,6 +395,52 @@
           "then": {"required": ["context_id", "source_type", "temporal_scope", "production_plan", "capacity_model", "event_impact", "limitations"]}
         }
       ]
+    },
+    "eventTraceability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "workflow_run_id", "current_stage", "decision_snapshot", "timeline", "status_changes", "status_cards"],
+      "properties": {
+        "event_id": {"type": "string"},
+        "workflow_run_id": {"type": "string"},
+        "current_stage": {"enum": ["prediction", "decision", "inspection", "maintenance", "reassessment"]},
+        "decision_snapshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["as_of", "asset_id", "event_id", "workflow_run_id", "model_version", "prediction_result_id", "used_evidence", "excluded_evidence", "limitations", "source_hash", "context_hash"],
+          "properties": {
+            "as_of": {"type": ["string", "null"]},
+            "asset_id": {"type": ["string", "null"]},
+            "event_id": {"type": ["string", "null"]},
+            "workflow_run_id": {"type": "string"},
+            "model_version": {"type": ["string", "null"]},
+            "prediction_result_id": {"type": ["string", "null"]},
+            "used_evidence": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["evidence_id", "label", "source_ref", "reason"], "properties": {"evidence_id": {"type": "string"}, "label": {"type": "string"}, "source_ref": {"type": "string"}, "reason": {"type": "string"}}}},
+            "excluded_evidence": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["evidence_id", "label", "reason", "owner_domain"], "properties": {"evidence_id": {"type": "string"}, "label": {"type": "string"}, "reason": {"type": "string"}, "owner_domain": {"type": "string"}}}},
+            "limitations": {"type": "array", "items": {"type": "string"}},
+            "source_hash": {"type": ["string", "null"]},
+            "context_hash": {"type": ["string", "null"]}
+          }
+        },
+        "timeline": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["stage", "label", "status", "used_evidence_count", "excluded_evidence_count", "related_work_orders", "status_changes"], "properties": {"stage": {"enum": ["prediction", "decision", "inspection", "maintenance", "reassessment"]}, "label": {"type": "string"}, "status": {"enum": ["completed", "partial", "pending", "maintenance_completed", "observation_pending", "re_prediction_requested", "new_decision_created"]}, "occurred_at": {"type": ["string", "null"]}, "actor": {"type": ["string", "null"]}, "used_evidence_count": {"type": "integer", "minimum": 0}, "excluded_evidence_count": {"type": "integer", "minimum": 0}, "related_work_orders": {"type": "array", "items": {"type": "object", "additionalProperties": true}}, "status_changes": {"type": "array", "items": {"$ref": "#/$defs/traceStatusChange"}}}}},
+        "status_changes": {"type": "array", "items": {"$ref": "#/$defs/traceStatusChange"}},
+        "status_cards": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["key", "label", "state", "count"], "properties": {"key": {"enum": ["traceable", "reassessment_waiting", "evidence_gap", "partial_verification", "unmeasured_included"]}, "label": {"type": "string"}, "state": {"enum": ["ready", "waiting", "gap", "partial", "clear"]}, "count": {"type": "integer", "minimum": 0}}}}
+      }
+    },
+    "traceStatusChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor", "action_type", "before_status", "after_status", "reason", "created_at", "related_work_order_id", "related_maintenance_action_id"],
+      "properties": {
+        "actor": {"type": "string"},
+        "action_type": {"type": "string"},
+        "before_status": {"type": ["string", "null"]},
+        "after_status": {"type": ["string", "null"]},
+        "reason": {"type": "string"},
+        "created_at": {"type": ["string", "null"]},
+        "related_work_order_id": {"type": ["string", "null"]},
+        "related_maintenance_action_id": {"type": ["string", "null"]}
+      }
     },
     "closedLoopSummary": {
       "type": "object",

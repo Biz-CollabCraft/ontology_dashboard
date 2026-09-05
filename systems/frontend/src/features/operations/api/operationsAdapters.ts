@@ -21,6 +21,8 @@ import type {
   OperationsReportModel,
   OperationsRiskStatus,
   OperationsSensorValue,
+  OperationsTraceStatusChange,
+  OperationsTraceabilityModel,
 } from "./operationsContracts";
 
 const STATUS_PRIORITY: Record<OperationsRiskStatus, number> = {
@@ -276,6 +278,84 @@ function operationContextFromAssetDetailViewModel(
         ? null
         : undefined,
     limitations: context.limitations,
+  };
+}
+
+function traceStatusChangeFromWire(change: {
+  actor: string;
+  action_type: string;
+  before_status: string | null;
+  after_status: string | null;
+  reason: string;
+  created_at: string | null;
+  related_work_order_id: string | null;
+  related_maintenance_action_id: string | null;
+}): OperationsTraceStatusChange {
+  return {
+    actor: change.actor,
+    actionType: change.action_type,
+    beforeStatus: change.before_status,
+    afterStatus: change.after_status,
+    reason: change.reason,
+    createdAt: change.created_at,
+    relatedWorkOrderId: change.related_work_order_id,
+    relatedMaintenanceActionId: change.related_maintenance_action_id,
+  };
+}
+
+function traceabilityFromAssetDetailViewModel(
+  viewModel: AssetDetailViewModel,
+): OperationsTraceabilityModel | null {
+  const traceability = viewModel.traceability;
+  if (!traceability) return null;
+  return {
+    eventId: traceability.event_id,
+    workflowRunId: traceability.workflow_run_id,
+    currentStage: traceability.current_stage,
+    decisionSnapshot: {
+      asOf: traceability.decision_snapshot.as_of,
+      assetId: traceability.decision_snapshot.asset_id,
+      eventId: traceability.decision_snapshot.event_id,
+      workflowRunId: traceability.decision_snapshot.workflow_run_id,
+      modelVersion: traceability.decision_snapshot.model_version,
+      predictionResultId: traceability.decision_snapshot.prediction_result_id,
+      usedEvidence: traceability.decision_snapshot.used_evidence.map((item) => ({
+        evidenceId: item.evidence_id,
+        label: item.label,
+        sourceRef: item.source_ref,
+        reason: item.reason,
+      })),
+      excludedEvidence: traceability.decision_snapshot.excluded_evidence.map((item) => ({
+        evidenceId: item.evidence_id,
+        label: item.label,
+        reason: item.reason,
+        ownerDomain: item.owner_domain,
+      })),
+      limitations: traceability.decision_snapshot.limitations,
+      sourceHash: traceability.decision_snapshot.source_hash,
+      contextHash: traceability.decision_snapshot.context_hash,
+    },
+    timeline: traceability.timeline.map((item) => ({
+      stage: item.stage,
+      label: item.label,
+      status: item.status,
+      occurredAt: item.occurred_at ?? null,
+      actor: item.actor ?? null,
+      usedEvidenceCount: item.used_evidence_count,
+      excludedEvidenceCount: item.excluded_evidence_count,
+      relatedWorkOrders: item.related_work_orders.map((row) => ({
+        workOrderId: String(row.work_order_id ?? ""),
+        workType: row.work_type === "maintenance" ? "maintenance" : "inspection",
+        status: String(row.status ?? "requested") as OperationsClosedLoopSummary["workOrders"][number]["status"],
+        assignedTo: typeof row.assigned_to === "string" ? row.assigned_to : null,
+        actorDisplayName: typeof row.actor_display_name === "string" ? row.actor_display_name : null,
+        createdAt: typeof row.created_at === "string" ? row.created_at : null,
+        updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+      })),
+      statusChanges: item.status_changes.map(traceStatusChangeFromWire),
+    })),
+    statusChanges: traceability.status_changes.map(traceStatusChangeFromWire),
+    statusCards: traceability.status_cards,
   };
 }
 
@@ -1051,6 +1131,7 @@ export function composeEventDetail(input: {
     assetDetailStatus: null,
     operationContext: null,
     closedLoop: null,
+    traceability: null,
     reviewPriority: null,
     activity: normalizeActivity(input.activity),
     report,
@@ -1116,6 +1197,7 @@ export function applyAssetDetailViewModel(
     },
     operationContext,
     closedLoop: closedLoopFromAssetDetailViewModel(viewModel),
+    traceability: traceabilityFromAssetDetailViewModel(viewModel),
     reviewPriority: viewModel.review_priority
       ? {
           level: viewModel.review_priority.level,

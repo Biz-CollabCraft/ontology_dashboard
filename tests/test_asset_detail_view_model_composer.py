@@ -872,6 +872,26 @@ def test_composer_projects_closed_loop_lifecycle_action_and_timeline() -> None:
         "target_type": "work_order",
         "target_id": "WO-INS-001",
     }
+    traceability = payload["traceability"]
+    assert traceability["event_id"] == payload["snapshot_basis"]["artifact_id"]
+    assert traceability["decision_snapshot"]["event_id"] == payload["snapshot_basis"]["event_id"]
+    assert traceability["workflow_run_id"].startswith("asset-detail:")
+    assert traceability["decision_snapshot"]["model_version"] == payload["snapshot_basis"]["model_version"]
+    assert traceability["decision_snapshot"]["source_hash"] == payload["snapshot_basis"]["source_sha256"]
+    assert traceability["decision_snapshot"]["used_evidence"]
+    assert traceability["decision_snapshot"]["excluded_evidence"]
+    assert traceability["status_changes"][0] == {
+        "actor": "윤하린",
+        "action_type": "work_order.requested",
+        "before_status": None,
+        "after_status": "requested",
+        "reason": "작업요청 생성",
+        "created_at": "2026-08-06T03:10:00Z",
+        "related_work_order_id": "WO-INS-001",
+        "related_maintenance_action_id": None,
+    }
+    assert [item["label"] for item in traceability["timeline"]] == ["예측", "판단", "점검", "정비", "재평가"]
+    assert {card["label"] for card in traceability["status_cards"]} == {"추적 가능", "재평가 대기", "근거 부족", "부분 검증", "미측정 포함"}
 
 
 def test_composer_preserves_empty_recommendation_as_gap_without_synthesizing_action() -> None:

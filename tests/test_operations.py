@@ -2068,6 +2068,17 @@ def test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context(
     assert detail_after["closed_loop"]["lifecycle_summary"]["current_step"] == (
         "post_maintenance_observation_pending"
     )
+    traceability = detail_after["traceability"]
+    assert traceability["event_id"] == event_id
+    assert traceability["decision_snapshot"]["model_version"] == before_detail["snapshot_basis"]["model_version"]
+    assert traceability["decision_snapshot"]["source_hash"] == before_detail["snapshot_basis"]["source_sha256"]
+    assert traceability["decision_snapshot"]["used_evidence"]
+    assert traceability["decision_snapshot"]["excluded_evidence"]
+    replay_stage = traceability["timeline"][-1]
+    assert replay_stage["stage"] == "reassessment"
+    assert replay_stage["status"] == "observation_pending"
+    assert any(change["before_status"] and change["after_status"] for change in traceability["status_changes"])
+    assert {card["label"] for card in traceability["status_cards"]} == {"추적 가능", "재평가 대기", "근거 부족", "부분 검증", "미측정 포함"}
     assert packet_after["maintenance_history_summary"]["maintenance_events"][0][
         "record_id"
     ] == maintenance_event_id

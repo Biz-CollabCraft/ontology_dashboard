@@ -1,5 +1,5 @@
-import { CalendarRange, Database, Gauge, History, RotateCcw, Volume2 } from "lucide-react";
-import { useMemo } from "react";
+import { CalendarRange, Database, Gauge, GitBranch, History, RotateCcw, ShieldCheck, Volume2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import type {
   OperationsBootstrapModel,
   OperationsEvent,
@@ -7,6 +7,7 @@ import type {
   OperationsRiskSeriesPoint,
   OperationsRiskStatus,
   OperationsSensorValue,
+  OperationsTraceStage,
 } from "../api/operationsContracts";
 import { formatProbability, formatTimestamp } from "../components/OperationsUi";
 import { displayAssetName, displayEventAssetName, displaySensorLabel } from "../displayLabels";
@@ -158,11 +159,72 @@ function sensorPoints(sensor: OperationsSensorValue): ChartPoint[] {
   }));
 }
 
+const TRACE_STATUS_LABEL: Record<string, string> = {
+  completed: "완료",
+  partial: "부분 검증",
+  pending: "대기",
+  maintenance_completed: "정비 완료",
+  observation_pending: "새 관측값 대기",
+  re_prediction_requested: "재예측 요청",
+  new_decision_created: "새 운영 판정 생성",
+};
+
+function SameEventTracePanel({ detail }: { detail: OperationsEventDetailModel }) {
+  const trace = detail.traceability;
+  const [selectedStage, setSelectedStage] = useState<OperationsTraceStage>(trace?.currentStage ?? "decision");
+  if (!trace || trace.timeline.length === 0) return null;
+  const selected = trace.timeline.find((item) => item.stage === selectedStage) ?? trace.timeline[0];
+  const snapshot = trace.decisionSnapshot;
+  return (
+    <section className="same-event-trace-panel" data-testid="same-event-trace-panel">
+      <header>
+        <div><GitBranch size={16} /><strong>같은 사건 추적</strong></div>
+        <span>{TRACE_STATUS_LABEL[selected.status] ?? selected.status}</span>
+      </header>
+      <dl className="same-event-trace-summary">
+        <div><dt>사건 ID</dt><dd>{trace.eventId}</dd></div>
+        <div><dt>현재 단계</dt><dd>{selected.label}</dd></div>
+        <div><dt>기준 시각</dt><dd>{formatTimestamp(snapshot.asOf)}</dd></div>
+        <div><dt>재평가 상태</dt><dd>{TRACE_STATUS_LABEL[trace.timeline.at(-1)?.status ?? "pending"] ?? "대기"}</dd></div>
+      </dl>
+      <div className="same-event-trace-timeline" role="tablist" aria-label="판단 조치 결과 재평가 흐름">
+        {trace.timeline.map((item) => (
+          <button type="button" role="tab" aria-selected={item.stage === selected.stage} className={item.stage === selected.stage ? "is-selected" : ""} key={item.stage} onClick={() => setSelectedStage(item.stage)}>
+            <span>{item.label}</span>
+            <strong>{TRACE_STATUS_LABEL[item.status] ?? item.status}</strong>
+            <small>{item.actor ?? "담당 기록 없음"}</small>
+          </button>
+        ))}
+      </div>
+      <div className="same-event-trace-detail">
+        <section>
+          <header><ShieldCheck size={15} /><strong>당시 판단 근거</strong><span>{selected.usedEvidenceCount}</span></header>
+          {snapshot.usedEvidence.length ? <ul>{snapshot.usedEvidence.map((item) => <li key={item.evidenceId}><strong>{item.label}</strong><span>{item.reason}</span></li>)}</ul> : <p>사용 근거가 아직 연결되지 않았습니다.</p>}
+        </section>
+        <section>
+          <header><Database size={15} /><strong>제외된 근거</strong><span>{selected.excludedEvidenceCount}</span></header>
+          {snapshot.excludedEvidence.length ? <ul>{snapshot.excludedEvidence.slice(0, 5).map((item) => <li key={`${item.evidenceId}-${item.reason}`}><strong>{item.label}</strong><span>{item.reason}</span></li>)}</ul> : <p>제외 근거 기록이 없습니다.</p>}
+        </section>
+        <section>
+          <header><History size={15} /><strong>조치 이력</strong><span>{selected.statusChanges.length || trace.statusChanges.length}</span></header>
+          {(selected.statusChanges.length ? selected.statusChanges : trace.statusChanges).slice(0, 5).map((change) => <article key={`${change.actionType}-${change.createdAt}`}><strong>{change.actor}</strong><p>{change.beforeStatus ?? "시작"} → {change.afterStatus ?? "상태 없음"}</p><small>{change.reason} · {formatTimestamp(change.createdAt)}</small></article>)}
+          {!trace.statusChanges.length ? <p>상태 변경 이력이 아직 없습니다.</p> : null}
+        </section>
+        <section>
+          <header><Database size={15} /><strong>한계 정보</strong><span>{snapshot.limitations.length}</span></header>
+          {snapshot.limitations.length ? <ul>{snapshot.limitations.slice(0, 4).map((item) => <li key={item}><span>{item}</span></li>)}</ul> : <p>별도 한계 정보가 없습니다.</p>}
+          <dl><div><dt>모델 버전</dt><dd>{snapshot.modelVersion ?? "미연결"}</dd></div><div><dt>근거 지문</dt><dd>{snapshot.sourceHash ? snapshot.sourceHash.slice(0, 12) : "미연결"}</dd></div></dl>
+        </section>
+      </div>
+    </section>
+  );
+}
+
 function HistoryList({ detail }: { detail: OperationsEventDetailModel }) {
   const rows = detail.equipmentHistory;
   return (
     <section className="asset-history-section">
-      <header><div><History size={16} /><strong>설비 이력</strong></div><span>전체 {rows.length}건 · Backend ViewModel</span></header>
+      <header><div><History size={16} /><strong>설비 이력</strong></div><span>전체 {rows.length}건 · 운영 상세 기록</span></header>
       {rows.length ? (
         <div className="asset-history-rows">
           {rows.map((row, index) => (
@@ -175,7 +237,7 @@ function HistoryList({ detail }: { detail: OperationsEventDetailModel }) {
           ))}
         </div>
       ) : (
-        <div className="asset-chart-empty"><Database size={20} /><strong>설비 이력 미연결</strong><span>Backend ViewModel에 이력 row가 없습니다.</span></div>
+        <div className="asset-chart-empty"><Database size={20} /><strong>설비 이력 미연결</strong><span>현재 설비에 연결된 이력 기록이 없습니다.</span></div>
       )}
     </section>
   );
@@ -227,7 +289,7 @@ export function OperationsMapReportAssetDetailView({
     <div className="asset-detail-view operations-asset-graphs" data-testid="operations-summary-graphs">
       <section className="asset-detail-header">
         <div className="asset-detail-header-main">
-          <span>Backend ViewModel 상세</span>
+          <span>설비 상세</span>
           <h1>{displayAssetName(selectedAsset)}</h1>
           <p>{selectedAsset.assetType} · {selectedEvent.line} · {selectedEvent.assetId}</p>
         </div>
@@ -247,13 +309,13 @@ export function OperationsMapReportAssetDetailView({
           <div><dt>24시간 위험 예측</dt><dd>{formatProbability(detail.event.failureProbability)}</dd></div>
           <div><dt>판단 기준</dt><dd>{detail.reviewPriority ? detail.reviewPriority.level : "검토 우선순위 미연결"}</dd></div>
           <div><dt>기준 시각</dt><dd>{formatTimestamp(detail.event.observedAt ?? model.context.observedAt)}</dd></div>
-          <div><dt>표시 소스</dt><dd>Backend AssetDetailViewModel</dd></div>
+          <div><dt>표시 소스</dt><dd>운영 상세 스냅샷</dd></div>
         </dl>
       </section>
 
       <section className="asset-graph-workspace">
         <header className="asset-graph-toolbar">
-          <div><span>CANONICAL DETAIL SNAPSHOT</span><h2>Backend ViewModel 관측 흐름</h2></div>
+          <div><span>DETAIL SNAPSHOT</span><h2>운영 상세 관측 흐름</h2></div>
           <div className="asset-range-meta"><CalendarRange size={15} />{formatTimestamp(model.context.observedAt ?? model.context.refreshedAt)}</div>
         </header>
 
@@ -268,6 +330,7 @@ export function OperationsMapReportAssetDetailView({
             emptyLabel={`${displaySensorLabel(sensor.id, sensor.label)} 관측 흐름 없음`}
           />
         ))}
+        <SameEventTracePanel detail={detail} />
         <HistoryList detail={detail} />
       </section>
     </div>
