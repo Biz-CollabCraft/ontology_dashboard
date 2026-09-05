@@ -1724,7 +1724,7 @@ function FactoryMonitoringMapPanel({
                               <button
                                 key={slot.id}
                                 type="button"
-                                className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""} ${isLiveDemoFocus ? "is-live-result-focus" : ""} ${focusMode === "exceptions" && tone === "normal" && !selected && !isLiveDemoFocus ? "is-deemphasized" : ""}`}
+                                className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""} ${isLiveDemoFocus ? "is-live-result-focus" : ""} ${tone !== "normal" && !alertAcknowledged ? "has-alert" : ""} ${focusMode === "exceptions" && tone === "normal" && !selected && !isLiveDemoFocus ? "is-deemphasized" : ""}`}
                                 aria-pressed={selected}
                                 aria-label={`${displayFactorySlotName(slot, cell)} · ${asset.assetId} · ${operationsMonitorStatusLabel(liveStatus ?? currentPrediction?.statusGrade ?? asset.status)} · 위험 ${formatProbability(liveRisk ?? currentPrediction?.failureProbability ?? asset.failureProbability)}`}
                                 onClick={() => onPreviewAssetSlot(asset, slot, cell)}

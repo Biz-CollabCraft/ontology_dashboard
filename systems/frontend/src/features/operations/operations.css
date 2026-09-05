@@ -613,6 +613,7 @@
   text-overflow: ellipsis;
   transform: translate(-50%, -50%);
 }
+.operations-factory-asset-node.has-alert > span { max-width: calc(100% - 24px); }
 .operations-live-node-risk { position: absolute; left: 3px; right: 3px; bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: currentColor; font-size: 8px; font-weight: 950; letter-spacing: -.02em; opacity: .92; }
 .operations-asset-alert-badge {
   position: absolute;
