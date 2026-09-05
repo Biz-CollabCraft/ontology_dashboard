@@ -16,7 +16,16 @@ import {
   formatProbability,
   formatTimestamp,
 } from "../components/OperationsUi";
-import { displayEventAssetName, displayEventLabel, fieldFailureLabel } from "../displayLabels";
+import {
+  displayAssignee,
+  displayCriticality,
+  displayEventAssetName,
+  displayEventLabel,
+  displayProductionImpact,
+  displayReviewPriority,
+  fieldFailureLabel,
+  humanizeOperationalText,
+} from "../displayLabels";
 
 const DECISION_OPTIONS: Array<{
   decision: OperationsDecision;
@@ -209,8 +218,8 @@ export function OperationsOperationsPage({
             <button type="button" key={event.eventId} className={event.eventId === selectedEventId ? "is-selected" : ""} onClick={() => { setDecision(event.recommendedDecision); onSelectEvent(event); }}>
               <div><OperationsStatusBadge status={event.status} /><strong>{displayEventAssetName(event)}</strong><code>{displayEventLabel(event)}</code></div>
               <dl><div><dt>위험</dt><dd>{formatProbability(event.failureProbability)}</dd></div><div><dt>영향</dt><dd>{formatMinutes(event.estimatedDowntimeMinutes)}</dd></div></dl>
-              <span>{DECISION_LABEL[event.recommendedDecision]} · Decision Case</span>
-              <small>{event.assignedEngineer ?? "미배정"}</small>
+              <span>{DECISION_LABEL[event.recommendedDecision]} · 판단 안건</span>
+              <small>{displayAssignee(event.assignedEngineer)}</small>
             </button>
           ))}</div> : <OperationsState kind="empty" title="처리할 작업 후보가 없습니다" detail="현재 관측 기준으로 작업요청 후보가 필요한 이벤트가 없습니다." />}
         </OperationsPanel>
@@ -224,12 +233,12 @@ export function OperationsOperationsPage({
                 <section className="operations-manager-impact-strip" aria-label="생산 영향과 판단 기준">
                   <article><span>생산 계획</span><strong>{plannedUnits === null ? "-" : `${plannedUnits.toLocaleString()}개`}</strong><small>{planningContext?.productionPlan?.planDate ?? "계획 데이터 확인 중"}</small></article>
                   <article><span>제품 / 라인</span><strong>{eventImpact?.productVariant ?? "-"}</strong><small>{eventImpact?.line ?? selectedEvent.line}</small></article>
-                  <article className="is-critical"><span>예상 계획 영향</span><strong>{estimatedLostUnits === null ? "-" : `${estimatedLostUnits.toLocaleString()}개`}</strong><small>{planningContext?.productionImpact ?? "영향 확인 필요"}</small></article>
-                  <article><span>예상 정지</span><strong>{formatMinutes(estimatedDowntime)}</strong><small>Decision Case 기준</small></article>
+                  <article className="is-critical"><span>예상 계획 영향</span><strong>{estimatedLostUnits === null ? "-" : `${estimatedLostUnits.toLocaleString()}개`}</strong><small>{displayProductionImpact(planningContext?.productionImpact)}</small></article>
+                  <article><span>예상 정지</span><strong>{formatMinutes(estimatedDowntime)}</strong><small>판단 안건 기준</small></article>
                 </section>
                 <div className="operations-guided-action">
                   <div>
-                    <span>{queueRank > 0 ? `DECISION CASE · 우선순위 #${queueRank}` : "DECISION CASE"}</span>
+                    <span>{queueRank > 0 ? `판단 안건 · 우선순위 #${queueRank}` : "판단 안건"}</span>
                     <strong>{recommendedOption.title}</strong>
                     <p>{snapshotBasisFailed
                       ? "현재 선택한 예측의 정본 근거를 불러오지 못했습니다. 상세 조회를 다시 시도하세요."
@@ -248,22 +257,22 @@ export function OperationsOperationsPage({
                     <button type="button" className="operations-button secondary" onClick={() => onOpenReport(selectedEvent)}><FileText size={14} />보고서 보기</button>
                   </div>
                 </div>
-                <section className="operations-decision-routing" aria-label="Decision Case 책임과 다음 액션">
-                  <div><span>현재 담당</span><strong>{selectedEvent.assignedEngineer ?? "미배정"}</strong><small>현재 기록된 owner</small></div>
-                  <div><span>검토 우선순위</span><strong>{detail?.reviewPriority?.level ?? selectedEvent.status}</strong><small>위험·운영 맥락 기반</small></div>
+                <section className="operations-decision-routing" aria-label="판단 안건 책임과 다음 작업">
+                  <div><span>현재 담당</span><strong>{displayAssignee(selectedEvent.assignedEngineer)}</strong><small>현재 기록된 담당자</small></div>
+                  <div><span>검토 우선순위</span><strong>{displayReviewPriority(detail?.reviewPriority?.level)}</strong><small>위험·운영 맥락 기반</small></div>
                   <div><span>다음 책임 역할</span><strong>{nextOwnerLabel}</strong><small>Backend Closed-loop policy</small></div>
                   <div><span>다음 허용 액션</span><strong>{nextActionLabel}</strong><small>가짜 배정/우선순위 변경 없음</small></div>
                 </section>
                 <div className="operations-operation-hero">
                   <div><OperationsStatusBadge status={selectedEvent.status} /><OperationsConfidenceBadge confidence={selectedEvent.confidence} /></div>
-                  <dl><div><dt>대상 설비</dt><dd>{displayEventAssetName(selectedEvent)}</dd></div><div><dt>의심 부품</dt><dd>{suspectedPart}</dd></div><div><dt>고장 확률</dt><dd>{formatProbability(selectedEvent.failureProbability)}</dd></div><div><dt>추천 상태</dt><dd>{DECISION_LABEL[selectedEvent.recommendedDecision]}</dd></div><div><dt>최근 사람 결정</dt><dd>{latestDecision?.decision ? DECISION_LABEL[latestDecision.decision] : "기록 없음"}</dd></div><div><dt>담당자</dt><dd>{selectedEvent.assignedEngineer ?? "미배정"}</dd></div><div><dt>부품</dt><dd>{selectedEvent.sparePartAvailable === null ? "확인 필요" : selectedEvent.sparePartAvailable ? "확보" : "미확보"}</dd></div></dl>
+                  <dl><div><dt>대상 설비</dt><dd>{displayEventAssetName(selectedEvent)}</dd></div><div><dt>의심 부품</dt><dd>{suspectedPart}</dd></div><div><dt>고장 확률</dt><dd>{formatProbability(selectedEvent.failureProbability)}</dd></div><div><dt>추천 상태</dt><dd>{DECISION_LABEL[selectedEvent.recommendedDecision]}</dd></div><div><dt>최근 사람 결정</dt><dd>{latestDecision?.decision ? DECISION_LABEL[latestDecision.decision] : "기록 없음"}</dd></div><div><dt>담당자</dt><dd>{displayAssignee(selectedEvent.assignedEngineer)}</dd></div><div><dt>부품</dt><dd>{selectedEvent.sparePartAvailable === null ? "확인 필요" : selectedEvent.sparePartAvailable ? "확보" : "미확보"}</dd></div></dl>
                 </div>
                 <section className="operations-always-action" aria-label="현재 허용된 작업">
-                  <header><span>Allowed Action</span><strong>{canDecide ? "판단 기록 가능" : "읽기 전용"}</strong></header>
+                  <header><span>현재 가능한 작업</span><strong>{canDecide ? "판단 기록 가능" : "읽기 전용"}</strong></header>
                   <div className="operations-action-row">
                     <button type="button" className="operations-button primary" onClick={saveDecision} disabled={!canSubmitDecision || savingDecision}><Save size={14} />{savingDecision ? "처리 중" : decisionActionLabel}</button>
-                    <button type="button" className="operations-button secondary" onClick={() => onOpenAsset(selectedEvent)}><Wrench size={14} />Asset 근거</button>
-                    <button type="button" className="operations-button ghost" onClick={() => onOpenReport(selectedEvent)}><FileText size={14} />Report</button>
+                    <button type="button" className="operations-button secondary" onClick={() => onOpenAsset(selectedEvent)}><Wrench size={14} />설비 근거</button>
+                    <button type="button" className="operations-button ghost" onClick={() => onOpenReport(selectedEvent)}><FileText size={14} />보고서</button>
                   </div>
                 </section>
                 <ol className="operations-decision-flow" aria-label="업무 진행 상태">
@@ -278,15 +287,15 @@ export function OperationsOperationsPage({
                 <>
                   {detail.warnings.length ? <div className="operations-inline-warning" role="status"><strong>부분 연결 경고</strong><ul>{detail.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div> : null}
                   <div className="operations-operation-evidence-grid">
-                    <OperationsPanel title="Allowed Action" eyebrow="사람 기록">
+                    <OperationsPanel title="현재 가능한 작업" eyebrow="사람 기록">
                       <div className="operations-recommendation"><span>추천</span><strong>{DECISION_LABEL[selectedEvent.recommendedDecision]}</strong><p>버튼 하나를 고르면 아래 기록 액션에 바로 반영됩니다.</p></div>
                       <dl className="operations-inspector-summary">
-                        <div><dt>검토 우선순위</dt><dd>{detail.reviewPriority?.level ?? "확인 필요"}</dd></div>
-                        <div><dt>중요도</dt><dd>{detail.assetCriticality ?? "확인 필요"}</dd></div>
-                        <div><dt>생산 영향</dt><dd>{detail.operationContext?.productionImpact ?? "확인 필요"}{estimatedLostUnits !== null ? ` · 약 ${estimatedLostUnits.toLocaleString()}개` : ""}</dd></div>
+                        <div><dt>검토 우선순위</dt><dd>{displayReviewPriority(detail.reviewPriority?.level)}</dd></div>
+                        <div><dt>중요도</dt><dd>{displayCriticality(detail.assetCriticality)}</dd></div>
+                        <div><dt>생산 영향</dt><dd>{displayProductionImpact(detail.operationContext?.productionImpact)}{estimatedLostUnits !== null ? ` · 약 ${estimatedLostUnits.toLocaleString()}개` : ""}</dd></div>
                         <div><dt>열린 작업</dt><dd>{detail.maintenanceContext?.openWorkOrderExists === null || detail.maintenanceContext?.openWorkOrderExists === undefined ? "확인 필요" : detail.maintenanceContext.openWorkOrderExists ? "있음" : "없음"}</dd></div>
                       </dl>
-                      {detail.reviewPriority?.reasons.length ? <p className="operations-threshold-note">{detail.reviewPriority.reasons.join(" · ")}</p> : <p className="operations-threshold-note">필수 맥락이 없으면 Operations가 우선순위를 임의 계산하지 않습니다.</p>}
+                      {detail.reviewPriority?.reasons.length ? <p className="operations-threshold-note">{detail.reviewPriority.reasons.map(humanizeOperationalText).join(" · ")}</p> : <p className="operations-threshold-note">필수 맥락이 없으면 운영 화면이 우선순위를 임의 계산하지 않습니다.</p>}
                       <div className="operations-decision-option-grid" role="radiogroup" aria-label="판단 종류">
                         {DECISION_OPTIONS.map((option) => {
                           const Icon = option.Icon;

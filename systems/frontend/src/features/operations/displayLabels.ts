@@ -29,6 +29,26 @@ export const SENSOR_FIELD_LABELS: Record<string, string> = {
   overstrain_index: "과부하 누적 지표",
   overstrain_load: "과부하 누적 지표",
   temperature_difference_k: "공정-공기 온도차",
+  temperature_gap_k: "공정 온도 편차",
+};
+
+const OPERATIONAL_FIELD_LABELS: Record<string, string> = {
+  generator_failure_score: "AI 고장 위험도",
+  model_selected_threshold: "이상 판정 기준값",
+  asset_criticality_adjustment: "설비 중요도 보정값",
+  criticality_adjustment: "설비 중요도 보정값",
+  generator_model_artifact_manifest: "적용 모델 정보",
+  failure_score: "AI 고장 위험도",
+  selected_threshold: "이상 판정 기준값",
+};
+
+const OPERATIONAL_TERM_LABELS: Record<string, string> = {
+  live_sensor: "실시간 센서",
+  maintenance_replay_overlay: "정비 후 재현 관측",
+  policy_review: "정책 검토",
+  product_result: "예측 판정 결과",
+  prediction_result: "예측 결과",
+  data_quality_hold: "데이터 확인 필요",
 };
 
 const FEATURE_WINDOW_SUFFIX = /(?:(?:_(?:1h|6h|12h|24h|7d|30d)_(?:max_abs|abs_max|abs_mean|change|max|min|mean|std|last))|(?:_(?:current|abs_current)))$/;
@@ -79,6 +99,7 @@ export const FIELD_FACTOR_LABELS: Record<string, { item: string; symptom: string
   overstrain_index: { item: "프레스 과부하 확인", symptom: "과부하 누적" },
   overstrain_load: { item: "프레스 과부하 확인", symptom: "과부하 누적" },
   temperature_difference_k: { item: "공정-공기 온도차 확인", symptom: "열 해소 불균형" },
+  temperature_gap_k: { item: "공정 온도 편차 확인", symptom: "공정 온도 편차 증가" },
 };
 
 export const FAILURE_TYPE_LABELS: Record<string, string> = {
@@ -164,7 +185,12 @@ export function displayEventLabel(event: Pick<DisplayEventLike, "eventId"> | str
 
 export function displaySensorLabel(key: string, fallback?: string | null): string {
   const normalized = normalizedFeatureKey(key);
-  return SENSOR_FIELD_LABELS[key] ?? SENSOR_FIELD_LABELS[normalized] ?? fallback ?? normalized.replaceAll("_", " ");
+  return SENSOR_FIELD_LABELS[key]
+    ?? SENSOR_FIELD_LABELS[normalized]
+    ?? OPERATIONAL_FIELD_LABELS[key]
+    ?? OPERATIONAL_FIELD_LABELS[normalized]
+    ?? fallback
+    ?? humanizeOperationalText(normalized);
 }
 
 export function displaySensorFactorLabel(key: string, fallback?: string | null): string {
@@ -194,10 +220,14 @@ export function humanizeOperationalText(value: string): string {
     .replaceAll("Replay", "재현 분석")
     .replace(/[A-Za-z][A-Za-z0-9_]*(?:_[A-Za-z0-9]+){1,}/g, (token) => {
       const normalized = normalizedFeatureKey(token);
-      const mapped = SENSOR_FIELD_LABELS[token] ?? SENSOR_FIELD_LABELS[normalized];
+      const mapped = SENSOR_FIELD_LABELS[token]
+        ?? SENSOR_FIELD_LABELS[normalized]
+        ?? OPERATIONAL_FIELD_LABELS[token]
+        ?? OPERATIONAL_FIELD_LABELS[normalized]
+        ?? OPERATIONAL_TERM_LABELS[token];
       if (mapped) return mapped;
       if (token === "failure_risk") return "일반 고장 위험";
-      return token;
+      return token.replaceAll("_", " ");
     });
 }
 
@@ -245,15 +275,15 @@ export function fieldFactorLocation(factor: Pick<DisplayFactorLike, "feature">):
 }
 
 export function fieldFailureLabel(value: string): string {
-  return FAILURE_TYPE_LABELS[value] ?? value;
+  return FAILURE_TYPE_LABELS[value] ?? humanizeOperationalText(value);
 }
 
 export function displayProductionImpact(value?: string | null): string {
   if (!value) return "생산 영향 수준 미제공";
-  return PRODUCTION_IMPACT_LABELS[value] ?? value;
+  return PRODUCTION_IMPACT_LABELS[value] ?? humanizeOperationalText(value);
 }
 
 export function displayReviewPriority(value?: string | null): string {
   if (!value) return "검토 우선순위 미제공";
-  return REVIEW_PRIORITY_LABELS[value] ?? value;
+  return REVIEW_PRIORITY_LABELS[value] ?? humanizeOperationalText(value);
 }

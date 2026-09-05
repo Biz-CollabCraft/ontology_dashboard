@@ -396,8 +396,8 @@ export function MaintenanceWorkflowActionPanel({
       label = "현장 관리자 수락 대기";
       helper = "현장 담당자가 요청을 수락하면 해당 담당자에게 자동 배정됩니다.";
     } else if (state.inspectionResult?.outcome === "no_action_required") {
-      label = "점검 완료 · 정비 불필요";
-      helper = "현장 점검 결과 추가 정비가 필요하지 않은 것으로 기록됐습니다.";
+      label = "처리 완료 · 정비 불필요";
+      helper = "현장 점검 결과 추가 정비가 필요하지 않아 이 Case는 정상 종결됐습니다.";
     } else if (state.inspectionResult?.outcome === "data_check_required") {
       label = "추가 데이터 확인 필요";
       helper = "점검 결과만으로 정비 판단을 내리지 않고 추가 데이터 확인 상태로 유지합니다.";

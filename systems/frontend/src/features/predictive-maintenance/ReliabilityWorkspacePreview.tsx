@@ -86,6 +86,7 @@ const LIFECYCLE_LABELS: Record<OperationsClosedLoopLifecycleStep, [string, strin
   inspection_approved: ["점검 승인", "Inspection approved"],
   inspection_in_progress: ["점검 중", "Inspection in progress"],
   inspection_completed: ["점검 완료", "Inspection completed"],
+  inspection_closed_no_action: ["점검 종결", "Inspection closed"],
   recommendation_proposed: ["정비안 제안", "Recommendation proposed"],
   maintenance_requested: ["정비 요청", "Maintenance requested"],
   maintenance_approved: ["정비 승인", "Maintenance approved"],

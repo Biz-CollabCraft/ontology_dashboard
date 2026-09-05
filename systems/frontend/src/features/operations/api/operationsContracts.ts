@@ -499,6 +499,7 @@ export type OperationsClosedLoopLifecycleStep =
   | "inspection_approved"
   | "inspection_in_progress"
   | "inspection_completed"
+  | "inspection_closed_no_action"
   | "recommendation_proposed"
   | "maintenance_requested"
   | "maintenance_approved"

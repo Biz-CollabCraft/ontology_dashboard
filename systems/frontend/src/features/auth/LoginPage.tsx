@@ -43,6 +43,7 @@ const DEMO_ACCOUNTS = [
 
 const PUBLIC_DEMO_HOSTS = new Set([
   "dashboard.oosu.dev",
+  "kosa165.iptime.org",
   "127.0.0.1",
   "localhost",
 ]);

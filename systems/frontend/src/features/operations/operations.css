@@ -407,7 +407,44 @@
 .operations-report-output-preview p { margin: 0; color: var(--operations-muted); font-size: 11px; line-height: 1.45; }
 .operations-report-output-card > footer { display: flex; justify-content: flex-end; }
 .operations-report-output-card > footer .operations-button { min-width: 96px; }
-.operations-workflow-print-report { display: none; }
+.operations-workflow-print-report,
+.operations-print-root { display: none; }
+.operations-print-root { position:fixed; inset:0; z-index:180; grid-template-rows:auto minmax(0,1fr); background:#e8edf3; color:#111827; }
+.operations-print-root[role="dialog"] { display:grid; }
+.operations-print-root.is-direct-print { display:grid; visibility:hidden; pointer-events:none; }
+.operations-print-preview-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:58px; padding:9px 18px; border-bottom:1px solid #c8d2df; background:#fff; box-shadow:0 2px 12px rgba(15,23,42,.12); }
+.operations-print-preview-toolbar > div { display:flex; align-items:center; gap:9px; }
+.operations-print-preview-toolbar span { color:#52657d; font-size:12px; font-weight:800; }
+.operations-print-preview-toolbar strong { color:#111827; font-size:15px; }
+.operations-print-preview-canvas { overflow:auto; padding:28px; }
+.operations-print-preview-canvas .operations-workflow-print-report { display:grid; align-content:start; gap:16px; width:min(210mm,100%); min-height:297mm; margin:0 auto; padding:12mm; background:#fff; color:#111827; box-shadow:0 18px 48px rgba(15,23,42,.2); }
+.operations-print-preview-canvas .operations-workflow-print-report > header,
+.operations-print-preview-canvas .operations-workflow-print-report > dl,
+.operations-print-preview-canvas .operations-workflow-print-report > section { padding:18px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; }
+.operations-print-preview-canvas .operations-workflow-print-report > header { display:grid; gap:5px; }
+.operations-print-preview-canvas .operations-workflow-print-report > header strong { font-size:25px; }
+.operations-print-preview-canvas .operations-workflow-print-report > dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin:0; }
+.operations-print-preview-canvas .operations-workflow-print-report dd { margin:4px 0 0; font-weight:850; }
+.operations-print-preview-canvas .operations-workflow-print-report > header { order:1; }
+.operations-print-preview-canvas .operations-workflow-print-report > dl { order:2; }
+.operations-print-preview-canvas .operations-print-purpose-summary { order:3; }
+.operations-print-preview-canvas .operations-print-purpose-detail { order:4; }
+.operations-print-preview-canvas .operations-print-inspection-evidence { order:5; }
+.operations-print-preview-canvas .operations-print-sensor-history { order:6; }
+.operations-print-preview-canvas .operations-print-inspection-evidence .equipment-sketch { grid-template-columns:1fr; min-height:0; overflow:visible; }
+.operations-print-preview-canvas .operations-print-inspection-evidence .cnc-visual,
+.operations-print-preview-canvas .operations-print-inspection-evidence .compressor-visual { --sketch-origin:max(12px,calc(50% - 310px)); height:260px; border-color:#94a3b8; background:linear-gradient(#e8edf3 1px,transparent 1px),linear-gradient(90deg,#e8edf3 1px,transparent 1px),#fff; }
+.operations-print-preview-canvas .operations-print-inspection-evidence :where(.cnc-visual,.compressor-visual) span { border-color:#8093aa !important; background:#fff !important; color:#172033 !important; }
+.operations-print-preview-canvas .operations-print-sensor-history .asset-series-block { margin-top:16px; border:1px solid #cbd5e1; border-radius:7px; overflow:hidden; }
+.operations-print-preview-canvas .operations-print-sensor-history .asset-series-chart { width:100%; min-height:360px; }
+.operations-print-preview-canvas .operations-print-sensor-history .asset-series-chart { background:#fff !important; }
+.operations-print-preview-canvas .operations-print-sensor-history .asset-chart-frame { fill:#f8fafc !important; stroke:#cbd5e1 !important; }
+.operations-print-preview-canvas .operations-print-sensor-history .asset-chart-grid { stroke:#e2e8f0 !important; }
+.operations-print-preview-canvas .operations-print-sensor-history :where(.asset-chart-axis,.asset-chart-axis-title) { fill:#475569 !important; }
+.operations-print-preview-canvas .operations-print-sensor-history .asset-current-axis { fill:#172033 !important; }
+.operations-print-preview-canvas .operations-print-sensor-history .asset-baseline-band { fill:rgba(69,184,128,.12) !important; stroke:rgba(21,128,61,.45) !important; }
+.operations-print-preview-canvas .operations-print-sensor-history .asset-baseline-mean { stroke:#15803d !important; }
+.operations-print-preview-canvas .operations-print-sensor-history :where(.asset-current-marker,.asset-current-value-marker,.asset-crossing-marker,.asset-extrema-label circle) { stroke:#fff !important; }
 .operations-monitoring-hero { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 18px 20px; border: 1px solid rgba(76,144,240,.18); border-radius: 12px; background: linear-gradient(135deg, rgba(76,144,240,.12), rgba(69,184,128,.07)), var(--operations-surface); box-shadow: 0 18px 42px rgba(0,0,0,.18); }
 .operations-monitoring-hero > div { display: grid; gap: 5px; min-width: 0; }
 .operations-monitoring-hero span { color: #9cc5fa; font-size: 10px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; }
@@ -435,7 +472,7 @@
 .operations-plan-impact-card.is-live-stage-observation { box-shadow: inset 3px 0 0 rgba(76,144,240,.72); }
 .operations-plan-impact-card.is-live-stage-prediction { box-shadow: inset 3px 0 0 rgba(240,162,58,.72); }
 .operations-plan-impact-card.is-live-stage-role-view { box-shadow: inset 3px 0 0 rgba(69,184,128,.72); }
-.operations-plan-impact-note { margin: 0 0 9px; padding: 8px 10px; border: 1px solid rgba(181,196,214,.11); border-radius: 6px; background: rgba(255,255,255,.018); color: var(--operations-dim); font-size: 10px; font-weight: 800; }
+.operations-plan-impact-note { margin: 0; padding: 7px 9px; border: 1px solid rgba(181,196,214,.11); border-radius: 6px; background: rgba(255,255,255,.018); color: var(--operations-dim); font-size: 10px; font-weight: 800; }
 .operations-process-map { min-width: 0; display: grid; grid-template-columns: repeat(2,minmax(180px,1fr)); gap: 9px; }
 .operations-process-line { min-width: 0; min-height: 116px; display: grid; gap: 5px; align-content: center; padding: 14px; border: 1px solid var(--operations-border); border-left-width: 4px; border-radius: 7px; background: rgba(255,255,255,.018); color: var(--operations-text); text-align: left; cursor: pointer; }
 .operations-process-line:hover { background: rgba(255,255,255,.035); border-color: rgba(76,144,240,.38); }
@@ -470,8 +507,28 @@
 .operations-line-impact-card.tone-attention { border-left-color: var(--operations-accent); }
 .operations-line-impact-card.tone-normal { border-left-color: var(--operations-success); }
 .operations-factory-map-panel .operations-panel-body { display: grid; gap: 10px; }
+.operations-factory-map-panel .operations-panel-header { align-items:center; }
+.operations-factory-map-panel .operations-panel-actions { flex:1; min-width:0; }
+.operations-factory-map-heading-tools { display:flex; width:100%; min-width:0; align-items:center; justify-content:flex-start; gap:10px; }
+.operations-factory-map-heading-tools .operations-plan-impact-note { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.operations-factory-map-heading-tools .operations-factory-map-legend { flex:none; padding-inline:4px; }
+.operations-factory-map-heading-tools .operations-factory-map-mode { flex:none; margin-left:auto; }
 .operations-factory-map { min-width: 0; display: grid; gap: 10px; }
-.operations-factory-map-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.operations-factory-map-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+@media (max-width: 1180px) {
+  .operations-factory-map-heading-tools .operations-plan-impact-note { display:none; }
+}
+@media (max-width: 940px) {
+  .operations-factory-map-heading-tools .operations-factory-map-legend { width:100%; justify-content:flex-start; order:2; }
+  .operations-factory-map-heading-tools { flex-wrap:wrap; }
+}
+@media (max-width: 720px) {
+  .operations-factory-map-panel .operations-panel-header { align-items:flex-start; flex-direction:column; }
+  .operations-factory-map-panel .operations-panel-actions,
+  .operations-factory-map-heading-tools { width:100%; }
+  .operations-factory-map-heading-tools { justify-content:flex-end; }
+  .operations-factory-map-heading-tools .operations-factory-map-mode { margin-left:auto; }
+}
 .operations-factory-map-mode { display: inline-flex; gap: 3px; padding: 2px; border: 1px solid var(--operations-border); border-radius: 7px; background: rgba(255,255,255,.018); }
 .operations-factory-map-mode button { min-height: 26px; padding: 0 9px; border: 0; border-radius: 5px; color: var(--operations-dim); background: transparent; font-size: 10px; font-weight: 850; cursor: pointer; }
 .operations-factory-map-mode button.is-active { color: var(--operations-text); background: rgba(76,144,240,.11); box-shadow: inset 0 0 0 1px rgba(76,144,240,.2); }
@@ -677,6 +734,36 @@
 .operations-live-feature-monitor .operations-feature-series-collection > header strong { font-size: 11px; }
 .operations-live-feature-monitor .asset-window-control { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; max-width: min(100%, 430px); }
 .operations-live-feature-monitor .asset-window-control button { min-width: 40px; min-height: 22px; padding: 0 7px; font-size: 9px; }
+.operations-inspection-sensor-workbench { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; align-items: start; }
+.operations-inspection-sensor-workbench > section { min-width: 0; height: auto; align-self: start; }
+.operations-inspection-sensor-workbench .equipment-sketch { min-height: 0; }
+.operations-inspection-sensor-workbench .target-list { max-height: 210px; overflow: auto; }
+.operations-inspection-sensor-workbench .asset-series-chart { min-height: 0; aspect-ratio: 720 / 300; }
+.operations-sensor-control-row { width:100%; min-width:0; min-height:32px; flex-wrap:nowrap; padding:3px 4px 3px 8px; border:1px solid rgba(181,196,214,.38); border-radius:7px; background:rgba(255,255,255,.045); }
+.operations-sensor-control-row > strong { flex:none; white-space:nowrap; }
+.operations-sensor-control-row > .asset-window-control { flex:none; margin-left:auto; }
+.asset-series-expand { display:inline-grid; flex:none; place-items:center; width:25px; height:25px; margin-left:0; padding:0; border:1px solid rgba(181,196,214,.42); border-radius:5px; background:rgba(255,255,255,.045); color:var(--operations-text); cursor:pointer; }
+.asset-series-heading > .asset-baseline-key { margin-left:auto; }
+.asset-series-expand:hover,.asset-series-expand:focus-visible { border-color:#6da8f7; background:rgba(76,144,240,.2); outline:none; }
+.asset-series-chart.is-expandable { cursor:zoom-in; }
+.asset-series-chart.is-expandable:focus-visible { outline:2px solid #6da8f7; outline-offset:-2px; }
+.operations-sensor-detail-layer { position:fixed; inset:0; z-index:130; display:grid; place-items:center; padding:24px; }
+.operations-sensor-detail-scrim { position:absolute; inset:0; width:100%; height:100%; border:0; background:rgba(5,10,19,.68); backdrop-filter:blur(3px); cursor:default; }
+.operations-sensor-detail-dialog { position:relative; z-index:1; display:grid; gap:10px; width:min(1180px,calc(100vw - 48px)); max-height:calc(100vh - 48px); overflow:auto; padding:14px; border:1px solid rgba(156,197,250,.52); border-radius:10px; background:var(--operations-surface); box-shadow:0 28px 80px rgba(0,0,0,.58); }
+.operations-sensor-detail-dialog > header { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:36px; padding-bottom:9px; border-bottom:1px solid rgba(181,196,214,.3); }
+.operations-sensor-detail-dialog > header > div { display:flex; align-items:center; gap:8px; color:var(--operations-text); }
+.operations-sensor-detail-dialog > header span { color:var(--operations-dim); font-size:11px; font-weight:800; }
+.operations-sensor-detail-dialog > header button { width:30px; height:30px; display:grid; place-items:center; border:1px solid rgba(181,196,214,.34); border-radius:6px; background:rgba(255,255,255,.04); color:var(--operations-text); cursor:pointer; }
+.operations-sensor-detail-dialog .asset-series-chart { min-height:420px; aspect-ratio:1200 / 430; }
+.operations-overview-report-graph .operations-feature-series-collection > header { align-items:center; }
+.operations-overview-report-graph .operations-feature-series-collection > header .asset-window-control { margin-left:auto; border-color:rgba(181,196,214,.38); background:rgba(255,255,255,.05); }
+.operations-overview-report-graph .operations-feature-series-collection > header .asset-window-control button { min-height:24px; }
+@media (max-width: 980px) {
+  .operations-sensor-control-row { flex-wrap:wrap; }
+  .operations-sensor-detail-layer { padding:12px; }
+  .operations-sensor-detail-dialog { width:calc(100vw - 24px); max-height:calc(100vh - 24px); }
+  .operations-sensor-detail-dialog .asset-series-chart { min-height:260px; }
+}
 .operations-mini-feature-chart { display: grid; gap: 8px; }
 .operations-mini-feature-chart header { display: flex; align-items: center; gap: 7px; color: var(--operations-muted); }
 .operations-mini-feature-chart header strong { color: var(--operations-text); font-size: 12px; }
@@ -719,6 +806,15 @@
 .operations-side-map-report .asset-window-control button { min-width: 42px; min-height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--operations-dim); font-size: 10px; font-weight: 900; cursor: pointer; }
 .operations-side-map-report .asset-window-control button:hover,
 .operations-side-map-report .asset-window-control button.is-active { background: rgba(76,144,240,.16); color: var(--operations-text); }
+.operations-asset-preview dt,
+.operations-side-map-report > header span,
+.operations-live-feature-note { color: var(--operations-muted); }
+.operations-asset-preview > dl div,
+.operations-overview-report-graph,
+.operations-overview-inspection-panel { border-color: rgba(181,196,214,.24); }
+@media (max-width: 1050px) {
+  .operations-inspection-sensor-workbench { grid-template-columns: minmax(0,1fr); }
+}
 .operations-side-map-report .asset-series-chart { display: block; width: 100%; height: auto; min-height: 150px; aspect-ratio: 900 / 260; background: #121922; }
 .operations-live-feature-monitor .asset-series-chart { min-height: 0; aspect-ratio: 1040 / 260; }
 .operations-live-feature-monitor .asset-series-block:nth-of-type(n+2) .asset-series-chart { min-height: 0; aspect-ratio: 1040 / 260; }
@@ -864,6 +960,14 @@
 .operations-inspection-target-list p { margin: 2px 0 0; color: var(--operations-dim); font-size: 9px; line-height: 1.35; }
 .operations-inspection-target-list span { color: var(--operations-muted); font-size: 10px; font-weight: 900; }
 .operations-side-map-report .equipment-sketch { display: grid; grid-template-columns: minmax(0,1fr); gap: 10px; align-items: center; border: 1px solid rgba(181,196,214,.11); border-radius: 7px; background: rgba(255,255,255,.025); padding: 10px; min-width: 0; }
+.operations-inspection-sensor-workbench .equipment-sketch { overflow:visible; }
+.operations-inspection-sensor-workbench .cnc-visual,
+.operations-inspection-sensor-workbench .compressor-visual { box-sizing:border-box; width:100%; min-width:0; }
+.operations-inspection-sensor-workbench .cnc-visual { --sketch-origin:max(6px,calc(50% - 310px)); }
+.operations-inspection-sensor-workbench :where(.target-list p,.sketch-legend,.sketch-legend small) { color:var(--operations-muted); }
+:root[data-theme="light"] .operations-inspection-sensor-workbench :where(.operations-side-map-report>header,.operations-side-map-report>header span,.target-list p,.sketch-legend,.sketch-legend small,.asset-series-heading>span,.asset-chart-axis,.asset-chart-axis-title) { color:#40536d; fill:#40536d; }
+:root[data-theme="light"] .operations-inspection-sensor-workbench :where(.operations-side-map-report>header strong,.target-list strong,.operations-sensor-selector>strong,.operations-sensor-selector button) { color:#152238; }
+:root[data-theme="light"] .operations-inspection-sensor-workbench :where(.operations-overview-report-graph,.operations-overview-inspection-panel,.equipment-sketch,.target-list article,.operations-sensor-selector) { border-color:#bdc9d8; }
 .operations-side-map-report .equipment-sketch strong { display: block; color: var(--operations-text); font-size: 14px; }
 .operations-side-map-report .sketch-legend { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; color: var(--operations-muted); font-size: 11px; line-height: 1.35; }
 .operations-side-map-report .sketch-legend li { min-width: 0; display: grid; grid-template-columns: 20px minmax(0,1fr); gap: 6px; align-items: start; }
@@ -2306,6 +2410,26 @@
 
 @page { size: A4; margin: 12mm; }
 @media print {
+  body.operations-workflow-print-mode .operations-print-preview-toolbar { display:none !important; }
+  body.operations-workflow-print-mode .operations-print-preview-canvas { display:block !important; overflow:visible !important; padding:0 !important; }
+  body.operations-workflow-print-mode .operations-print-root.is-direct-print { visibility:visible !important; }
+  body.operations-workflow-print-mode > *:not(.operations-print-root) { display:none !important; }
+  body.operations-workflow-print-mode .operations-print-root {
+    --operations-bg:#fff;
+    --operations-surface:#fff;
+    --operations-text:#111827;
+    --operations-muted:#334155;
+    --operations-dim:#52657d;
+    --operations-border:#cbd5e1;
+    display:block !important;
+    position:static !important;
+    inset:auto !important;
+    width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+    background:#fff !important;
+    color:#111827 !important;
+  }
   html, body, #root { margin: 0 !important; padding: 0 !important; background: var(--operations-bg) !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .operations-app { min-height: 0; background: var(--operations-bg) !important; color: var(--operations-text); print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .operations-global-header,
@@ -2358,18 +2482,25 @@
   body.operations-workflow-print-mode .operations-workflow-print-report,
   body.operations-workflow-print-mode .operations-workflow-print-report * { visibility: visible !important; }
   body.operations-workflow-print-mode .operations-workflow-print-report {
-    position: absolute !important;
-    inset: 0 auto auto 0 !important;
-    display: grid !important;
-    gap: 8mm !important;
+    position: static !important;
+    display: block !important;
     width: 100% !important;
-    min-height: 100% !important;
-    padding: 10mm !important;
-    background: var(--operations-bg) !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
     color: var(--operations-text) !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
+  body.operations-workflow-print-mode .operations-workflow-print-report > header,
+  body.operations-workflow-print-mode .operations-workflow-print-report > dl,
+  body.operations-workflow-print-mode .operations-workflow-print-report > section { margin:0 0 4mm !important; }
+  body.operations-workflow-print-mode .operations-workflow-print-report > header { order:1; }
+  body.operations-workflow-print-mode .operations-workflow-print-report > dl { order:2; }
+  body.operations-workflow-print-mode .operations-print-purpose-summary { order:3; }
+  body.operations-workflow-print-mode .operations-print-purpose-detail { order:4; }
+  body.operations-workflow-print-mode .operations-print-inspection-evidence { order:5; }
+  body.operations-workflow-print-mode .operations-print-sensor-history { order:6; }
   body.operations-workflow-print-mode .operations-workflow-print-report > header,
   body.operations-workflow-print-mode .operations-workflow-print-report dl,
   body.operations-workflow-print-mode .operations-workflow-print-report section {
@@ -2392,6 +2523,21 @@
   body.operations-workflow-print-mode .operations-workflow-print-report h2 { margin: 0 0 4mm !important; font-size: 13pt !important; }
   body.operations-workflow-print-mode .operations-workflow-print-report article { padding: 3mm 0 !important; border-top: 1px solid rgba(181,196,214,.14) !important; break-inside: avoid; }
   body.operations-workflow-print-mode .operations-workflow-print-report article:first-of-type { border-top: 0 !important; }
+  body.operations-workflow-print-mode .operations-print-inspection-evidence { break-before: page; }
+  body.operations-workflow-print-mode .operations-print-inspection-evidence .equipment-sketch { display:grid !important; grid-template-columns:1fr !important; gap:3mm !important; min-height:0 !important; padding:3mm !important; overflow:visible !important; }
+  body.operations-workflow-print-mode .operations-print-inspection-evidence .cnc-visual,
+  body.operations-workflow-print-mode .operations-print-inspection-evidence .compressor-visual { height:58mm !important; min-height:58mm !important; transform:none !important; }
+  body.operations-workflow-print-mode .operations-print-inspection-evidence :where(.cnc-visual,.compressor-visual) { border-color:#94a3b8 !important; background:linear-gradient(#e8edf3 1px,transparent 1px),linear-gradient(90deg,#e8edf3 1px,transparent 1px),#fff !important; }
+  body.operations-workflow-print-mode .operations-print-inspection-evidence :where(.cnc-visual,.compressor-visual) span { border-color:#8093aa !important; background:#fff !important; color:#172033 !important; }
+  body.operations-workflow-print-mode .operations-print-inspection-evidence ol { display:grid !important; gap:2mm !important; margin:2mm 0 0 !important; padding-left:6mm !important; }
+  body.operations-workflow-print-mode .operations-print-inspection-evidence li { display:grid !important; gap:1mm !important; color:var(--operations-text) !important; }
+  body.operations-workflow-print-mode .operations-print-inspection-evidence li span { color:var(--operations-muted) !important; }
+  body.operations-workflow-print-mode .operations-print-sensor-history { break-before:auto; break-inside:auto !important; padding:4mm !important; }
+  body.operations-workflow-print-mode .operations-print-sensor-history > p { margin:0 0 4mm !important; }
+  body.operations-workflow-print-mode .operations-print-sensor-history .asset-series-block { margin:0 0 4mm !important; border:1px solid rgba(181,196,214,.3) !important; border-radius:6px !important; background:var(--operations-surface) !important; break-inside:avoid; }
+  body.operations-workflow-print-mode .operations-print-sensor-history .asset-series-heading { min-height:8mm !important; padding:1.5mm 3mm !important; }
+  body.operations-workflow-print-mode .operations-print-sensor-history .asset-series-chart { display:block !important; width:100% !important; height:58mm !important; min-height:58mm !important; aspect-ratio:auto !important; }
+  body.operations-workflow-print-mode .operations-print-sensor-history .asset-series-expand { display:none !important; }
 }
 
 /* Reliability workspace light mode is the final cascade owner for embedded operations surfaces. */

@@ -890,6 +890,7 @@ _LIFECYCLE_STEP_LABELS = {
     "inspection_approved": "점검 시작 대기",
     "inspection_in_progress": "점검 진행 중",
     "inspection_completed": "점검 결과 확인",
+    "inspection_closed_no_action": "점검 완료·조치 불필요",
     "recommendation_proposed": "정비안 검토 대기",
     "maintenance_requested": "정비 승인 대기",
     "maintenance_approved": "정비 시작 대기",
@@ -907,6 +908,7 @@ _LIFECYCLE_ORDER = [
     "inspection_approved",
     "inspection_in_progress",
     "inspection_completed",
+    "inspection_closed_no_action",
     "recommendation_proposed",
     "maintenance_requested",
     "maintenance_approved",
@@ -1041,6 +1043,13 @@ def _closed_loop_current_step(closed_loop: dict[str, Any]) -> str | None:
             return "maintenance_approved"
         if status == "completed":
             return "maintenance_completed"
+
+    inspection_results = _sorted_by_time(
+        closed_loop.get("inspection_results") or [],
+        keys=("recorded_at",),
+    )
+    if inspection_results and inspection_results[0].get("outcome") == "no_action_required":
+        return "inspection_closed_no_action"
 
     work_orders = _sorted_by_time(
         closed_loop.get("work_orders") or [],
