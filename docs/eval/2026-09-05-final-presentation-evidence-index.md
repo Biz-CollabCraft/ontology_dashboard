@@ -18,6 +18,7 @@
 | --- | --- | --- |
 | 판단보조 fixture 회귀 | `docs/eval/2026-09-05-ai-decision-support-briefing.md` | 필수 판단 항목, 역할별 분리, 보류 표현 확인 |
 | 120-run 표본 해석 | `docs/eval/2026-09-05-live-120-sample-rationale.md` | 8개 gold case x 15회 반복의 타당성 및 발표 문장 |
+| PR156 LLM-eval branch 흡수 | `docs/eval/2026-09-06-pr156-llm-eval-integration-note.md` | Closed-loop feedback이 Agent Review context로 이어지는지 현재 Operations 기준 확인 |
 | live LLM 품질 | `tests/eval/results/agent_summary_llm_eval_live_120_20260905_pm_fix.json` | 120/120 accepted, fallback 0, gold 1.0 |
 | 최신 workflow 비교 | `tests/eval/results/agent_workflow_baseline_live_20260905_pm_validator_fix.json` | B3 gold 1.0, PM 1.0, B1 대비 token 감소 |
 | holdout/paraphrase | `tests/eval/results/agent_summary_llm_eval_live_holdout_paraphrase_20260905_pm_overfit_check.json` | 24/24 accepted, fallback 0, gold 1.0 |
@@ -55,6 +56,7 @@
 - 실제 provider usage smoke는 GS-002 1건 기준으로 `provider_reported_rows=1`, `estimated_rows=0`을 확인했다. 이 smoke는 provider usage 수집 기능 확인이며, 기존 120-run token 수치를 대체하지 않는다.
 - cost는 가격 설정이 없어 금액으로 확정하지 않는다. `cost.status`는 `not_configured` 또는 `not_measured`로 둔다.
 - 72-row workflow 비교는 B1/B2 invalid row와 B3 fallback/reuse caveat가 있으므로, clean model-quality claim은 120-run live quality artifact를 기준으로 말한다.
+- PR156 LLM-eval branch의 남은 가치는 Closed-loop feedback 보조 근거다. 발표 본문 수치가 아니라 Q&A용 보조 설명으로만 사용한다.
 
 ## 발표에서 말할 수 있는 문장
 
