@@ -254,12 +254,15 @@ def _role_summaries(
     history_context = packet.get("maintenance_history_summary") or {}
     model_context = packet.get("model_expression_context") or {}
     ontology_context = packet.get("ontology_context") or {}
+    confidence_label = _confidence_label(packet)
     asset_label = _asset_label(packet)
     status = str(risk.get("status_grade") or "데이터 품질 보류")
     production_impact = _production_impact_label(operation_context.get("production_impact"))
     downtime = operation_context.get("estimated_downtime_minutes")
     lost_units = operation_context.get("estimated_lost_units")
-    lost_units_text = f"약 {int(lost_units)}건" if isinstance(lost_units, (int, float)) else "추정 물량"
+    lost_units_text = (
+        f"약 {int(lost_units)}건" if isinstance(lost_units, (int, float)) else "추정 물량"
+    )
     downtime_text = f"{int(downtime)}분" if isinstance(downtime, (int, float)) else "예상 정지"
     component_text = _component_text(targets)
     location_text = _location_text(targets)
@@ -268,6 +271,19 @@ def _role_summaries(
     similar_event_text = _similar_event_text(history_context)
     part_text = _part_candidate_text(ontology_context)
     primary_refs = source_refs[:3] or _packet_source_refs(packet)[:1]
+    if confidence_label == "data_quality_hold":
+        manager_quote = (
+            f"{asset_label}는 데이터 품질 보류 상태라 생산 영향과 추정 물량 손실을 "
+            "확정하지 않습니다. 유사 이력은 아직 전용 이력 계약 미연결 상태입니다. "
+            "점검 승인 여부는 데이터 보강과 이력 조회 후 검토해야 합니다."
+        )
+    else:
+        manager_quote = (
+            f"{asset_label} 위험 감지 건은 현재 생산 영향이 {production_impact}으로 분류되며, "
+            f"{downtime_text} 기준 {lost_units_text} 손실 가능성이 있습니다. "
+            f"모델 근거는 {factor_text}이고 {work_request_text} "
+            f"{similar_event_text} 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+        )
 
     quotes = {
         "field_operator": (
@@ -276,12 +292,7 @@ def _role_summaries(
             f"{factor_text}와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. "
             f"{work_request_text} {part_text}"
         ),
-        "process_manager": (
-            f"{asset_label} 위험 감지 건은 현재 생산 영향이 {production_impact}이며, "
-            f"{downtime_text} 기준 {lost_units_text} 손실 가능성이 있습니다. "
-            f"모델 근거는 {factor_text}이고 {work_request_text} "
-            f"{similar_event_text} 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
-        ),
+        "process_manager": manager_quote,
     }
     return [
         {

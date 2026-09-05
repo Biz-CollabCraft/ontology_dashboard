@@ -101,6 +101,71 @@ def test_gold_accuracy_scores_reference_answer_misses_and_forbidden_claims() -> 
     assert score["missing_required_points"]
 
 
+def test_gold_accuracy_accepts_observed_process_manager_surface_variants() -> None:
+    harness = _load_harness()
+    packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-002.json")
+    candidate = harness.compose_deterministic_agent_review_summary(packet)
+    candidate["summary"] = (
+        "CNC-S04-L04-01는 현재 warning 상태이며 예측 위험도는 82.5%입니다. "
+        "공구/마모 계통과 동력 전달 계통을 함께 확인해야 합니다."
+    )
+    candidate["role_summaries"] = [
+        {
+            "role": "field_operator",
+            "quote": (
+                "공구 매거진 및 스핀들 공구 체결부와 주축 모터를 점검하고, 관측값을 "
+                "기록한 후 정비팀 또는 생산 관리자에게 인계해야 합니다."
+            ),
+        },
+        {
+            "role": "process_manager",
+            "quote": (
+                "현재 상태는 중간 정도의 생산 영향을 미치며, 예상되는 다운타임은 120분, "
+                "손실 예상 유닛은 25개입니다. 정비 우선순위 및 승인 검토가 필요합니다."
+            ),
+        },
+    ]
+
+    score = harness._gold_accuracy(candidate, packet=packet)
+
+    assert score["role_scores"]["process_manager"]["score"] == 1.0
+    assert score["role_scores"]["process_manager"]["missing_points"] == []
+    assert "생산 영향이 중간" in score["matched_required_points"]
+    assert "25건" in score["matched_required_points"]
+
+
+def test_gold_accuracy_keeps_data_quality_hold_process_manager_miss_visible() -> None:
+    harness = _load_harness()
+    packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-007.json")
+    candidate = harness.compose_deterministic_agent_review_summary(packet)
+    candidate["summary"] = (
+        "CNC-S04-L05-01는 데이터 품질 보류 상태라 위험 등급과 예측 위험도를 "
+        "확정하지 않습니다. 근거 공백이 있습니다."
+    )
+    candidate["role_summaries"] = [
+        {
+            "role": "field_operator",
+            "quote": "데이터 품질 보류 상태에 대한 증거를 기록하십시오.",
+        },
+        {
+            "role": "process_manager",
+            "quote": (
+                "현재 CNC-S04-L05-01의 생산 영향은 낮으며, 예상 다운타임은 40분입니다. 정비 "
+                "이력이 부족하여 생산 계획에 미치는 영향이 불확실합니다."
+            ),
+        },
+    ]
+
+    score = harness._gold_accuracy(candidate, packet=packet)
+
+    assert score["role_scores"]["process_manager"]["score"] == 0.0
+    assert score["role_scores"]["process_manager"]["missing_points"] == [
+        "추정 물량 손실",
+        "유사 이력은 아직",
+        "점검 승인",
+    ]
+
+
 def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:
     output = tmp_path / "agent-summary-llm-eval.json"
     env = {

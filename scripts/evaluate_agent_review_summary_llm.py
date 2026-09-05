@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -613,7 +614,50 @@ def _gold_forbidden_points(answer: dict[str, Any]) -> list[str]:
 def _contains_point(text: str, point: Any) -> bool:
     if point in (None, ""):
         return True
-    return str(point) in text
+    point_text = str(point)
+    if point_text in text:
+        return True
+    return any(re.search(pattern, text) for pattern in _gold_point_surface_patterns(point_text))
+
+
+def _gold_point_surface_patterns(point: str) -> list[str]:
+    escaped = re.escape(point)
+    patterns = {
+        "생산 영향이 없음": [
+            r"생산(?:에 미치는)? 영향(?:은|이)? 없",
+            r"생산 영향\s*없",
+        ],
+        "생산 영향이 낮은": [
+            r"생산(?:에 미치는)? 영향(?:은|이)? 낮",
+            r"낮은 생산 영향",
+        ],
+        "생산 영향이 중간": [
+            r"생산(?:에 미치는)? 영향(?:은|이)? 중간",
+            r"중간(?: 정도| 수준)?의 생산 영향",
+        ],
+        "생산 영향이 높은": [
+            r"생산(?:에 미치는)? 영향(?:은|이)? 높",
+            r"높은 생산 영향",
+        ],
+        "점검 승인": [
+            r"점검 승인(?: 여부)?",
+            r"승인 검토",
+            r"관리자 승인",
+        ],
+        "전달": [
+            r"전달",
+            r"인계",
+        ],
+    }
+    count_match = re.fullmatch(r"(\d+)건", point)
+    if count_match:
+        count = re.escape(count_match.group(1))
+        return [
+            rf"{count}\s*건",
+            rf"{count}\s*개",
+            rf"{count}\s*유닛",
+        ]
+    return patterns.get(point, [escaped])
 
 
 def _summary_prose(summary: dict[str, Any]) -> str:

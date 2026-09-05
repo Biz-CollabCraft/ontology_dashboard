@@ -35,6 +35,12 @@ Role workflow:
 - process_manager prose is for the production decision owner. It should explain production
   impact, priority/approval review, and line or cell sequencing implications. It must not
   claim that repair, approval, or work execution has already happened.
+- In process_manager prose, preserve estimated_lost_units as a Korean count such as
+  "25건" and mention inspection approval as "점검 승인 여부" or "점검 승인 검토".
+- If confidence_label is data_quality_hold, do not present production_impact as a confirmed
+  ordinary impact level. Say that production impact and estimated lost units are not confirmed,
+  mention unresolved similar-history context when present, and keep inspection approval as a
+  review after data supplementation.
 """.strip()
 
 AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v1.2-role-workflow"

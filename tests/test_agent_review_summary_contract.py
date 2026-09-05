@@ -138,11 +138,36 @@ def test_deterministic_agent_review_summary_fails_closed_on_data_quality_hold() 
     packet = json.loads((GOLD_ROOT / "GS-007.json").read_text(encoding="utf-8"))
 
     summary = compose_deterministic_agent_review_summary(packet)
+    process_quote = next(
+        item["quote"]
+        for item in summary["role_summaries"]
+        if item["role"] == "process_manager"
+    )
 
     assert summary["confidence_label"] == "data_quality_hold"
     assert summary["inspection_focus"] == []
     assert "확정하지 않습니다" in summary["summary"]
     assert "정비" not in summary["summary"]
+    assert "추정 물량 손실" in process_quote
+    assert "유사 이력은 아직" in process_quote
+    assert "점검 승인" in process_quote
+    assert "생산 영향이 낮은" not in process_quote
+    assert "생산 영향은 낮" not in process_quote
+
+
+def test_deterministic_agent_review_summary_keeps_zero_loss_manager_context() -> None:
+    packet = json.loads((GOLD_ROOT / "GS-001.json").read_text(encoding="utf-8"))
+
+    summary = compose_deterministic_agent_review_summary(packet)
+    process_quote = next(
+        item["quote"]
+        for item in summary["role_summaries"]
+        if item["role"] == "process_manager"
+    )
+
+    assert "생산 영향이 없음" in process_quote
+    assert "0건" in process_quote
+    assert "점검 승인" in process_quote
 
 
 def test_validated_agent_review_summary_discards_invalid_candidate() -> None:
