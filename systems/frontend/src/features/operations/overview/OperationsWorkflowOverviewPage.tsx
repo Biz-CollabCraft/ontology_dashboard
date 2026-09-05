@@ -522,8 +522,14 @@ function operationsMonitorStatusLabel(status: OperationsRiskStatus, workStatus?:
   return "정상";
 }
 
-function alertBadgeCount(assets: OperationsAsset[]): number {
-  return assets.filter((asset) => mapTone(asset.status) !== "normal").length;
+const ACKNOWLEDGED_ALERTS_STORAGE_KEY = "operations.acknowledged-alerts.v1";
+
+function assetAlertKey(asset: OperationsAsset): string {
+  return `${asset.assetId}:${asset.eventId ?? asset.observedAt}`;
+}
+
+function alertBadgeCount(assets: OperationsAsset[], acknowledgedAlerts: Set<string>): number {
+  return assets.filter((asset) => mapTone(asset.status) !== "normal" && !acknowledgedAlerts.has(assetAlertKey(asset))).length;
 }
 
 function displayPartLabel(value: boolean | null): string {
@@ -1634,6 +1640,7 @@ function FactoryMonitoringMapPanel({
   postMaintenancePredictions,
   planningBasis,
   liveDemo,
+  acknowledgedAlerts,
   focusMode,
   onFocusModeChange,
   onPreviewAssetSlot,
@@ -1643,6 +1650,7 @@ function FactoryMonitoringMapPanel({
   postMaintenancePredictions: Record<string, PostMaintenancePredictionSummary>;
   planningBasis: { value: string; fallback: boolean };
   liveDemo: RealtimeDemoSnapshot;
+  acknowledgedAlerts: Set<string>;
   focusMode: "all" | "exceptions";
   onFocusModeChange: (mode: "all" | "exceptions") => void;
   onPreviewAssetSlot: (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => void;
@@ -1682,7 +1690,7 @@ function FactoryMonitoringMapPanel({
                     : siteCells.some((cell) => cell.summary?.attention)
                       ? "attention"
                       : "normal";
-              const siteBadgeCount = alertBadgeCount(siteAssets);
+              const siteBadgeCount = alertBadgeCount(siteAssets, acknowledgedAlerts);
               return (
                 <article key={site} className={`operations-factory-line-row tone-${siteTone}`}>
                   <header>
@@ -1708,6 +1716,7 @@ function FactoryMonitoringMapPanel({
                             const liveStatus = isLiveDemoFocus ? liveDemo.status : null;
                             const liveRisk = isLiveDemoFocus ? liveDemo.risk : null;
                             const tone = asset ? mapTone(liveStatus ?? currentPrediction?.statusGrade ?? asset.status) : "slot";
+                            const alertAcknowledged = asset ? acknowledgedAlerts.has(assetAlertKey(asset)) : false;
                             const title = asset
                               ? `${displayFactorySlotName(slot, cell)} · ${operationsMonitorStatusLabel(liveStatus ?? currentPrediction?.statusGrade ?? asset.status)} · ${formatProbability(liveRisk ?? currentPrediction?.failureProbability ?? asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}${isLiveDemoFocus ? " · 최근 Result 수신" : ""}`
                               : `${cell.label} · ${slot.label} · 설비 미연결`;
@@ -1723,7 +1732,7 @@ function FactoryMonitoringMapPanel({
                               >
                                 <span>{displayAssetShortName(asset)}</span>
                                 {isLiveDemoFocus ? <small className="operations-live-node-risk">{formatProbability(liveRisk)}</small> : null}
-                                {tone !== "normal" ? <b className="operations-asset-alert-badge" aria-label={`${operationsMonitorStatusLabel(liveStatus ?? asset.status)} 알림`}>{isLiveDemoFocus ? "LIVE" : tone === "critical" ? "!" : "1"}</b> : null}
+                                {tone !== "normal" && !alertAcknowledged ? <b className="operations-asset-alert-badge" aria-label={`${operationsMonitorStatusLabel(liveStatus ?? asset.status)} 알림`}>{isLiveDemoFocus ? "LIVE" : tone === "critical" ? "!" : "1"}</b> : null}
                               </button>
                             ) : (
                               <div key={slot.id} className={`operations-factory-asset-node ${tone} ${slot.kind}`} title={title} aria-label={title}>
@@ -1831,6 +1840,16 @@ export function OperationsWorkflowOverviewPage({
   const [detailDrawerTab, setDetailDrawerTab] = useState<DrawerTab>("status");
   const [factorySlotPreview, setFactorySlotPreview] = useState<FactorySlotPreview | null>(null);
   const [factoryFocusMode, setFactoryFocusMode] = useState<"all" | "exceptions">("exceptions");
+  const acknowledgedAlertsStorageKey = `${ACKNOWLEDGED_ALERTS_STORAGE_KEY}:${currentUserId}`;
+  const [acknowledgedAlerts, setAcknowledgedAlerts] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(`${ACKNOWLEDGED_ALERTS_STORAGE_KEY}:${currentUserId}`) ?? "[]");
+      return new Set(Array.isArray(stored) ? stored.filter((item): item is string => typeof item === "string") : []);
+    } catch {
+      return new Set();
+    }
+  });
   const [postMaintenancePredictions, setPostMaintenancePredictions] = useState<Record<string, PostMaintenancePredictionSummary>>({});
   const autoOpenedDrawerKeyRef = useRef<string | null>(null);
   const suppressAutoOpenDrawerRef = useRef(false);
@@ -1845,6 +1864,23 @@ export function OperationsWorkflowOverviewPage({
       return { ...current, [assetId]: prediction };
     });
   }, []);
+  const acknowledgeAlert = useCallback((asset: OperationsAsset) => {
+    const alertKey = assetAlertKey(asset);
+    setAcknowledgedAlerts((current) => {
+      if (current.has(alertKey)) return current;
+      const next = new Set(current);
+      next.add(alertKey);
+      const retained = [...next].slice(-1000);
+      return new Set(retained);
+    });
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(acknowledgedAlertsStorageKey, JSON.stringify([...acknowledgedAlerts]));
+    } catch {
+      // Acknowledgement still works for the current session when storage is unavailable.
+    }
+  }, [acknowledgedAlerts, acknowledgedAlertsStorageKey]);
   useEffect(() => {
     if (!selectedAsset || detailDrawerOpen) return;
     if (suppressAutoOpenDrawerRef.current) return;
@@ -1856,10 +1892,11 @@ export function OperationsWorkflowOverviewPage({
     const drawerKey = `${selectedAsset.assetId}:${selectedEventId}`;
     if (autoOpenedDrawerKeyRef.current === drawerKey) return;
     autoOpenedDrawerKeyRef.current = drawerKey;
+    acknowledgeAlert(selectedAsset);
     setFactorySlotPreview(null);
     setDetailDrawerOpen(true);
     setDetailDrawerTab("status");
-  }, [detailDrawerOpen, selectedAsset, selectedEvent?.eventId]);
+  }, [acknowledgeAlert, detailDrawerOpen, selectedAsset, selectedEvent?.eventId]);
   // Live demo ticks update cards and map emphasis only. They must not mutate
   // the selected Case because that writes asset_id/event_id into the URL and
   // reopens the detail drawer after login or after the user closes it.
@@ -1970,6 +2007,8 @@ export function OperationsWorkflowOverviewPage({
   const previewInDrawer = (assetId: string, eventId: string | null) => {
     suppressAutoOpenDrawerRef.current = false;
     setFactorySlotPreview(null);
+    const asset = model.assets.find((candidate) => candidate.assetId === assetId);
+    if (asset) acknowledgeAlert(asset);
     onPreviewAsset(assetId, eventId);
     setDetailDrawerOpen(true);
     setDetailDrawerTab("status");
@@ -1978,6 +2017,7 @@ export function OperationsWorkflowOverviewPage({
   const previewFactoryAssetSlot = (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => {
     suppressAutoOpenDrawerRef.current = false;
     setFactorySlotPreview({ slot, cell });
+    acknowledgeAlert(asset);
     onPreviewAsset(asset.assetId, asset.eventId);
     setDetailDrawerOpen(true);
     setDetailDrawerTab("status");
@@ -2053,6 +2093,7 @@ export function OperationsWorkflowOverviewPage({
         postMaintenancePredictions={postMaintenancePredictions}
         planningBasis={planningBasis}
         liveDemo={liveDemo}
+        acknowledgedAlerts={acknowledgedAlerts}
         focusMode={factoryFocusMode}
         onFocusModeChange={setFactoryFocusMode}
         onPreviewAssetSlot={previewFactoryAssetSlot}
