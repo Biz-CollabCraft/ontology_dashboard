@@ -1053,21 +1053,30 @@ class ManufacturingPredictiveMaintenanceService:
         retrieved_at: datetime,
     ) -> dict[str, Any]:
         fixture_root = self.root / "data" / "fixtures" / "operation_context"
+        cutoff = datetime(2026, 9, 2, tzinfo=timezone(timedelta(hours=9)))
+        if identity.decision_as_of < cutoff:
+            production_context = "operational-decision-context-evidence-aligned-v1.json"
+            maintenance_context = "maintenance-readiness-context-evidence-aligned-v1.json"
+            quality_context = "quality-delivery-context-evidence-aligned-v1.json"
+        else:
+            production_context = "operational-decision-context-v1.json"
+            maintenance_context = "maintenance-readiness-context-v1.json"
+            quality_context = "quality-delivery-context-v1.json"
 
         def load_context(name: str) -> dict[str, Any]:
             return json.loads((fixture_root / name).read_text(encoding="utf-8"))
 
         return {
             "production": FixtureProductionDecisionContextReadPort(
-                context=load_context("operational-decision-context-v1.json"),
+                context=load_context(production_context),
                 source_ref="fixture:production",
             ).lookup(identity=identity, retrieved_at=retrieved_at),
             "maintenance_readiness": FixtureMaintenanceReadinessContextReadPort(
-                context=load_context("maintenance-readiness-context-v1.json"),
+                context=load_context(maintenance_context),
                 source_ref="fixture:maintenance",
             ).lookup(identity=identity, retrieved_at=retrieved_at),
             "quality_delivery": FixtureQualityDeliveryContextReadPort(
-                context=load_context("quality-delivery-context-v1.json"),
+                context=load_context(quality_context),
                 source_ref="fixture:quality",
             ).lookup(identity=identity, retrieved_at=retrieved_at),
         }
