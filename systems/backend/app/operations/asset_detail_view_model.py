@@ -891,6 +891,7 @@ _LIFECYCLE_STEP_LABELS = {
     "inspection_in_progress": "점검 진행 중",
     "inspection_completed": "점검 결과 확인",
     "inspection_closed_no_action": "점검 완료·조치 불필요",
+    "inspection_data_check_required": "추가 데이터 확인 필요",
     "recommendation_proposed": "정비안 검토 대기",
     "maintenance_requested": "정비 승인 대기",
     "maintenance_approved": "정비 시작 대기",
@@ -909,6 +910,7 @@ _LIFECYCLE_ORDER = [
     "inspection_in_progress",
     "inspection_completed",
     "inspection_closed_no_action",
+    "inspection_data_check_required",
     "recommendation_proposed",
     "maintenance_requested",
     "maintenance_approved",
@@ -1048,8 +1050,12 @@ def _closed_loop_current_step(closed_loop: dict[str, Any]) -> str | None:
         closed_loop.get("inspection_results") or [],
         keys=("recorded_at",),
     )
-    if inspection_results and inspection_results[0].get("outcome") == "no_action_required":
-        return "inspection_closed_no_action"
+    if inspection_results:
+        inspection_outcome = inspection_results[0].get("outcome")
+        if inspection_outcome == "no_action_required":
+            return "inspection_closed_no_action"
+        if inspection_outcome == "data_check_required":
+            return "inspection_data_check_required"
 
     work_orders = _sorted_by_time(
         closed_loop.get("work_orders") or [],
@@ -1082,11 +1088,24 @@ def _closed_loop_current_step(closed_loop: dict[str, Any]) -> str | None:
 
 
 def _completed_lifecycle_steps(current_step: str) -> list[str]:
+    if current_step in {
+        "inspection_closed_no_action",
+        "inspection_data_check_required",
+    }:
+        current_step = "inspection_completed"
+    progress_order = [
+        step
+        for step in _LIFECYCLE_ORDER
+        if step not in {
+            "inspection_closed_no_action",
+            "inspection_data_check_required",
+        }
+    ]
     try:
-        index = _LIFECYCLE_ORDER.index(current_step)
+        index = progress_order.index(current_step)
     except ValueError:
         return []
-    return _LIFECYCLE_ORDER[:index]
+    return progress_order[:index]
 
 
 def _closed_loop_primary_action(actions: list[dict[str, Any]]) -> dict[str, Any] | None:

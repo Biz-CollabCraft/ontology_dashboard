@@ -73,6 +73,7 @@ export type MaintenanceWorkflowDisplayStatus =
   | "inspection_started"
   | "inspection_completed"
   | "inspection_closed_no_action"
+  | "inspection_data_check_required"
   | "maintenance_started"
   | "maintenance_completed"
   | "observation_pending"
@@ -104,9 +105,9 @@ function displayStatus(
   );
   const inspectionResult = latest(lineage.inspection_results ?? []);
   if (inspectionWorkOrder?.status === "completed") {
-    return inspectionResult?.outcome === "no_action_required"
-      ? "inspection_closed_no_action"
-      : "inspection_completed";
+    if (inspectionResult?.outcome === "no_action_required") return "inspection_closed_no_action";
+    if (inspectionResult?.outcome === "data_check_required") return "inspection_data_check_required";
+    return "inspection_completed";
   }
   if (inspectionWorkOrder?.status === "in_progress") return "inspection_started";
   if (inspectionWorkOrder?.status === "approved") return "assigned";

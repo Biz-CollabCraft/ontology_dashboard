@@ -98,6 +98,7 @@ type WorkStatus =
   | "inspection_started"
   | "inspection_completed"
   | "inspection_closed_no_action"
+  | "inspection_data_check_required"
   | "maintenance_started"
   | "maintenance_completed"
   | "observation_pending"
@@ -214,6 +215,7 @@ const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
   inspection_started: "점검 중",
   inspection_completed: "점검 완료·정비 검토",
   inspection_closed_no_action: "점검 완료·조치 불필요",
+  inspection_data_check_required: "추가 데이터 확인 필요",
   maintenance_started: "정비 중",
   maintenance_completed: "정비 완료",
   observation_pending: "정비 후 관측 대기",
@@ -227,6 +229,7 @@ const WORK_STATUS_ACTION: Record<WorkStatus, { label: string; disabled: boolean 
   inspection_started: { label: "점검 결과 기록", disabled: false },
   inspection_completed: { label: "비용 확인·정비 판단", disabled: true },
   inspection_closed_no_action: { label: "처리 완료", disabled: true },
+  inspection_data_check_required: { label: "데이터 확인 대기", disabled: true },
   maintenance_started: { label: "정비 완료", disabled: false },
   maintenance_completed: { label: "정비 후 관측 대기", disabled: true },
   observation_pending: { label: "관측 데이터 대기", disabled: true },
@@ -275,6 +278,7 @@ const CLOSED_LOOP_LIFECYCLE_LABEL: Record<OperationsClosedLoopLifecycleStep, str
   inspection_in_progress: "점검 중",
   inspection_completed: "점검 완료",
   inspection_closed_no_action: "점검 종결",
+  inspection_data_check_required: "추가 데이터 확인",
   recommendation_proposed: "정비안 제안",
   maintenance_requested: "정비 요청",
   maintenance_approved: "정비 승인",
@@ -1107,6 +1111,8 @@ function workStatusFromLifecycleSummary(summary: OperationsClosedLoopLifecycleSu
       return "assigned";
     case "inspection_closed_no_action":
       return "inspection_closed_no_action";
+    case "inspection_data_check_required":
+      return "inspection_data_check_required";
     case "inspection_in_progress":
     case "maintenance_in_progress":
       return "inspection_started";
@@ -1152,6 +1158,7 @@ function closedLoopActionForStatus(closedLoop: OperationsClosedLoopSummary | nul
     inspection_started: ["complete_inspection_work_order", "complete_inspection", "complete_work_order"],
     inspection_completed: [],
     inspection_closed_no_action: [],
+    inspection_data_check_required: [],
     maintenance_started: ["complete_maintenance_work_order", "complete_maintenance", "complete_work_order"],
     maintenance_completed: [],
     observation_pending: [],

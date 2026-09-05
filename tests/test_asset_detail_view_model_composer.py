@@ -874,6 +874,57 @@ def test_composer_projects_closed_loop_lifecycle_action_and_timeline() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("outcome", "expected_step", "expected_label"),
+    [
+        ("no_action_required", "inspection_closed_no_action", "점검 완료·조치 불필요"),
+        ("data_check_required", "inspection_data_check_required", "추가 데이터 확인 필요"),
+    ],
+)
+def test_composer_projects_terminal_and_hold_inspection_outcomes(
+    outcome: str,
+    expected_step: str,
+    expected_label: str,
+) -> None:
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=ARTIFACT,
+        closed_loop={
+            "work_orders": [
+                {
+                    "work_order_id": "WO-INS-001",
+                    "work_type": "inspection",
+                    "status": "completed",
+                    "created_at": "2026-08-06T03:10:00Z",
+                    "updated_at": "2026-08-06T03:20:00Z",
+                }
+            ],
+            "inspection_results": [
+                {
+                    "inspection_result_id": "INSPECTION-RESULT-001",
+                    "work_order_id": "WO-INS-001",
+                    "outcome": outcome,
+                    "recorded_at": "2026-08-06T03:20:00Z",
+                }
+            ],
+        },
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    summary = payload["closed_loop"]["lifecycle_summary"]
+    assert summary["current_step"] == expected_step
+    assert summary["current_step_label"] == expected_label
+    assert summary["next_step"] is None
+    assert summary["completed_steps"] == [
+        "prediction",
+        "evidence",
+        "decision",
+        "inspection_requested",
+        "inspection_approved",
+        "inspection_in_progress",
+    ]
+
+
 def test_composer_preserves_empty_recommendation_as_gap_without_synthesizing_action() -> None:
     artifact = json.loads(json.dumps(ARTIFACT))
     artifact["evidence_payload"]["recommended_actions"] = []
