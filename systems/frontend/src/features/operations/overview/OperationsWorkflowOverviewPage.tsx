@@ -1754,6 +1754,123 @@ function FactoryMonitoringMapPanel({
   );
 }
 
+function EngineerFactoryDashboard({
+  model,
+  selectedAsset,
+  factoryCells,
+  planningBasis,
+  liveDemo,
+  onPreviewAssetSlot,
+  onPreviewAsset,
+  onRefresh,
+}: {
+  model: OperationsBootstrapModel;
+  selectedAsset: OperationsAsset | null;
+  factoryCells: FactoryCellLayout[];
+  planningBasis: { value: string; fallback: boolean };
+  liveDemo: RealtimeDemoSnapshot;
+  onPreviewAssetSlot: (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => void;
+  onPreviewAsset: (assetId: string, eventId: string | null) => void;
+  onRefresh: () => void;
+}) {
+  const selected = selectedAsset ?? model.assets.find((asset) => asset.assetId === liveDemo.assetId) ?? model.assets[0] ?? null;
+  const actionable = model.assets.filter((asset) => asset.status === "critical" || asset.status === "warning").length;
+  const held = model.assets.filter((asset) => asset.status === "data_quality_hold").length;
+  const running = Math.max(0, model.metrics.totalAssets - held);
+  const recentEvents = [...model.events]
+    .sort((left, right) => (timestampMillis(right.observedAt) ?? 0) - (timestampMillis(left.observedAt) ?? 0))
+    .slice(0, 3);
+  const riskValues = model.events
+    .filter((event) => event.assetId === selected?.assetId && typeof event.failureProbability === "number")
+    .sort((left, right) => (timestampMillis(left.observedAt) ?? 0) - (timestampMillis(right.observedAt) ?? 0))
+    .map((event) => event.failureProbability as number)
+    .slice(-18);
+  const chartValues = riskValues.length > 1
+    ? riskValues
+    : selected?.failureProbability !== null && selected?.failureProbability !== undefined
+      ? [Math.max(0, selected.failureProbability * 0.72), selected.failureProbability]
+      : [];
+  const chartPoints = chartValues.map((value, index) => {
+    const x = chartValues.length === 1 ? 50 : (index / (chartValues.length - 1)) * 100;
+    return `${x.toFixed(2)},${(100 - value * 100).toFixed(2)}`;
+  }).join(" ");
+  const selectedFactors = selected?.topFactors.filter((factor) => typeof factor.value === "number").slice(0, 4) ?? [];
+  const statusTone = selected?.status ?? "data_quality_hold";
+
+  return (
+    <div className="engineer-factory-dashboard" data-testid="engineer-factory-dashboard">
+      <header className="engineer-factory-header">
+        <div><strong>공장 현황</strong><span>{model.context.workspaceName} · {model.lineRisk.length.toLocaleString()}개 라인 · 설비 {model.metrics.totalAssets.toLocaleString()}대</span></div>
+        <div className="engineer-factory-live"><i /><b>실시간 수집 중</b><span>기준 시각 {formatTimestamp(model.context.observedAt ?? model.context.refreshedAt)}</span><button type="button" onClick={onRefresh}><RefreshCw size={13} />새로고침</button></div>
+      </header>
+
+      <section className="engineer-factory-kpis" aria-label="공장 핵심 현황">
+        <article><span>즉시 조치 필요 설비</span><strong>{actionable}<small>대</small></strong><p>긴급·경고 등급으로 현장 확인이 필요합니다.</p></article>
+        <article><span>가동 중 설비</span><strong>{running}<small>/ {model.metrics.totalAssets}대</small></strong><p>데이터 품질 보류 {held}대는 별도로 구분합니다.</p></article>
+        <article><span>예상 정지 영향</span><strong>{formatMinutes(model.metrics.estimatedDowntimeMinutes)}</strong><p>현재 위험 설비의 예측 비가동 시간 합계입니다.</p></article>
+      </section>
+
+      <section className="engineer-factory-main-grid">
+        <section className="engineer-factory-card engineer-equipment-list" aria-label="라인 셀 설비 상태">
+          <header><strong>라인 · 셀 · 설비 상태</strong><span>설비를 누르면 현황이 함께 바뀝니다</span></header>
+          <div className="engineer-equipment-scroll">
+            {factoryCells.map((cell) => (
+              <article key={cell.id}>
+                <div><b>{cell.label}</b><small>{cell.summary ? `${cell.summary.assets.length}대` : "미연결"}</small></div>
+                <div className="engineer-equipment-slots">
+                  {cell.slots.map((slot) => {
+                    const asset = slot.asset;
+                    const active = asset?.assetId === selected?.assetId;
+                    const live = asset?.assetId === liveDemo.assetId;
+                    const tone = asset ? mapTone(live ? liveDemo.status : asset.status) : "slot";
+                    return asset ? (
+                      <button
+                        type="button"
+                        key={slot.id}
+                        className={`tone-${tone} ${active ? "is-selected" : ""}`}
+                        onClick={() => onPreviewAssetSlot(asset, slot, cell)}
+                        title={`${displayAssetName(asset)} · ${operationsMonitorStatusLabel(live ? liveDemo.status : asset.status)}`}
+                      >
+                        <span>{displayAssetShortName(asset)}</span>
+                        <small>{operationsMonitorStatusLabel(live ? liveDemo.status : asset.status)}</small>
+                      </button>
+                    ) : null;
+                  })}
+                </div>
+              </article>
+            ))}
+          </div>
+          <footer className="engineer-equipment-legend">
+            <span><i className="normal" />정상</span><span><i className="attention" />주의</span><span><i className="critical" />긴급</span><span><i className="hold" />확인 필요</span>
+          </footer>
+        </section>
+
+        <section className="engineer-factory-card engineer-risk-trend" aria-label="선택 설비 위험 추세">
+          <header><div><strong>위험 점수 추세 · 최근 관측</strong><span>{selected ? `${displayAssetName(selected)} · ${selected.assetId}` : "설비를 선택하세요"}</span></div><b className={`tone-${statusTone}`}>{formatProbability(selected?.failureProbability ?? null)}</b></header>
+          {chartPoints ? <div className="engineer-risk-chart"><svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="위험 점수 추세"><rect y="0" width="100" height="38" className="risk-zone" /><rect y="38" width="100" height="20" className="attention-zone" /><rect y="58" width="100" height="42" className="normal-zone" /><line x1="0" x2="100" y1="38" y2="38" /><line x1="0" x2="100" y1="58" y2="58" /><polyline points={chartPoints} /></svg><div><span>이전 관측</span><span>현재</span></div></div> : <OperationsState kind="empty" title="위험 추세 없음" detail="선택 설비의 위험 관측이 아직 연결되지 않았습니다." />}
+          <footer><span>현재 상태 <b>{operationsMonitorStatusLabel(selected?.status ?? "data_quality_hold")}</b></span><span>{planningBasis.value}</span></footer>
+        </section>
+
+        <section className="engineer-factory-card engineer-recent-events" aria-label="최근 이벤트">
+          <header><strong>최근 이벤트</strong><span>최근 {recentEvents.length}건</span></header>
+          <div>{recentEvents.map((event) => <button type="button" key={event.eventId} onClick={() => onPreviewAsset(event.assetId, event.eventId)}><span><OperationsStatusBadge status={event.status} /><time>{formatTimestamp(event.observedAt)}</time></span><strong>{displayEventLabel(event.eventId)}</strong><small>{displayEventAssetName(event)} · {event.line}</small><p>{fieldFailureLabel(event.predictedFailureType)} · {DECISION_LABEL[event.recommendedDecision]}</p></button>)}</div>
+        </section>
+      </section>
+
+      <section className="engineer-factory-bottom-grid">
+        <section className="engineer-factory-card engineer-evidence-summary">
+          <header><strong>선택 설비 근거 요약</strong><span>{selected?.observedAt ? `${formatTimestamp(selected.observedAt)} 관측` : "관측 시각 없음"}</span></header>
+          {selected ? <><div className="engineer-evidence-lead"><OperationsStatusBadge status={selected.status} /><b>{fieldFailureLabel(selected.predictedFailureType)}</b></div><ol>{selected.topFactors.slice(0, 4).map((factor) => <li key={factor.id}>{fieldFactorSymptom(factor)} · 기여도 {Math.round(Math.abs(factor.contribution) * 100)}%</li>)}</ol><dl><div><dt>담당자</dt><dd>{selected.assignedEngineer ?? "미배정"}</dd></div><div><dt>예상 정지</dt><dd>{formatMinutes(selected.estimatedDowntimeMinutes)}</dd></div><div><dt>부품</dt><dd>{displayPartLabel(selected.sparePartAvailable)}</dd></div><div><dt>권고</dt><dd>{DECISION_LABEL[selected.recommendedDecision]}</dd></div></dl></> : <OperationsState kind="empty" title="선택 설비 없음" detail="상태맵에서 설비를 선택하면 근거가 표시됩니다." />}
+        </section>
+        <section className="engineer-factory-card engineer-live-signals">
+          <header><strong>실시간 상태 신호</strong><span>위험 기여 상위 {selectedFactors.length}건</span></header>
+          {selectedFactors.length ? <div>{selectedFactors.map((factor) => { const ratio = Math.min(100, Math.max(8, Math.abs(factor.contribution) * 100)); return <article key={factor.id}><i><b style={{ height: `${ratio}%` }} /></i><strong>{typeof factor.value === "number" ? factor.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) : "-"}<small>{factor.unit ?? ""}</small></strong><span>{displaySensorLabel(factor.feature, factor.label)}</span></article>; })}</div> : <OperationsState kind="empty" title="상태 신호 없음" detail="선택 설비의 센서 기여 정보가 아직 연결되지 않았습니다." />}
+        </section>
+      </section>
+    </div>
+  );
+}
+
 export function OperationsWorkflowOverviewPage({
   model,
   role,
@@ -2024,7 +2141,19 @@ export function OperationsWorkflowOverviewPage({
   };
 
   return (
-    <div className="operations-page operations-overview-page" data-testid="operations-overview">
+    <div className="operations-page operations-overview-page" data-testid="operations-overview" data-role={role}>
+      {role === "field_operator" ? (
+        <EngineerFactoryDashboard
+          model={model}
+          selectedAsset={selectedAsset}
+          factoryCells={factoryCells}
+          planningBasis={planningBasis}
+          liveDemo={liveDemo}
+          onPreviewAssetSlot={previewFactoryAssetSlot}
+          onPreviewAsset={previewInDrawer}
+          onRefresh={onRefresh}
+        />
+      ) : <>
       <section className="operations-monitoring-hero" aria-label="실시간 공장 모니터링 현황">
         <div>
           <span>실시간 공장 모니터링</span>
@@ -2207,7 +2336,7 @@ export function OperationsWorkflowOverviewPage({
             {selectedAsset
               ? experienceKind === "executive"
                 ? `${displayFactoryAssetName(selectedAsset.assetId) ?? displayAssetName(selectedAsset)} · 운영 리스크 확인`
-                : role === "field_operator"
+                : String(role) === "field_operator"
                 ? `${displayFactoryAssetName(selectedAsset.assetId) ?? displayAssetName(selectedAsset)} · ${operationsMonitorStatusLabel(selectedAsset.status, selectedClosedLoopStatus)}`
                 : `${displayFactoryAssetName(selectedAsset.assetId) ?? displayAssetName(selectedAsset)} · 생산 영향 확인`
               : "선택된 설비가 없습니다"}
@@ -2215,7 +2344,7 @@ export function OperationsWorkflowOverviewPage({
           <p>
             {experienceKind === "executive"
               ? `고위험 설비 ${(metrics.critical + metrics.warning).toLocaleString()}대 · 판단 대기 ${metrics.pendingDecisions.toLocaleString()}건 · 예상 다운타임 ${formatMinutes(metrics.estimatedDowntimeMinutes)}. 같은 Decision Case 근거로 Executive Brief를 생성할 수 있습니다.`
-              : role === "field_operator"
+              : String(role) === "field_operator"
               ? fieldSummary
               : `${agentSummaryLine} · 상세 설명은 설비 클릭 후 센서 그래프 아래에서 확인합니다.`}
           </p>
@@ -2245,7 +2374,7 @@ export function OperationsWorkflowOverviewPage({
             </div>
           </OperationsPanel>
         </div>
-      ) : role === "field_operator" ? (
+      ) : String(role) === "field_operator" ? (
         <div className="operations-role-overview operations-role-overview-wide">
           <OperationsPanel title="우선순위" eyebrow="점검 요청 기준" className="operations-today-panel">
             <div className="operations-order-board">
@@ -2293,6 +2422,7 @@ export function OperationsWorkflowOverviewPage({
         selectedAssetId={selectedAsset?.assetId ?? null}
         onPreview={previewInDrawer}
       />
+      </>}
 
       {(drawerAsset || factorySlotPreview) && detailDrawerOpen ? (
         <div className="operations-detail-drawer-layer" role="presentation">

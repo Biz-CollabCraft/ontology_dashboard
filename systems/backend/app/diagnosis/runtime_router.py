@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import hmac
 import json
 import os
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
@@ -36,6 +39,193 @@ router = APIRouter(
 internal_router = APIRouter(prefix="/internal", tags=["prediction-result-inbox"])
 PREDICTION_RESULT_INGEST_TOKEN_ENV = "PREDICTION_RESULT_INGEST_TOKEN"
 PREDICTION_RESULT_INGEST_ORG_ENV = "PREDICTION_RESULT_INGEST_ORGANIZATION_ID"
+GEN_DATA_OUTPUT_ROOT_ENV = "GEN_DATA_OUTPUT_ROOT"
+
+
+def _risk_from_file_record(record: dict[str, Any]) -> float:
+    measurements = record.get("measurements") or {}
+    if record.get("asset_type") == "compressor":
+        zone_floor = {
+            "attention": 0.45,
+            "warning": 0.58,
+            "alert": 0.72,
+            "danger": 0.86,
+        }.get(str(measurements.get("relative_vibration_zone", "")).lower(), 0.0)
+        vibration_score = min(abs(float(measurements.get("relative_vibration_z") or 0)) / 4.0, 1.0)
+        return round(max(zone_floor, vibration_score), 4)
+    wear = min(float(measurements.get("tool_wear_min") or 0) / 240.0, 1.0)
+    torque = min(float(measurements.get("torque_nm") or 0) / 80.0, 1.0)
+    temperature_gap = max(
+        float(measurements.get("process_temperature_k") or 0)
+        - float(measurements.get("air_temperature_k") or 0),
+        0.0,
+    )
+    return round(min(wear * 0.68 + torque * 0.22 + min(temperature_gap / 15.0, 1.0) * 0.1, 1.0), 4)
+
+
+def _risk_status(score: float) -> str:
+    if score >= 0.75:
+        return "critical"
+    if score >= 0.55:
+        return "warning"
+    if score >= 0.35:
+        return "attention"
+    return "normal"
+
+
+def _latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]]]:
+    output_root = Path(os.getenv(GEN_DATA_OUTPUT_ROOT_ENV, "/home/bistell/gen_data/output"))
+    streams = sorted(
+        output_root.glob("runs/*/source/sensor_records.jsonl"),
+        key=lambda path: path.stat().st_mtime_ns,
+        reverse=True,
+    )
+    for stream in streams:
+        asset_master = stream.parents[1] / "canonical" / "asset_master.csv"
+        expected_assets: set[str] = set()
+        if asset_master.exists():
+            with asset_master.open("r", encoding="utf-8-sig", newline="") as handle:
+                expected_assets = {
+                    row["asset_id"] for row in csv.DictReader(handle) if row.get("asset_id")
+                }
+        ticks: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+        with stream.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                observed_at = str(record.get("observed_at") or "")
+                asset_id = str(record.get("asset_id") or "")
+                if observed_at and asset_id:
+                    ticks[observed_at][asset_id] = record
+        for observed_at in sorted(ticks, reverse=True):
+            records = ticks[observed_at]
+            if expected_assets and expected_assets.issubset(records):
+                return stream, observed_at, [records[key] for key in sorted(expected_assets)]
+            if not expected_assets and len(records) >= 100:
+                return stream, observed_at, list(records.values())
+    raise HTTPException(status_code=503, detail="완성된 gen_data 관측 틱을 찾지 못했습니다.")
+
+
+def _filesystem_overview(project_id: str, workspace_id: str) -> dict[str, Any]:
+    stream, observed_at, records = _latest_complete_file_tick()
+    run_id = stream.parents[1].name
+    assets: list[dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
+    line_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        asset_id = str(record["asset_id"])
+        asset_type = str(record.get("asset_type") or "equipment")
+        score = _risk_from_file_record(record)
+        risk_status = _risk_status(score)
+        cell = str(record.get("cell_id") or "미분류")
+        site = str(record.get("site_id") or "미분류")
+        line = cell.split("-")[0] if "-" in cell else cell
+        display_type = "CNC 가공기" if asset_type == "cnc" else "공기압축기"
+        display_name = f"{cell} · {display_type} {asset_id.rsplit('-', 1)[-1]}"
+        event_id = f"FILE#{run_id}#{record.get('observation_id', asset_id)}"
+        asset = {
+            "assetId": asset_id,
+            "displayName": display_name,
+            "assetType": asset_type,
+            "site": site,
+            "line": line,
+            "cell": cell,
+            "status": risk_status,
+            "failureProbability": score,
+            "confidence": "unavailable",
+            "confidenceScore": None,
+            "criticality": None,
+            "assignedEngineer": None,
+            "estimatedDowntimeMinutes": None,
+            "sparePartAvailable": None,
+            "predictedFailureType": "실시간 센서 이상 징후" if risk_status != "normal" else "이상 징후 없음",
+            "recommendedDecision": "request_inspection" if risk_status in {"critical", "warning"} else "continue_monitoring",
+            "observedAt": observed_at,
+            "eventId": event_id if risk_status != "normal" else None,
+            "topFactors": [],
+            "provenance": {
+                "datasetId": None,
+                "datasetVersionId": run_id,
+                "datasetLabel": "gen_data 파일 관측",
+                "sourceVersion": str(record.get("generator_version") or "gen_data"),
+                "modelVersion": None,
+                "policyVersion": None,
+                "schemaVersion": str(record.get("schema_version") or ""),
+                "promptVersion": None,
+                "sourceRefs": [f"gen_data://runs/{run_id}/source/sensor_records.jsonl"],
+            },
+        }
+        assets.append(asset)
+        line_groups[line].append(asset)
+        if risk_status != "normal":
+            events.append({
+                "eventId": event_id,
+                "scenarioId": str(record.get("branch_kind") or "live-file"),
+                "assetId": asset_id,
+                "assetName": display_name,
+                "line": line,
+                "status": risk_status,
+                "failureProbability": score,
+                "confidence": "unavailable",
+                "predictedFailureType": asset["predictedFailureType"],
+                "recommendedDecision": asset["recommendedDecision"],
+                "criticality": None,
+                "assignedEngineer": None,
+                "estimatedDowntimeMinutes": None,
+                "sparePartAvailable": None,
+                "observedAt": observed_at,
+                "datasetVersionId": run_id,
+                "ontologyObjectId": None,
+            })
+    counts = {key: sum(item["status"] == key for item in assets) for key in ("normal", "attention", "warning", "critical", "data_quality_hold")}
+    line_risk = []
+    for line, items in sorted(line_groups.items()):
+        line_risk.append({
+            "line": line,
+            "total": len(items),
+            "normal": sum(item["status"] == "normal" for item in items),
+            "critical": sum(item["status"] == "critical" for item in items),
+            "warning": sum(item["status"] == "warning" for item in items),
+            "attention": sum(item["status"] == "attention" for item in items),
+            "dataQualityHold": 0,
+            "averageRisk": round(sum(item["failureProbability"] for item in items) / len(items), 4),
+        })
+    return {
+        "context": {
+            "projectId": project_id,
+            "projectName": "Smart Factory A",
+            "workspaceId": workspace_id,
+            "workspaceName": "Production Reliability",
+            "datasetVersionId": run_id,
+            "datasetLabel": "gen_data 실시간 파일 관측",
+            "sourceVersion": "filesystem",
+            "modelVersion": None,
+            "schemaVersion": str(records[0].get("schema_version") or ""),
+            "sourceMode": "canonical-runtime",
+            "sourceStatus": "파일 시스템 연결됨 · 마지막 완성 틱",
+            "refreshedAt": datetime.now(timezone.utc).isoformat(),
+            "observedAt": observed_at,
+            "stale": False,
+            "warnings": [],
+        },
+        "assets": assets,
+        "events": sorted(events, key=lambda item: item["failureProbability"], reverse=True),
+        "metrics": {
+            "totalAssets": len(assets),
+            "normal": counts["normal"],
+            "attention": counts["attention"],
+            "warning": counts["warning"],
+            "critical": counts["critical"],
+            "dataQualityHold": counts["data_quality_hold"],
+            "averageRisk": round(sum(item["failureProbability"] for item in assets) / len(assets), 4) if assets else None,
+            "estimatedDowntimeMinutes": None,
+            "pendingDecisions": len(events),
+        },
+        "lineRisk": line_risk,
+        "selectionRestoreError": None,
+    }
 def require_scope(
     *,
     principal: Principal,
@@ -366,6 +556,23 @@ def latest_product_results(
         offset=offset,
         limit=limit,
     ).model_dump(mode="json")
+
+
+@router.get("/filesystem-overview")
+def filesystem_overview(
+    project_id: str,
+    workspace_id: str,
+    principal: Principal = Depends(require_permission("events.read")),
+    identity: IdentityService = Depends(get_identity_service),
+):
+    """Serve the engineer overview from the latest complete gen_data file tick."""
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    return _filesystem_overview(project_id, workspace_id)
 
 
 @router.get("/results/post-maintenance")

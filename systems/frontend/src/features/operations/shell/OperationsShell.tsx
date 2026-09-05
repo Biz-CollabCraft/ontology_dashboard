@@ -84,6 +84,7 @@ export function OperationsShell({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const workflowMode = dashboard === "workflow";
+  const engineerOverview = workflowMode && role === "field_operator" && activeView === "overview";
   const navItems = operationsNavigationItems(dashboard);
   const roleMeta = ROLE_LABELS[role];
   const active = workflowMode && activeView === "overview" ? roleMeta : VIEW_LABELS[activeView];
@@ -100,6 +101,9 @@ export function OperationsShell({
     : role === "process_manager"
       ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다."
       : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다.";
+  if (engineerOverview) {
+    return <main className="operations-app engineer-standalone-app">{children}</main>;
+  }
   return (
     <main className="operations-app">
       <header className="operations-global-header">

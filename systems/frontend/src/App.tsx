@@ -59,6 +59,7 @@ const CommercialV4App = lazy(() =>
   import("./features/commercial-v4/CommercialV4App").then((module) => ({ default: module.CommercialV4App })),
 );
 const OperationsApplication = lazy(() => import("./features/operations/OperationsApplication"));
+const EngineerFactoryApplication = lazy(() => import("./features/operations/overview/EngineerFactoryApplication"));
 const FoundryAppShell = lazy(() =>
   import("./ui/foundry/FoundryAppShell").then((module) => ({ default: module.FoundryAppShell })),
 );
@@ -286,6 +287,16 @@ function AppRouter() {
 
   const operationsProjectRoute = matchOperationsProjectPath(pathname);
   if (operationsProjectRoute) {
+    const query = new URLSearchParams(window.location.search);
+    const engineerFactoryRoute = query.get("role") === "field_operator"
+      && (query.get("view") === "overview" || pathname.endsWith("/factory-status"));
+    if (engineerFactoryRoute) {
+      const workspaceId = query.get("workspace_id");
+      const lacksScope = !user.is_admin && !user.project_scopes.includes(operationsProjectRoute.projectId);
+      const lacksWorkspaceScope = Boolean(workspaceId && !user.is_admin && !user.workspace_scopes.includes(workspaceId));
+      if (lacksScope || lacksWorkspaceScope) return <Redirect to={user.default_path} />;
+      return <Suspense fallback={<ReliabilityRoutePlaceholder />}><EngineerFactoryApplication projectId={operationsProjectRoute.projectId} /></Suspense>;
+    }
     return (
       <ProjectPreviewRoute projectId={operationsProjectRoute.projectId}>
         <OperationsApplication projectId={operationsProjectRoute.projectId} />
