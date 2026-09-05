@@ -600,9 +600,31 @@
   box-shadow: 0 0 0 3px rgba(236,91,98,.16), 0 0 24px rgba(236,91,98,.32);
   animation: operations-live-node-focus 2.4s ease-in-out infinite;
 }
-.operations-factory-asset-node span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 44px; color: currentColor; font-size: 10px; font-weight: 900; }
+.operations-factory-asset-node > span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: calc(100% - 8px);
+  overflow: hidden;
+  color: currentColor;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transform: translate(-50%, -50%);
+}
 .operations-live-node-risk { position: absolute; left: 3px; right: 3px; bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: currentColor; font-size: 8px; font-weight: 950; letter-spacing: -.02em; opacity: .92; }
-.operations-asset-alert-badge { position: absolute; top: -8px; right: -8px; min-width: 17px; height: 17px; font-size: 9px; }
+.operations-asset-alert-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 1;
+  min-width: 13px;
+  height: 13px;
+  padding-inline: 3px;
+  font-size: 8px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.9), 0 3px 8px rgba(236,91,98,.28);
+}
 .operations-live-notification-badge.is-zone-summary { min-width: auto; padding-inline: 7px; }
 .operations-slot-status { display: inline-flex; align-items: center; justify-content: center; min-height: 22px; padding: 0 8px; border: 1px solid rgba(181,196,214,.18); border-radius: 999px; color: var(--operations-muted); background: rgba(255,255,255,.025); font-size: 10px; font-weight: 900; }
 .operations-risk-track,
@@ -2943,8 +2965,8 @@
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-slots { gap: 3px; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-slots .operations-factory-asset-node { min-height: 25px; aspect-ratio: auto; }
 .rw-preview-shell[data-active-surface="factory-status"] .operations-factory-cell-slots .compressor { min-height: 22px; aspect-ratio: auto; }
-.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-asset-node span { max-width: 100%; font-size: 10px; }
-.rw-preview-shell[data-active-surface="factory-status"] .operations-asset-alert-badge { top: -5px; right: -5px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-factory-asset-node > span { max-width: calc(100% - 8px); font-size: 10px; }
+.rw-preview-shell[data-active-surface="factory-status"] .operations-asset-alert-badge { top: 2px; right: 2px; }
 
 /* Desktop is the readable operational baseline. Small semantic copy should
    not collapse into 7-8px console text. */
