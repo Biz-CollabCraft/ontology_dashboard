@@ -62,12 +62,17 @@ export function postMaintenancePollingFailure(
   };
 }
 
+export function supportsInspectionOutcome(assetType: string, outcome: InspectionOutcome): boolean {
+  return assetType.toLowerCase().includes("cnc") || outcome !== "maintenance_recommended";
+}
+
 export type MaintenanceWorkflowDisplayStatus =
   | "candidate_recommended"
   | "work_requested"
   | "assigned"
   | "inspection_started"
   | "inspection_completed"
+  | "inspection_closed_no_action"
   | "maintenance_started"
   | "maintenance_completed"
   | "observation_pending"
@@ -97,7 +102,12 @@ function displayStatus(
   const inspectionWorkOrder = latest(
     lineage.work_orders.filter((item) => item.work_type === "inspection"),
   );
-  if (inspectionWorkOrder?.status === "completed") return "inspection_completed";
+  const inspectionResult = latest(lineage.inspection_results ?? []);
+  if (inspectionWorkOrder?.status === "completed") {
+    return inspectionResult?.outcome === "no_action_required"
+      ? "inspection_closed_no_action"
+      : "inspection_completed";
+  }
   if (inspectionWorkOrder?.status === "in_progress") return "inspection_started";
   if (inspectionWorkOrder?.status === "approved") return "assigned";
   if (inspectionWorkOrder?.status === "requested") return "work_requested";
@@ -451,6 +461,12 @@ export function MaintenanceWorkflowActionPanel({
     if (!state.inspectionWorkOrder) {
       label = "운영 관리자 점검 요청 대기";
       helper = "현재 Case의 근거는 준비되어 있습니다. 운영 관리자가 점검 작업요청을 생성하면 이 화면에서 수락할 수 있습니다.";
+    } else if (state.inspectionResult?.outcome === "no_action_required") {
+      label = "처리 완료 · 정비 불필요";
+      helper = "현장 점검 결과 추가 정비가 필요하지 않아 이 Case는 정상 종결됐습니다.";
+    } else if (state.inspectionResult?.outcome === "data_check_required") {
+      label = "추가 데이터 확인 필요";
+      helper = "점검 결과만으로 정비 여부를 확정하지 않고 추가 데이터 확인 상태로 유지합니다.";
     } else if (state.inspectionWorkOrder?.status === "requested") {
       label = "요청 수락·내게 배정";
       helper = "수락과 동시에 이 점검 요청의 담당자로 배정됩니다.";
@@ -472,13 +488,14 @@ export function MaintenanceWorkflowActionPanel({
       });
     } else if (state.inspectionWorkOrder?.status === "in_progress") {
       label = "점검 결과 기록·완료";
-      helper = !supportsCncMaintenance
-        ? "현재 정비·Overlay 실행은 CNC 설비만 지원합니다. 이 설비의 점검 완료는 후속 계약이 필요합니다."
+      const inspectionOutcomeSupported = supportsInspectionOutcome(assetType, inspectionOutcome);
+      helper = !inspectionOutcomeSupported
+        ? "현재 정비·Overlay 실행은 CNC 설비만 지원합니다. 추가 정비 불필요 또는 추가 데이터 확인 결과는 기록할 수 있습니다."
         : inspectionReady
           ? "입력한 점검 사실을 기록합니다. 정비 Action 후보는 Backend가 이 결과에서 산출합니다."
           : "점검 판정, 체크리스트, 측정값과 발견 내용을 입력하세요.";
-      enabled = canFieldExecute && supportsCncMaintenance && inspectionReady;
-      command = supportsCncMaintenance && inspectionReady ? () => completeInspectionWorkOrder({
+      enabled = canFieldExecute && inspectionOutcomeSupported && inspectionReady;
+      command = inspectionOutcomeSupported && inspectionReady ? () => completeInspectionWorkOrder({
         projectId,
         workspaceId,
         workOrderId: state.inspectionWorkOrder!.work_order_id,
@@ -558,7 +575,7 @@ export function MaintenanceWorkflowActionPanel({
           <small>최저비용 option은 자동 선택되지 않으며, Action 판단은 생산 관리자가 명시적으로 수행합니다.</small>
         </label>
       ) : null}
-      {role === "field_operator" && supportsCncMaintenance && state.inspectionWorkOrder?.status === "in_progress" ? (
+      {role === "field_operator" && state.inspectionWorkOrder?.status === "in_progress" ? (
         <fieldset className="operations-inspection-form" disabled={!canFieldExecute || running}>
           <legend>현장 점검 사실</legend>
           <label className="operations-field">

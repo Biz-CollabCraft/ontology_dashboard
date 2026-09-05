@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../../api";
-import { postMaintenancePollingFailure } from "./MaintenanceWorkflowActionPanel";
+import {
+  postMaintenancePollingFailure,
+  supportsInspectionOutcome,
+} from "./MaintenanceWorkflowActionPanel";
 
 describe("post-maintenance result polling", () => {
   it("surfaces authorization and contract failures immediately", () => {
@@ -22,5 +25,17 @@ describe("post-maintenance result polling", () => {
       message: "정비 후 결과 조회가 3회 연속 실패했습니다: connection reset",
       stop: false,
     });
+  });
+});
+
+describe("inspection outcome support", () => {
+  it("allows non-CNC equipment to close an inspection without maintenance", () => {
+    expect(supportsInspectionOutcome("compressor", "no_action_required")).toBe(true);
+    expect(supportsInspectionOutcome("compressor", "data_check_required")).toBe(true);
+  });
+
+  it("keeps maintenance execution limited to supported CNC equipment", () => {
+    expect(supportsInspectionOutcome("compressor", "maintenance_recommended")).toBe(false);
+    expect(supportsInspectionOutcome("cnc", "maintenance_recommended")).toBe(true);
   });
 });
