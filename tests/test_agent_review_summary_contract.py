@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -51,7 +52,10 @@ def _valid_summary() -> dict:
             {
                 "role": "process_manager",
                 "label": "공정 관리자",
-                "quote": "생산 영향은 패킷 근거와 점검 승인 상태를 함께 봐야 합니다.",
+                "quote": (
+                    "생산 영향이 중간 수준으로 분류되며, 120분 기준 약 25건 손실 "
+                    "가능성이 있습니다. 점검 승인 여부를 함께 봐야 합니다."
+                ),
                 "source_refs": [PACKET["source_refs"][0]],
             },
         ],
@@ -170,6 +174,51 @@ def test_deterministic_agent_review_summary_keeps_zero_loss_manager_context() ->
     assert "점검 승인" in process_quote
 
 
+def test_deterministic_agent_review_summary_handles_manager_holdout_variants() -> None:
+    cases = [
+        {
+            "base": "GS-002",
+            "operation": {
+                "production_impact": "high",
+                "estimated_downtime_minutes": 360,
+                "estimated_lost_units": 124,
+            },
+            "expected": ["생산 영향이 높은", "124건", "점검 승인"],
+            "forbidden": ["생산 영향이 중간", "25건"],
+        },
+        {
+            "base": "GS-005",
+            "operation": {
+                "production_impact": "none",
+                "estimated_downtime_minutes": 15,
+                "estimated_lost_units": 0,
+            },
+            "expected": ["생산 영향이 없음", "0건", "점검 승인"],
+            "forbidden": ["생산 영향이 낮은", "18건"],
+        },
+    ]
+    for case in cases:
+        packet = copy.deepcopy(
+            json.loads((GOLD_ROOT / f"{case['base']}.json").read_text(encoding="utf-8"))
+        )
+        packet["operation_context_summary"] = {
+            **packet["operation_context_summary"],
+            **case["operation"],
+        }
+
+        summary = compose_deterministic_agent_review_summary(packet)
+        process_quote = next(
+            item["quote"]
+            for item in summary["role_summaries"]
+            if item["role"] == "process_manager"
+        )
+
+        for expected in case["expected"]:
+            assert expected in process_quote
+        for forbidden in case["forbidden"]:
+            assert forbidden not in process_quote
+
+
 def test_validated_agent_review_summary_discards_invalid_candidate() -> None:
     bad_candidate = {
         **_valid_summary(),
@@ -198,6 +247,26 @@ def test_agent_review_summary_validator_rejects_prose_only_action_claims() -> No
     assert any(error.startswith("directive_prose_claims:") for error in errors)
     assert "prose_probability_mismatch:99.9%" in errors
     assert "prose_priority_mismatch:low" in errors
+
+
+def test_agent_review_summary_validator_rejects_missing_manager_context() -> None:
+    summary = {
+        **_valid_summary(),
+        "role_summaries": [
+            _valid_summary()["role_summaries"][0],
+            {
+                **_valid_summary()["role_summaries"][1],
+                "quote": (
+                    "생산 영향은 확인되지 않았으며, 예상 손실 유닛 수는 25건입니다. "
+                    "점검 승인 여부는 데이터 보완 후 검토가 필요합니다."
+                ),
+            },
+        ],
+    }
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert "process_manager_production_impact_missing" in errors
 
 
 def test_agent_review_summary_validator_rejects_boundary_inversion_and_deleted_limits() -> None:

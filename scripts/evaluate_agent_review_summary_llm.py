@@ -27,6 +27,7 @@ DEFAULT_MODEL = "gpt-4o-mini"
 
 
 def main() -> None:
+    global GOLD_ANSWERS_PATH, _GOLD_ANSWERS_CACHE
     _load_dotenv(ROOT / ".env")
     parser = argparse.ArgumentParser(
         description="Run the controlled Agent Review Summary LLM evaluation harness."
@@ -37,10 +38,14 @@ def main() -> None:
     parser.add_argument("--provider", default="mock-openai-compatible")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--manifest", type=Path, default=GOLD_ROOT / "manifest.json")
+    parser.add_argument("--gold-answers", type=Path, default=GOLD_ANSWERS_PATH)
     parser.add_argument("--progress-every", type=int, default=0)
     parser.add_argument("--run-id")
     parser.add_argument("--candidate-sha")
     args = parser.parse_args()
+    GOLD_ANSWERS_PATH = args.gold_answers
+    _GOLD_ANSWERS_CACHE = None
     if args.mode == "live" and (not args.run_id or not args.candidate_sha):
         raise SystemExit("live evaluation requires --run-id and --candidate-sha")
     if args.concurrency < 1:
@@ -56,7 +61,7 @@ def main() -> None:
         live_provider = None
         provider_name = args.provider
 
-    manifest = _load_json(GOLD_ROOT / "manifest.json")
+    manifest = _load_json(args.manifest)
     packets = [
         _load_json(ROOT / case["fixture_path"])
         for case in manifest["cases"]
@@ -91,7 +96,10 @@ def main() -> None:
         "run_id": args.run_id or "unversioned",
         "candidate_sha": args.candidate_sha or "unversioned",
         "recorded_at": datetime.now(UTC).isoformat(),
-        "scope": f"8x{args.iterations} {args.mode} Agent Review Summary LLM evaluation",
+        "scope": (
+            f"{len(packets)}x{args.iterations} {args.mode} "
+            "Agent Review Summary LLM evaluation"
+        ),
         "eval_set_id": manifest["eval_set_id"],
         "mode": args.mode,
         "provider": provider_name,
@@ -654,8 +662,10 @@ def _gold_point_surface_patterns(point: str) -> list[str]:
         count = re.escape(count_match.group(1))
         return [
             rf"{count}\s*건",
-            rf"{count}\s*개",
-            rf"{count}\s*유닛",
+            rf"(?:손실|물량|유닛)[^.。\n]{{0,24}}{count}\s*개",
+            rf"{count}\s*개[^.。\n]{{0,16}}(?:손실|물량|유닛)",
+            rf"(?:손실|물량)[^.。\n]{{0,24}}{count}\s*유닛",
+            rf"{count}\s*유닛[^.。\n]{{0,16}}(?:손실|물량)",
         ]
     return patterns.get(point, [escaped])
 

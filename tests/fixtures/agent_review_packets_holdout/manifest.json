@@ -1,0 +1,98 @@
+{
+  "eval_set_id": "agent-review-packet-holdout-v1",
+  "purpose": "process_manager_overfit_check",
+  "description": "Eight holdout/paraphrase fixtures for PM production-impact, lost-unit, approval, and data-quality boundary checks.",
+  "owner_domain": "product_evidence",
+  "packet_schema_version": "agent-review-packet-v1.0",
+  "summary_schema_version": "agent-review-summary-v1.0",
+  "cases": [
+    {
+      "scenario_id": "HGS-001",
+      "asset_id": "CNC-H01-L02-01",
+      "fixture_path": "tests/fixtures/agent_review_packets_holdout/HGS-001.json",
+      "description": "Holdout paraphrase case with changed event id, asset, impact, and lost-unit values.",
+      "covers": [
+        "process_manager_holdout",
+        "paraphrased_fixture_surface",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
+      "scenario_id": "HGS-002",
+      "asset_id": "CNC-H02-L03-02",
+      "fixture_path": "tests/fixtures/agent_review_packets_holdout/HGS-002.json",
+      "description": "Holdout paraphrase case with changed event id, asset, impact, and lost-unit values.",
+      "covers": [
+        "process_manager_holdout",
+        "paraphrased_fixture_surface",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
+      "scenario_id": "HGS-003",
+      "asset_id": "CNC-H03-L04-03",
+      "fixture_path": "tests/fixtures/agent_review_packets_holdout/HGS-003.json",
+      "description": "Holdout paraphrase case with changed event id, asset, impact, and lost-unit values.",
+      "covers": [
+        "process_manager_holdout",
+        "paraphrased_fixture_surface",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
+      "scenario_id": "HGS-004",
+      "asset_id": "CNC-H04-L01-01",
+      "fixture_path": "tests/fixtures/agent_review_packets_holdout/HGS-004.json",
+      "description": "Holdout paraphrase case with changed event id, asset, impact, and lost-unit values.",
+      "covers": [
+        "process_manager_holdout",
+        "paraphrased_fixture_surface",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
+      "scenario_id": "HGS-005",
+      "asset_id": "CNC-H05-L05-02",
+      "fixture_path": "tests/fixtures/agent_review_packets_holdout/HGS-005.json",
+      "description": "Holdout paraphrase case with changed event id, asset, impact, and lost-unit values.",
+      "covers": [
+        "process_manager_holdout",
+        "paraphrased_fixture_surface",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
+      "scenario_id": "HGS-006",
+      "asset_id": "CNC-H06-L02-03",
+      "fixture_path": "tests/fixtures/agent_review_packets_holdout/HGS-006.json",
+      "description": "Holdout paraphrase case with changed event id, asset, impact, and lost-unit values.",
+      "covers": [
+        "process_manager_holdout",
+        "paraphrased_fixture_surface",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
+      "scenario_id": "HGS-007",
+      "asset_id": "CNC-H07-L05-01",
+      "fixture_path": "tests/fixtures/agent_review_packets_holdout/HGS-007.json",
+      "description": "Holdout paraphrase case with changed event id, asset, impact, and lost-unit values.",
+      "covers": [
+        "process_manager_holdout",
+        "paraphrased_fixture_surface",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
+      "scenario_id": "HGS-008",
+      "asset_id": "CNC-H08-L04-02",
+      "fixture_path": "tests/fixtures/agent_review_packets_holdout/HGS-008.json",
+      "description": "Holdout paraphrase case with changed event id, asset, impact, and lost-unit values.",
+      "covers": [
+        "process_manager_holdout",
+        "paraphrased_fixture_surface",
+        "closed_loop_boundary_readonly"
+      ]
+    }
+  ]
+}

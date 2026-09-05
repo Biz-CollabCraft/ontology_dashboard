@@ -65,6 +65,43 @@ def test_mock_120_run_harness_aggregates_all_gold_packets(monkeypatch) -> None:
     assert all(row["gold_accuracy"]["accuracy_goldset_score"] == 1.0 for row in rows)
 
 
+def test_mock_holdout_run_uses_custom_manifest_and_gold_answers() -> None:
+    harness = _load_harness()
+    harness.GOLD_ANSWERS_PATH = (
+        harness.ROOT / "tests/fixtures/agent_review_packets_holdout/gold_answers.json"
+    )
+    harness._GOLD_ANSWERS_CACHE = None
+    manifest = harness._load_json(
+        harness.ROOT / "tests/fixtures/agent_review_packets_holdout/manifest.json"
+    )
+    packets = [
+        harness._load_json(harness.ROOT / case["fixture_path"])
+        for case in manifest["cases"]
+    ]
+
+    rows = [
+        harness._run_mock_candidate(
+            packet=packet,
+            iteration=1,
+            provider="mock-openai-compatible",
+            model="gpt-4o-mini",
+        )
+        for packet in packets
+    ]
+    aggregate = harness._aggregate(rows)
+
+    assert len(packets) == 8
+    assert rows[0]["gold_accuracy"]["answer_set_id"] == (
+        "agent-review-summary-holdout-gold-answers-v1"
+    )
+    assert aggregate["gold_accuracy"]["accuracy_goldset_score"] == 1.0
+    assert all(
+        row["gold_accuracy"]["role_scores"]["process_manager"]["score"] == 1.0
+        for row in rows
+    )
+    assert aggregate["gold_accuracy"]["missing_required_points"] == 0
+
+
 def test_quality_scores_detect_internal_language_and_missing_role_focus() -> None:
     harness = _load_harness()
     packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-004.json")
@@ -132,6 +169,14 @@ def test_gold_accuracy_accepts_observed_process_manager_surface_variants() -> No
     assert score["role_scores"]["process_manager"]["missing_points"] == []
     assert "생산 영향이 중간" in score["matched_required_points"]
     assert "25건" in score["matched_required_points"]
+
+
+def test_gold_accuracy_does_not_match_inventory_counts_as_lost_units() -> None:
+    harness = _load_harness()
+
+    assert harness._contains_point("손실 예상 유닛은 25개입니다.", "25건")
+    assert not harness._contains_point("25개 부품 재고 확보를 검토합니다.", "25건")
+    assert not harness._contains_point("공구 25개를 점검합니다.", "25건")
 
 
 def test_gold_accuracy_keeps_data_quality_hold_process_manager_miss_visible() -> None:

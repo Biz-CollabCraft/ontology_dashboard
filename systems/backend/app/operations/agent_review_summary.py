@@ -625,6 +625,8 @@ def _validate_natural_language_grounding(
     errors.extend(loss_errors)
     priority_errors = _validate_prose_priorities(prose_values, packet=packet)
     errors.extend(priority_errors)
+    manager_errors = _validate_process_manager_context(summary, packet=packet)
+    errors.extend(manager_errors)
     return errors
 
 
@@ -816,6 +818,59 @@ def _validate_prose_lost_units(
     if unknown:
         return [f"prose_lost_units_mismatch:{','.join(unknown)}"]
     return []
+
+
+def _validate_process_manager_context(
+    summary: dict[str, Any],
+    *,
+    packet: dict[str, Any],
+) -> list[str]:
+    quote = _role_quote(summary, "process_manager")
+    if not quote:
+        return ["process_manager_quote_missing"]
+    if _confidence_label(packet) == "data_quality_hold":
+        errors = []
+        if "추정 물량 손실" not in quote or "확정하지" not in quote:
+            errors.append("process_manager_hold_loss_boundary_missing")
+        if "유사 이력은 아직" not in quote:
+            errors.append("process_manager_hold_history_boundary_missing")
+        if "점검 승인" not in quote:
+            errors.append("process_manager_approval_review_missing")
+        return errors
+
+    operation = packet.get("operation_context_summary") or {}
+    production_impact = str(operation.get("production_impact") or "")
+    impact_tokens = {
+        "none": ("생산 영향이 없음", "생산 영향 없음"),
+        "low": ("생산 영향이 낮", "낮은 생산 영향"),
+        "medium": ("생산 영향이 중간", "중간 생산 영향", "중간 수준"),
+        "high": ("생산 영향이 높", "높은 생산 영향", "높은 수준"),
+    }
+    errors = []
+    expected_tokens = impact_tokens.get(production_impact)
+    if expected_tokens and not any(token in quote for token in expected_tokens):
+        errors.append("process_manager_production_impact_missing")
+
+    lost_units = operation.get("estimated_lost_units")
+    if isinstance(lost_units, (int, float)) and not isinstance(lost_units, bool):
+        count = int(lost_units)
+        count_patterns = (
+            rf"{count}\s*건",
+            rf"(?:손실|물량|유닛)[^.。\n]{{0,24}}{count}\s*개",
+            rf"{count}\s*개[^.。\n]{{0,16}}(?:손실|물량|유닛)",
+        )
+        if not any(re.search(pattern, quote) for pattern in count_patterns):
+            errors.append("process_manager_lost_units_missing")
+    if "점검 승인" not in quote:
+        errors.append("process_manager_approval_review_missing")
+    return errors
+
+
+def _role_quote(summary: dict[str, Any], role: str) -> str:
+    for item in summary.get("role_summaries") or []:
+        if isinstance(item, dict) and item.get("role") == role:
+            return str(item.get("quote") or "")
+    return ""
 
 
 def _normalize_claim_text(value: str) -> str:
