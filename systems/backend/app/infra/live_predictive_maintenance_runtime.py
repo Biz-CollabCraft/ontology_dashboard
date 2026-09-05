@@ -1084,7 +1084,6 @@ def _live_pipeline_observation_rows(
     producer file and makes worker restart behaviour deterministic.
     """
     psycopg, dict_row, _ = _postgres_modules()
-    cadence_filter = "MOD(EXTRACT(EPOCH FROM observed_at)::bigint, 600) = 0"
     lookback_rows = max(minimum_history_rows, minimum_history_rows * 8)
     queries = {
         "cnc": """
@@ -1095,9 +1094,8 @@ def _live_pipeline_observation_rows(
                      ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY observed_at DESC) AS rn
               FROM pm_cnc_observations
               WHERE dataset_version_id=%s
-                AND {cadence_filter}
             ) ranked WHERE rn <= %s ORDER BY asset_id,observed_at
-        """.format(cadence_filter=cadence_filter),
+        """,
         "compressor": """
             SELECT * FROM (
               SELECT observed_at,asset_id,site_id,cell_id,is_operating,operating_state,
@@ -1106,9 +1104,8 @@ def _live_pipeline_observation_rows(
                      ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY observed_at DESC) AS rn
               FROM pm_compressor_observations
               WHERE dataset_version_id=%s
-                AND {cadence_filter}
             ) ranked WHERE rn <= %s ORDER BY asset_id,observed_at
-        """.format(cadence_filter=cadence_filter),
+        """,
     }
     selected: list[tuple[str, dict[str, Any]]] = []
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
