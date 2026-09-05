@@ -10,11 +10,11 @@ const appBase = configuredBase
   : githubPagesBase;
 
 const apiProxy = {
-  "/api": { target: "http://127.0.0.1:8100" },
-  "/health": { target: "http://127.0.0.1:8100" },
-  "/docs": { target: "http://127.0.0.1:8100" },
-  "/redoc": { target: "http://127.0.0.1:8100" },
-  "/openapi.json": { target: "http://127.0.0.1:8100" },
+  "/api": { target: "http://127.0.0.1:8000" },
+  "/health": { target: "http://127.0.0.1:8000" },
+  "/docs": { target: "http://127.0.0.1:8000" },
+  "/redoc": { target: "http://127.0.0.1:8000" },
+  "/openapi.json": { target: "http://127.0.0.1:8000" },
 };
 
 function interactiveTeamShareRoute(): Plugin {
