@@ -55,21 +55,45 @@ class AgentReviewSummaryProvider:
         self.name = getattr(provider, "name", "none")
 
     def generate(self, packet: dict[str, Any]) -> dict[str, Any]:
+        summary, _metadata = self.generate_with_metadata(packet)
+        return summary
+
+    def generate_with_metadata(self, packet: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         if self.provider is None:
             raise RuntimeError("agent_review_summary_provider_disabled")
         baseline_summary = compose_deterministic_agent_review_summary(packet)
-        payload = self.provider.generate_json(
-            AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT,
-            build_tool_selected_agent_review_summary_prompt_payload(
-                packet=packet,
-                baseline_summary=baseline_summary,
-            ),
-            response_schema=agent_review_summary_editable_schema(),
-            response_schema_name="agent_review_summary_editable",
+        prompt_payload = build_tool_selected_agent_review_summary_prompt_payload(
+            packet=packet,
+            baseline_summary=baseline_summary,
         )
-        return _merge_llm_editable_fields(
+        if hasattr(self.provider, "generate_json_with_metadata"):
+            result = self.provider.generate_json_with_metadata(
+                AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT,
+                prompt_payload,
+                response_schema=agent_review_summary_editable_schema(),
+                response_schema_name="agent_review_summary_editable",
+            )
+            payload = result["payload"]
+            metadata = dict(result.get("provider_metadata") or {})
+        else:
+            payload = self.provider.generate_json(
+                AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT,
+                prompt_payload,
+                response_schema=agent_review_summary_editable_schema(),
+                response_schema_name="agent_review_summary_editable",
+            )
+            metadata = {"usage": None, "usage_measurement": "not_reported"}
+        summary = _merge_llm_editable_fields(
             baseline_summary=baseline_summary,
             candidate=payload,
+        )
+        return (
+            summary,
+            {
+                "provider": self.name,
+                "usage": metadata.get("usage"),
+                "usage_measurement": metadata.get("usage_measurement") or "not_reported",
+            },
         )
 
 

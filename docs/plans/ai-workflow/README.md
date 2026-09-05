@@ -4,6 +4,7 @@ AI, LLM, agent review, SOP grounding, and evaluation-related implementation plan
 
 ## Current Canonical Plan
 
+- `2026-09-03-005-ai-solution-engineer-5min-presentation-script.md`: current canonical five-minute presentation script. Use `docs/eval/2026-09-05-final-presentation-evidence-index.md` as the evidence index for all presentation numbers and claim boundaries.
 - `2026-08-29-001-ai-context-orchestration-adapter-plan.md`: post-PR #130 AI context orchestration plan covering adapter-based domain context, polling watcher materialization, ontology/SOP exploration, KG Level 0 traces, and deferred RAG/LangGraph gates.
 - `2026-08-29-002-product-result-evidence-materialization-plan.md`: prerequisite product-evidence boundary plan covering Generator output validation, Product Result/Evidence materialization, lineage, checksum, and ViewModel consumption boundaries.
 - `2026-08-29-003-evidence-snapshot-consistency-guard-plan.md`: sibling projection and guard plan ensuring UI ViewModel, Report, Closed-loop Recommendation Input, and Agent Review consume the same Product Result/Evidence snapshot without making ViewModel the Closed-loop input.

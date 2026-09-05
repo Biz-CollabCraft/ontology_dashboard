@@ -326,6 +326,46 @@ def test_openai_provider_sends_json_schema_response_format(monkeypatch: pytest.M
     }
 
 
+def test_openai_provider_exposes_reported_usage_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Response:
+        status_code = 200
+        text = "{\"choices\": [{\"message\": {\"content\": \"{\\\"ok\\\": true}\"}}]}"
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "choices": [{"message": {"content": "{\"ok\": true}"}}],
+                "usage": {
+                    "prompt_tokens": 11,
+                    "completion_tokens": 7,
+                    "total_tokens": 18,
+                },
+            }
+
+    def fake_post(url: str, **kwargs) -> Response:
+        return Response()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "gpt-4o-mini")
+    monkeypatch.setattr("app.infra.llm.provider.httpx.post", fake_post)
+
+    provider = OpenAICompatibleProvider()
+    result = provider.generate_json_with_metadata("Return JSON.", {"input": "value"})
+
+    assert result["payload"] == {"ok": True}
+    assert result["provider_metadata"]["usage"] == {
+        "prompt_tokens": 11,
+        "completion_tokens": 7,
+        "total_tokens": 18,
+    }
+    assert result["provider_metadata"]["usage_measurement"] == "provider_reported"
+    assert provider.generate_json("Return JSON.", {"input": "value"}) == {"ok": True}
+
+
 def test_openai_provider_retries_json_object_when_json_schema_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

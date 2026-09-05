@@ -211,6 +211,48 @@ def test_gold_accuracy_keeps_data_quality_hold_process_manager_miss_visible() ->
     ]
 
 
+def test_live_candidate_prefers_provider_reported_usage() -> None:
+    harness = _load_harness()
+    packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-002.json")
+
+    class ProviderWithUsage:
+        def generate_with_metadata(self, packet: dict) -> tuple[dict, dict]:
+            candidate = harness.compose_deterministic_agent_review_summary(packet)
+            candidate["mode"] = "llm"
+            return (
+                candidate,
+                {
+                    "usage": {
+                        "prompt_tokens": 123,
+                        "completion_tokens": 45,
+                        "total_tokens": 168,
+                    },
+                    "usage_measurement": "provider_reported",
+                },
+            )
+
+    row = harness._run_candidate(
+        packet=packet,
+        iteration=1,
+        provider="openai-compatible",
+        model="gpt-4o-mini",
+        mode="live",
+        live_provider=ProviderWithUsage(),
+    )
+    aggregate = harness._aggregate([row])
+
+    assert row["accepted"] is True
+    assert row["llm"]["usage"] == {
+        "prompt_tokens": 123,
+        "completion_tokens": 45,
+        "total_tokens": 168,
+    }
+    assert row["llm"]["usage_measurement"] == "provider_reported"
+    assert aggregate["tokens"]["usage_measurement"] == "provider_reported"
+    assert aggregate["tokens"]["provider_reported_rows"] == 1
+    assert aggregate["tokens"]["estimated_rows"] == 0
+
+
 def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:
     output = tmp_path / "agent-summary-llm-eval.json"
     env = {

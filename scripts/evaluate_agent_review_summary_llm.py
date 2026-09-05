@@ -216,16 +216,18 @@ def _run_candidate(
     baseline_summary = compose_deterministic_agent_review_summary(packet)
     queue_wait_ms = round((started - queued_at) * 1000, 3) if queued_at is not None else None
     try:
+        provider_metadata: dict[str, Any] = {}
         if mode == "live":
             if live_provider is None:
                 raise RuntimeError("live_provider_unavailable")
-            candidate = live_provider.generate(packet)
+            candidate, provider_metadata = live_provider.generate_with_metadata(packet)
         else:
             candidate = dict(baseline_summary)
             candidate["mode"] = "llm"
         provider_error = None
     except Exception as exc:  # provider, timeout, parsing, and schema failures fall back closed
         candidate = dict(baseline_summary)
+        provider_metadata = {}
         provider_error = exc.__class__.__name__
     errors = validate_agent_review_summary_contract(candidate, packet=packet)
     quality_scores = _quality_scores(candidate, packet=packet)
@@ -235,13 +237,11 @@ def _run_candidate(
         packet=packet,
         baseline_summary=baseline_summary,
     )
-    prompt_tokens = _estimate_tokens(prompt_payload)
-    completion_tokens = _estimate_tokens(_editable_candidate_payload(candidate))
-    usage = {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": prompt_tokens + completion_tokens,
-    }
+    usage, usage_measurement = _usage_or_estimate(
+        provider_metadata.get("usage"),
+        prompt_payload=prompt_payload,
+        candidate=candidate,
+    )
     cost = _estimated_cost(usage)
     accepted = provider_error is None and not errors
     return {
@@ -267,6 +267,7 @@ def _run_candidate(
             "duration_ms": duration_ms,
             "queue_wait_ms": queue_wait_ms,
             "usage": usage,
+            "usage_measurement": usage_measurement,
             "cost": cost,
         },
     }
@@ -301,6 +302,9 @@ def _aggregate(
         if row["llm"].get("queue_wait_ms") is not None
     ]
     total_tokens = [int(row["llm"]["usage"]["total_tokens"]) for row in rows]
+    provider_reported_usage_rows = sum(
+        1 for row in rows if row["llm"].get("usage_measurement") == "provider_reported"
+    )
     cost_values = [
         row["llm"]["cost"]["estimated_total_cost"]
         for row in rows
@@ -386,6 +390,15 @@ def _aggregate(
             if total_tokens
             else None,
             "total_tokens": sum(total_tokens),
+            "usage_measurement": (
+                "provider_reported"
+                if provider_reported_usage_rows == len(rows)
+                else "mixed"
+                if provider_reported_usage_rows
+                else "estimated_from_serialized_payload_and_output_chars"
+            ),
+            "provider_reported_rows": provider_reported_usage_rows,
+            "estimated_rows": len(rows) - provider_reported_usage_rows,
         },
         "cost": {
             "status": "estimated" if len(cost_values) == len(rows) else "not_configured",
@@ -418,6 +431,38 @@ def _pre_harness_gate() -> dict[str, Any]:
 def _estimate_tokens(payload: dict[str, Any]) -> int:
     rendered = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     return max(1, len(rendered) // 4)
+
+
+def _usage_or_estimate(
+    provider_usage: Any,
+    *,
+    prompt_payload: dict[str, Any],
+    candidate: dict[str, Any],
+) -> tuple[dict[str, int], str]:
+    if isinstance(provider_usage, dict):
+        prompt_tokens = provider_usage.get("prompt_tokens")
+        completion_tokens = provider_usage.get("completion_tokens")
+        total_tokens = provider_usage.get("total_tokens")
+        if all(isinstance(value, int) for value in (prompt_tokens, completion_tokens, total_tokens)):
+            return (
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                },
+                "provider_reported",
+            )
+
+    prompt_tokens = _estimate_tokens(prompt_payload)
+    completion_tokens = _estimate_tokens(_editable_candidate_payload(candidate))
+    return (
+        {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+        "estimated_from_serialized_payload_and_output_chars",
+    )
 
 
 def _estimated_cost(usage: dict[str, int]) -> dict[str, Any]:
@@ -783,7 +828,7 @@ def _load_dotenv(path: Path) -> None:
 def _limits(mode: str, concurrency: int) -> list[str]:
     common = [
         "Configured-rate cost is an estimate from environment variables, not provider billing reconciliation.",
-        "Token counts are heuristic because the current provider port returns parsed JSON without provider usage metadata.",
+        "Token counts use provider usage metadata when reported; otherwise they fall back to a serialized payload/output heuristic.",
     ]
     if mode == "live":
         return [
