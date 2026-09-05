@@ -151,6 +151,12 @@ Product Result/Evidence 승격, Maintenance Replay Overlay, Frontend 자동 갱�
 CNC/Compressor Model Artifact를 발행하므로 몇 분이 걸릴 수 있으며, 이후에는
 검증된 로컬 Artifact를 재사용합니다.
 
+Windows에서는 저장소 루트의 `START_LOCAL_REALTIME_DEMO.cmd`를 더블클릭하면
+동일한 통합 실행기를 시작하고, 모든 준비가 끝난 뒤 로그인 화면을 자동으로 엽니다.
+테스트 후 로컬 PostgreSQL 초기화 절차는
+[`docs/operations/local-realtime-demo-runbook.md`](docs/operations/local-realtime-demo-runbook.md)를
+따릅니다.
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_local_realtime.py
 ```
@@ -160,8 +166,8 @@ CNC/Compressor Model Artifact를 발행하므로 몇 분이 걸릴 수 있으며
 ```
 
 기본 로컬 데모는 과거 7일(168시간)의 Observation을 같은 Simulation Run에서
-먼저 생성한 뒤 현재 시각까지 fast-forward하고, 전체 Run horizon은 14일
-(336시간)로 잡아 정비 전 이력과 정비 후 재관측 시간을 모두 확보합니다. 72시간은
+먼저 생성한 뒤 현재 시각까지 fast-forward하고, 전체 Run horizon은 30일
+(720시간)로 잡아 정비 전 이력과 정비 후 재관측 시간을 모두 확보합니다. 72시간은
 데이터 계약의 상한이 아니라 예전 local runner의 demo 기본값이었습니다. 현재
 gen_data `balanced_demo`, seed 42의 첫 failure schedule은 72시간 horizon에서 3건,
 180시간에서 19건, 336시간에서 34건이 포함되므로 72시간은 Closed-loop 데모 후보를
@@ -172,7 +178,7 @@ gen_data `balanced_demo`, seed 42의 첫 failure schedule은 72시간 horizon에
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_local_realtime.py `
   --history-hours 168 `
-  --simulation-hours 336 `
+  --simulation-hours 720 `
   --speed 60
 ```
 
@@ -200,16 +206,21 @@ history query 상한을 두지 않습니다.
 Generator의 Prediction Result Batch를 Backend가 최종 판정으로 승격합니다.
 실행 로그와 세션 출력은 Git에서 제외되는
 `data_preprocessed/local-realtime/sessions/` 아래에 저장됩니다.
-반복 실행 시에는 DB에 저장된 마지막 Observation의 정확히 10분 뒤부터
-Simulation Clock을 이어서 시작합니다. 이전 세션의 서로 다른 시작 시각이 최근
-이력에 섞여 Model Artifact의 10분 cadence 계약을 깨뜨리는 것을 방지하면서도
-기존 Closed-loop 이력은 보존합니다.
+깨끗한 DB에서 처음 실행할 때는 전 설비의 최근 7일 이력인 1008틱을 먼저
+fast-forward한 뒤 Frontend를 시작합니다. 이 워밍업은 그래프 표시용 초기 이력이며,
+Simulation 종료 시각과 분리되어 있습니다. 기본 Run 수명은 720시간이므로 워밍업
+뒤에도 Simulation은 계속 실행됩니다. 모델 입력과 정비 후 Overlay가 요구하는
+이력은 별도의 36틱 계약을 그대로 사용합니다. 초기 이력과 Run 수명은 각각
+`--history-hours`, `--simulation-hours`로 조정할 수 있으며 Run 수명은 반드시
+초기 이력 시간보다 길어야 합니다.
 로컬 실행기는 가속된 합성 Simulation Clock을 명시적으로 활성화합니다. 일반
 Backend 실행은 계속해서 현재 시각보다 2분 이상 미래인 센서 Observation을
 거부하므로 실제 센서 운영 경계에는 영향을 주지 않습니다.
-또한 MVP 화면이 정적 Canonical V3.1 기본값에 머물지 않도록 로컬 데모 Project
-사용자들의 명시적 Dataset 선택을 Live Dataset Version으로 맞춥니다. 기존 선택을
-유지하려면 `--keep-dataset-selection`을 사용합니다.
+또한 Operations 화면이 정적 Canonical V3.1 또는 과거 Live Dataset에 고정되지
+않도록 초기 이력 전체의 DB 적재와 그 마지막 시점의 Product Result까지 확인한 뒤
+Frontend를 시작합니다. 그 다음 데모 사용자들의 명시적 선택을 제거하여 자동 Live
+Dataset 선택 정책으로 복구합니다. 기존 선택을 유지하려면
+`--keep-dataset-selection`을 사용합니다.
 
 V3.1 예지보전 데모 패키지가
 `data/raw/predictive_maintenance_canonical_v3.1`에 있으면 자동으로 감지해

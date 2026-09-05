@@ -110,6 +110,8 @@ describe("Operations adapter contract", () => {
     expect(assets[0].status).toBe("critical");
     expect(assets[0].criticality).toBeNull();
     expect(assets[0].eventId).toBe("RESULT#CNC-009");
+    expect(assets[0].line).toBe("CELL-1");
+    expect(assets[0].provenance.datasetLabel).toBe("Canonical V3.1");
     expect(events).toEqual([
       expect.objectContaining({
         eventId: "RESULT#CNC-009",
@@ -451,6 +453,13 @@ describe("Operations adapter contract", () => {
       datasetVersion: "dsv-canonical-v3-1",
       sourceSha256: null,
     });
+    expect(enriched.event).toEqual(expect.objectContaining({
+      eventId: "EVT-CNC-001",
+      observedAt: "2026-08-06T03:00:00Z",
+      failureProbability: 0.92,
+      status: "critical",
+      datasetVersionId: "dsv-canonical-v3-1",
+    }));
     expect(enriched.sensors[0]).toEqual(expect.objectContaining({
       observedAt: "2026-08-06T03:00:00Z",
       historySourceRef: "observation-series://CNC-001/tool_wear_min",

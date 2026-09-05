@@ -541,9 +541,14 @@ def _feature(
             **_optional(factor_evidence or {}, "evidence_field_id"),
         }
     current_value = sensor.get("current") if "current" in sensor else (factor_evidence or {}).get("value")
-    current_quality = (
-        "unknown" if is_data_quality_hold or current_value is None else "good"
-    )
+    current_quality = "good"
+    if current_value is None and not is_data_quality_hold:
+        current_point = _feature_point_at(history, current_observed_at)
+        if current_point is not None:
+            current_value = current_point.get("value")
+            current_quality = str(current_point.get("quality_status") or "unknown")
+    if is_data_quality_hold or current_value is None:
+        current_quality = "unknown"
     return (
         {
             "key": key,
@@ -560,6 +565,16 @@ def _feature(
         },
         gap,
     )
+
+
+def _feature_point_at(history: dict[str, Any], observed_at: str) -> dict[str, Any] | None:
+    """Return the exact Observation used by the selected Product Result."""
+
+    target = _timestamp_instant(observed_at)
+    for point in reversed(history.get("points") or []):
+        if _timestamp_instant(str(point["observed_at"])) == target:
+            return point
+    return None
 
 
 def _feature_history(

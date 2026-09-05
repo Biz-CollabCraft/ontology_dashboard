@@ -14,7 +14,9 @@ from scripts.run_local_realtime import (
     _fast_forward_initial_history,
     _initial_fast_forward_target_hours,
     _latest_live_observed_at,
+    _restore_automatic_dataset_selection,
     _simulation_start_at,
+    _wait_for_live_dataset_session,
 )
 
 
@@ -75,8 +77,8 @@ def test_resumed_live_run_does_not_repeat_initial_fast_forward() -> None:
 def test_initial_fast_forward_keeps_the_original_run(monkeypatch) -> None:
     calls = []
 
-    def post_json(url, payload):
-        calls.append((url, payload))
+    def post_json(url, payload, *, timeout_seconds=15):
+        calls.append((url, payload, timeout_seconds))
         return {"run_id": "original-run", "generated_records": 3600}
 
     monkeypatch.setattr(local_realtime, "_post_json", post_json)
@@ -92,6 +94,7 @@ def test_initial_fast_forward_keeps_the_original_run(monkeypatch) -> None:
         (
             "http://127.0.0.1:8300/api/runs/original-run/simulation/fast-forward",
             {"target_elapsed_hours": 168},
+            300,
         )
     ]
 
@@ -157,16 +160,112 @@ def test_database_bootstrap_migrates_and_seeds_before_package_ingestion(monkeypa
     assert "get_identity_service" in calls[2][1][2]
 
 
-def test_clean_start_creates_simulation_before_selecting_live_dataset_and_frontend() -> None:
+def test_clean_start_creates_simulation_before_waiting_for_live_dataset_and_frontend() -> None:
     source = inspect.getsource(local_realtime.main)
     run_create = source.index('f"http://127.0.0.1:{args.gen_data_port}/api/runs"')
-    dataset_select = source.index("_select_live_dataset_for_project_users(")
+    dataset_select = source.index("_wait_for_live_dataset_session(")
     frontend_start = source.index('"frontend",')
 
     assert run_create < dataset_select < frontend_start
     assert '"--speed", type=float, default=60.0' in source
     assert "default=DEFAULT_SIMULATION_HOURS" in source
-    assert DEFAULT_SIMULATION_HOURS == 336
+    assert DEFAULT_SIMULATION_HOURS == 720
     assert DEFAULT_HISTORY_BACKFILL_HOURS == 168
     assert MODEL_MINIMUM_HISTORY_HOURS == 6
     assert MODEL_MINIMUM_HISTORY_ROWS == 36
+
+
+def test_launcher_waits_for_a_product_result_from_its_own_session(monkeypatch) -> None:
+    latest = datetime(2026, 9, 4, 5, 0, tzinfo=timezone.utc)
+
+    class Result:
+        def fetchone(self):
+            return ("dsv-live", 100800, 100, latest, latest)
+
+    class Connection:
+        def __init__(self):
+            self.executed = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, statement, params=None):
+            self.executed.append((statement, params))
+            if "COUNT(artifact.artifact_id)" in statement:
+                return Result()
+            return self
+
+    connection = Connection()
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=lambda _url: connection))
+
+    assert _wait_for_live_dataset_session(
+        "postgresql://local/demo",
+        simulation_session_id="local-realtime-current",
+        minimum_record_count=100800,
+    ) == ("dsv-live", 100)
+    query, params = connection.executed[-1]
+    assert "simulation_session_id" in query
+    assert "version.record_count" in query
+    assert params[-1] == "local-realtime-current"
+
+
+def test_launcher_uses_fixed_warmup_boundary_while_live_head_advances(monkeypatch) -> None:
+    warmup_boundary = datetime(2026, 9, 4, 5, 0, tzinfo=timezone.utc)
+    moving_live_head = warmup_boundary + timedelta(hours=2)
+
+    class Result:
+        def fetchone(self):
+            return ("dsv-live", 100800, 100, warmup_boundary, moving_live_head)
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, statement, params=None):
+            if "COUNT(artifact.artifact_id)" in statement:
+                return Result()
+            return self
+
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=lambda _url: Connection()))
+
+    assert _wait_for_live_dataset_session(
+        "postgresql://local/demo",
+        simulation_session_id="local-realtime-current",
+        minimum_record_count=100800,
+        required_result_at=warmup_boundary,
+    ) == ("dsv-live", 100)
+
+
+def test_launcher_restores_automatic_selection_instead_of_pinning_live_explicitly(monkeypatch) -> None:
+    class Result:
+        def fetchall(self):
+            return [("manager",), ("engineer",)]
+
+    class Connection:
+        def __init__(self):
+            self.executed = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, statement, params=None):
+            self.executed.append((statement, params))
+            if "DELETE FROM pm_workspace_dataset_selections" in statement:
+                return Result()
+            return self
+
+    connection = Connection()
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=lambda _url: connection))
+
+    assert _restore_automatic_dataset_selection("postgresql://local/demo") == 2
+    query, _params = connection.executed[-1]
+    assert "DELETE FROM pm_workspace_dataset_selections" in query

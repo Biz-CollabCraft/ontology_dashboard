@@ -163,6 +163,46 @@ def test_latest_detail_view_anchors_history_and_snapshot_to_selected_event() -> 
     )
 
 
+def test_latest_detail_view_uses_exact_observation_for_non_evidence_sensor_current() -> None:
+    class CurrentObservationPort(FakeAssetDetailReadPort):
+        def feature_series(self, **kwargs: Any) -> dict[str, dict[str, Any]]:
+            series = super().feature_series(**kwargs)
+            series["voltage_raw"] = {
+                "source_ref": "observation://CMP-S03-L03-01.voltage_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-31T23:50:00+09:00",
+                        "value": 218.0,
+                        "quality_status": "good",
+                    },
+                    {
+                        "observed_at": "2026-08-01T00:00:00+09:00",
+                        "value": 221.5,
+                        "quality_status": "good",
+                    },
+                ],
+            }
+            return series
+
+    payload = AssetDetailViewModelService(CurrentObservationPort()).latest_detail_view(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        asset_id="CMP-S03-L03-01",
+        dataset_version_id="canonical-ai4i-physics-v3.1",
+        event_id="RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
+        history_window="24h",
+    )
+
+    voltage = next(item for item in payload["features"] if item["key"] == "voltage_raw")
+    assert voltage["current"] == {
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "value": 221.5,
+        "quality_status": "good",
+    }
+    assert [point["value"] for point in voltage["history"]["points"]] == [218.0]
+
+
 def test_service_rejects_mismatched_result_artifact_asset() -> None:
     artifact = json.loads(json.dumps(ARTIFACT))
     artifact["asset_id"] = "CMP-OTHER"

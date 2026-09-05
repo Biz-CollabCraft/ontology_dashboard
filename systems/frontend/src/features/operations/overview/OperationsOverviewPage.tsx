@@ -20,6 +20,9 @@ export function OperationsOverviewPage({
   detail,
   detailLoading,
   detailError,
+  monitoringDetail,
+  monitoringDetailLoading,
+  monitoringDetailError,
   sensorWindow,
   canMaterializeAgentSummary,
   canManageWorkflow,
@@ -40,6 +43,9 @@ export function OperationsOverviewPage({
   detail: OperationsEventDetailModel | null;
   detailLoading: boolean;
   detailError: string | null;
+  monitoringDetail: OperationsEventDetailModel | null;
+  monitoringDetailLoading: boolean;
+  monitoringDetailError: string | null;
   sensorWindow: OperationsSensorWindowId;
   canMaterializeAgentSummary: boolean;
   canManageWorkflow: boolean;
@@ -71,6 +77,9 @@ export function OperationsOverviewPage({
           detail={detail}
           detailLoading={detailLoading}
           detailError={detailError}
+          monitoringDetail={monitoringDetail}
+          monitoringDetailLoading={monitoringDetailLoading}
+          monitoringDetailError={monitoringDetailError}
           sensorWindow={sensorWindow}
           canMaterializeAgentSummary={canMaterializeAgentSummary}
           canManageWorkflow={canManageWorkflow}

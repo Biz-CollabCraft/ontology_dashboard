@@ -636,9 +636,22 @@ export interface OpenInspectionWorkOrderReadModel {
   equipment_id: string;
   asset_type: string;
   work_type: "inspection";
-  status: "requested" | "approved" | "in_progress";
+  status: "requested" | "approved" | "in_progress" | "completed";
   assigned_to?: string | null;
   assigned_at?: string | null;
+  inspection_outcome?: "no_action_required" | "maintenance_recommended" | "data_check_required" | null;
+  current_step?:
+    | "inspection_requested"
+    | "inspection_approved"
+    | "inspection_in_progress"
+    | "inspection_completed"
+    | "recommendation_proposed"
+    | "maintenance_requested"
+    | "maintenance_approved"
+    | "maintenance_in_progress"
+    | "maintenance_completed"
+    | "post_maintenance_observation_pending"
+    | "ready_for_reprediction";
 }
 
 export interface MaintenanceCostAnalysisRequest {

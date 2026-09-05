@@ -1094,6 +1094,11 @@ export function applyAssetDetailViewModel(
     threshold: viewModel.risk.threshold,
     event: {
       ...detail.event,
+      eventId: snapshotBasis.eventId ?? detail.event.eventId,
+      observedAt: snapshotBasis.observedAt,
+      failureProbability: viewModel.risk.current,
+      status: viewModel.risk.status_grade ?? detail.event.status,
+      datasetVersionId: snapshotBasis.datasetVersion ?? detail.event.datasetVersionId,
       criticality: viewModel.asset.criticality,
     },
     assetCriticality: viewModel.asset.criticality,

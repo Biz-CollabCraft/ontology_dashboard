@@ -17,7 +17,9 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createOperationsAgentReviewSummary,
+  getOpenInspectionWorkOrders,
   getOperationsAgentReviewSummary,
+  type OpenInspectionWorkOrderReadModel,
 } from "../../../api";
 import type {
   OperationsAgentReviewSummary,
@@ -70,7 +72,7 @@ import {
   type PostMaintenancePredictionSummary,
 } from "../maintenance/MaintenanceWorkflowActionPanel";
 
-interface WorkOrderCandidate {
+export interface WorkOrderCandidate {
   event: OperationsEvent;
   asset: OperationsAsset | null;
   suspectedPart: string;
@@ -503,13 +505,30 @@ function latestReceivedLabel(model: OperationsBootstrapModel): string {
 }
 
 function operationsMonitorStatusLabel(status: OperationsRiskStatus, workStatus?: WorkStatus | null): string {
-  if (workStatus === "inspection_started" || workStatus === "inspection_completed") return "점검 중";
+  if (workStatus === "work_requested") return "점검 요청됨";
+  if (workStatus === "assigned") return "담당자 배정됨";
+  if (workStatus === "inspection_started") return "점검 중";
+  if (workStatus === "inspection_completed") return "점검 완료·정비 검토";
   if (workStatus === "maintenance_started") return "정비 중";
-  if (workStatus === "maintenance_completed" || workStatus === "observation_pending" || workStatus === "ready_for_reprediction") return "완료 확인 필요";
+  if (workStatus === "maintenance_completed") return "정비 완료";
+  if (workStatus === "observation_pending") return "정비 후 관측 대기";
+  if (workStatus === "ready_for_reprediction") return "정비 후 예측 완료";
   if (status === "critical") return "긴급";
   if (status === "warning" || status === "attention") return "주의";
   if (status === "data_quality_hold") return "완료 확인 필요";
   return "정상";
+}
+
+function mapWorkStatusLabel(status: WorkStatus): string {
+  if (status === "work_requested") return "점검 요청";
+  if (status === "assigned") return "담당 배정";
+  if (status === "inspection_started") return "점검 중";
+  if (status === "inspection_completed") return "점검 완료";
+  if (status === "maintenance_started") return "정비 중";
+  if (status === "maintenance_completed") return "정비 완료";
+  if (status === "observation_pending") return "관측 대기";
+  if (status === "ready_for_reprediction") return "예측 완료";
+  return "후보";
 }
 
 function alertBadgeCount(assets: OperationsAsset[]): number {
@@ -1085,8 +1104,10 @@ function latestClosedLoopMaintenanceEvent(closedLoop: OperationsClosedLoopSummar
   return [...(closedLoop?.maintenanceEvents ?? [])].sort((left, right) => String(right.completedAt ?? "").localeCompare(String(left.completedAt ?? "")))[0] ?? null;
 }
 
-function workStatusFromLifecycleSummary(summary: OperationsClosedLoopLifecycleSummary | null | undefined): WorkStatus | null {
-  switch (summary?.currentStep) {
+export function workStatusFromLifecycleStep(
+  step: OperationsClosedLoopLifecycleStep | OpenInspectionWorkOrderReadModel["current_step"] | null | undefined,
+): WorkStatus | null {
+  switch (step) {
     case "prediction":
     case "evidence":
     case "decision":
@@ -1094,14 +1115,16 @@ function workStatusFromLifecycleSummary(summary: OperationsClosedLoopLifecycleSu
     case "inspection_requested":
       return "work_requested";
     case "inspection_approved":
+      return "assigned";
     case "inspection_completed":
     case "recommendation_proposed":
     case "maintenance_requested":
     case "maintenance_approved":
-      return "assigned";
+      return "inspection_completed";
     case "inspection_in_progress":
-    case "maintenance_in_progress":
       return "inspection_started";
+    case "maintenance_in_progress":
+      return "maintenance_started";
     case "maintenance_completed":
       return "maintenance_completed";
     case "post_maintenance_observation_pending":
@@ -1111,6 +1134,43 @@ function workStatusFromLifecycleSummary(summary: OperationsClosedLoopLifecycleSu
     default:
       return null;
   }
+}
+
+function workStatusFromLifecycleSummary(summary: OperationsClosedLoopLifecycleSummary | null | undefined): WorkStatus | null {
+  return workStatusFromLifecycleStep(summary?.currentStep);
+}
+
+function workStatusFromInspectionWorkflow(
+  workOrder: OpenInspectionWorkOrderReadModel | null | undefined,
+): WorkStatus | null {
+  if (!workOrder) return null;
+  const lifecycleStatus = workStatusFromLifecycleStep(workOrder.current_step);
+  if (lifecycleStatus) return lifecycleStatus;
+  if (workOrder.status === "requested") return "work_requested";
+  if (workOrder.status === "approved") return "assigned";
+  if (workOrder.status === "in_progress") return "inspection_started";
+  if (workOrder.status === "completed") return "inspection_completed";
+  return null;
+}
+
+export function prioritizeActiveWorkflowCandidates(
+  candidates: WorkOrderCandidate[],
+  workOrders: OpenInspectionWorkOrderReadModel[],
+): WorkOrderCandidate[] {
+  const candidatesByAsset = new Map<string, WorkOrderCandidate>();
+  for (const workOrder of workOrders) {
+    const candidate = candidates.find((item) => item.event.eventId === workOrder.event_id)
+      ?? candidates.find((item) => item.event.assetId === workOrder.asset_id);
+    if (candidate && !candidatesByAsset.has(workOrder.asset_id)) {
+      candidatesByAsset.set(workOrder.asset_id, candidate);
+    }
+  }
+  for (const candidate of candidates) {
+    if (!candidatesByAsset.has(candidate.event.assetId)) {
+      candidatesByAsset.set(candidate.event.assetId, candidate);
+    }
+  }
+  return [...candidatesByAsset.values()];
 }
 
 function workStatusFromClosedLoop(closedLoop: OperationsClosedLoopSummary | null | undefined): WorkStatus | null {
@@ -1344,16 +1404,22 @@ function WorkStatusQueueBoard({
   candidates,
   role,
   selectedAssetId,
+  workOrders,
+  loadError,
   onPreview,
 }: {
   candidates: WorkOrderCandidate[];
   role: OperationsRoleLens;
   selectedAssetId: string | null;
+  workOrders: OpenInspectionWorkOrderReadModel[];
+  loadError: string | null;
   onPreview: (assetId: string, eventId: string | null) => void;
 }) {
   const items = candidates.map((candidate) => {
-    const status = workStatusForAsset(candidate.asset, candidate.event);
-    return { candidate, status, column: workQueueColumn(status) };
+    const workOrder = workOrders.find((item) => item.asset_id === candidate.event.assetId) ?? null;
+    const status: WorkStatus = workStatusFromInspectionWorkflow(workOrder)
+      ?? workStatusForAsset(candidate.asset, candidate.event);
+    return { candidate, workOrder, status, column: workQueueColumn(status) };
   });
   return (
     <section className="operations-work-queue-board" aria-label="작업 상태 큐">
@@ -1362,7 +1428,7 @@ function WorkStatusQueueBoard({
           <span>{role === "field_operator" ? "현장 작업 큐" : "생산 판단 큐"}</span>
           <strong>작업 상태 큐</strong>
         </div>
-        <small>현재 확인 가능한 판단·작업 상태를 기준으로 분류하며 실제 업무 이력이 생기면 자동 반영됩니다.</small>
+        <small>{loadError ?? "실시간 Prediction은 계속 수집하며 화면 상태는 열린 점검 WorkOrder를 우선합니다."}</small>
       </header>
       <div className="operations-work-kanban" role="list">
         {WORK_QUEUE_COLUMNS.map((column) => {
@@ -1374,10 +1440,13 @@ function WorkStatusQueueBoard({
                 <b>{columnItems.length}</b>
               </header>
               <div>
-                {columnItems.length ? columnItems.map(({ candidate, status }) => {
+                {columnItems.length ? columnItems.map(({ candidate, workOrder, status }) => {
                   const assetName = candidate.asset ? displayAssetName(candidate.asset) : displayEventAssetName(candidate.event);
                   const lineLabel = candidate.asset?.line || candidate.asset?.cell || candidate.event.line || "라인 미지정";
-                  const assignee = candidate.event.assignedEngineer ?? candidate.asset?.assignedEngineer ?? "미배정";
+                  const assignee = workOrder?.assigned_to
+                    ?? candidate.event.assignedEngineer
+                    ?? candidate.asset?.assignedEngineer
+                    ?? "미배정";
                   const secondary = role === "field_operator"
                     ? `${candidate.suspectedPart} · ${displayPartLabel(candidate.event.sparePartAvailable)}`
                     : `${lineLabel} · ${DECISION_LABEL[candidate.event.recommendedDecision]}`;
@@ -1388,7 +1457,9 @@ function WorkStatusQueueBoard({
                       className={selectedAssetId === candidate.event.assetId ? "operations-work-kanban-card is-selected" : "operations-work-kanban-card"}
                       onClick={() => onPreview(candidate.event.assetId, candidate.event.eventId)}
                     >
-                      <OperationsStatusBadge status={candidate.event.status} />
+                      {workOrder
+                        ? <span className="operations-slot-status">{WORK_STATUS_LABEL[status]}</span>
+                        : <OperationsStatusBadge status={candidate.event.status} />}
                       <strong>{assetName}</strong>
                       <small>{secondary}</small>
                       <span>{WORK_STATUS_LABEL[status]} · 담당 {assignee}</span>
@@ -1567,6 +1638,7 @@ function FactoryMonitoringMapPanel({
   factoryCells,
   selectedAsset,
   postMaintenancePredictions,
+  workOrders,
   planningBasis,
   liveDemo,
   focusMode,
@@ -1576,6 +1648,7 @@ function FactoryMonitoringMapPanel({
   factoryCells: FactoryCellLayout[];
   selectedAsset: OperationsAsset | null;
   postMaintenancePredictions: Record<string, PostMaintenancePredictionSummary>;
+  workOrders: OpenInspectionWorkOrderReadModel[];
   planningBasis: { value: string; fallback: boolean };
   liveDemo: RealtimeDemoSnapshot;
   focusMode: "all" | "exceptions";
@@ -1632,13 +1705,23 @@ function FactoryMonitoringMapPanel({
                           {cell.slots.map((slot) => {
                             const asset = slot.asset;
                             const currentPrediction = asset ? postMaintenancePredictions[asset.assetId] : null;
+                            const openWorkOrder = asset
+                              ? workOrders.find((item) => item.asset_id === asset.assetId) ?? null
+                              : null;
+                            const workflowStatus = workStatusFromInspectionWorkflow(openWorkOrder);
                             const selected = asset ? selectedAsset?.assetId === asset.assetId : false;
                             const isLiveDemoFocus = asset?.assetId === liveDemo.assetId;
                             const liveStatus = isLiveDemoFocus ? liveDemo.status : null;
                             const liveRisk = isLiveDemoFocus ? liveDemo.risk : null;
-                            const tone = asset ? mapTone(liveStatus ?? currentPrediction?.statusGrade ?? asset.status) : "slot";
+                            const tone = workflowStatus
+                              ? ["maintenance_completed", "observation_pending", "ready_for_reprediction"].includes(workflowStatus)
+                                ? "hold"
+                                : "warning"
+                              : asset ? mapTone(liveStatus ?? currentPrediction?.statusGrade ?? asset.status) : "slot";
                             const title = asset
-                              ? `${displayFactorySlotName(slot, cell)} · ${operationsMonitorStatusLabel(liveStatus ?? currentPrediction?.statusGrade ?? asset.status)} · ${formatProbability(liveRisk ?? currentPrediction?.failureProbability ?? asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}${isLiveDemoFocus ? " · 최근 Result 수신" : ""}`
+                              ? workflowStatus
+                                ? `${displayFactorySlotName(slot, cell)} · ${WORK_STATUS_LABEL[workflowStatus]} · ${openWorkOrder?.work_order_id ?? "작업 ID 확인 중"}`
+                                : `${displayFactorySlotName(slot, cell)} · ${operationsMonitorStatusLabel(liveStatus ?? currentPrediction?.statusGrade ?? asset.status)} · ${formatProbability(liveRisk ?? currentPrediction?.failureProbability ?? asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}${isLiveDemoFocus ? " · 최근 Result 수신" : ""}`
                               : `${cell.label} · ${slot.label} · 설비 미연결`;
                             return asset ? (
                               <button
@@ -1646,13 +1729,13 @@ function FactoryMonitoringMapPanel({
                                 type="button"
                                 className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""} ${isLiveDemoFocus ? "is-live-result-focus" : ""} ${focusMode === "exceptions" && tone === "normal" && !selected && !isLiveDemoFocus ? "is-deemphasized" : ""}`}
                                 aria-pressed={selected}
-                                aria-label={`${displayFactorySlotName(slot, cell)} · ${asset.assetId} · ${operationsMonitorStatusLabel(liveStatus ?? currentPrediction?.statusGrade ?? asset.status)} · 위험 ${formatProbability(liveRisk ?? currentPrediction?.failureProbability ?? asset.failureProbability)}`}
+                                aria-label={`${displayFactorySlotName(slot, cell)} · ${asset.assetId} · ${workflowStatus ? WORK_STATUS_LABEL[workflowStatus] : operationsMonitorStatusLabel(liveStatus ?? currentPrediction?.statusGrade ?? asset.status)} · 위험 ${formatProbability(liveRisk ?? currentPrediction?.failureProbability ?? asset.failureProbability)}`}
                                 onClick={() => onPreviewAssetSlot(asset, slot, cell)}
                                 title={title}
                               >
-                                <span>{displayAssetShortName(asset)}</span>
+                                <span>{workflowStatus ? mapWorkStatusLabel(workflowStatus) : displayAssetShortName(asset)}</span>
                                 {isLiveDemoFocus ? <small className="operations-live-node-risk">{formatProbability(liveRisk)}</small> : null}
-                                {tone !== "normal" ? <b className="operations-asset-alert-badge" aria-label={`${operationsMonitorStatusLabel(liveStatus ?? asset.status)} 알림`}>{isLiveDemoFocus ? "LIVE" : tone === "critical" ? "!" : "1"}</b> : null}
+                                {tone !== "normal" ? <b className="operations-asset-alert-badge" aria-label={`${workflowStatus ? WORK_STATUS_LABEL[workflowStatus] : operationsMonitorStatusLabel(liveStatus ?? asset.status)} 알림`}>{isLiveDemoFocus && !workflowStatus ? "LIVE" : tone === "critical" ? "!" : "1"}</b> : null}
                               </button>
                             ) : (
                               <div key={slot.id} className={`operations-factory-asset-node ${tone} ${slot.kind}`} title={title} aria-label={title}>
@@ -1683,6 +1766,9 @@ export function OperationsWorkflowOverviewPage({
   detail,
   detailLoading,
   detailError,
+  monitoringDetail,
+  monitoringDetailLoading,
+  monitoringDetailError,
   sensorWindow,
   canMaterializeAgentSummary,
   canManageWorkflow,
@@ -1700,6 +1786,9 @@ export function OperationsWorkflowOverviewPage({
   detail: OperationsEventDetailModel | null;
   detailLoading: boolean;
   detailError: string | null;
+  monitoringDetail: OperationsEventDetailModel | null;
+  monitoringDetailLoading: boolean;
+  monitoringDetailError: string | null;
   sensorWindow: OperationsSensorWindowId;
   canMaterializeAgentSummary: boolean;
   canManageWorkflow: boolean;
@@ -1717,13 +1806,60 @@ export function OperationsWorkflowOverviewPage({
     const asset = model.assets.find((item) => item.assetId === event.assetId) ?? null;
     return { event, asset, suspectedPart: suspectedPartLabel(event, asset) };
   });
+  const [openInspectionWorkOrders, setOpenInspectionWorkOrders] = useState<OpenInspectionWorkOrderReadModel[]>([]);
+  const [openInspectionWorkOrdersError, setOpenInspectionWorkOrdersError] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void getOpenInspectionWorkOrders(
+      model.context.projectId,
+      model.context.workspaceId,
+      controller.signal,
+    ).then((response) => {
+      setOpenInspectionWorkOrders(response.items);
+      setOpenInspectionWorkOrdersError(null);
+    }).catch((reason) => {
+      if (controller.signal.aborted) return;
+      setOpenInspectionWorkOrders([]);
+      setOpenInspectionWorkOrdersError(
+        reason instanceof Error ? reason.message : "열린 점검 요청을 불러오지 못했습니다.",
+      );
+    });
+    return () => controller.abort();
+  }, [model.context.projectId, model.context.refreshedAt, model.context.workspaceId]);
+  const queueCandidatePool = [...workOrderCandidates];
+  for (const workOrder of openInspectionWorkOrders) {
+    if (queueCandidatePool.some((candidate) => candidate.event.eventId === workOrder.event_id)) continue;
+    const currentEvent = model.events.find((item) => item.eventId === workOrder.event_id)
+      ?? model.events.find((item) => item.assetId === workOrder.asset_id);
+    if (!currentEvent) continue;
+    const event = currentEvent.eventId === workOrder.event_id
+      ? currentEvent
+      : { ...currentEvent, eventId: workOrder.event_id };
+    const asset = model.assets.find((item) => item.assetId === workOrder.asset_id) ?? null;
+    queueCandidatePool.push({ event, asset, suspectedPart: suspectedPartLabel(event, asset) });
+  }
+  const queueCandidates = prioritizeActiveWorkflowCandidates(
+    queueCandidatePool,
+    openInspectionWorkOrders,
+  );
   const lineImpactSummaries = buildLineImpactSummaries(model.assets);
   const factoryCells = buildFactoryCellLayout(model.assets, lineImpactSummaries);
   const selectedAsset = model.assets.find((asset) => asset.assetId === selectedAssetId)
     ?? null;
-  const selectedEvent = selectedAsset?.eventId
-    ? model.events.find((event) => event.eventId === selectedAsset.eventId) ?? null
+  const selectedOpenInspectionWorkOrder = selectedAsset
+    ? openInspectionWorkOrders.find((item) => item.asset_id === selectedAsset.assetId) ?? null
     : null;
+  const selectedEventSource = selectedOpenInspectionWorkOrder
+    ? model.events.find((event) => event.eventId === selectedOpenInspectionWorkOrder.event_id)
+      ?? model.events.find((event) => event.assetId === selectedOpenInspectionWorkOrder.asset_id)
+      ?? null
+    : selectedAsset?.eventId
+      ? model.events.find((event) => event.eventId === selectedAsset.eventId) ?? null
+      : null;
+  const selectedEvent = selectedEventSource && selectedOpenInspectionWorkOrder
+    && selectedEventSource.eventId !== selectedOpenInspectionWorkOrder.event_id
+    ? { ...selectedEventSource, eventId: selectedOpenInspectionWorkOrder.event_id }
+    : selectedEventSource;
   const selectedFactors = detail && detail.event.assetId === selectedAsset?.assetId && detail.topFactors.length
     ? detail.topFactors
     : selectedAsset?.topFactors ?? [];
@@ -1735,26 +1871,30 @@ export function OperationsWorkflowOverviewPage({
   const riskyLines = model.lineRisk.filter((line) => line.critical + line.warning + line.dataQualityHold > 0).length;
   const attentionEquipmentCount = metrics.attention + metrics.warning + metrics.dataQualityHold;
   const urgentEquipmentCount = metrics.critical;
-  const workInProgressCount = workOrderCandidates.length;
+  const workInProgressCount = new Set(openInspectionWorkOrders.map((item) => item.asset_id)).size;
   const runningEquipmentCount = Math.max(0, metrics.totalAssets - workInProgressCount);
   const lastReceived = latestReceivedLabel(model);
   const liveDemo = useRealtimeRoleDemo(model);
   const selectedCandidate = selectedEvent
-    ? workOrderCandidates.find((candidate) => candidate.event.eventId === selectedEvent.eventId) ?? null
+    ? queueCandidates.find((candidate) => candidate.event.eventId === selectedEvent.eventId)
+      ?? queueCandidates.find((candidate) => candidate.event.assetId === selectedEvent.assetId)
+      ?? null
     : null;
   const selectedDetail = detail?.event.assetId === selectedAsset?.assetId ? detail : null;
   const plannedUnits = plannedUnitsFromDetail(selectedDetail);
   const planningBasis = planningBasisFromDetail(selectedDetail);
   const maxPlanningImpact = planningImpactFromOperationContext(selectedDetail);
-  const selectedClosedLoopStatus = workStatusFromClosedLoop(selectedDetail?.closedLoop);
-  const selectedClosedLoopWorkId = closedLoopWorkIdLabel(selectedDetail?.closedLoop);
+  const selectedClosedLoopStatus = workStatusFromInspectionWorkflow(selectedOpenInspectionWorkOrder)
+    ?? workStatusFromClosedLoop(selectedDetail?.closedLoop);
+  const selectedClosedLoopWorkId = selectedOpenInspectionWorkOrder?.work_order_id
+    ?? closedLoopWorkIdLabel(selectedDetail?.closedLoop);
   const selectedLifecycleSummary = selectedDetail?.closedLoop?.lifecycleSummary ?? null;
-  const selectedWorkStatusLabel = selectedLifecycleSummary?.currentStepLabel ?? (selectedClosedLoopStatus ? WORK_STATUS_LABEL[selectedClosedLoopStatus] : "미생성");
+  const selectedWorkStatusLabel = selectedClosedLoopStatus ? WORK_STATUS_LABEL[selectedClosedLoopStatus] : "미생성";
   const selectedWorkStatusDetail = selectedClosedLoopStatus
-    ? `${selectedClosedLoopWorkId} · 담당 ${closedLoopAssignee(selectedDetail?.closedLoop) ?? selectedEvent?.assignedEngineer ?? "미배정"}`
+    ? `${selectedClosedLoopWorkId} · 담당 ${selectedOpenInspectionWorkOrder?.assigned_to ?? closedLoopAssignee(selectedDetail?.closedLoop) ?? selectedEvent?.assignedEngineer ?? "미배정"}`
     : "작업요청 ID 미생성 · 점검 후보";
   const agentSummaryLine = role === "field_operator"
-    ? `점검 후보 ${workOrderCandidates.length}건 · 부품 확인 ${needsPartCheck}건 · ${selectedWorkStatusLabel}`
+    ? `점검 후보 ${queueCandidates.length}건 · 부품 확인 ${needsPartCheck}건 · ${selectedWorkStatusLabel}`
     : `위험 라인 ${riskyLines}개 · 라인 ${lineImpactSummaries.length}개 · 평균 위험도 ${formatProbability(metrics.averageRisk)}`;
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
   const [detailDrawerTab, setDetailDrawerTab] = useState<DrawerTab>("status");
@@ -1802,11 +1942,24 @@ export function OperationsWorkflowOverviewPage({
       observedAt: drawerPrediction.observedAt,
     }
     : drawerAssetSource;
-  const drawerEvent = drawerAsset?.eventId
-    ? model.events.find((event) => event.eventId === drawerAsset.eventId) ?? null
+  const drawerOpenInspectionWorkOrder = drawerAsset
+    ? openInspectionWorkOrders.find((item) => item.asset_id === drawerAsset.assetId) ?? null
     : null;
+  const drawerEventSource = drawerOpenInspectionWorkOrder
+    ? model.events.find((event) => event.eventId === drawerOpenInspectionWorkOrder.event_id)
+      ?? model.events.find((event) => event.assetId === drawerOpenInspectionWorkOrder.asset_id)
+      ?? null
+    : drawerAsset?.eventId
+      ? model.events.find((event) => event.eventId === drawerAsset.eventId) ?? null
+      : null;
+  const drawerEvent = drawerEventSource && drawerOpenInspectionWorkOrder
+    && drawerEventSource.eventId !== drawerOpenInspectionWorkOrder.event_id
+    ? { ...drawerEventSource, eventId: drawerOpenInspectionWorkOrder.event_id }
+    : drawerEventSource;
   const drawerCandidate = drawerEvent
-    ? workOrderCandidates.find((candidate) => candidate.event.eventId === drawerEvent.eventId) ?? null
+    ? queueCandidates.find((candidate) => candidate.event.eventId === drawerEvent.eventId)
+      ?? queueCandidates.find((candidate) => candidate.event.assetId === drawerEvent.assetId)
+      ?? null
     : null;
   const drawerLineSummary = drawerAsset
     ? lineImpactSummaries.find((summary) => summary.line === (drawerAsset.line || drawerAsset.cell || "라인 근거 없음")) ?? null
@@ -1817,14 +1970,25 @@ export function OperationsWorkflowOverviewPage({
   const drawerRiskPercent = drawerAsset?.failureProbability === null || drawerAsset?.failureProbability === undefined
     ? null
     : Math.round(drawerAsset.failureProbability * 100);
-  const drawerDetail = drawerAsset && detail?.event.assetId === drawerAsset.assetId ? detail : null;
-  const drawerEventId = drawerDetail?.snapshotBasis?.eventId
-    ?? drawerDetail?.event.eventId
+  const drawerEventId = drawerOpenInspectionWorkOrder?.event_id
     ?? drawerEvent?.eventId
     ?? drawerAsset?.eventId
     ?? null;
+  const drawerDetail = drawerAsset
+    && detail?.event.assetId === drawerAsset.assetId
+    && detail.event.eventId === drawerEventId
+    ? detail
+    : null;
+  const drawerMonitoringDetail = drawerAsset
+    && monitoringDetail?.event.assetId === drawerAsset.assetId
+    ? monitoringDetail
+    : null;
+  const drawerDetailEventId = drawerDetail?.snapshotBasis?.eventId
+    ?? drawerDetail?.event.eventId
+    ?? drawerEventId;
   const drawerClosedLoop = drawerDetail?.closedLoop ?? null;
-  const drawerClosedLoopStatus = workStatusFromClosedLoop(drawerClosedLoop);
+  const drawerClosedLoopStatus = workStatusFromInspectionWorkflow(drawerOpenInspectionWorkOrder)
+    ?? workStatusFromClosedLoop(drawerClosedLoop);
   const drawerLifecycleSummary = drawerClosedLoop?.lifecycleSummary ?? null;
   const drawerClosedLoopAction = primaryClosedLoopAction(drawerClosedLoop, drawerClosedLoopStatus);
   const drawerPlanningImpact = planningImpactFromOperationContext(drawerDetail);
@@ -1832,9 +1996,9 @@ export function OperationsWorkflowOverviewPage({
     ? drawerClosedLoopStatus ?? workStatusForAsset(drawerAsset, drawerEvent)
     : "candidate_recommended";
   const drawerAssignee = drawerAsset
-    ? closedLoopAssignee(drawerClosedLoop) ?? drawerAsset.assignedEngineer ?? drawerEvent?.assignedEngineer ?? "미배정"
+    ? drawerOpenInspectionWorkOrder?.assigned_to ?? closedLoopAssignee(drawerClosedLoop) ?? drawerAsset.assignedEngineer ?? drawerEvent?.assignedEngineer ?? "미배정"
     : "미배정";
-  const drawerWorkId = closedLoopWorkIdLabel(drawerClosedLoop);
+  const drawerWorkId = drawerOpenInspectionWorkOrder?.work_order_id ?? closedLoopWorkIdLabel(drawerClosedLoop);
   const drawerActionLabel = drawerClosedLoopAction?.label ?? null;
   const drawerWorkActionDisabled = true;
   const drawerActionHelper = drawerClosedLoop
@@ -1845,7 +2009,7 @@ export function OperationsWorkflowOverviewPage({
   const fieldSummaryPartStatus = selectedEvent ? displayPartLabel(selectedEvent.sparePartAvailable) : "확인 필요";
   const fieldSummaryQuality = selectedAsset?.status === "data_quality_hold" ? "데이터 품질 확인이 먼저 필요합니다" : "관측 데이터로 바로 확인할 수 있습니다";
   const fieldSummary = selectedAsset
-    ? `${fieldSummaryPart}을 먼저 확인하세요. 부품 상태는 ${fieldSummaryPartStatus}, 작업요청 ID는 아직 없고, ${fieldSummaryQuality}.`
+    ? `${fieldSummaryPart}을 먼저 확인하세요. 부품 상태는 ${fieldSummaryPartStatus}, 작업 상태는 ${selectedWorkStatusLabel}, ${fieldSummaryQuality}.`
     : "선택된 설비가 없어 점검 후보를 만들 수 없습니다.";
   const liveRoleViewLabel = experienceKind === "executive"
     ? "경영진 Brief 반영"
@@ -1907,7 +2071,8 @@ export function OperationsWorkflowOverviewPage({
   const previewFactoryAssetSlot = (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => {
     suppressAutoOpenDrawerRef.current = false;
     setFactorySlotPreview({ slot, cell });
-    onPreviewAsset(asset.assetId, asset.eventId);
+    const workOrder = openInspectionWorkOrders.find((item) => item.asset_id === asset.assetId) ?? null;
+    onPreviewAsset(asset.assetId, workOrder?.event_id ?? asset.eventId);
     setDetailDrawerOpen(true);
     setDetailDrawerTab("status");
   };
@@ -1980,6 +2145,7 @@ export function OperationsWorkflowOverviewPage({
         factoryCells={factoryCells}
         selectedAsset={selectedAsset}
         postMaintenancePredictions={postMaintenancePredictions}
+        workOrders={openInspectionWorkOrders}
         planningBasis={planningBasis}
         liveDemo={liveDemo}
         focusMode={factoryFocusMode}
@@ -2058,7 +2224,7 @@ export function OperationsWorkflowOverviewPage({
           <article className="operations-plan-impact-card">
             <ClipboardList className="operations-plan-impact-icon" size={15} aria-hidden="true" />
             <span>점검 후보</span>
-            <strong>{workOrderCandidates.length.toLocaleString()}건</strong>
+            <strong>{queueCandidates.length.toLocaleString()}건</strong>
             <small>전체 점검 후보</small>
           </article>
           <article className="operations-plan-impact-card is-critical">
@@ -2125,7 +2291,7 @@ export function OperationsWorkflowOverviewPage({
           </OperationsPanel>
           <OperationsPanel title="주요 Decision Case" eyebrow="의사결정 병목" className="operations-today-panel">
             <div className="operations-work-card-list">
-              {workOrderCandidates.slice(0, 3).map((candidate) => (
+              {queueCandidates.slice(0, 3).map((candidate) => (
                 <button type="button" key={candidate.event.eventId} className={selectedAsset?.assetId === candidate.event.assetId ? "operations-work-card is-selected" : "operations-work-card"} onClick={() => previewInDrawer(candidate.event.assetId, candidate.event.eventId)}>
                   <div><OperationsStatusBadge status={candidate.event.status} /><strong>{displayEventAssetName(candidate.event)}</strong><small>예상 영향 {formatMinutes(candidate.event.estimatedDowntimeMinutes)} · {DECISION_LABEL[candidate.event.recommendedDecision]}</small></div>
                 </button>
@@ -2138,7 +2304,7 @@ export function OperationsWorkflowOverviewPage({
           <OperationsPanel title="우선순위" eyebrow="점검 요청 기준" className="operations-today-panel">
             <div className="operations-order-board">
               <div className="operations-work-card-list">
-                {workOrderCandidates.length ? workOrderCandidates.map((candidate, index) => (
+                {queueCandidates.length ? queueCandidates.map((candidate, index) => (
                   <button type="button" key={candidate.event.eventId} className={selectedAsset?.assetId === candidate.event.assetId ? "operations-work-card is-selected" : "operations-work-card"} onClick={() => previewInDrawer(candidate.event.assetId, candidate.event.eventId)}>
                     <div><OperationsStatusBadge status={candidate.event.status} /><strong>{candidate.suspectedPart}</strong><small>제안 #{String(index + 1).padStart(2, "0")} · {displayEventAssetName(candidate.event)}</small></div>
                     <dl>
@@ -2165,7 +2331,7 @@ export function OperationsWorkflowOverviewPage({
           </OperationsPanel>
           <OperationsPanel title="승인 우선순위" eyebrow="Decision Case" className="operations-today-panel">
             <div className="operations-work-card-list">
-              {workOrderCandidates.slice(0, 3).map((candidate, index) => (
+              {queueCandidates.slice(0, 3).map((candidate, index) => (
                 <button type="button" key={candidate.event.eventId} className={selectedAsset?.assetId === candidate.event.assetId ? "operations-work-card is-selected" : "operations-work-card"} onClick={() => previewInDrawer(candidate.event.assetId, candidate.event.eventId)}>
                   <div><OperationsStatusBadge status={candidate.event.status} /><strong>{displayEventAssetName(candidate.event)}</strong><small>우선순위 {index + 1} · {DECISION_LABEL[candidate.event.recommendedDecision]}</small></div>
                 </button>
@@ -2176,9 +2342,11 @@ export function OperationsWorkflowOverviewPage({
       )}
 
       <WorkStatusQueueBoard
-        candidates={workOrderCandidates}
+        candidates={queueCandidates}
         role={role}
         selectedAssetId={selectedAsset?.assetId ?? null}
+        workOrders={openInspectionWorkOrders}
+        loadError={openInspectionWorkOrdersError}
         onPreview={previewInDrawer}
       />
 
@@ -2192,7 +2360,7 @@ export function OperationsWorkflowOverviewPage({
           />
           <aside className="operations-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
             <button type="button" className="operations-detail-drawer-close" aria-label="선택 설비 상세 닫기" onClick={closeDetailDrawer}><X size={16} /></button>
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} liveDemo={liveDemo} role={role} currentUserId={currentUserId} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "작업 이력" : drawerClosedLoop ? "업무 기록" : "현재 판단"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} monitoringDetail={drawerMonitoringDetail} monitoringDetailLoading={factorySlotPreview && !drawerAsset ? false : monitoringDetailLoading} monitoringDetailError={factorySlotPreview && !drawerAsset ? null : monitoringDetailError} sensorWindow={sensorWindow} liveDemo={liveDemo} role={role} currentUserId={currentUserId} openInspectionWorkOrder={drawerOpenInspectionWorkOrder} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerOpenInspectionWorkOrder ? "열린 WorkOrder" : drawerLifecycleSummary ? "작업 이력" : drawerClosedLoop ? "업무 기록" : "현재 판단"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerOpenInspectionWorkOrder?.event_id ?? drawerDetailEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -2620,10 +2788,14 @@ function AssetPreviewPanel({
   detail,
   detailLoading,
   detailError,
+  monitoringDetail,
+  monitoringDetailLoading,
+  monitoringDetailError,
   sensorWindow,
   liveDemo,
   role,
   currentUserId,
+  openInspectionWorkOrder,
   activeTab,
   workStatus,
   workStatusSource,
@@ -2657,10 +2829,14 @@ function AssetPreviewPanel({
   detail: OperationsEventDetailModel | null;
   detailLoading: boolean;
   detailError: string | null;
+  monitoringDetail: OperationsEventDetailModel | null;
+  monitoringDetailLoading: boolean;
+  monitoringDetailError: string | null;
   sensorWindow: OperationsSensorWindowId;
   liveDemo: RealtimeDemoSnapshot;
   role: OperationsRoleLens;
   currentUserId: string;
+  openInspectionWorkOrder: OpenInspectionWorkOrderReadModel | null;
   activeTab: DrawerTab;
   workStatus: WorkStatus;
   workStatusSource: string;
@@ -2696,6 +2872,10 @@ function AssetPreviewPanel({
   const [workflowStatus, setWorkflowStatus] = useState<MaintenanceWorkflowDisplayStatus | null>(null);
   const [workflowRevision, setWorkflowRevision] = useState(0);
   const assetId = asset?.assetId ?? null;
+  useEffect(() => {
+    setCostReviewEventId(null);
+    setWorkflowStatus(null);
+  }, [eventId]);
   const reportPostMaintenancePrediction = useCallback((prediction: PostMaintenancePredictionSummary) => {
     if (assetId) onPostMaintenancePrediction(assetId, prediction);
   }, [assetId, onPostMaintenancePrediction]);
@@ -2714,7 +2894,7 @@ function AssetPreviewPanel({
     ? "비용 분석은 참고 정보이며 정비 추천·승인·실행을 자동 생성하지 않습니다."
     : workActionHelper;
   const effectiveWorkActionDisabled = costReviewEligible || workActionDisabled;
-  const featureSnapshots = sensorSeries(detail, asset);
+  const featureSnapshots = sensorSeries(monitoringDetail, asset);
   const directFeatureSnapshots = featureSnapshots.filter(isPhysicalSensorSeries);
   const selectedLiveSnapshot = selectedAssetLiveSnapshot(asset, liveDemo);
   const realtimeDirectFeatureSnapshots = withRealtimeCurrentValues(directFeatureSnapshots, selectedLiveSnapshot);
@@ -2896,7 +3076,9 @@ function AssetPreviewPanel({
       {asset ? (
         <div className="operations-asset-preview">
           <header>
-            <OperationsStatusBadge status={asset.status} />
+            {effectiveWorkStatus === "candidate_recommended"
+              ? <OperationsStatusBadge status={asset.status} />
+              : <span className="operations-slot-status">{WORK_STATUS_LABEL[effectiveWorkStatus]}</span>}
             <div><strong>{assetDisplayName}</strong><small>{asset.line || asset.cell || asset.assetId} · 관측 {formatTimestamp(asset.observedAt)} · 고장 확정 아님</small></div>
             <button type="button" className="operations-icon-button" onClick={() => setReportOutputOpen(true)} aria-label="보고서 출력" title="보고서 출력">
               <Printer size={15} />
@@ -2916,7 +3098,7 @@ function AssetPreviewPanel({
                   <LineChart size={14} />
                   <strong>실시간 피쳐 변화</strong>
                   <span className={`operations-live-feed-status ${selectedLiveSnapshot ? "is-hot" : ""}`}>
-                    {selectedLiveSnapshot ? "LIVE now" : "최신 관측 기준"} · {formatTimestamp(selectedLiveSnapshot?.nowAt ?? asset.observedAt)}
+                    {selectedLiveSnapshot ? "LIVE now" : "최신 관측 기준"} · {formatTimestamp(selectedLiveSnapshot?.nowAt ?? monitoringDetail?.assetDetailStatus?.lastUpdatedAt ?? asset.observedAt)}
                   </span>
                 </header>
                 {selectedLiveSnapshot ? (
@@ -2952,9 +3134,9 @@ function AssetPreviewPanel({
                   windowId={sensorWindow}
                   onWindowChange={onSensorWindowChange}
                   liveDemo={selectedLiveSnapshot}
-                  loading={detailLoading}
+                  loading={monitoringDetailLoading}
                   emptyTitle="관측 이력 없음"
-                  emptyDetail={detailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
+                  emptyDetail={monitoringDetailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
                 />
                 <p className="operations-live-feature-note">
                   원본 필드명 대신 한국어 현장 용어로 표시합니다. LIVE 그래프는 과거 관측 이력 위에 지금 값과 단기 추세 범위를 함께 표시합니다.
@@ -3022,7 +3204,9 @@ function AssetPreviewPanel({
               <section className="operations-overview-action-panel" aria-label="생산 관리자 처리">
                 <header><ClipboardCheck size={14} /><strong>처리</strong><span>작업요청 검토</span></header>
                 <div className="operations-action-summary-card">
-                  <OperationsStatusBadge status={asset.status} />
+                  {effectiveWorkStatus === "candidate_recommended"
+                    ? <OperationsStatusBadge status={asset.status} />
+                    : <span className="operations-slot-status">{WORK_STATUS_LABEL[effectiveWorkStatus]}</span>}
                   <div>
                     <strong>{assetDisplayName}</strong>
                     <small>{workId} · 권고 {DECISION_LABEL[asset.recommendedDecision]}</small>
@@ -3051,6 +3235,7 @@ function AssetPreviewPanel({
                   assetType={asset.assetType}
                   role={role}
                   currentUserId={currentUserId}
+                  openInspectionWorkOrder={openInspectionWorkOrder}
                   snapshotBasis={detail?.snapshotBasis ?? null}
                   canManage={canManageWorkflow}
                   canFieldExecute={canExecuteFieldWorkflow}
@@ -3230,7 +3415,7 @@ function AssetPreviewPanel({
               </section>
 
               <section className="operations-overview-report-graph operations-side-map-report" aria-label="요약 리포트 센서 관측 그래프">
-                <header><LineChart size={14} /><strong>요약 리포트 관측 흐름</strong><span>{detailLoading ? "불러오는 중" : detailError ? "상세 연결 실패" : "동일 관측 기준"}</span></header>
+                <header><LineChart size={14} /><strong>요약 리포트 관측 흐름</strong><span>{monitoringDetailLoading ? "불러오는 중" : monitoringDetailError ? "상세 연결 실패" : "최신 관측 기준"}</span></header>
                 <div className="operations-overview-risk-meter">
                   <div><span>위험 예측 확률</span><strong>{riskPercent === null ? "-" : `${riskPercent}%`}</strong></div>
                   <i aria-hidden="true"><b style={{ width: `${riskPercent ?? 0}%` }} /></i>
@@ -3242,9 +3427,9 @@ function AssetPreviewPanel({
                   windowId={sensorWindow}
                   onWindowChange={onSensorWindowChange}
                   liveDemo={selectedLiveSnapshot}
-                  loading={detailLoading}
+                  loading={monitoringDetailLoading}
                   emptyTitle="센서 이력 없음"
-                  emptyDetail="현재 화면 데이터에는 표시할 센서 관측 이력이 없습니다."
+                  emptyDetail={monitoringDetailError || "현재 화면 데이터에는 표시할 센서 관측 이력이 없습니다."}
                 />
                 <DerivedMetricSlots sensors={realtimeFeatureSnapshots} windowId={sensorWindow} />
               </section>
@@ -3254,9 +3439,11 @@ function AssetPreviewPanel({
           {role === "field_operator" && activeTab === "action" ? (
             <>
             <section className="operations-overview-action-panel" aria-label="현장 관리자 처리">
-              <header><Wrench size={14} /><strong>현장 처리</strong><span>점검 후보</span></header>
+              <header><Wrench size={14} /><strong>현장 처리</strong><span>{WORK_STATUS_LABEL[effectiveWorkStatus]}</span></header>
               <div className="operations-action-summary-card">
-                <OperationsStatusBadge status={asset.status} />
+                {effectiveWorkStatus === "candidate_recommended"
+                  ? <OperationsStatusBadge status={asset.status} />
+                  : <span className="operations-slot-status">{WORK_STATUS_LABEL[effectiveWorkStatus]}</span>}
                 <div>
                   <strong>{candidate?.suspectedPart ?? (factors[0] ? fieldFactorItem(factors[0]) : fieldFailureLabel(asset.predictedFailureType))}</strong>
                   <small>{workId} · {planningImpact?.nextAction ?? "현장 점검 요청"}</small>
@@ -3272,7 +3459,9 @@ function AssetPreviewPanel({
                 <div><dt>다음 액션</dt><dd>{workActionLabel ?? planningImpact?.nextAction ?? "현장 점검 요청"}</dd></div>
               </dl>
               <p className="operations-action-note">
-                점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.
+                {effectiveWorkStatus === "candidate_recommended"
+                  ? "점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다."
+                  : `Backend의 ${workId} 작업 상태를 기준으로 다음 단계를 진행합니다.`}
               </p>
             </section>
             {eventId ? (
@@ -3286,6 +3475,7 @@ function AssetPreviewPanel({
                 assetType={asset.assetType}
                 role={role}
                 currentUserId={currentUserId}
+                openInspectionWorkOrder={openInspectionWorkOrder}
                 snapshotBasis={detail?.snapshotBasis ?? null}
                 canManage={canManageWorkflow}
                 canFieldExecute={canExecuteFieldWorkflow}

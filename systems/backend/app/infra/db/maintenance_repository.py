@@ -28,12 +28,14 @@ from app.maintenance.integration import (
     MaintenanceStartedEvent,
 )
 from app.maintenance.maintenance_schema import (
+    InspectionOutcome,
     InspectionResult,
     MaintenanceAction,
     MaintenanceActionStatus,
     OperationalRecommendedAction,
     RecommendationDecision,
     RecommendationDisposition,
+    RecommendationStatus,
     WorkOrder,
     WorkOrderAuthorization,
     WorkOrderStatus,
@@ -528,6 +530,31 @@ class MaintenanceRepository:
             )
             if replay is not None:
                 return replay
+            existing = connection.execute(
+                """
+                SELECT work_order_id
+                FROM closed_loop_work_orders
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND equipment_id=? AND work_type=?
+                  AND status IN (?,?,?)
+                LIMIT 1
+                """,
+                (
+                    scope.organization_id,
+                    scope.project_id,
+                    work_order.workspace_id,
+                    work_order.equipment_id,
+                    WorkOrderType.INSPECTION.value,
+                    WorkOrderStatus.REQUESTED.value,
+                    WorkOrderStatus.APPROVED.value,
+                    WorkOrderStatus.IN_PROGRESS.value,
+                ),
+            ).fetchone()
+            if existing is not None:
+                raise InvalidTransition(
+                    "an open inspection work order already exists for equipment: "
+                    f"{work_order.equipment_id} ({existing['work_order_id']})"
+                )
             self._insert_work_order(connection, work_order=work_order, now=now)
             self._record_activity(
                 connection,
@@ -1795,10 +1822,35 @@ class MaintenanceRepository:
             scope = self.project_context.resolve(workspace_id, connection=connection)
             rows = connection.execute(
                 """
-                SELECT * FROM closed_loop_work_orders
-                WHERE organization_id=? AND project_id=? AND workspace_id=?
-                  AND work_type=?
-                  AND status IN (?,?,?)
+                SELECT work_order.* FROM closed_loop_work_orders AS work_order
+                WHERE work_order.organization_id=?
+                  AND work_order.project_id=?
+                  AND work_order.workspace_id=?
+                  AND work_order.work_type=?
+                  AND (
+                    work_order.status IN (?,?,?)
+                    OR (
+                      work_order.status=?
+                      AND EXISTS (
+                        SELECT 1
+                        FROM closed_loop_inspection_results AS inspection_result
+                        WHERE inspection_result.organization_id=work_order.organization_id
+                          AND inspection_result.project_id=work_order.project_id
+                          AND inspection_result.workspace_id=work_order.workspace_id
+                          AND inspection_result.work_order_id=work_order.work_order_id
+                          AND inspection_result.outcome=?
+                      )
+                      AND NOT EXISTS (
+                        SELECT 1
+                        FROM closed_loop_recommendations AS recommendation
+                        WHERE recommendation.organization_id=work_order.organization_id
+                          AND recommendation.project_id=work_order.project_id
+                          AND recommendation.workspace_id=work_order.workspace_id
+                          AND recommendation.source_inspection_work_order_id=work_order.work_order_id
+                          AND recommendation.status IN (?,?)
+                      )
+                    )
+                  )
                 ORDER BY created_at DESC,work_order_id DESC
                 """,
                 (
@@ -1809,6 +1861,10 @@ class MaintenanceRepository:
                     WorkOrderStatus.REQUESTED.value,
                     WorkOrderStatus.APPROVED.value,
                     WorkOrderStatus.IN_PROGRESS.value,
+                    WorkOrderStatus.COMPLETED.value,
+                    InspectionOutcome.MAINTENANCE_RECOMMENDED.value,
+                    RecommendationStatus.REJECTED.value,
+                    RecommendationStatus.SUPERSEDED.value,
                 ),
             ).fetchall()
         return tuple(self._work_order_from_row(row) for row in rows)

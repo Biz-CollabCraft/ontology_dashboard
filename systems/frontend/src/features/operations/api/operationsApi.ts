@@ -323,6 +323,15 @@ export async function loadOperationsEventDetail(input: {
     activityPromise,
     assetDetailPromise,
   ]);
+  if (usesRuntimeProductResult && assetDetailState.status === "rejected") {
+    throw assetDetailState.reason;
+  }
+  if (usesRuntimeProductResult && assetDetailState.status === "fulfilled") {
+    const snapshot = assetDetailState.value.snapshot_basis;
+    if (snapshot.event_id !== input.event.eventId || assetDetailState.value.asset.asset_id !== input.event.assetId) {
+      throw new Error("요청한 Product Result와 설비 상세 snapshot이 일치하지 않습니다.");
+    }
+  }
   const predictiveDetail = predictiveState.status === "fulfilled"
     ? predictiveState.value.selected_event_detail
     : null;

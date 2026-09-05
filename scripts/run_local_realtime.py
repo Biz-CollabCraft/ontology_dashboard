@@ -17,6 +17,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -46,6 +47,7 @@ GEN_DATA_ROOT = _resolve_gen_data_root()
 LIVE_SOURCE_VERSION = "gen-data-wall-clock-live-v2"
 OBSERVATION_INTERVAL_MINUTES = 10
 MODEL_MINIMUM_HISTORY_ROWS = 36
+DEMO_ASSET_COUNT = 100
 MODEL_MINIMUM_HISTORY_HOURS = (
     MODEL_MINIMUM_HISTORY_ROWS * OBSERVATION_INTERVAL_MINUTES // 60
 )
@@ -53,7 +55,7 @@ DEFAULT_HISTORY_BACKFILL_HOURS = 168
 # Backward-compatible import name for older local demo helpers.  The value is
 # historical backfill, not the model warm-up requirement.
 DEFAULT_INITIAL_HISTORY_HOURS = DEFAULT_HISTORY_BACKFILL_HOURS
-DEFAULT_SIMULATION_HOURS = 336
+DEFAULT_SIMULATION_HOURS = 720
 
 
 def _wait(url: str, *, seconds: int = 90) -> None:
@@ -112,14 +114,14 @@ def _bootstrap_database(*, python: str, database_url: str, base_env: dict[str, s
     )
 
 
-def _post_json(url: str, payload: dict) -> dict:
+def _post_json(url: str, payload: dict, *, timeout_seconds: float = 15) -> dict:
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=15) as response:
+    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -240,15 +242,25 @@ def _fast_forward_initial_history(
             f"{run_id}/simulation/fast-forward"
         ),
         {"target_elapsed_hours": target_hours},
+        timeout_seconds=300,
     )
 
 
-def _select_live_dataset_for_project_users(
+def _wait_for_live_dataset_session(
     database_url: str,
     *,
-    timeout_seconds: int = 30,
+    simulation_session_id: str,
+    minimum_record_count: int = 0,
+    required_result_at: datetime | None = None,
+    timeout_seconds: int = 600,
 ) -> tuple[str, int]:
-    """Make the local real-time Dataset visible in Operations for demo users."""
+    """Wait for this run's ingestion and a fixed warm-up result boundary.
+
+    The continuous run resumes its configured speed after fast-forward.  Waiting
+    for the moving latest Observation would therefore chase a boundary that may
+    never be reached while Generator drains the queue.  `required_result_at`
+    freezes the warm-up boundary instead.
+    """
     import psycopg
 
     deadline = time.monotonic() + timeout_seconds
@@ -262,46 +274,96 @@ def _select_live_dataset_for_project_users(
                 connection.execute("SELECT set_config(%s, %s, true)", (key, value))
             row = connection.execute(
                 """
-                SELECT id FROM dataset_versions
-                WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
-                  AND source_version='gen-data-wall-clock-live-v2'
-                ORDER BY created_at DESC LIMIT 1
+                SELECT
+                    version.id,
+                    version.record_count,
+                    COUNT(artifact.artifact_id) AS result_count,
+                    MAX(artifact.observed_at) AS latest_result_at,
+                    GREATEST(
+                        (SELECT MAX(observed_at)
+                         FROM pm_cnc_observations
+                         WHERE dataset_version_id=version.id),
+                        (SELECT MAX(observed_at)
+                         FROM pm_compressor_observations
+                         WHERE dataset_version_id=version.id)
+                    ) AS latest_observation_at
+                FROM dataset_versions version
+                JOIN pm_result_artifacts artifact
+                  ON artifact.organization_id=version.organization_id
+                 AND artifact.project_id=version.project_id
+                 AND artifact.workspace_id=version.workspace_id
+                 AND artifact.dataset_version_id=version.id
+                JOIN prediction_results result
+                  ON result.organization_id=artifact.organization_id
+                 AND result.project_id=artifact.project_id
+                 AND result.workspace_id=artifact.workspace_id
+                 AND result.prediction_id=artifact.prediction_result_id
+                WHERE version.organization_id=%s
+                  AND version.project_id=%s
+                  AND version.workspace_id=%s
+                  AND version.source_version=%s
+                  AND result.payload_json #>>
+                      '{lineage,source_context,lineage,simulation_session_id}'=%s
+                GROUP BY version.id,version.record_count,version.version_number,version.created_at
+                ORDER BY version.version_number DESC,version.created_at DESC
+                LIMIT 1
                 """,
                 (
                     "org-ontology-demo",
                     "manufacturing-demo-project",
                     "manufacturing-demo",
+                    LIVE_SOURCE_VERSION,
+                    simulation_session_id,
                 ),
             ).fetchone()
-            if row is not None:
-                dataset_version_id = str(row[0])
-                selected = connection.execute(
-                    """
-                    INSERT INTO pm_workspace_dataset_selections(
-                        organization_id,project_id,workspace_id,user_id,
-                        dataset_version_id,selection_mode,created_at,updated_at
-                    )
-                    SELECT pm.organization_id,pm.project_id,%s,pm.user_id,
-                           %s,'explicit',now(),now()
-                    FROM project_memberships pm
-                    WHERE pm.organization_id=%s AND pm.project_id=%s
-                      AND pm.status='active'
-                    ON CONFLICT (organization_id,project_id,workspace_id,user_id)
-                    DO UPDATE SET dataset_version_id=EXCLUDED.dataset_version_id,
-                                  selection_mode='explicit',updated_at=now()
-                    RETURNING user_id
-                    """,
-                    (
-                        "manufacturing-demo",
-                        dataset_version_id,
-                        "org-ontology-demo",
-                        "manufacturing-demo-project",
-                    ),
-                ).fetchall()
-                return dataset_version_id, len(selected)
+            result_boundary = required_result_at or (row[4] if row is not None else None)
+            if (
+                row is not None
+                and int(row[1]) >= minimum_record_count
+                and row[3] is not None
+                and result_boundary is not None
+                and row[3] >= result_boundary
+            ):
+                return str(row[0]), int(row[2])
         if time.monotonic() >= deadline:
-            raise RuntimeError("live Dataset Version was not created before timeout")
+            raise RuntimeError(
+                "the current simulation session did not finish warm-up ingestion and "
+                "its required live Product Result before timeout"
+            )
         time.sleep(1)
+
+
+def _restore_automatic_dataset_selection(database_url: str) -> int:
+    """Remove explicit pins so runtime policy follows the current live Dataset."""
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        for key, value in (
+            ("app.organization_id", "org-ontology-demo"),
+            ("app.project_id", "manufacturing-demo-project"),
+            ("app.workspace_id", "manufacturing-demo"),
+        ):
+            connection.execute("SELECT set_config(%s, %s, true)", (key, value))
+        deleted = connection.execute(
+            """
+            DELETE FROM pm_workspace_dataset_selections selection
+            USING project_memberships membership
+            WHERE selection.organization_id=%s
+              AND selection.project_id=%s
+              AND selection.workspace_id=%s
+              AND membership.organization_id=selection.organization_id
+              AND membership.project_id=selection.project_id
+              AND membership.user_id=selection.user_id
+              AND membership.status='active'
+            RETURNING selection.user_id
+            """,
+            (
+                "org-ontology-demo",
+                "manufacturing-demo-project",
+                "manufacturing-demo",
+            ),
+        ).fetchall()
+    return len(deleted)
 
 
 class ProcessGroup:
@@ -400,7 +462,7 @@ def main() -> int:
         "--simulation-hours",
         type=int,
         default=DEFAULT_SIMULATION_HOURS,
-        help="Total simulated horizon. Defaults to 336 hours (14 days).",
+        help="Total simulated horizon. Defaults to 720 hours (30 days).",
     )
     parser.add_argument(
         "--history-hours",
@@ -426,6 +488,11 @@ def main() -> int:
         "--keep-dataset-selection",
         action="store_true",
         help="Do not select the live Dataset Version for local demo project users.",
+    )
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="Open the Frontend login page after every service is ready.",
     )
     args = parser.parse_args()
 
@@ -648,16 +715,31 @@ def main() -> int:
                 "maintenance replay uses the same 36-row branch-local warm-up"
             )
 
-        # Only after the first live Dataset exists do we bind demo users to it.
-        # This is the clean-start ordering required by the Windows presentation
-        # topology and avoids timing out on a Dataset that has not been created.
-        if not args.keep_dataset_selection:
-            live_version_id, selected_users = _select_live_dataset_for_project_users(
-                database_url,
-                timeout_seconds=90,
+        required_result_at = None
+        if initial_fast_forward is not None:
+            current_observed_at = datetime.fromisoformat(
+                str(initial_fast_forward["current_observed_at"]).replace("Z", "+00:00")
             )
+            required_result_at = current_observed_at - timedelta(
+                minutes=OBSERVATION_INTERVAL_MINUTES
+            )
+
+        live_version_id, live_result_count = _wait_for_live_dataset_session(
+            database_url,
+            simulation_session_id=simulation_session_id,
+            minimum_record_count=(
+                args.history_hours * 60 // OBSERVATION_INTERVAL_MINUTES
+            ) * DEMO_ASSET_COUNT,
+            required_result_at=required_result_at,
+        )
+        print(
+            f"[dataset] current session ready in {live_version_id}: "
+            f"{live_result_count} Product Result(s)"
+        )
+        if not args.keep_dataset_selection:
+            reset_users = _restore_automatic_dataset_selection(database_url)
             print(
-                f"[dataset] selected {live_version_id} for {selected_users} "
+                f"[dataset] restored automatic live selection for {reset_users} "
                 "manufacturing-demo user(s)"
             )
 
@@ -673,8 +755,9 @@ def main() -> int:
         _wait(f"http://127.0.0.1:{args.web_port}/")
 
         processes.assert_running()
+        web_url = f"http://127.0.0.1:{args.web_port}/login"
         print("\nLocal real-time predictive-maintenance runtime is ready")
-        print(f"  Web:       http://127.0.0.1:{args.web_port}/login")
+        print(f"  Web:       {web_url}")
         print(f"  Backend:   http://127.0.0.1:{args.api_port}/docs")
         print(f"  Generator: http://127.0.0.1:{args.generator_port}/runtime-pipeline/status")
         print(f"  gen_data:  http://127.0.0.1:{args.gen_data_port}/api/runs/{run['run_id']}")
@@ -686,6 +769,10 @@ def main() -> int:
         )
         print(f"  Logs:      {log_root}")
         print("Press Ctrl+C to stop application processes (PostgreSQL is preserved).")
+        if args.open_browser:
+            opened = webbrowser.open(web_url)
+            if not opened:
+                print(f"[browser] could not open automatically; open {web_url}")
 
         while True:
             time.sleep(2)

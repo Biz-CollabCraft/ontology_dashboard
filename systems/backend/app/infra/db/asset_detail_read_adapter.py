@@ -250,13 +250,19 @@ class PostgreSQLAssetDetailReadAdapter:
         row = self._latest_row(**query)
         if row is None:
             return None
+        dataset = self.repository.resolve_version(
+            organization_id=query["organization_id"],
+            project_id=query["project_id"],
+            workspace_id=query["workspace_id"],
+            dataset_version_id=str(row["dataset_version_id"]),
+        )
         created_at = row.get("created_at") or row.get("prediction_result_created_at")
         now = datetime.now(timezone.utc)
         is_stale = not isinstance(created_at, datetime) or now - created_at > timedelta(
             minutes=15
         )
         return {
-            "source": "canonical",
+            "source": str(dataset.get("source_type") or "runtime"),
             "is_stale": is_stale,
             "is_data_quality_hold": str(row.get("status_grade"))
             == "data_quality_hold",

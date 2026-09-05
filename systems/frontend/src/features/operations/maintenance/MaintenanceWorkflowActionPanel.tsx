@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   acceptInspectionWorkOrder,
@@ -19,11 +19,22 @@ import {
   type InspectionOutcome,
   type MaintenanceActionCandidateReadModel,
   type MaintenanceEventLineageReadModel,
+  type OpenInspectionWorkOrderReadModel,
 } from "../../../api";
 import type { OperationsEvidenceSnapshotBasis, OperationsRoleLens } from "../api/operationsContracts";
 
 function commandKey(eventId: string, action: string, target: string): string {
   return `operations-${eventId}-${action}-${target}`.replace(/[^a-zA-Z0-9_.:-]/g, "-").slice(0, 190);
+}
+
+export function resolveWorkflowEventId(
+  eventId: string,
+  assetId: string,
+  openInspectionWorkOrder: OpenInspectionWorkOrderReadModel | null | undefined,
+): string {
+  return openInspectionWorkOrder?.asset_id === assetId
+    ? openInspectionWorkOrder.event_id
+    : eventId;
 }
 
 function latest<T>(items: T[]): T | null {
@@ -60,6 +71,16 @@ export function postMaintenancePollingFailure(
       : null,
     stop: false,
   };
+}
+
+export function postMaintenancePollingDelay(
+  resultAvailable: boolean,
+  consecutiveFailures: number,
+): number {
+  if (consecutiveFailures > 0) {
+    return Math.min(1_500 * (2 ** consecutiveFailures), 10_000);
+  }
+  return resultAvailable ? 5_000 : 1_500;
 }
 
 export type MaintenanceWorkflowDisplayStatus =
@@ -113,6 +134,7 @@ export function MaintenanceWorkflowActionPanel({
   assetType,
   role,
   currentUserId,
+  openInspectionWorkOrder,
   snapshotBasis,
   canManage,
   canFieldExecute,
@@ -128,6 +150,7 @@ export function MaintenanceWorkflowActionPanel({
   assetType: string;
   role: OperationsRoleLens;
   currentUserId: string;
+  openInspectionWorkOrder?: OpenInspectionWorkOrderReadModel | null;
   snapshotBasis: OperationsEvidenceSnapshotBasis | null;
   canManage: boolean;
   canFieldExecute: boolean;
@@ -141,6 +164,7 @@ export function MaintenanceWorkflowActionPanel({
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [pollingError, setPollingError] = useState<string | null>(null);
   const [postMaintenancePrediction, setPostMaintenancePrediction] = useState<PostMaintenancePredictionSummary | null>(null);
+  const postMaintenancePredictionRef = useRef<PostMaintenancePredictionSummary | null>(null);
   const [actionCandidates, setActionCandidates] = useState<MaintenanceActionCandidateReadModel[]>([]);
   const [selectedActionCandidateId, setSelectedActionCandidateId] = useState("");
   const [inspectionOutcome, setInspectionOutcome] = useState<InspectionOutcome>("maintenance_recommended");
@@ -155,11 +179,12 @@ export function MaintenanceWorkflowActionPanel({
   const [inspectionFindings, setInspectionFindings] = useState("");
   const [inspectionNote, setInspectionNote] = useState("");
   const supportsCncMaintenance = assetType.toLowerCase().includes("cnc");
+  const workflowEventId = resolveWorkflowEventId(eventId, assetId, openInspectionWorkOrder);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const next = await getMaintenanceEventLineage(projectId, workspaceId, eventId);
+      const next = await getMaintenanceEventLineage(projectId, workspaceId, workflowEventId);
       setLineage(next);
       onStatusChanged?.(displayStatus(next, Boolean(postMaintenancePrediction)));
     } catch (reason) {
@@ -167,13 +192,18 @@ export function MaintenanceWorkflowActionPanel({
     } finally {
       setLoading(false);
     }
-  }, [eventId, onStatusChanged, postMaintenancePrediction, projectId, workspaceId]);
+  }, [onStatusChanged, postMaintenancePrediction, projectId, workflowEventId, workspaceId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
   const state = useMemo(() => {
     const workOrders = lineage?.work_orders ?? [];
-    const inspectionWorkOrder = latest(workOrders.filter((item) => item.work_type === "inspection"));
+    const lineageInspectionWorkOrder = latest(workOrders.filter((item) => item.work_type === "inspection"));
+    const inspectionWorkOrder = lineageInspectionWorkOrder ?? (
+      openInspectionWorkOrder?.asset_id === assetId
+        ? openInspectionWorkOrder
+        : null
+    );
     const maintenanceWorkOrder = latest(workOrders.filter((item) => item.work_type === "maintenance"));
     const inspectionResult = latest(lineage?.inspection_results ?? []);
     const recommendation = latest(lineage?.recommendations ?? []);
@@ -203,7 +233,7 @@ export function MaintenanceWorkflowActionPanel({
       hasReviewedCostAnalysis: inspectionCostAnalyses.length > 0,
       selectedActionCandidate,
     };
-  }, [actionCandidates, lineage, selectedActionCandidateId]);
+  }, [actionCandidates, assetId, lineage, openInspectionWorkOrder, selectedActionCandidateId]);
 
   useEffect(() => {
     const inspectionResultId = state.inspectionResult?.inspection_result_id;
@@ -255,7 +285,7 @@ export function MaintenanceWorkflowActionPanel({
 
   useEffect(() => {
     const maintenanceEventId = state.maintenanceEvent?.maintenance_event_id;
-    if (!maintenanceEventId || !state.action?.restart_at || postMaintenancePrediction) return;
+    if (!maintenanceEventId || !state.action?.restart_at) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
@@ -263,6 +293,7 @@ export function MaintenanceWorkflowActionPanel({
     setPollingError(null);
 
     const poll = async () => {
+      let resultAvailable = false;
       try {
         const result = await getPostMaintenanceProductResults(
           projectId,
@@ -274,16 +305,24 @@ export function MaintenanceWorkflowActionPanel({
         consecutiveFailures = 0;
         setPollingError(null);
         if (result) {
+          resultAvailable = true;
           const prediction: PostMaintenancePredictionSummary = {
             failureProbability: result.failure_probability,
             statusGrade: result.status_grade,
             observedAt: result.observed_at,
           };
-          setPostMaintenancePrediction(prediction);
-          onPostMaintenancePrediction?.(prediction);
-          onStatusChanged?.("ready_for_reprediction");
-          setMessage({ tone: "success", text: "정비 후 관측과 예측 처리가 완료됐습니다." });
-          return;
+          const previous = postMaintenancePredictionRef.current;
+          if (
+            previous?.failureProbability !== prediction.failureProbability
+            || previous.statusGrade !== prediction.statusGrade
+            || previous.observedAt !== prediction.observedAt
+          ) {
+            postMaintenancePredictionRef.current = prediction;
+            setPostMaintenancePrediction(prediction);
+            onPostMaintenancePrediction?.(prediction);
+            onStatusChanged?.("ready_for_reprediction");
+            setMessage({ tone: "success", text: "정비 후 관측과 예측 처리가 완료됐습니다." });
+          }
         }
       } catch (reason) {
         if (controller.signal.aborted) return;
@@ -293,9 +332,7 @@ export function MaintenanceWorkflowActionPanel({
         if (failure.stop) return;
       }
       if (!stopped) {
-        const retryDelay = consecutiveFailures > 0
-          ? Math.min(1_500 * (2 ** consecutiveFailures), 10_000)
-          : 1_500;
+        const retryDelay = postMaintenancePollingDelay(resultAvailable, consecutiveFailures);
         timer = setTimeout(() => void poll(), retryDelay);
       }
     };
@@ -311,7 +348,6 @@ export function MaintenanceWorkflowActionPanel({
     assetId,
     onPostMaintenancePrediction,
     onStatusChanged,
-    postMaintenancePrediction,
     projectId,
     state.action?.restart_at,
     state.maintenanceEvent?.maintenance_event_id,
@@ -379,7 +415,7 @@ export function MaintenanceWorkflowActionPanel({
       command = snapshotBasis ? () => requestInspectionWorkOrder({
         projectId,
         workspaceId,
-        eventId,
+        eventId: workflowEventId,
         snapshotBasis: {
           artifact_id: snapshotBasis.artifactId,
           evidence_payload_reference: snapshotBasis.evidencePayloadReference,
@@ -390,7 +426,7 @@ export function MaintenanceWorkflowActionPanel({
           dataset_version: snapshotBasis.datasetVersion,
           source_sha256: snapshotBasis.sourceSha256,
         },
-        idempotencyKey: commandKey(eventId, "inspection-request", snapshotBasis.artifactId ?? eventId),
+        idempotencyKey: commandKey(workflowEventId, "inspection-request", snapshotBasis.artifactId ?? workflowEventId),
       }) : null;
     } else if (state.inspectionWorkOrder.status === "requested") {
       label = "현장 관리자 수락 대기";
@@ -419,7 +455,7 @@ export function MaintenanceWorkflowActionPanel({
         costAnalysisId: state.costAnalysis!.analysis_id,
         actionCandidateId: state.selectedActionCandidate!.action_candidate_id,
         idempotencyKey: commandKey(
-          eventId,
+          workflowEventId,
           "recommendation-create",
           `${state.selectedActionCandidate!.action_candidate_id}:${state.costAnalysis!.analysis_id}`,
         ),
@@ -433,7 +469,7 @@ export function MaintenanceWorkflowActionPanel({
         workspaceId,
         recommendationId: state.recommendation!.recommendation_id,
         disposition: "accept",
-        idempotencyKey: commandKey(eventId, "recommendation-accept", state.recommendation!.recommendation_id),
+        idempotencyKey: commandKey(workflowEventId, "recommendation-accept", state.recommendation!.recommendation_id),
       });
     } else if (state.maintenanceWorkOrder?.status === "requested") {
       label = "정비 WorkOrder 승인";
@@ -444,7 +480,7 @@ export function MaintenanceWorkflowActionPanel({
         workspaceId,
         workOrderId: state.maintenanceWorkOrder!.work_order_id,
         datasetVersionId,
-        idempotencyKey: commandKey(eventId, "maintenance-approve", state.maintenanceWorkOrder!.work_order_id),
+        idempotencyKey: commandKey(workflowEventId, "maintenance-approve", state.maintenanceWorkOrder!.work_order_id),
       });
     }
   } else {
@@ -457,7 +493,7 @@ export function MaintenanceWorkflowActionPanel({
       enabled = canFieldExecute;
       command = () => acceptInspectionWorkOrder({
         projectId, workspaceId, workOrderId: state.inspectionWorkOrder!.work_order_id,
-        idempotencyKey: commandKey(eventId, "inspection-accept", state.inspectionWorkOrder!.work_order_id),
+        idempotencyKey: commandKey(workflowEventId, "inspection-accept", state.inspectionWorkOrder!.work_order_id),
       });
     } else if (state.inspectionWorkOrder?.status === "approved") {
       label = "점검 시작";
@@ -468,7 +504,7 @@ export function MaintenanceWorkflowActionPanel({
       enabled = canFieldExecute && assignedToCurrentUser;
       command = () => startInspectionWorkOrder({
         projectId, workspaceId, workOrderId: state.inspectionWorkOrder!.work_order_id,
-        idempotencyKey: commandKey(eventId, "inspection-start", state.inspectionWorkOrder!.work_order_id),
+        idempotencyKey: commandKey(workflowEventId, "inspection-start", state.inspectionWorkOrder!.work_order_id),
       });
     } else if (state.inspectionWorkOrder?.status === "in_progress") {
       label = "점검 결과 기록·완료";
@@ -483,7 +519,7 @@ export function MaintenanceWorkflowActionPanel({
         workspaceId,
         workOrderId: state.inspectionWorkOrder!.work_order_id,
         facts: inspectionFacts,
-        idempotencyKey: commandKey(eventId, "inspection-complete", state.inspectionWorkOrder!.work_order_id),
+        idempotencyKey: commandKey(workflowEventId, "inspection-complete", state.inspectionWorkOrder!.work_order_id),
       }) : null;
     } else if (state.action?.status === "planned") {
       label = "정비 시작";
@@ -491,7 +527,7 @@ export function MaintenanceWorkflowActionPanel({
       enabled = canFieldExecute;
       command = () => startMaintenanceAction({
         projectId, workspaceId, maintenanceActionId: state.action!.maintenance_action_id,
-        idempotencyKey: commandKey(eventId, "maintenance-start", state.action!.maintenance_action_id),
+        idempotencyKey: commandKey(workflowEventId, "maintenance-start", state.action!.maintenance_action_id),
       });
     } else if (state.action?.status === "in_progress") {
       label = "정비 완료";
@@ -502,7 +538,7 @@ export function MaintenanceWorkflowActionPanel({
         workspaceId,
         maintenanceActionId: state.action!.maintenance_action_id,
         actionCode: state.action!.action_code,
-        idempotencyKey: commandKey(eventId, "maintenance-complete", state.action!.maintenance_action_id),
+        idempotencyKey: commandKey(workflowEventId, "maintenance-complete", state.action!.maintenance_action_id),
       });
     } else if (state.maintenanceEvent && !state.action?.restart_at) {
       label = "정비 후 관측 재개";
@@ -512,7 +548,7 @@ export function MaintenanceWorkflowActionPanel({
         projectId,
         workspaceId,
         maintenanceEventId: state.maintenanceEvent!.maintenance_event_id,
-        idempotencyKey: commandKey(eventId, "maintenance-replay", state.maintenanceEvent!.maintenance_event_id),
+        idempotencyKey: commandKey(workflowEventId, "maintenance-replay", state.maintenanceEvent!.maintenance_event_id),
       });
     }
   }
