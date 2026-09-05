@@ -92,6 +92,27 @@ async function getEventActivity(eventId: string): Promise<unknown> {
   return payload;
 }
 
+/** Check the backend/database connection before requesting observation history.
+ *  This intentionally has no client-side timeout: the readiness response is the
+ *  connection boundary, while the detail request reports data availability.
+ */
+async function ensureObservationConnection(): Promise<void> {
+  const response = await fetch(`${API_BASE}/health/ready`, {
+    credentials: "include",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const dependency = payload?.dependency ? ` · ${payload.dependency}` : "";
+    throw new ApiError(
+      response.status,
+      "observation_connection_unavailable",
+      `관측 연결을 확인하지 못했습니다${dependency}. 잠시 후 다시 시도해 주세요.`,
+    );
+  }
+}
+
 async function getAssetDetailViewModel(
   projectId: string,
   workspaceId: string,
@@ -100,6 +121,7 @@ async function getAssetDetailViewModel(
   datasetVersionId: string,
   historyWindow: OperationsSensorWindowId,
 ): Promise<AssetDetailViewModel> {
+  await ensureObservationConnection();
   const backendHistoryWindow = historyWindow === "30d"
     ? "30d"
     : historyWindow === "7d"
