@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.dependencies import build_manufacturing_service
-from app.mvp.agent_context_tool_pipeline import (
+from app.operations.agent_context_tool_pipeline import (
     FORBIDDEN_TOOL_NAMES,
     execute_packet_context_tool,
     run_langgraph_tool_pipeline,

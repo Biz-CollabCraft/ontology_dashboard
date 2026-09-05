@@ -54,7 +54,7 @@ def semantic_reference_payload() -> dict[str, Any]:
             / "fixtures"
             / "product_result_evidence_projection"
             / "semantic_regression"
-            / "pdm-mvp-semantic-reference-critical.json"
+            / "pdm-operations-semantic-reference-critical.json"
         ).read_text(encoding="utf-8")
     )
 
@@ -109,7 +109,7 @@ def test_product_result_artifact_uses_maintenance_context_only_when_provider_is_
     assert not any(gap["field"] == "evidence_payload.maintenance_context" for gap in payload["evidence_gaps"])
 
 
-def test_evidence_payload_preserves_pdm_mvp_reference_semantics_without_copying_values() -> None:
+def test_evidence_payload_preserves_pdm_operations_reference_semantics_without_copying_values() -> None:
     fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
     semantic_reference = semantic_reference_payload()
 

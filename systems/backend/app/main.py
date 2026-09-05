@@ -43,12 +43,12 @@ from app.project.project_router import build_project_router
 from app.report import ReportConflictError, build_report_router
 from app.dataset.ingestion.router import router as adapters_router
 from app.dataset.dataset_router import router as datasets_router
-from app.mvp.router import router as manufacturing_router
+from app.operations.router import router as manufacturing_router
 from app.diagnosis.runtime_router import (
     internal_router as prediction_result_inbox_router,
     router as predictive_maintenance_runtime_router,
 )
-from app.mvp.service import EventNotFound
+from app.operations.service import EventNotFound
 
 
 app = create_app()

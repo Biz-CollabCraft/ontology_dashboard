@@ -150,9 +150,14 @@ class RecommendationDecisionCreateRequest(StrictCommand):
 
 
 class MaintenanceWorkOrderApproveRequest(StrictCommand):
-    """Select the replay context that Diagnosis must validate server-side."""
+    """Approve a WorkOrder using Diagnosis-owned runtime lineage.
 
-    simulation_session_id: str = Field(min_length=1, max_length=240)
+    ``simulation_session_id`` is compatibility-only for historical Product
+    Results that predate source-session lineage. Live callers omit it; when
+    lineage exists, the server resolves it from the authorized Product Result.
+    """
+
+    simulation_session_id: str | None = Field(default=None, min_length=1, max_length=240)
 
 
 class MaintenanceActionStartRequest(StrictCommand):

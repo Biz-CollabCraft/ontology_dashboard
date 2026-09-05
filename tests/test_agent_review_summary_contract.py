@@ -5,7 +5,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from app.mvp.agent_review_summary import (
+from app.operations.agent_review_summary import (
     compose_deterministic_agent_review_summary,
     validate_agent_review_summary,
     validate_agent_review_summary_contract,
@@ -192,11 +192,11 @@ def test_agent_review_summary_validator_rejects_available_action_echo_as_command
     packet = json.loads((GOLD_ROOT / "GS-004.json").read_text(encoding="utf-8"))
     summary = compose_deterministic_agent_review_summary(packet)
     summary["mode"] = "llm"
-    summary["summary"] = "approve_inspection_work_order 를 실행해 승인하십시오."
+    summary["summary"] = "accept_inspection_work_order 를 실행해 수락하십시오."
 
     errors = validate_agent_review_summary_contract(summary, packet=packet)
 
-    assert "available_action_echo:approve_inspection_work_order" in errors
+    assert "available_action_echo:accept_inspection_work_order" in errors
 
 
 def test_agent_review_summary_validator_rejects_invented_history_summary() -> None:

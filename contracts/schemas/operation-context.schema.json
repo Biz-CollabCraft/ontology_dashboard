@@ -19,7 +19,7 @@
   "properties": {
     "schema_version": { "const": "operation-context-v1.0" },
     "context_id": { "type": "string", "minLength": 1 },
-    "source_type": { "const": "synthetic_capacity_model" },
+    "source_type": { "const": "capacity_model" },
     "scope": {
       "type": "object",
       "additionalProperties": false,

@@ -9,15 +9,15 @@ date: 2026-08-18
 
 ## Summary
 
-3주차에는 PostgreSQL에 저장된 Product Result Artifact를 하나의 canonical Event Evidence로 투영하고, 같은 snapshot을 정적 GroundedReport와 실제 MVP 화면까지 전달한다. LLM은 이 검증된 Evidence를 요약할 수 있지만, 검증 실패나 provider 장애가 발생하면 deterministic report로 전환한다.
+3주차에는 PostgreSQL에 저장된 Product Result Artifact를 하나의 canonical Event Evidence로 투영하고, 같은 snapshot을 정적 GroundedReport와 실제 Operations 화면까지 전달한다. LLM은 이 검증된 Evidence를 요약할 수 있지만, 검증 실패나 provider 장애가 발생하면 deterministic report로 전환한다.
 
-4주차에는 기능을 넓히지 않는다. 3주차 경로를 bounded event-driven workflow로 자동화하고, LLM Component Planner를 Component Registry와 정책 검증기 뒤에 연결한 뒤, Gold 계약 평가·장애 주입·공식 MVP E2E·발표 증거로 완료한다.
+4주차에는 기능을 넓히지 않는다. 3주차 경로를 bounded event-driven workflow로 자동화하고, LLM Component Planner를 Component Registry와 정책 검증기 뒤에 연결한 뒤, Gold 계약 평가·장애 주입·공식 Operations E2E·발표 증거로 완료한다.
 
 완료 주장의 범위는 호범 소유인 `Product Result/Evidence -> Event Evidence -> GroundedReport -> Event UI projection`이다. WorkOrder·Maintenance·Closed-loop 상태 머신과 production SLA/exactly-once 보장은 포함하지 않는다.
 
 ## Problem Frame
 
-현재 저장된 Runtime Artifact가 canonical Evidence로 투영되는 경로는 존재하지만, Runtime detail은 이후 Report와 Layout을 자유형 dict로 다시 만든다. 별도의 ReportAgent와 LayoutPlanner는 grounding·fallback·Registry 검증을 제공하지만 fixture/legacy 경로에 머물러 있다. 공식 MVP consumer도 Runtime detail과 legacy Evidence/Report를 병렬 조회한 뒤 legacy Report를 우선해 서로 다른 snapshot을 섞을 수 있다.
+현재 저장된 Runtime Artifact가 canonical Evidence로 투영되는 경로는 존재하지만, Runtime detail은 이후 Report와 Layout을 자유형 dict로 다시 만든다. 별도의 ReportAgent와 LayoutPlanner는 grounding·fallback·Registry 검증을 제공하지만 fixture/legacy 경로에 머물러 있다. 공식 Operations consumer도 Runtime detail과 legacy Evidence/Report를 병렬 조회한 뒤 legacy Report를 우선해 서로 다른 snapshot을 섞을 수 있다.
 
 또한 현행 Gold 평가는 8개 시나리오에서 통과할 수 있으나 provider가 없으면 Report/Layout 16개가 모두 deterministic fallback이다. 따라서 이 결과만으로 실제 LLM 품질이나 PostgreSQL Runtime-to-UI 연결을 주장할 수 없다.
 
@@ -31,7 +31,7 @@ date: 2026-08-18
 - **R4** LLM summary에는 검증된 canonical Evidence와 허용된 report context만 전달한다. raw producer payload, `hidden_truth`, `evaluation_truth`는 전달하지 않는다.
 - **R5** Report citation/action reference는 현재 Event Evidence source field에 존재해야 하며 status·decision·숫자 원값을 변경할 수 없다.
 - **R6** LLM timeout, malformed JSON, schema 오류, unknown citation, 금지 주장, status/decision 변조는 deterministic report로 fail closed한다.
-- **R7** 공식 MVP는 Runtime snapshot을 정본으로 소비하고, legacy API는 Runtime 미지원 시에만 명시적 fallback으로 사용한다. 하나의 화면에서 Runtime과 legacy 산출물을 혼합하지 않는다.
+- **R7** 공식 Operations는 Runtime snapshot을 정본으로 소비하고, legacy API는 Runtime 미지원 시에만 명시적 fallback으로 사용한다. 하나의 화면에서 Runtime과 legacy 산출물을 혼합하지 않는다.
 - **R8** manager와 engineer의 정적 화면을 실제 Component Registry로 렌더링하고 citation, source, fallback mode를 확인할 수 있어야 한다.
 
 ### 4주차 완료 요구사항
@@ -43,7 +43,7 @@ date: 2026-08-18
 - **R13** deterministic policy gate는 role·intent·event 상태에 따른 required/forbidden/first block 규칙과 field binding을 검사한다.
 - **R14** Report LLM 실패, Planner 실패, 둘 다 실패를 독립적으로 처리하며, 유효한 deterministic bundle을 게시하거나 `QUALITY_HOLD`로 종료한다.
 - **R15** Report 품질은 Gold 8개 x 역할 2개 = 16건, Layout 품질은 Gold 8개 x 역할 2개 x 역할별 intent 3개 = 48건으로 평가한다.
-- **R16** official MVP E2E는 manager critical, engineer warning, data-quality hold, LLM/Planner offline의 대표 4개 flow를 검증한다.
+- **R16** official Operations E2E는 manager critical, engineer warning, data-quality hold, LLM/Planner offline의 대표 4개 flow를 검증한다.
 - **R17** 평가 결과는 commit, dataset/model/policy/prompt/schema/provider version과 실행 mode를 포함해 JSONL/JSON/Markdown으로 보존한다.
 - **R18** deterministic fallback 결과와 실제 LLM 채택 결과를 분리해 보고한다.
 
@@ -71,14 +71,14 @@ flowchart LR
     G -->|valid| I["Atomic UI snapshot"]
     G -->|invalid or provider failure| J["Deterministic fallback"]
     J --> I
-    I --> K["Official MVP Component Registry"]
+    I --> K["Official Operations Component Registry"]
 ```
 
 ## Scope Boundaries
 
 ### Core
 
-- PostgreSQL Runtime Artifact에서 공식 MVP 화면까지 단일 snapshot 소비 경로
+- PostgreSQL Runtime Artifact에서 공식 Operations 화면까지 단일 snapshot 소비 경로
 - Evidence quality validation과 GroundedReport/LLM summary grounding
 - Event detail/report 영역의 Component Registry 기반 동적 배치
 - outbox 기반 파생 snapshot 자동화, idempotency, retry/dead-letter
@@ -114,7 +114,7 @@ flowchart LR
 - `systems/backend/ontology_dashboard/llm.py`
 - `systems/backend/ontology_dashboard/planner/layout.py`
 - `tests/test_predictive_maintenance_result_replay.py`
-- `tests/test_mvp.py`
+- `tests/test_operations.py`
 
 **Work:**
 
@@ -136,10 +136,10 @@ flowchart LR
 
 **Files:**
 
-- `systems/frontend/src/features/mvp/api/mvpApi.ts`
-- `systems/frontend/src/features/mvp/api/mvpAdapters.ts`
-- `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts`
-- `systems/frontend/src/features/mvp/report/MvpExecutiveReportPage.tsx`
+- `systems/frontend/src/features/operations/api/operationsApi.ts`
+- `systems/frontend/src/features/operations/api/operationsAdapters.ts`
+- `systems/frontend/src/features/operations/api/operationsAdapters.test.ts`
+- `systems/frontend/src/features/operations/report/OperationsExecutiveReportPage.tsx`
 - `systems/frontend/src/components.tsx`
 - `systems/backend/ontology_dashboard/predictive_maintenance_runtime/service.py`
 - `systems/backend/ontology_dashboard/predictive_maintenance_runtime/models.py`
@@ -195,7 +195,7 @@ flowchart LR
 - `systems/backend/ontology_dashboard/planner/layout.py`
 - `prompts/ui-planner.md`
 - `contracts/schemas/ui-block.schema.json`
-- `tests/test_mvp.py`
+- `tests/test_operations.py`
 - `evaluation/gold_scenarios.yml`
 
 **Work:**
@@ -257,29 +257,29 @@ flowchart LR
 - 동일 idempotency key의 중복 bundle: 0건
 - 구버전의 latest overwrite, cross-workspace access, snapshot version mismatch: 0건
 
-### U6 — Official MVP E2E, CI, Demo Freeze
+### U6 — Official Operations E2E, CI, Demo Freeze
 
 **Requirements:** R16-R18
 
 **Files:**
 
-- `systems/frontend/e2e/mvp-frontend-convergence.spec.ts`
+- `systems/frontend/e2e/operations-frontend-convergence.spec.ts`
 - `systems/frontend/e2e/gold-flow.spec.ts`
 - `.github/workflows/backend-contract-ci.yml`
 - `.github/workflows/architecture.yml`
-- `docs/mvp/evidence-report-layout-demo-runbook.md`
+- `docs/operations/evidence-report-layout-demo-runbook.md`
 - `evaluation/results/<date>-gold-v2/`
 
 **Work:**
 
-- GS-004 manager critical, GS-002 engineer warning, GS-007 data-quality hold, GS-008 LLM/Planner offline을 official MVP에서 검증한다.
+- GS-004 manager critical, GS-002 engineer warning, GS-007 data-quality hold, GS-008 LLM/Planner offline을 official Operations에서 검증한다.
 - 실제 Component 순서, required/forbidden block, Evidence binding, fallback/source badge를 확인한다.
 - 평가 manifest와 승인된 발표 요약을 CI artifact로 구분해 저장한다.
 - 1분 데모와 아키텍처/KPI 한 장을 고정한다.
 
 **Acceptance scenarios:**
 
-- **AE17:** PostgreSQL Runtime API에서 받은 하나의 snapshot이 official MVP Component Registry까지 렌더링된다.
+- **AE17:** PostgreSQL Runtime API에서 받은 하나의 snapshot이 official Operations Component Registry까지 렌더링된다.
 - **AE18:** 대표 4개 flow가 브라우저에서 통과하고, LLM offline flow도 raw error/secret 없이 fallback mode를 표시한다.
 - **AE19:** 실행 manifest에 commit과 dataset/model/policy/prompt/schema/provider version 및 실행 mode가 기록된다.
 - **AE20:** API/fixture 테스트만 통과하고 PostgreSQL-to-browser flow가 없으면 상태를 `Partially Verified`로 유지한다.
@@ -327,9 +327,9 @@ flowchart LR
 
 4주차 종료 시 아래가 모두 충족돼야 호범 범위를 완료로 표시한다.
 
-- PostgreSQL stored Runtime Artifact부터 official MVP 화면까지 단일 snapshot 경로가 있다.
+- PostgreSQL stored Runtime Artifact부터 official Operations 화면까지 단일 snapshot 경로가 있다.
 - 정적 Report, LLM summary, Layout이 동일 canonical Evidence와 version lineage를 사용한다.
-- official MVP가 검증된 Layout을 Component Registry로 실제 렌더링한다.
+- official Operations가 검증된 Layout을 Component Registry로 실제 렌더링한다.
 - 16개 Report/48개 Layout 계약 평가와 장애 주입 결과 파일이 생성된다.
 - representative 4개 browser flow가 통과한다.
 - Hard Gate 위반은 0건이고 fallback/quality-hold 분기가 모두 검증된다.

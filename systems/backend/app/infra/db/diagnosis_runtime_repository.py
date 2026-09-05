@@ -84,7 +84,9 @@ class PredictiveMaintenanceRuntimeRepository:
                      AS result_artifact_schema_version,
                    (SELECT r.prediction_task FROM pm_result_artifacts r
                     WHERE r.dataset_version_id=v.id ORDER BY r.observed_at DESC LIMIT 1)
-                     AS runtime_prediction_task
+                     AS runtime_prediction_task,
+                   (SELECT MAX(r.observed_at) FROM pm_result_artifacts r
+                    WHERE r.dataset_version_id=v.id) AS latest_result_observed_at
             FROM dataset_versions v
             JOIN datasets d ON d.id=v.dataset_id
             LEFT JOIN store_projections rel
@@ -482,6 +484,50 @@ class PredictiveMaintenanceRuntimeRepository:
             ).fetchone()
         return None if row is None else dict(row)
 
+    def post_maintenance_runtime_status_row(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        maintenance_event_id: str,
+    ) -> dict[str, Any] | None:
+        """Return the latest Generator outcome for one post-maintenance branch.
+
+        Non-predicted outcomes never become Product Results, so the receive-only
+        inbox is the canonical place to expose warming-up and explicit failures.
+        """
+
+        with self._connection(organization_id, project_id) as connection:
+            row = connection.execute(
+                """
+                SELECT raw_item->>'output_status' AS status,
+                       raw_item->>'failure_reason' AS failure_reason,
+                       raw_item->>'observed_at' AS observed_at,
+                       raw_item->>'model_id' AS model_id,
+                       raw_item->>'model_version' AS model_version,
+                       raw_item->'lineage' AS lineage,
+                       received_at,updated_at
+                FROM pm_prediction_result_inbox_items
+                WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                  AND validation_status IN ('accepted','duplicate')
+                  AND raw_item->>'asset_id'=%s
+                  AND raw_item->>'source_kind'='maintenance_replay_overlay'
+                  AND raw_item#>>'{lineage,maintenance_event_id}'=%s
+                ORDER BY received_at DESC,receive_item_id DESC
+                LIMIT 1
+                """,
+                (
+                    organization_id,
+                    project_id,
+                    workspace_id,
+                    asset_id,
+                    maintenance_event_id,
+                ),
+            ).fetchone()
+        return None if row is None else dict(row)
+
     def result_artifact_row(
         self,
         *,
@@ -610,6 +656,45 @@ class PredictiveMaintenanceRuntimeRepository:
                 (*parameters, offset, limit),
             ).fetchall()
         return total, [dict(row) for row in rows]
+
+    def result_history_rows(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        dataset_version_id: str,
+        asset_id: str,
+        start: datetime,
+        end: datetime,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return governed runtime Product Results for one AssetDetail chart."""
+
+        with self._connection(organization_id, project_id) as connection:
+            rows = connection.execute(
+                """
+                SELECT artifact_id,prediction_id,observed_at,
+                       failure_probability,status_grade,source_sha256
+                FROM pm_result_artifacts
+                WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                  AND dataset_version_id=%s AND asset_id=%s
+                  AND observed_at >= %s AND observed_at <= %s
+                ORDER BY observed_at,created_at,artifact_id
+                LIMIT %s
+                """,
+                (
+                    organization_id,
+                    project_id,
+                    workspace_id,
+                    dataset_version_id,
+                    asset_id,
+                    start,
+                    end,
+                    limit,
+                ),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     @staticmethod
     def _observation_filters(

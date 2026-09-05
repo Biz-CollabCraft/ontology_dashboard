@@ -117,9 +117,11 @@ class DatasetVersionOptions(StrictModel):
     default_dataset_version_id: str | None = None
     selection_mode: Literal["automatic", "explicit"] = "automatic"
     selection_reason: Literal[
+        "wall_clock_live_runtime",
         "canonical_v3_1_release_ready",
         "latest_published_predictive_maintenance",
         "latest_predictive_maintenance",
+        "latest_wall_clock_safe_predictive_maintenance",
         "explicit_user_selection",
         "no_runtime_dataset",
     ] = "no_runtime_dataset"
@@ -543,8 +545,8 @@ class PredictiveMaintenanceDashboardResponse(StrictModel):
     selected_event_id: str | None = None
     selected_event_detail: DashboardEventDetail | None = None
     fallback_available: Literal[True] = True
-    fallback_name: Literal["Manufacturing Gold Fixture Demo"] = (
-        "Manufacturing Gold Fixture Demo"
+    fallback_name: Literal["Hanbit Tech Operations Reference"] = (
+        "Hanbit Tech Operations Reference"
     )
     replay_source: Literal["postgresql_prediction_timeline"] = (
         "postgresql_prediction_timeline"

@@ -18,6 +18,7 @@ from argon2 import PasswordHasher
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from app.common.rate_limit import RateLimiter
+from app.common.company_context import load_company_context
 from app.common.runtime_settings import app_environment, project_root, trust_proxy_headers, trusted_proxy_networks
 from app.dashboard import DashboardService
 from app.dashboard.dashboard_schema import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
@@ -35,7 +36,11 @@ from app.dashboard.visualizations import (
     validate_override_channel_mapping,
 )
 from app.dataset import DatasetCatalogService
-from app.diagnosis.evidence import FixtureContextProvider, build_product_result_artifact
+from app.diagnosis.evidence import (
+    FixtureContextProvider,
+    build_product_result_artifact,
+    validate_product_result_artifact,
+)
 from app.diagnosis.predictor import configured_predictor
 from app.diagnosis.runtime_service import (
     PredictiveMaintenanceRuntimeService,
@@ -47,6 +52,7 @@ from app.diagnosis.contracts import load_fixture
 from app.governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
 from app.infra.db.dashboard_repository import DashboardRepository
+from app.infra.db.company_context_repository import CompanyContextRepository
 from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from app.infra.db.dataset_repository import DatasetRepository
 from app.infra.db.diagnosis_runtime_repository import PredictiveMaintenanceRuntimeRepository
@@ -72,10 +78,12 @@ from app.infra.db.report_repository import ReportRepository
 from app.infra.db.settings import database_location
 from app.infra.context import Project3HttpContextProvider, ResilientContextProvider
 from app.infra.llm import configured_provider
+from app.operations.agent_answer_provider import GroundedAgentAnswerProvider
 from app.infra.maintenance_cost_basis_provider import JsonMaintenanceCostBasisProvider
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.maintenance.live_service import LivePredictiveMaintenanceService
 from app.maintenance.service import MaintenanceLoopService
+from app.operations.asset_detail_view_model import AssetDetailViewModelService
 from app.ontology import OntologyService
 from app.planner import LayoutPlanner, OntologyDashboardPlannerService
 from app.project import ProjectService
@@ -100,18 +108,23 @@ from app.infra.db.postgresql_repositories import (
     seed_runtime_reference_data,
 )
 from app.infra.db.project_repository import SQLiteProjectContextResolver as RuntimeProjectContextResolver
+from app.infra.db.operational_decision_support_service import (
+    PersistedOperationalDecisionSupportService,
+)
 from app.infra.db.role_workflow_repository import RoleWorkflowRepository
-from app.infra.db.mvp_audit_repository import AuditRepository
-from app.mvp.role_workflow_service import RoleWorkflowService
-from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
-from app.mvp.context_providers import default_agent_review_context_registry
-from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
-from app.mvp.service import ManufacturingPredictiveMaintenanceService
+from app.infra.db.operations_audit_repository import AuditRepository
+from app.operations.role_workflow_service import RoleWorkflowService
+from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider
+from app.operations.context_providers import default_agent_review_context_registry
+from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
+from app.operations.service import ManufacturingPredictiveMaintenanceService
+from app.operations.operational_decision_support_port import OperationalDecisionSupportService
 
 
 ROOT = project_root()
 MANUFACTURING_WORKSPACE = "manufacturing-demo"
 _MIGRATION_LOCK = Lock()
+_SERVICE_BUILD_LOCK = Lock()
 
 
 def database_target() -> str:
@@ -124,7 +137,7 @@ def ensure_database_migrations() -> tuple[str, ...]:
         return tuple(migrate(database_target()))
 
 
-def _mvp_fixture_masters(root: Path) -> list[tuple[str, dict[str, Any]]]:
+def _operations_fixture_masters(root: Path) -> list[tuple[str, dict[str, Any]]]:
     fixture_root = root / "data" / "fixtures"
     masters: list[tuple[str, dict[str, Any]]] = []
     for pattern in ("GS-*.json", "AZ-*.json", "MPT-*.json"):
@@ -139,7 +152,7 @@ def _mvp_fixture_masters(root: Path) -> list[tuple[str, dict[str, Any]]]:
     return masters
 
 
-def _mvp_context_provider(fixture: dict[str, Any]):
+def _operations_context_provider(fixture: dict[str, Any]):
     fallback = FixtureContextProvider()
     if fixture["runtime"]["context_provider"] == "project3_http":
         return ResilientContextProvider(Project3HttpContextProvider(), fallback)
@@ -151,7 +164,7 @@ def build_manufacturing_service(
     *,
     root: Path = ROOT,
 ) -> ManufacturingPredictiveMaintenanceService:
-    """Compose the MVP application service with concrete runtime adapters."""
+    """Compose the Operations application service with concrete runtime adapters."""
 
     target = str(database_path)
     migrate(target)
@@ -173,8 +186,36 @@ def build_manufacturing_service(
         )
     )
     provider = configured_provider()
+    company_context_repository = CompanyContextRepository(target)
+    runtime_asset_detail_service = None
+    if is_postgresql(target):
+        from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
+
+        runtime_asset_detail_service = AssetDetailViewModelService(
+            PostgreSQLAssetDetailReadAdapter(
+                PredictiveMaintenanceRuntimeRepository(target),
+                validate_artifact=validate_product_result_artifact,
+            )
+        )
+    try:
+        if is_postgresql(target):
+            company_scope = PostgreSQLProjectContextResolver(target).resolve(MANUFACTURING_WORKSPACE)
+            company_organization_id = company_scope.organization_id
+        else:
+            company_organization_id = "org-ontology-demo"
+        company_context_repository.seed_records(
+            organization_id=company_organization_id,
+            project_id="manufacturing-demo-project",
+            workspace_id=MANUFACTURING_WORKSPACE,
+            context=load_company_context(),
+        )
+    except Exception:
+        # Context persistence is an enrichment path. Core Operations must remain
+        # available while an older DB is being migrated or a read-only Team DB
+        # connection is intentionally used.
+        pass
     equipment_service = EquipmentService(
-        FixtureEquipmentRepository(_mvp_fixture_masters(root))
+        FixtureEquipmentRepository(_operations_fixture_masters(root))
     )
     return ManufacturingPredictiveMaintenanceService(
         root,
@@ -182,18 +223,39 @@ def build_manufacturing_service(
         equipment_service=equipment_service,
         report_agent=ReportAgent(root, provider),
         layout_planner=LayoutPlanner(root, provider),
-        context_provider_factory=_mvp_context_provider,
+        context_provider_factory=_operations_context_provider,
         agent_review_summary_provider=AgentReviewSummaryProvider(provider),
+        agent_answer_provider=GroundedAgentAnswerProvider(provider),
         agent_review_context_registry=default_agent_review_context_registry(),
         domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
         maintenance_lineage_query=maintenance_lineage_query,
+        company_context_query=company_context_repository,
+        runtime_asset_detail_service=runtime_asset_detail_service,
         workspace_id=MANUFACTURING_WORKSPACE,
     )
 
 
 @lru_cache(maxsize=1)
+def _cached_manufacturing_service(target: str) -> ManufacturingPredictiveMaintenanceService:
+    return build_manufacturing_service(target)
+
+
 def get_service() -> ManufacturingPredictiveMaintenanceService:
-    return build_manufacturing_service(database_target())
+    # lru_cache protects repeated calls after initialization, but it does not
+    # serialize concurrent first misses. The public preview opens several
+    # Operations reads in parallel after login; without this lock, each cold
+    # request can run migrations and create its own PostgreSQL pool before the
+    # first service is cached, exhausting low-limit Team DB roles.
+    with _SERVICE_BUILD_LOCK:
+        return _cached_manufacturing_service(database_target())
+
+
+@lru_cache(maxsize=1)
+def get_operational_decision_support_service() -> OperationalDecisionSupportService:
+    target = database_target()
+    if is_postgresql(target):
+        return PersistedOperationalDecisionSupportService(ROOT, database_url=str(target))
+    return PersistedOperationalDecisionSupportService(ROOT, Path(target))
 
 
 def _password_hasher() -> PasswordHasher:
@@ -273,16 +335,31 @@ def build_live_predictive_maintenance_service(
     from app.infra.generator_runtime_pipeline import GeneratorRuntimePipelineClient
 
     target = database_url or database_target()
+    enqueue_client = GeneratorRuntimePipelineClient()
     shared = {
         "predictor_factory": configured_predictor,
         "artifact_builder": build_product_result_artifact,
     }
     return LivePredictiveMaintenanceService(
-        dataset=LiveDatasetIngestionAdapter(target, **shared),
-        diagnosis=LiveDiagnosisApplicationAdapter(**shared),
+        dataset=LiveDatasetIngestionAdapter(
+            target,
+            **shared,
+            allow_accelerated_simulation=os.getenv(
+                "ONTOLOGY_DASHBOARD_ALLOW_ACCELERATED_SIMULATION", "0"
+            ).lower()
+            in {"1", "true", "yes"},
+        ),
+        diagnosis=LiveDiagnosisApplicationAdapter(
+            snapshot_root=runtime_pipeline_input_root,
+            enqueue_client=enqueue_client,
+            simulation_session_id=(
+                os.getenv("ONTOLOGY_DASHBOARD_SIMULATION_SESSION_ID", "").strip()
+                or None
+            ),
+        ),
         maintenance=LiveMaintenanceOverlayAdapter(
             snapshot_root=runtime_pipeline_input_root,
-            enqueue_client=GeneratorRuntimePipelineClient(),
+            enqueue_client=enqueue_client,
         ),
         ontology=LiveOntologyProjectionAdapter(),
     )
@@ -435,6 +512,23 @@ def get_predictive_maintenance_runtime_service() -> PredictiveMaintenanceRuntime
             detail="Predictive-maintenance live runtime requires PostgreSQL",
         )
     return PredictiveMaintenanceRuntimeService(PredictiveMaintenanceRuntimeRepository(target))
+
+
+@lru_cache(maxsize=1)
+def get_runtime_asset_detail_service() -> AssetDetailViewModelService | None:
+    """Return the authoritative PostgreSQL AssetDetail read boundary when available."""
+
+    target = database_target()
+    if not is_postgresql(target):
+        return None
+    from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
+
+    return AssetDetailViewModelService(
+        PostgreSQLAssetDetailReadAdapter(
+            PredictiveMaintenanceRuntimeRepository(target),
+            validate_artifact=validate_product_result_artifact,
+        )
+    )
 
 
 class _RuntimeThenDemoEvidenceProjection:

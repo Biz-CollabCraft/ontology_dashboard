@@ -88,6 +88,11 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
             "prediction_id": provenance.get("prediction_id"),
             "top_factor_count": len(clean_artifact.get("top_factors", [])),
             "evidence_payload_reference": provenance.get("evidence_payload_reference"),
+            # Persistence adds this checksum after validating the immutable
+            # producer payload.  Carry it through the canonical projection so
+            # command-side stale-view checks compare the same stored row that
+            # the AssetDetail ViewModel displayed.
+            "source_sha256": clean_artifact.get("source_sha256"),
         },
         "assessment": {
             "status": clean_artifact.get("status_grade"),
@@ -284,9 +289,11 @@ def _operational_decision_kind(payload: dict[str, Any]) -> str | None:
     # display/domain metadata and is deliberately not interpreted here.
     decision = action.get("action_id")
     if decision not in OPERATIONAL_DECISION_KINDS:
-        raise ValueError(
-            "Diagnosis policy action_id is not an operational decision"
-        )
+        # Historical/producer-owned action identifiers may still be useful as
+        # report evidence, but they must never be promoted into an executable
+        # operational decision. Treating them as unavailable is both safer and
+        # keeps read projections usable for mixed-version runtime data.
+        return None
     return str(decision)
 
 

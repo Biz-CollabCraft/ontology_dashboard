@@ -20,7 +20,7 @@ from app.diagnosis.recommendation_policy import (
     evaluate_recommendation_policy,
 )
 from app.dependencies import build_manufacturing_service
-from app.mvp.contracts import LayoutRequest, ReportRequest
+from app.operations.contracts import LayoutRequest, ReportRequest
 
 FORBIDDEN_PHRASES = [
     "자동 정지 완료",

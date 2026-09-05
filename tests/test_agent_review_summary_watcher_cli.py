@@ -52,6 +52,7 @@ def test_agent_review_summary_watcher_cli_reports_workflow_contract(tmp_path: Pa
         "target_scope": "project",
         "history_window": "24h",
         "limit": 1,
+        "source": "fixture",
         "stale_detection": "summary_key",
         "summary_duplicate_policy": "reuse_existing_summary",
         "run_record_policy": "record_each_explicit_trigger",
@@ -99,6 +100,7 @@ def test_agent_review_summary_watcher_cli_reports_watch_operating_mode(
     payload = json.loads(completed.stdout)
 
     assert payload["operating_mode"]["mode"] == "watch"
+    assert payload["operating_mode"]["source"] == "fixture"
     assert payload["operating_mode"]["poll_interval_seconds"] == 1.5
     assert payload["operating_mode"]["max_iterations"] == 1
     assert payload["operating_mode"]["max_attempts"] == 2
@@ -112,3 +114,44 @@ def test_agent_review_summary_watcher_cli_reports_watch_operating_mode(
     assert payload["operating_mode"]["stop_behavior"] == (
         "bounded_iterations_or_signal"
     )
+
+
+def test_agent_review_summary_watcher_cli_can_require_live_provider(
+    tmp_path: Path,
+) -> None:
+    env = {
+        **os.environ,
+        "APP_ENV": "test",
+        "ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK": "1",
+        "PYTHONPATH": "systems/backend:packages/backend:packages/ml_core",
+        "OPENAI_API_KEY": "",
+        "ANTHROPIC_API_KEY": "",
+        "GOOGLE_API_KEY": "",
+        "VERTEX_PROJECT_ID": "",
+    }
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/watch_agent_review_summaries.py",
+            "--database",
+            str(tmp_path / "watcher-require-live.db"),
+            "--limit",
+            "1",
+            "--max-attempts",
+            "1",
+            "--require-live-provider",
+        ],
+        cwd=ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(completed.stdout)
+
+    assert completed.returncode == 2
+    assert payload["live_provider_required"] is True
+    assert payload["live_provider_ready"] is False
+    assert payload["items"][0]["mode"] == "deterministic_fallback"

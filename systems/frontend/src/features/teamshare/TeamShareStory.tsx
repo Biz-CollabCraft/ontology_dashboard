@@ -52,7 +52,7 @@ const FEATURE_DOCUMENT_URL = "https://github.com/oosuhada/agentic-ontology-dashb
 const REVIEW_TEMPLATE = `채택해야 하는 기능:
 수정이 필요한 기능:
 후속으로 미룰 기능:
-초기 MVP 역할:
+초기 운영 역할:
 첫 Dataset:
 담당하고 싶은 영역:
 가장 큰 기술 리스크:`;
@@ -511,7 +511,7 @@ export function TeamShareStory() {
         <ol>
           <li><b>01</b><span><strong>핵심 사용자 흐름</strong><small>Report-first Manager와 Dashboard-first Practitioner를 제품 기준으로 채택할지</small></span></li>
           <li><b>02</b><span><strong>첫 Dataset과 Ontology</strong><small>실제 프로젝트에서 먼저 연결할 Dataset과 Object·Link 범위</small></span></li>
-          <li><b>03</b><span><strong>초기 MVP Workbench</strong><small>Dashboard, Reports, Analysis, Ontology 중 초기 릴리스 범위</small></span></li>
+          <li><b>03</b><span><strong>초기 운영 Workbench</strong><small>Dashboard, Reports, Analysis, Ontology 중 초기 릴리스 범위</small></span></li>
           <li><b>04</b><span><strong>Ownership</strong><small>Frontend, Backend, Data, Ontology mapping과 검증 책임</small></span></li>
         </ol>
         <div className="team-share-review-actions"><button type="button" className="primary" onClick={() => IS_PUBLIC_STORY ? openPublicResource(REPOSITORY_URL) : navigate("/login")}>{IS_PUBLIC_STORY ? "GitHub에서 코드 보기" : "실제 앱 열기"} <ArrowRight size={13} /></button><button type="button" onClick={() => IS_PUBLIC_STORY ? openPublicResource(FEATURE_DOCUMENT_URL) : navigate("/reference")}>{IS_PUBLIC_STORY ? "Feature 문서 보기" : "Analysis reference"}</button><button type="button" onClick={() => void copyReviewTemplate()}><ClipboardCopy size={13} />{copied ? "복사 완료" : "리뷰 양식 복사"}</button></div>

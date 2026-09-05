@@ -156,7 +156,7 @@ class ProductResultMaterializationService:
     @staticmethod
     @lru_cache(maxsize=1)
     def _threshold_policy() -> dict[str, Any]:
-        path = project_root() / "systems" / "backend" / "app" / "diagnosis" / "threshold_policy.json"
+        path = project_root() / "systems" / "backend" / "app" / "diagnosis" / "v31_threshold_policy.json"
         return json.loads(path.read_text(encoding="utf-8"))
 
     @classmethod
@@ -418,7 +418,7 @@ class ProductResultMaterializationService:
         source_fields.append(
             {
                 "field_id": "backend_policy.severity_rules",
-                "source_path": "systems/backend/app/diagnosis/threshold_policy.json",
+                "source_path": "systems/backend/app/diagnosis/v31_threshold_policy.json",
                 "label": "Backend severity policy",
                 "description": "Backend-owned severity and criticality adjustment policy applied during Product Result promotion.",
             }

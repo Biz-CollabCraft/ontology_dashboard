@@ -21,6 +21,11 @@ from systems.generator.app.preprocessing.preprocessing_exception import (
 logger = logging.getLogger(__name__)
 
 PLANNER_VERSION = "preprocessing-planner-v1"
+ID_COLUMN_CANDIDATES = (
+    "asset_id", "machineID", "Product ID", "product_id", "equipment_id",
+    "device_id", "asset", "machine", "UDI", "udi",
+)
+TIME_COLUMN_CANDIDATES = ("observed_at", "datetime", "timestamp", "time", "date")
 
 
 class PreprocessingPlanner:
@@ -147,11 +152,8 @@ class PreprocessingPlanner:
                 ) from e
             stage2_fallback_reason = "llm_call_failed"
 
-        id_candidates = ["asset_id", "machineID", "Product ID", "product_id", "equipment_id", "device_id", "asset", "machine", "UDI", "udi"]
-        time_candidates = ["observed_at", "datetime", "timestamp", "time", "date"]
-
-        found_id = next((c for c in id_candidates if c in avail_cols), None)
-        found_time = next((c for c in time_candidates if c in avail_cols), None)
+        found_id = next((c for c in ID_COLUMN_CANDIDATES if c in avail_cols), None)
+        found_time = next((c for c in TIME_COLUMN_CANDIDATES if c in avail_cols), None)
 
         self._last_s2_provenance = (True, stage2_fallback_reason or "column_planning_fallback")
         return {
@@ -168,18 +170,15 @@ class PreprocessingPlanner:
     def enforce_key_columns(self, selected_columns: list[str], available_columns: list[str]) -> list[str]:
         """Preserve key machine and timestamp column identifiers if present in available columns."""
         result = list(selected_columns)
-        id_candidates = ["asset_id", "machineID", "Product ID", "product_id", "equipment_id", "device_id", "asset", "machine", "UDI", "udi"]
-        time_candidates = ["observed_at", "datetime", "timestamp", "time", "date"]
-
-        has_id = any(c in result for c in id_candidates)
+        has_id = any(c in result for c in ID_COLUMN_CANDIDATES)
         if not has_id:
-            found_id = next((c for c in id_candidates if c in available_columns), None)
+            found_id = next((c for c in ID_COLUMN_CANDIDATES if c in available_columns), None)
             if found_id and found_id not in result:
                 result.append(found_id)
 
-        has_time = any(c in result for c in time_candidates)
+        has_time = any(c in result for c in TIME_COLUMN_CANDIDATES)
         if not has_time:
-            found_time = next((c for c in time_candidates if c in available_columns), None)
+            found_time = next((c for c in TIME_COLUMN_CANDIDATES if c in available_columns), None)
             if found_time and found_time not in result:
                 result.append(found_time)
 
@@ -223,8 +222,17 @@ class PreprocessingPlanner:
             aggregation=aggregation,
         )
 
-        raw_selected = stage2_plan.get("selected_columns", list(df_preview.columns))
-        final_selected = self.enforce_key_columns(raw_selected, list(df_preview.columns))
+        available_columns = list(df_preview.columns)
+        raw_selected = stage2_plan.get("selected_columns", available_columns)
+        final_selected = self.enforce_key_columns(raw_selected, available_columns)
+        resolved_id_column = stage2_plan.get("id_column") or next(
+            (column for column in ID_COLUMN_CANDIDATES if column in available_columns),
+            None,
+        )
+        resolved_time_column = stage2_plan.get("time_column") or next(
+            (column for column in TIME_COLUMN_CANDIDATES if column in available_columns),
+            None,
+        )
 
         # Check provenance from Stage 1 & Stage 2
         fallback_reasons = []
@@ -251,8 +259,8 @@ class PreprocessingPlanner:
             "fingerprint": fingerprint,
             "structure_type": structure_type,
             "selected_columns": final_selected,
-            "id_column": stage2_plan.get("id_column"),
-            "time_column": stage2_plan.get("time_column"),
+            "id_column": resolved_id_column,
+            "time_column": resolved_time_column,
             "attribute_column": stage2_plan.get("attribute_column"),
             "value_column": stage2_plan.get("value_column"),
             "duplicate_policy": stage2_plan.get("duplicate_policy", duplicate_policy),

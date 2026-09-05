@@ -30,7 +30,7 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title="Ontology Dashboard API",
         version="0.8.0",
-        description="Predictive-maintenance MVP backend.",
+        description="Predictive-maintenance Operations backend.",
         lifespan=application_lifespan,
     )
     application.add_middleware(

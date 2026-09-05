@@ -27,7 +27,7 @@ from app.infra.db.dashboard_repository import DashboardRepository
 from app.infra.db.identity_repository import IdentityRepository as SQLIdentityRepository
 from app.infra.db.report_repository import ExportRepository
 from app.infra.db.ontology_action_repository import OntologyActionRepository
-from app.infra.db.mvp_audit_repository import AuditRepository
+from app.infra.db.operations_audit_repository import AuditRepository
 from .role_workflow_repository import RoleWorkflowRepository
 from .postgresql_compat import (
     PostgreSQLProjectContextResolver,

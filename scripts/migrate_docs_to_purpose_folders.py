@@ -30,7 +30,7 @@ MOVES: dict[str, str] = {
     "docs/10-product/data-dictionary.md": "docs/10-product/data-dictionary.md",
     "docs/10-product/data-gap.md": "docs/10-product/data-gap.md",
     "docs/10-product/model-baseline-results.md": "docs/10-product/model-baseline-results.md",
-    "docs/10-product/mvp-scope.md": "docs/10-product/mvp-scope.md",
+    "docs/10-product/operations-scope.md": "docs/10-product/operations-scope.md",
     "docs/10-product/personas.md": "docs/10-product/personas.md",
     "docs/10-product/risk-threshold-policy.md": "docs/10-product/risk-threshold-policy.md",
     "docs/10-product/role-needs-research.md": "docs/10-product/role-needs-research.md",

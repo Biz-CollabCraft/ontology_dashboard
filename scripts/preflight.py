@@ -56,8 +56,8 @@ REQUIRED_FILES = [
     "systems/backend/app/planner/planner_router.py",
     "systems/backend/app/governance/governance_service.py",
     "systems/backend/app/governance/governance_router.py",
-    "systems/backend/app/mvp/service.py",
-    "systems/backend/app/mvp/router.py",
+    "systems/backend/app/operations/service.py",
+    "systems/backend/app/operations/router.py",
     "systems/backend/app/infra/db/settings.py",
     "systems/backend/app/infra/db/connection.py",
     "systems/backend/app/infra/db/pool.py",
@@ -85,7 +85,7 @@ REQUIRED_FILES = [
     "scripts/preflight.py",
     "systems/verify_architecture.py",
     "systems/frontend/package.json",
-    "systems/frontend/src/features/mvp/MvpApplication.tsx",
+    "systems/frontend/src/features/operations/OperationsApplication.tsx",
 ]
 
 

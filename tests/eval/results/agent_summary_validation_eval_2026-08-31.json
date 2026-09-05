@@ -9,14 +9,14 @@
     "tests/test_agent_review_summary_contract.py",
     "contracts/schemas/agent-review-summary.schema.json",
     "contracts/schemas/agent-review-packet.schema.json",
-    "systems/backend/app/mvp/agent_review_summary.py"
+    "systems/backend/app/operations/agent_review_summary.py"
   ],
   "verified_claims": [
     "Unknown source_refs are rejected at top-level and nested paths.",
     "Korean free-text repair, approval, causal certainty, downtime-saving, priority downgrade, and unsupported production-loss claims are rejected.",
     "Data-quality hold summaries cannot invent inspection focus, confidence, or missing evidence.",
     "Invalid LLM candidates fall back to deterministic summaries instead of being stored as trusted output.",
-    "Role summaries remain limited to the MVP roles and keep source refs grounded in the packet."
+    "Role summaries remain limited to the Operations roles and keep source refs grounded in the packet."
   ],
   "current_decision": "Validation remains a release gate before any stronger orchestration engine or richer domain tool pipeline is promoted."
 }

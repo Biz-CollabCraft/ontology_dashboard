@@ -6,11 +6,13 @@ export function OntologyLifecycleLoader({
   operation,
   detail,
   variant = "panel",
+  steps = ["Data", "Logic", "Action"],
   className = "",
 }: {
   operation: string;
   detail?: string;
   variant?: OntologyLifecycleLoaderVariant;
+  steps?: readonly [string, string, string];
   className?: string;
 }) {
   const glowId = `od-loader-glow-${useId().replace(/:/g, "")}`;
@@ -29,29 +31,31 @@ export function OntologyLifecycleLoader({
           </radialGradient>
         </defs>
         <circle className="od-lifecycle-loader__glow" cx="90" cy="54" r="47" fill={`url(#${glowId})`} />
-        <g className="od-lifecycle-loader__rings" fill="none">
-          <ellipse cx="90" cy="54" rx="63" ry="24" />
-          <ellipse cx="90" cy="54" rx="63" ry="24" transform="rotate(60 90 54)" />
-          <ellipse cx="90" cy="54" rx="63" ry="24" transform="rotate(120 90 54)" />
+        <g className="od-lifecycle-loader__system">
+          <g className="od-lifecycle-loader__rings" fill="none">
+            <ellipse cx="90" cy="54" rx="63" ry="24" />
+            <ellipse cx="90" cy="54" rx="63" ry="24" transform="rotate(60 90 54)" />
+            <ellipse cx="90" cy="54" rx="63" ry="24" transform="rotate(120 90 54)" />
+          </g>
+          <g className="od-lifecycle-loader__nodes phase-data">
+            <g transform="translate(153 54)"><circle className="node-halo" r="7" /><circle className="node-core" r="3.2" /></g>
+            <g transform="translate(58.5 74.785)"><circle className="node-halo" r="7" /><circle className="node-core" r="3.2" /></g>
+          </g>
+          <g className="od-lifecycle-loader__nodes phase-logic" transform="rotate(60 90 54)">
+            <g transform="translate(121.5 33.215)"><circle className="node-halo" r="7" /><circle className="node-core" r="3.2" /></g>
+            <g transform="translate(58.5 33.215)"><circle className="node-halo" r="7" /><circle className="node-core" r="3.2" /></g>
+          </g>
+          <g className="od-lifecycle-loader__nodes phase-action" transform="rotate(120 90 54)">
+            <g transform="translate(121.5 74.785)"><circle className="node-halo" r="7" /><circle className="node-core" r="3.2" /></g>
+            <g transform="translate(27 54)"><circle className="node-halo" r="7" /><circle className="node-core" r="3.2" /></g>
+          </g>
         </g>
-        <g className="od-lifecycle-loader__nodes phase-data">
-          <circle cx="27" cy="54" r="5" />
-          <circle cx="153" cy="54" r="5" />
-          <circle cx="90" cy="78" r="5" />
-        </g>
-        <g className="od-lifecycle-loader__nodes phase-logic">
-          <circle cx="68" cy="31" r="5" />
-          <circle cx="117" cy="39" r="5" />
-          <circle cx="116" cy="78" r="5" />
-        </g>
-        <g className="od-lifecycle-loader__nodes phase-action">
-          <circle cx="48" cy="76" r="5" />
-          <circle cx="126" cy="22" r="5" />
-        </g>
+        <circle className="od-lifecycle-loader__center-halo" cx="90" cy="54" r="10" />
+        <circle className="od-lifecycle-loader__center" cx="90" cy="54" r="3" />
       </svg>
       <div className="od-lifecycle-loader__copy">
         <div className="od-lifecycle-loader__phases" aria-hidden="true">
-          <span>Data</span><i>→</i><span>Logic</span><i>→</i><span>Action</span>
+          <span>{steps[0]}</span><i>→</i><span>{steps[1]}</span><i>→</i><span>{steps[2]}</span>
         </div>
         <strong>{operation}</strong>
         {detail ? <small>{detail}</small> : null}

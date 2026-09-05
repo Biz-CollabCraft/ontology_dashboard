@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from app.mvp.agent_review_summary import (
+from app.operations.agent_review_summary import (
     FORBIDDEN_SUMMARY_CLAIMS,
     compose_deterministic_agent_review_summary,
     validate_agent_review_summary_contract,
@@ -30,9 +30,12 @@ def test_agent_review_eval_manifest_defines_minimum_release_gate() -> None:
     assert manifest["purpose"] == "pre_llm_release_gate"
     assert manifest["packet_schema_version"] == "agent-review-packet-v1.0"
     assert manifest["summary_schema_version"] == "agent-review-summary-v1.0"
-    assert manifest["case_selection_policy"]["minimum_cases"] == 3
-    assert len(manifest["cases"]) == 3
-    assert len({case["scenario_id"] for case in manifest["cases"]}) == 3
+    minimum_cases = manifest["case_selection_policy"]["minimum_cases"]
+    assert minimum_cases == 8
+    assert len(manifest["cases"]) >= minimum_cases
+    assert len({case["scenario_id"] for case in manifest["cases"]}) == len(
+        manifest["cases"]
+    )
 
 
 def test_agent_review_eval_manifest_required_coverage_is_satisfied() -> None:
@@ -160,6 +163,31 @@ def _has_readonly_available_action(packet: dict) -> bool:
 
 
 COVERAGE_CHECKS: dict[str, Callable[[dict], bool]] = {
+    "normal_stable": lambda packet: (
+        packet["risk_summary"]["status_grade"] == "normal"
+        and packet["review_priority"]["level"] == "low"
+    ),
+    "continue_monitoring": lambda packet: (
+        packet["risk_summary"]["status_grade"] == "normal"
+    ),
+    "heat_dissipation_warning": lambda packet: (
+        packet["risk_summary"]["status_grade"] == "warning"
+        and any(
+            target.get("component_id") == "thermal_path"
+            for target in packet["inspection_targets"]
+        )
+    ),
+    "low_confidence_attention": lambda packet: (
+        packet["risk_summary"]["status_grade"] == "attention"
+        and packet["review_priority"]["level"] == "medium"
+    ),
+    "multi_factor_warning": lambda packet: (
+        packet["risk_summary"]["status_grade"] == "warning"
+        and len(packet["inspection_targets"]) > 1
+    ),
+    "multiple_inspection_targets": lambda packet: (
+        len(packet["inspection_targets"]) > 1
+    ),
     "sop_guidance_present": lambda packet: bool(packet["sop_guidance"]),
     "sop_guidance_absent": lambda packet: packet["sop_guidance"] == [],
     "field_location_present": _has_location,

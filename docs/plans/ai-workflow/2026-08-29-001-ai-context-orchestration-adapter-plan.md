@@ -33,19 +33,19 @@ Current implementation baseline:
 
 - `contracts/schemas/agent-review-packet.schema.json` defines the read-only packet.
 - `contracts/schemas/agent-review-summary.schema.json` defines the LLM/deterministic output.
-- `systems/backend/app/mvp/domain_context_adapters.py` owns the current manufacturing fixture adapter for operation context, SOP guidance, inspection locations, and SOP retrieval.
-- `systems/backend/app/mvp/agent_review_packet.py` composes packet context from ViewModel and adapter-supplied SOP retrieval.
-- `systems/backend/app/mvp/agent_review_summary.py` composes deterministic fallback and validates summary output.
-- `systems/backend/app/mvp/agent_review_summary_provider.py` wraps the LLM provider.
-- `systems/backend/app/mvp/agent_review_summary_workflow.py` exposes the current lightweight workflow result for watcher execution, including engine identity, bounded retry attempts, terminal status, and read-only consumer readiness.
-- `systems/frontend/src/features/mvp/overview/MvpWorkflowOverviewPage.tsx` consumes the summary inline.
+- `systems/backend/app/operations/domain_context_adapters.py` owns the current manufacturing fixture adapter for operation context, SOP guidance, inspection locations, and SOP retrieval.
+- `systems/backend/app/operations/agent_review_packet.py` composes packet context from ViewModel and adapter-supplied SOP retrieval.
+- `systems/backend/app/operations/agent_review_summary.py` composes deterministic fallback and validates summary output.
+- `systems/backend/app/operations/agent_review_summary_provider.py` wraps the LLM provider.
+- `systems/backend/app/operations/agent_review_summary_workflow.py` exposes the current lightweight workflow result for watcher execution, including engine identity, bounded retry attempts, terminal status, and read-only consumer readiness.
+- `systems/frontend/src/features/operations/overview/OperationsWorkflowOverviewPage.tsx` consumes the summary inline.
 - `tests/fixtures/agent_review_packets/` and summary tests provide the first gold traces.
 
 ## Requirements
 
 - R1. The AI path must remain read-only. It may summarize, cite, and prepare review language, but must not create WorkOrder, MaintenanceAction, MaintenanceEvent, Replay, or auto approval state.
 - R2. Domain context must enter the AI path through adapter-owned contracts, not hidden DB reads inside prompts.
-- R3. Role summaries should stay focused on the two MVP roles currently represented in the product surface: `field_operator` and `process_manager`.
+- R3. Role summaries should stay focused on the two Operations roles currently represented in the product surface: `field_operator` and `process_manager`.
 - R4. Missing context should be represented as `data_footnotes` or `evidence_gaps`, not as loud main-copy warnings that drown out usable evidence.
 - R5. Polling watcher adoption must start at a lightweight materialization level before event/outbox promotion is added.
 - R6. SOP RAG and GraphRAG must be treated as expansion paths because the current SOP source is a controlled, structured fixture.
@@ -99,8 +99,8 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Goal:** Define the stable abstraction that lets new domain adapters contribute context to the Agent Review Packet.
 - **Files:**
   - `contracts/schemas/agent-review-packet.schema.json`
-  - `systems/backend/app/mvp/agent_review_packet.py`
-  - `systems/backend/app/mvp/context_providers.py`
+  - `systems/backend/app/operations/agent_review_packet.py`
+  - `systems/backend/app/operations/context_providers.py`
   - `tests/test_agent_review_packet_golden.py`
 - **Approach:** Create a small contract around context sections such as `operation_context_summary`, `sop_guidance`, `ontology_context`, `maintenance_history_summary`, and `data_footnotes`. Keep each section source-ref based and read-only.
 - **Test Scenarios:**
@@ -116,10 +116,10 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Status:** Implemented. `DomainReviewContextAdapter` and `ManufacturingFixtureReviewContextAdapter` now own operation context, SOP guidance, inspection location references, SOP retrieval, spare-part candidates, similar-event context, and ontology traversal before `AssetDetailViewModel` and `AgentReviewPacket` consume them. The fixture implementation is internally split into operation, SOP, location, and ontology context adapters while preserving the public packet contract.
 - **Goal:** Make domain additions explicit and replaceable rather than hard-coded inside one packet composer.
 - **Files:**
-  - `systems/backend/app/mvp/domain_context_adapters.py`
-  - `systems/backend/app/mvp/context_providers.py`
+  - `systems/backend/app/operations/domain_context_adapters.py`
+  - `systems/backend/app/operations/context_providers.py`
   - `systems/backend/app/dependencies.py`
-  - `tests/test_mvp.py`
+  - `tests/test_operations.py`
 - **Approach:** Register adapters from the composition root. The current manufacturing adapter is fixture-backed, read-only, and replaceable; external domains should implement the same adapter surface before adding dynamic plugin loading.
 - **Test Scenarios:**
   - Default registry returns operation context for manufacturing demo.
@@ -132,12 +132,12 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, each materialization attempt records an `agent_review_workflow_runs` row, summaries store the generating `workflow_run_id`, the watcher emits stage status and an explicit `operating_mode`, `GET /agent-review-summary` is stored-summary lookup only, UI manual regeneration calls the explicit `POST` trigger, and `run_local_live.sh` can start the watcher with bounded polling, bounded retry attempts, optional max iterations, stale-policy reporting, and optional Postgres shutdown for one-shot live checks.
 - **Goal:** Decide whether AI summaries should be prepared before the user opens the UI.
 - **Files:**
-  - `systems/backend/app/mvp/agent_review_summary.py`
-  - `systems/backend/app/mvp/agent_review_summary_workflow.py`
-  - `systems/backend/app/mvp/service.py`
+  - `systems/backend/app/operations/agent_review_summary.py`
+  - `systems/backend/app/operations/agent_review_summary_workflow.py`
+  - `systems/backend/app/operations/service.py`
   - `systems/backend/app/infra/db/migrations.py`
   - `scripts/watch_agent_review_summaries.py`
-  - `tests/test_mvp.py`
+  - `tests/test_operations.py`
   - `docs/plans/ai-workflow/2026-08-29-001-ai-context-orchestration-adapter-plan.md`
 - **Approach:** Start with a Level 0 watcher contract: discover new or changed Product Result artifacts, compute packet checksum, compute summary, validate it, store status, and emit read-only workflow stages. The simple workflow boundary now reports `engine`, `max_attempts`, `attempt_count`, `terminal_status`, retry policy, and per-attempt errors. Do not mutate Closed-loop. Do not introduce event/outbox promotion in this unit.
 - **Test Scenarios:**
@@ -157,9 +157,9 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 - **Goal:** Add a controlled exploration path that combines SOP and ontology relationships before considering RAG or KG infrastructure.
 - **Files:**
-  - `systems/backend/app/mvp/sop_retrieval.py`
+  - `systems/backend/app/operations/sop_retrieval.py`
   - `systems/backend/app/ontology/ontology_service.py`
-  - `systems/backend/app/mvp/context_providers.py`
+  - `systems/backend/app/operations/context_providers.py`
   - `tests/test_agent_review_packet_golden.py`
   - `tests/test_agent_review_packet_eval_set.py`
 - **Approach:** Implement ontology-backed lookup as an adapter behind packet composition. It should answer relationship questions such as component-to-location, factor-to-component, failure-mode-to-SOP, and SOP maturity gate.
@@ -190,7 +190,7 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Missing context: validated Product Evidence gaps remain gaps even when a demo adapter supplies auxiliary history context.
 - **Verification:** `tests/eval/test_agent_context_retrieval_eval.py` was executed on 2026-08-30 and passed 6/6 checks. The result artifact records that packet answers and `ontology_context` traversal satisfy the same answer facets for GS-002, GS-004, and GS-007, now including `spare_part_ids` and `similar_event_ids`. This is intentionally not a Cypher/SPARQL-vs-SQL performance benchmark; production KG remains a later decision.
 - **Current Data Boundary:** `spare_parts`, `similar_events`, `inspection_locations`, `operation_context`, and structured SOP retrieval are fixture-backed demo adapter context with `assumption_level`, not validated Product Evidence or operational source-of-truth records. They can support read-only AI explanation and KG/RDB comparison design, but must not be used as Closed-loop approval or mutation facts until an explicit current-domain promotion contract exists.
-- **Demo Coverage Boundary:** The CNC demo spare-part fixture covers the same component IDs as the CNC inspection-location fixture (`tooling`, `drive_power`, `thermal_path`, `rotating_assembly`). A separate compressor fixture covers representative compressor components (`vibration_path`, `air_supply`, `electrical_supply`, `rotating_assembly`) through a direct adapter contract test. The current `MPT-001` MVP fixture still uses the compatibility input-event shape, so compressor service-level packet coverage is deferred until the compressor input-event contract is split from the CNC sensor envelope.
+- **Demo Coverage Boundary:** The CNC demo spare-part fixture covers the same component IDs as the CNC inspection-location fixture (`tooling`, `drive_power`, `thermal_path`, `rotating_assembly`). A separate compressor fixture covers representative compressor components (`vibration_path`, `air_supply`, `electrical_supply`, `rotating_assembly`) through a direct adapter contract test. The current `MPT-001` Operations fixture still uses the compatibility input-event shape, so compressor service-level packet coverage is deferred until the compressor input-event contract is split from the CNC sensor envelope.
 - **External Reference Basis:** The fixture is standard-aligned, not standards-complete. ISO 14224 frames reliability and maintenance data around equipment, failure, maintenance action, resources used, and downtime categories. MIMOSA OSA-EAI frames exchange of asset registry, condition, maintenance, and reliability information across enterprise systems, including logistics and parts-supplier contexts. ISA-95/IEC 62264 frames enterprise-control integration and the production/logistics boundary. These references support why spare-part candidates and similar-event history are valid read-only decision context, but they do not prove that the current demo fixture is an ISO/MIMOSA/ISA compliant data model.
 - **Approved Wording:** Use "standard-aligned demo adapter fixture" or "demo adapter assumption aligned with maintenance/resource/logistics context." Do not use "industry-standard spare-part master," "standards-compliant asset catalog," or "all CNC/compressor parts are covered." For Korean product/docs wording, prefer "표준 정비 데이터 범주와 정렬된 데모 어댑터 근거" and avoid "업계 표준 부품 마스터를 구현했다."
 - **Question Backlog:** `agent_context_question_backlog.jsonl` separates current coverage from future KG pressure. Current Level 0 covers component/location/spare/similar-event explanation and read-only boundaries. Level 1 candidates require new source contracts for CMMS work-order history, ERP/WMS inventory lots and supplier lead time, MES/APS schedule impact, structured SOP steps/tools/safety constraints, and multi-asset topology.
@@ -204,8 +204,8 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Current-Domain Update Candidates:** The near-term DB-backed update candidates are: persisted AI summary refresh/reuse on packet hash changes; similar-event history appended from completed inspection/maintenance outcomes; SOP revision candidates derived from local inspection results, maintenance events, equipment-state patches, and similar events; spare-part candidate context versioning from fixture updates; operation-context snapshot versioning from fixture updates; and inspection-location reference versioning from fixture updates. These are update candidates for read models or review candidates, not proof of live enterprise integrations.
 - **SOP Update Trigger Path:** SOP update pressure should come from local operational evidence, not from a user-facing summary alone. Candidate inputs are Closed-loop inspection results, completed maintenance events, equipment-state patches, similar-event outcomes, repeated missing measurements, and post-maintenance observations already represented by Product Result/Evidence or local fixtures. A future `SOP Review Aggregator` can group these by `sop_id`, component, failure mode, factor key, and time window, then produce a `SOP Revision Candidate` with source refs, observed drift, suggested checklist/threshold changes, confidence, and explicit limitations. The approved SOP version remains a human-owned publish step.
 - **SOP Mutation Boundary:** AI workflow may create a read-only SOP revision candidate or review packet. It must not update SOP `maturity`, `effective_from`, `document_hash`, sensor thresholds, checklist text, or Closed-loop approval criteria directly. Existing inspection results must not be retroactively reclassified under a newer SOP version unless a separate migration/audit workflow is explicitly run.
-- **RDB Baseline:** `agent_context_rdb_baseline.json` records the current default as `keep_rdb_packet_projection`. It names where RDB/ViewModel projection is sufficient today and where pressure starts: inventory lot/supplier lead time, Closed-loop work-order dedup history, SOP step/tool/safety relationships, and cross-asset topology. The baseline explicitly forbids claiming KG speed or production necessity from the current MVP fixture.
-- **KG Level 1 Experiment:** `systems/backend/app/mvp/agent_context_graph.py` builds an in-memory graph from the existing read-only packet. It does not add a graph database or runtime dependency. The experiment verifies graph-shaped paths for `PredictionSnapshot -> Factor -> Component -> InspectionLocation/SOP/SparePart/SimilarEvent -> Outcome`, using the same expected answer facets as the packet baseline.
+- **RDB Baseline:** `agent_context_rdb_baseline.json` records the current default as `keep_rdb_packet_projection`. It names where RDB/ViewModel projection is sufficient today and where pressure starts: inventory lot/supplier lead time, Closed-loop work-order dedup history, SOP step/tool/safety relationships, and cross-asset topology. The baseline explicitly forbids claiming KG speed or production necessity from the current Operations fixture.
+- **KG Level 1 Experiment:** `systems/backend/app/operations/agent_context_graph.py` builds an in-memory graph from the existing read-only packet. It does not add a graph database or runtime dependency. The experiment verifies graph-shaped paths for `PredictionSnapshot -> Factor -> Component -> InspectionLocation/SOP/SparePart/SimilarEvent -> Outcome`, using the same expected answer facets as the packet baseline.
 
 ### U6. RAG Decision Gate
 
@@ -229,10 +229,10 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Status:** Implemented as a lightweight evaluation gate. Production LangGraph runtime remains deferred behind the workflow boundary.
 - **Goal:** Prepare for LangGraph without adding it before orchestration complexity is verified in code.
 - **Files:**
-  - `systems/backend/app/mvp/agent_review_summary_workflow.py`
-  - `systems/backend/app/mvp/agent_review_summary_provider.py`
-  - `systems/backend/app/mvp/domain_context_adapters.py`
-  - `tests/test_mvp.py`
+  - `systems/backend/app/operations/agent_review_summary_workflow.py`
+  - `systems/backend/app/operations/agent_review_summary_provider.py`
+  - `systems/backend/app/operations/domain_context_adapters.py`
+  - `tests/test_operations.py`
   - `tests/eval/agent_workflow_eval_gate.json`
   - `tests/eval/langgraph_decision_gate.json`
   - `tests/eval/test_agent_context_retrieval_eval.py`
@@ -250,7 +250,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Status:** Implemented as an eval-only experiment. It is not wired into the production watcher or UI path.
 - **Goal:** Create code-level evidence for when LangGraph/tool orchestration is useful: not because the summary always needs every domain, but because different situations route to different read-only context tools.
 - **Files:**
-  - `systems/backend/app/mvp/agent_context_tool_pipeline.py`
+  - `systems/backend/app/operations/agent_context_tool_pipeline.py`
   - `tests/eval/agent_tool_trajectory_gold.jsonl`
   - `tests/eval/test_agent_tool_pipeline_eval.py`
   - `tests/eval/langgraph_decision_gate.json`
@@ -266,19 +266,19 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U9. System Admin Runtime Log Side Tab
 
-- **Status:** Implemented as a read-only MVP `System Admin` side tab. This is a UI/observability slice, not an automation or mutation slice.
+- **Status:** Implemented as a read-only Operations `System Admin` side tab. This is a UI/observability slice, not an automation or mutation slice.
 - **Goal:** Let a system administrator understand whether AI summaries are current, reused, manually regenerated, watcher-generated, partially completed, or failed across the project.
 - **Files:**
-  - `systems/backend/app/mvp/router.py`
-  - `systems/backend/app/mvp/service.py`
-  - `systems/backend/app/infra/db/mvp_audit_repository.py`
-  - `systems/frontend/src/features/mvp/system/MvpSystemAdminPage.tsx`
-  - `systems/frontend/src/features/mvp/shell/MvpShell.tsx`
-  - `systems/frontend/src/features/mvp/context/MvpSelectionContext.tsx`
-  - `systems/frontend/src/features/mvp/overview/MvpWorkflowOverviewPage.tsx`
-  - `systems/frontend/src/features/mvp/mvp.css`
-  - `tests/test_mvp.py`
-  - `systems/frontend/e2e/mvp-frontend-convergence.spec.ts`
+  - `systems/backend/app/operations/router.py`
+  - `systems/backend/app/operations/service.py`
+  - `systems/backend/app/infra/db/operations_audit_repository.py`
+  - `systems/frontend/src/features/operations/system/OperationsSystemAdminPage.tsx`
+  - `systems/frontend/src/features/operations/shell/OperationsShell.tsx`
+  - `systems/frontend/src/features/operations/context/OperationsSelectionContext.tsx`
+  - `systems/frontend/src/features/operations/overview/OperationsWorkflowOverviewPage.tsx`
+  - `systems/frontend/src/features/operations/operations.css`
+  - `tests/test_operations.py`
+  - `systems/frontend/e2e/operations-frontend-convergence.spec.ts`
 - **Approach:** Keep `운영 로그` out of the asset side-view. Add a project-level `System Admin` side tab that reads stored `agent_review_workflow_runs` metadata through a project-scoped read API and renders every run as a terminal-like log line with trigger, status, updated time, engine, asset/event hints, and stage. `상세 보기` opens a read-only dialog with run stage, summary key, source/context hashes, timing, and validation errors. It is read-only.
 - **UI Behavior:**
   - `watcher · 완료`: summary was prepared before side-view interaction.
@@ -474,7 +474,7 @@ Minimum release gates:
 
 - Groundedness: no packet/source-ref unsupported fact.
 - Boundary compliance: no Closed-loop mutation, approval, replay, or repair completion claim.
-- Role shape: exactly `field_operator` and `process_manager` summaries for MVP workflow.
+- Role shape: exactly `field_operator` and `process_manager` summaries for Operations workflow.
 - Data gap handling: missing data appears as `evidence_gaps` or `data_footnotes`.
 - Source refs: every nested summary source ref must exist in packet `source_refs`.
 - Workflow observability: `engine`, `attempt_count`, retry policy, and terminal status are emitted for watcher/materialization runs.
@@ -487,7 +487,7 @@ External eval alignment:
 
 - OpenAI contextual eval framing maps to this service as workflow-specific definition of "good": role-specific, grounded, bounded, and reusable summaries.
 - LangSmith agent-eval framing maps final-response checks to the current simple workflow. Tool trajectory checks now exist as an eval-only experiment and become release gates only if the production workflow adopts independent runtime tools.
-- Azure agent/RAG evaluators map to task completion, tool-call correctness, groundedness, retrieval relevance, and response completeness; only the groundedness and completion-adjacent checks are current MVP gates.
+- Azure agent/RAG evaluators map to task completion, tool-call correctness, groundedness, retrieval relevance, and response completeness; only the groundedness and completion-adjacent checks are current Operations gates.
 - RAGAS-style context precision/recall remains deferred until SOP content becomes runtime retrieval context rather than structured adapter metadata.
 
 Useful but deferred metrics:
@@ -596,7 +596,7 @@ The reason U3 comes after the adapter and ontology work is simple: materializing
 
 ## Open Questions
 
-- Resolved for this slice: `ontology_context` is a first-class read-only packet section for bounded traversal evidence; it is not a production graph store or mutation tool.
-- Resolved for this slice: materialized summaries are persisted in SQLite/PostgreSQL tables with workflow-run trace rows, summary keys, source/context hashes, fallback status, and stale running-run recovery.
-- Resolved for this slice: role-specific copy uses a hybrid contract. Deterministic fallback is always available, while LLM candidates may be stored only after schema, structured grounding, natural-language boundary, and negative-claim validation pass.
-- Resolved for this slice: the first non-SOP domain adapter after operation context is maintenance history. It projects existing Closed-loop, activity, and equipment-history records into read-only `maintenance_history_summary`, and the MVP decision/work-order flow verifies DB storage is visible again in detail ViewModel, Agent Review Packet, and deterministic summary. Inventory, work schedule, and MES actuals remain future adapters until they have current source contracts and eval-backed grounding checks.
+- Should `ontology_context` be added to the packet as a first-class schema section, or should ontology remain a hidden implementation detail behind `inspection_targets` and `sop_guidance` for one more slice?
+- Should materialized summaries be persisted in SQLite/PostgreSQL now, or should a file/checksum trace be enough for Operations review?
+- Should role-specific copy be generated by LLM, deterministic templates, or a hybrid where LLM may only rewrite the quote text?
+- What is the first non-SOP domain adapter after operation context: inventory, work schedule, MES production actuals, or maintenance history?

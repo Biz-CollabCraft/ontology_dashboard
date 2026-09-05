@@ -242,6 +242,29 @@ class IdentityService:
             raise AuthError("role_context_denied", "현재 역할에 허용되지 않은 화면 관점입니다.")
         return resolved
 
+    @staticmethod
+    def report_role(
+        principal: Principal,
+        requested_role: str | None = None,
+    ) -> Literal["manager", "engineer", "executive"]:
+        if principal.is_admin and requested_role in {"manager", "engineer", "executive"}:
+            return requested_role
+        role = principal.roles[0] if principal.roles else ""
+        mapping: dict[str, Literal["manager", "engineer", "executive"]] = {
+            "executive_viewer": "executive",
+            "process_manager": "manager",
+            "process_engineer": "engineer",
+            "maintenance_technician": "engineer",
+            "quality_auditor": "manager",
+            "ml_validator": "engineer",
+            "fde": "engineer",
+            "tenant_admin": "manager",
+        }
+        resolved = mapping.get(role, "manager")
+        if requested_role is not None and requested_role != resolved:
+            raise AuthError("role_context_denied", "현재 역할에 허용되지 않은 보고 관점입니다.")
+        return resolved
+
     def get_display_preferences(self, *, user_id: str) -> dict[str, Any] | None:
         return self.repository.get_display_preferences(user_id=user_id)
 

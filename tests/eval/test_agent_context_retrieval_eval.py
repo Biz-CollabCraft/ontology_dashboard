@@ -5,11 +5,11 @@ from pathlib import Path
 from typing import Any
 
 from app.dependencies import build_manufacturing_service
-from app.mvp.agent_context_graph import (
+from app.operations.agent_context_graph import (
     answer_agent_context_graph,
     build_agent_context_graph,
 )
-from app.mvp.agent_review_summary_workflow import AgentReviewSummaryWorkflow
+from app.operations.agent_review_summary_workflow import AgentReviewSummaryWorkflow
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -308,6 +308,8 @@ def test_workflow_eval_gate_covers_minimum_release_axes(tmp_path: Path) -> None:
         "fallback_retry",
         "domain_context_grounding",
         "closed_loop_boundary",
+        "baseline_comparison",
+        "stability_evaluation_output",
     }
     assert set(gate["minimum_release_gates"]) == set(gate["evaluation_scope"])
     assert {

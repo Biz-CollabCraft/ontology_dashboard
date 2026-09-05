@@ -180,7 +180,7 @@ maintenance_event_id
 잃어버리면 안 된다. Product Result, Evidence, Decision과 정비 이력을 동일 Event와
 Equipment 기준으로 추적할 수 있어야 한다.
 
-Canonical V3.1 MVP에서는 다음 identity 계약을 사용한다.
+Canonical V3.1 Operations에서는 다음 identity 계약을 사용한다.
 
 ```text
 equipment_id = asset_id
@@ -215,7 +215,7 @@ RecommendedAction 생성만으로 MaintenanceAction이나 MaintenanceEvent를 �
 있지만, `work_type=maintenance` 실행 Work Order와 MaintenanceAction은 생산 운영 의사결정자의 승인
 Decision을 통과한 경우에만 만들 수 있다.
 
-MVP에서는 광우가 별도 recommendation 의미를 새로 계산하지 않는다.
+Operations에서는 광우가 별도 recommendation 의미를 새로 계산하지 않는다.
 
 - materialization source는 stable `action_id`와 승인·근거 필드를 가진
   `evidence_payload.recommended_actions[]`다.
@@ -326,7 +326,7 @@ Deferred 항목이다.
 - 점검 Work Order와 정비 실행 Work Order의 생성 조건 분리
 - Producer recommendation → Operational RecommendedAction materialization 계약과
   원본 참조 필드 정의
-- `asset_id = equipment_id` MVP identity 계약과 Dataset Version 독립 stable key 정의
+- `asset_id = equipment_id` Operations identity 계약과 Dataset Version 독립 stable key 정의
 - RecommendedAction, Decision, WorkOrder/MaintenanceAction,
   MaintenanceEvent 최소 모델 정의
 - 허용·금지 상태 전이 구현
@@ -481,7 +481,7 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 - Product Result Artifact와 Evidence Payload의 최종 Schema/version
 - `product_result_id`, `evidence_id`, `asset_id`, 생성 시각
 - `evidence_payload.recommended_actions[]`의 stable `action_id`, policy/version과 basis
-- `asset_id = equipment_id` MVP 규칙과 Dataset Version 독립 stable identity 검증 기준
+- `asset_id = equipment_id` Operations 규칙과 Dataset Version 독립 stable identity 검증 기준
 - risk grade, failure type, top factor의 공식 의미
 - Result/Evidence 조회 API와 unavailable/error 규칙
 - Event Evidence Projection의 필드와 근거 의미
@@ -573,11 +573,11 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 2. 동일 Equipment의 RiskEvent에 근거를 연결한다.
 3. Diagnosis producer recommendation의 `kind`는 opaque로 보존하고 Event Evidence Projection의
    별도 `operational_decision_kind=request_inspection|review_shutdown`을 근거로
-   `process_manager`가 `event_id`만 제출해 inspection WorkOrder를 요청·승인한다. Backend는
+   `process_manager`가 `event_id`만 제출해 inspection WorkOrder를 요청한다. Backend는
    같은 scope의 Diagnosis public query에서 canonical Projection을 다시 조회하여 Product
    Result/Evidence/Action ID, schema/policy version, Equipment identity와 decision을 서버에서
    확정하며 클라이언트가 제출한 lineage나 decision은 받지 않는다.
-4. `process_engineer`가 inspection WorkOrder를 시작하고 checklist, measurements, findings,
+4. `process_engineer`가 요청 큐에서 inspection WorkOrder를 수락해 자신에게 배정한 뒤 시작하고 checklist, measurements, findings,
    outcome, note를 포함한 불변 Inspection Result를 기록한다. 이 완료는 MaintenanceEvent나
    정비 승인이 아니다.
 5. 점검 결과가 `maintenance_recommended`이면 Maintenance가 구조화된 checklist와
@@ -660,7 +660,7 @@ WorkOrder를 생성하고, 이 시점에는 MaintenanceAction을 만들지 않�
       `closed-loop-product-consumption-contract.md`로 합의·문서화했다.
 - [ ] 실제 Product API endpoint/OpenAPI payload가 canonical 소비 계약과 일치하는지 구현 PR에서 검증했다.
 - [ ] 변경 예약 파일과 PR 순서를 팀 채널에 공유했다.
-- [ ] 비용 분석과 What-if가 핵심 MVP 범위 밖임을 재확인했다.
+- [ ] 비용 분석과 What-if가 핵심 Operations 범위 밖임을 재확인했다.
 - [ ] 이 문서 PR과 이후 구현 PR은 merge 전에 최신 `origin/main`을 반영하고
       architecture/backend-contract CI를 다시 통과시킨다.
 

@@ -2,7 +2,7 @@
 
 Status: draft
 Date: 2026-08-26
-Base: PR #128 `feat(mvp): 역할별 overview와 asset detail 작업 흐름 정리`
+Base: PR #128 `feat(operations): 역할별 overview와 asset detail 작업 흐름 정리`
 Reference:
 
 - PR #127 `Generator Runtime Prediction Result Pipeline 및 Outbox 전달 경계 구현`

@@ -6,8 +6,8 @@
       "paths": ["**"],
       "context": [
         "docs/ai-code-review-context.md",
-        "docs/mvp/current-mvp-implementation-baseline.md",
-        "docs/mvp/requirements-specification.md"
+        "docs/operations/current-operations-implementation-baseline.md",
+        "docs/operations/requirements-specification.md"
       ]
     },
     "architecture": {
@@ -15,17 +15,17 @@
       "context": [
         "docs/architecture.md",
         "docs/backend-migration-map.md",
-        "docs/mvp/runtime-ownership-integration.md",
+        "docs/operations/runtime-ownership-integration.md",
         "docs/architecture-decisions/ADR-001-unified-feature-contract.md",
         "docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md"
       ]
     },
-    "mvp": {
+    "operations": {
       "paths": ["systems/frontend/**", "systems/backend/**/predictive_maintenance*", "systems/backend/**/reports.py", "systems/backend/app/report/**"],
       "context": [
-        "docs/mvp/current-mvp-implementation-baseline.md",
-        "docs/mvp/functional-specification.md",
-        "docs/mvp/api-specification.md"
+        "docs/operations/current-operations-implementation-baseline.md",
+        "docs/operations/functional-specification.md",
+        "docs/operations/api-specification.md"
       ]
     },
     "closed_loop": {
@@ -40,30 +40,30 @@
     "product_result": {
       "paths": ["systems/backend/app/diagnosis/**", "systems/backend/**/product_result*", "contracts/schemas/product-result*", "tests/test_product_result*"],
       "context": [
-        "docs/mvp/model-artifact-publish-contract.md",
-        "docs/mvp/generator-feature-label-contract.md",
+        "docs/operations/model-artifact-publish-contract.md",
+        "docs/operations/generator-feature-label-contract.md",
         "docs/closed-loop-runtime-overlay-contract.md"
       ]
     },
     "evidence": {
       "paths": ["systems/backend/**/evidence*", "systems/frontend/**/*evidence*", "tests/**/*evidence*"],
       "context": [
-        "docs/mvp/pdm-evidence-report-ui-integration-plan.md",
-        "docs/mvp/report-specification.md"
+        "docs/operations/pdm-evidence-report-ui-integration-plan.md",
+        "docs/operations/report-specification.md"
       ]
     },
     "report": {
       "paths": ["systems/backend/app/report/**", "systems/backend/**/reports.py", "systems/frontend/**/*report*", "contracts/schemas/report.schema.json"],
       "context": [
-        "docs/mvp/report-specification.md",
-        "docs/mvp/pdm-evidence-report-ui-integration-plan.md"
+        "docs/operations/report-specification.md",
+        "docs/operations/pdm-evidence-report-ui-integration-plan.md"
       ]
     },
     "frontend_operations": {
-      "paths": ["systems/frontend/src/features/mvp/operations/**", "systems/frontend/src/features/mvp/**"],
+      "paths": ["systems/frontend/src/features/operations/operations/**", "systems/frontend/src/features/operations/**"],
       "context": [
-        "docs/mvp/current-mvp-implementation-baseline.md",
-        "docs/mvp/functional-specification.md",
+        "docs/operations/current-operations-implementation-baseline.md",
+        "docs/operations/functional-specification.md",
         "docs/closed-loop-domain-contract.md",
         "docs/closed-loop-product-consumption-contract.md",
         "docs/closed-loop-runtime-overlay-contract.md"
@@ -72,7 +72,7 @@
     "generator": {
       "paths": ["systems/generator/**", "ml/**"],
       "context": [
-        "docs/mvp/generator-feature-label-contract.md",
+        "docs/operations/generator-feature-label-contract.md",
         "docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md"
       ]
     },
@@ -80,7 +80,7 @@
       "paths": ["infra/**", "systems/backend/Dockerfile", "systems/frontend/Dockerfile", "systems/frontend/nginx.conf", "render.yaml", ".dockerignore"],
       "context": [
         "docs/architecture.md",
-        "docs/mvp/runtime-ownership-integration.md"
+        "docs/operations/runtime-ownership-integration.md"
       ]
     }
   }

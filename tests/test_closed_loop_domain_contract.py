@@ -42,7 +42,7 @@ from app.maintenance import (
     transition_risk_event,
     transition_work_order,
 )
-from app.mvp.contracts import DecisionRequest
+from app.operations.contracts import DecisionRequest
 
 
 def equipment_identity():
@@ -173,7 +173,7 @@ def test_materialization_preserves_meaning_scope_lineage_and_dedupe_key() -> Non
         )
 
 
-def test_operational_recommendation_rejects_mismatched_mvp_identity() -> None:
+def test_operational_recommendation_rejects_mismatched_operations_identity() -> None:
     payload = proposed_recommendation().model_dump()
     payload["equipment_id"] = "CNC-OTHER"
     with pytest.raises(ValidationError, match="equipment_id = asset_id"):
@@ -419,7 +419,12 @@ def test_action_and_event_require_approved_completed_matching_lineage() -> None:
         idempotency_key="inspection-create-001",
     )
     inspection_approved = WorkOrder.model_validate(
-        {**inspection.model_dump(), "status": WorkOrderStatus.APPROVED}
+        {
+            **inspection.model_dump(),
+            "status": WorkOrderStatus.APPROVED,
+            "assigned_to": "engineer-1",
+            "assigned_at": datetime.now(timezone.utc),
+        }
     )
     with pytest.raises(ValueError, match="maintenance work order"):
         plan_maintenance_action(

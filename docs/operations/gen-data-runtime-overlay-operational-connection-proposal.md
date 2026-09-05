@@ -185,6 +185,11 @@ Runtime Overlay를 소비하려면 `source_kind=simulation` run에서
 `simulation_session_id`가 Backend maintenance event의 `simulation_session_id`와 같아야
 한다.
 
+Live 경로에서는 실행기가 Source Session ID를 Live Prediction enqueue lineage에 넣고,
+Generator와 Backend가 이를 Product Result까지 보존한다. Maintenance WorkOrder 승인 시
+Frontend가 새 Replay Session을 만들지 않으며, Diagnosis가 승인된 Product Result에서
+이 Source Session ID를 검증해 Maintenance에 반환한다.
+
 예시:
 
 ```bash
@@ -283,6 +288,33 @@ python3 scripts/smoke_runtime_overlay_local_bridge.py \
 11. accepted batch를 promote endpoint로 승격한다.
 12. `/results/latest`와 DB read-only query로 Product Result Artifact가 보이는지
     확인한다.
+
+## Closed-loop 소유 역할 요청
+
+정비 후 관측 진행률을 Closed-loop API/UI에 연결하기 위해 다음 handoff를 요청한다.
+
+- `gen_data` 소유 출력: branch별 `generated_rows`, `latest_observed_at`,
+  `last_progress_at`, stream 종료·실패 상태
+- Generator 소유 출력: Model Artifact에서 해석한 `required_rows`, readiness,
+  `history_insufficient` 또는 feature/model 실패의 `reason_code`와 `retryable`
+- Closed-loop 소유 구현: `maintenance_event_id` 기준 correlation, 상태 projection,
+  `warming_up`/`blocked`/`stalled` 전이, API 노출, 재시작 후 상태 복구
+- Product API/UI 소유 구현: 진행률과 마지막 진행 시각 표시, 명시적 실패 시 polling 중단,
+  운영자 재시도 동선 제공
+
+Closed-loop는 관측 row를 생성하거나 Model Artifact를 해석하지 않는다. `gen_data`는
+readiness를 판정하지 않고, Generator는 Maintenance 상태를 변경하거나 설비를 resume하지
+않는다. `stalled`는 관측 중단을 알리는 운영 상태이며 정상 판정이나 자동 resume의 근거가
+아니다.
+
+수용 조건은 다음과 같다.
+
+1. 진행 상태가 `maintenance_event_id`, session, branch, history segment와 함께 조회된다.
+2. `generated_rows < required_rows`이며 stream이 진행 중일 때만 `warming_up`이다.
+3. 유효 이력을 더 확보할 수 없으면 `history_insufficient`, pipeline 장애는 명시적 실패다.
+4. 마지막 진행 시각이 정책 임계치를 넘으면 `stalled`로 표시하되 자동 정상화하지 않는다.
+5. 정비 완료부터 예측 성공, 이력 부족, source 중단, 추론 실패, delivery 실패까지 E2E로
+   검증한다.
 
 ## 후속 구현 범위
 

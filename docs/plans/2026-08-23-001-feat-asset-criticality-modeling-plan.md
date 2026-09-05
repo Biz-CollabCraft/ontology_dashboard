@@ -9,9 +9,9 @@ date: 2026-08-23
 
 **Goal:** `AssetDetailViewModel`에서 설비 중요도를 예측 위험도와 분리된 제조 운영 맥락으로 모델링하고, 결측/출처/검토 우선순위 의미를 schema와 composer 테스트로 고정한다.
 
-**Architecture:** 현재 규모에서는 별도 graph DB나 full digital twin을 만들지 않는다. `asset.criticality`를 설비 마스터/프로젝트 운영 맥락에서 온 영향도 필드로 두고, `risk.status_grade`는 모델 위험도, `review_priority`는 risk, criticality, history/context를 조합한 표시/검토 우선순위 파생값으로 분리한다. `review_priority`는 WorkOrder priority, 권한, action state가 아니다. 온톨로지 관계는 문서와 typed reference 수준으로 고정하고, 운영/정비 맥락은 SQL/RDB 기반 source와 `AssetDetailViewModel` composition boundary에서 우선 결합한다. PR #107의 MVP `AssetDetailViewModel` API/E2E 연결을 기준 구현으로 삼되, 운영 read-port/PostgreSQL 연결은 후속으로 둔다. 이번 후속 구현 범위에는 schema/composer/API 호환성뿐 아니라 Objects/Operations/Report의 신규 context/review-priority 소비와 중복 UI 정리까지 포함한다. Microsoft Fabric/Eventhouse/KQL 패턴, TimescaleDB/ClickHouse/DuckDB류 시계열 분석 비교는 후순위 검증 항목으로만 남긴다.
+**Architecture:** 현재 규모에서는 별도 graph DB나 full digital twin을 만들지 않는다. `asset.criticality`를 설비 마스터/프로젝트 운영 맥락에서 온 영향도 필드로 두고, `risk.status_grade`는 모델 위험도, `review_priority`는 risk, criticality, history/context를 조합한 표시/검토 우선순위 파생값으로 분리한다. `review_priority`는 WorkOrder priority, 권한, action state가 아니다. 온톨로지 관계는 문서와 typed reference 수준으로 고정하고, 운영/정비 맥락은 SQL/RDB 기반 source와 `AssetDetailViewModel` composition boundary에서 우선 결합한다. PR #107의 Operations `AssetDetailViewModel` API/E2E 연결을 기준 구현으로 삼되, 운영 read-port/PostgreSQL 연결은 후속으로 둔다. 이번 후속 구현 범위에는 schema/composer/API 호환성뿐 아니라 Objects/Operations/Report의 신규 context/review-priority 소비와 중복 UI 정리까지 포함한다. Microsoft Fabric/Eventhouse/KQL 패턴, TimescaleDB/ClickHouse/DuckDB류 시계열 분석 비교는 후순위 검증 항목으로만 남긴다.
 
-**Tech Stack:** Python 3, pytest, jsonschema, existing `systems/backend/app/mvp/asset_detail_view_model.py` composer, existing `systems/backend/app/diagnosis/recommendation_policy.py` policy contract, React/TypeScript MVP frontend, Vitest/Playwright.
+**Tech Stack:** Python 3, pytest, jsonschema, existing `systems/backend/app/operations/asset_detail_view_model.py` composer, existing `systems/backend/app/diagnosis/recommendation_policy.py` policy contract, React/TypeScript Operations frontend, Vitest/Playwright.
 
 ---
 
@@ -66,7 +66,7 @@ PR100 검토에서 드러난 실제 현상은 단순 schema typo가 아니라 pr
 | Extend Event Evidence only | 변경량이 작음 | 시계열, runtime history, maintenance context를 단일 Evidence로 설명할 수 없음 | Lower |
 | Build ontology/graph layer first | 장기적으로 관계 질의가 유리함 | 현재 규모 대비 과하고 PR95/100의 즉시 문제를 해결하지 못함 | Defer |
 | Add Microsoft Fabric/Eventhouse/KQL-style time-series platform | 예지보전 reference architecture와 시계열 분석 패턴이 명확함 | 현재 stack 밖의 vendor/runtime 의존성이 생기고, 이번 구현 범위의 contract 문제보다 인프라 검증이 커짐 | Defer as future validation |
-| Benchmark TimescaleDB/ClickHouse/DuckDB now | 시계열 저장소 선택 근거를 만들 수 있음 | 데이터 생성/적재/쿼리/운영 비교가 별도 프로젝트가 되며 MVP report contract 완성에 직접 필요하지 않음 | Backlog |
+| Benchmark TimescaleDB/ClickHouse/DuckDB now | 시계열 저장소 선택 근거를 만들 수 있음 | 데이터 생성/적재/쿼리/운영 비교가 별도 프로젝트가 되며 Operations report contract 완성에 직접 필요하지 않음 | Backlog |
 | Single `AssetDetailViewModel` API | snapshot, source, gap, quality state를 한 계약에서 통제 가능 | backend adapter 책임 증가 | Preferred |
 
 ### Proposed Framing
@@ -115,12 +115,12 @@ Reference grounding:
 - MIMOSA OIIE Use Case 7 frames CBM triggering as condition monitoring/control historian measurements flowing into operational risk interpretation and then a maintenance work request. This supports separating `Recommendation`/CBM request candidates from direct maintenance execution. Reference: https://www.mimosa.org/open-industrial-interoperability-ecosystem-oiie/oiie-use-cases/oiie-use-case-7-condition-based-maintenance-triggering/
 - Microsoft Fabric predictive-maintenance architecture uses real-time events plus contextualization data such as asset maintenance history and operational parameters, with Eventhouse/KQL for time-series analysis. This supports deriving repeated-event, post-maintenance, and high-load analysis requirements, but it does not require adopting Fabric/Eventhouse in the current repository. Reference: https://learn.microsoft.com/en-us/fabric/real-time-intelligence/architectures/predictive-maintenance
 - OPC UA for Asset Administration Shell describes AAS/Submodel-style digital asset representation. This supports keeping Asset-centered typed contexts, but not implementing a full AAS runtime or graph database for this implementation scope. Reference: https://reference.opcfoundation.org/specs/OPC-30270/full
-- Current repository MVP and architecture-review contracts already define the official surface as Overview / Objects / Operations / Event Executive Brief, with Product Result Artifact/Evidence provenance, role-specific workflow, and Backend-computed `available_actions`. This supports improving the existing Object/Action workflow instead of replacing it with a generic graph-first surface.
+- Current repository Operations and architecture-review contracts already define the official surface as Overview / Objects / Operations / Event Executive Brief, with Product Result Artifact/Evidence provenance, role-specific workflow, and Backend-computed `available_actions`. This supports improving the existing Object/Action workflow instead of replacing it with a generic graph-first surface.
 
 Current implementation state to verify before execution:
 - Fixture clean-contract commit `40e37b1` is the prerequisite baseline for this plan. It changes `features[].current` to an observation object and uses `features[].history { source_ref, points }`; fixture adapter and canonical composer share the same pre-current, timezone-aware, duplicate-instant rejection invariants.
-- Focused backend contract/composer/MVP verification for that baseline recorded `64 passed`. Frontend typecheck and browser E2E remain unproven because local frontend dependencies were unavailable at the time of verification; this plan must close that evidence gap before claiming end-to-end adoption.
-- PR #107 has merged and introduced the MVP `AssetDetailViewModel` API, backend composer, and frontend consumption path. Start implementation from updated `main`, not from the superseded PR #100 direction.
+- Focused backend contract/composer/Operations verification for that baseline recorded `64 passed`. Frontend typecheck and browser E2E remain unproven because local frontend dependencies were unavailable at the time of verification; this plan must close that evidence gap before claiming end-to-end adoption.
+- PR #107 has merged and introduced the Operations `AssetDetailViewModel` API, backend composer, and frontend consumption path. Start implementation from updated `main`, not from the superseded PR #100 direction.
 - PR #100 is superseded by the PR #107 `AssetDetailViewModel` direction. Items from PR #100 review must be rechecked against the latest PR #107/main code before remaining work is kept.
 - Already-addressed items such as `runtime_prediction_history` naming, nullable `evidence_field_id`, data-quality-hold mapping, and freshness unknown handling should be recorded as prerequisites or verification checks, not blindly reimplemented.
 
@@ -387,7 +387,7 @@ Design decision:
 - Maintenance may store `simulation_session_id` as an opaque correlation
   reference after scope validation, but must not create, parse, or infer it.
 
-Current MVP boundary:
+Current Operations boundary:
 - The caller passes a replay session selector.
 - Diagnosis Runtime validates organization/project/workspace scope, session
   state, Dataset binding, and target equipment inclusion through a public query.
@@ -419,7 +419,7 @@ confusing it with closed-loop integration event IDs.
 
 | Choice | Pros | Cons | Decision |
 |---|---|---|---|
-| Manual 3-level criticality | Fast, explainable, enough for MVP | Subjective, needs later calibration | Use now |
+| Manual 3-level criticality | Fast, explainable, enough for Operations | Subjective, needs later calibration | Use now |
 | Numeric score/RPN | Better ranking math later | Invents precision without data today | Defer |
 | Criticality required string | Simple UI and sorting | Forces fake defaults when unknown | Use nullable or gap-aware handling |
 | Full ontology/graph DB | Flexible relationship traversal | Too much infra and migration cost | Defer |
@@ -427,7 +427,7 @@ confusing it with closed-loop integration event IDs.
 | KQL/Eventhouse-style platform | Strong reference for streaming/time-series analytics | Adds vendor/runtime scope outside this branch | Reference only |
 | Time-series DB benchmark now | Could support future scale decision | Distracts from current report contract and requires synthetic load design | Backlog |
 | RUL prediction | Strong predictive-maintenance story | Current data lacks time-to-failure labels and degradation lifecycle evidence | Avoid claim |
-| Preserve Object/Action UI philosophy | Matches existing MVP contracts and governed action boundaries | Needs information architecture cleanup to avoid duplicated panels | Use now |
+| Preserve Object/Action UI philosophy | Matches existing Operations contracts and governed action boundaries | Needs information architecture cleanup to avoid duplicated panels | Use now |
 | Generic graph-first UX | Shows relationships visually | Does not directly solve evidence sufficiency, operational context, or action governance | Defer/avoid as core flow |
 | Agent workflow as automation engine | Could appear advanced | Blurs source-of-truth, authorization, and state-transition ownership | Avoid |
 | Agent workflow as coordination assistant | Improves review packets and handoff quality | Requires stable Evidence/ViewModel/action contracts first | Backlog |
@@ -444,12 +444,12 @@ confusing it with closed-loop integration event IDs.
 
 **Files:**
 - Inspect: `contracts/schemas/asset-detail-view-model.schema.json`
-- Inspect: `systems/backend/app/mvp/asset_detail_view_model.py`
-- Inspect: `systems/backend/app/mvp/service.py`
-- Inspect: `systems/frontend/src/features/mvp/api/mvpAdapters.ts`
+- Inspect: `systems/backend/app/operations/asset_detail_view_model.py`
+- Inspect: `systems/backend/app/operations/service.py`
+- Inspect: `systems/frontend/src/features/operations/api/operationsAdapters.ts`
 - Inspect: `tests/test_asset_detail_view_model_contract.py`
 - Inspect: `tests/test_asset_detail_view_model_composer.py`
-- Inspect: `tests/test_mvp.py`
+- Inspect: `tests/test_operations.py`
 
 - [ ] **Step 1: Start from PR #107 or post-merge main**
 
@@ -470,7 +470,7 @@ Keep only unresolved items in the implementation PR.
 
 **Files:**
 - Modify: `contracts/schemas/asset-detail-view-model.schema.json`
-- Modify: `systems/backend/app/mvp/asset_detail_view_model.py`
+- Modify: `systems/backend/app/operations/asset_detail_view_model.py`
 - Modify: `tests/fixtures/asset_detail_view_model/*.json`
 - Test: `tests/test_asset_detail_view_model_contract.py`
 - Test: `tests/test_asset_detail_view_model_composer.py`
@@ -501,7 +501,7 @@ instants, differing timestamps, and duplicate-instant conflict rejection.
 
 - [ ] **Step 5: Close browser evidence gap**
 
-Run the MVP browser/E2E path against the clean fixture contract and record the
+Run the Operations browser/E2E path against the clean fixture contract and record the
 result. Until frontend typecheck, adapter tests, and browser E2E pass, contract
 adoption is only partially verified.
 
@@ -510,8 +510,8 @@ adoption is only partially verified.
 **Files:**
 - Modify: `contracts/schemas/asset-detail-view-model.schema.json`
 - Modify: `contracts/schemas/README.md`
-- Modify: `docs/mvp/schema-definition.md`
-- Modify: `docs/mvp/api-specification.md`
+- Modify: `docs/operations/schema-definition.md`
+- Modify: `docs/operations/api-specification.md`
 - Modify: `docs/closed-loop-product-consumption-contract.md`
 - Modify: `tests/fixtures/asset_detail_view_model/*.json`
 - Test: `tests/test_asset_detail_view_model_contract.py`
@@ -560,12 +560,12 @@ Test scenarios:
 ### Task 3: Add Context And Review Priority Composition
 
 **Files:**
-- Modify: `systems/backend/app/mvp/asset_detail_view_model.py`
-- Modify: `systems/backend/app/mvp/service.py`
+- Modify: `systems/backend/app/operations/asset_detail_view_model.py`
+- Modify: `systems/backend/app/operations/service.py`
 - Modify: `contracts/schemas/asset-detail-view-model.schema.json`
 - Modify: `tests/fixtures/asset_detail_view_model/*.json`
 - Test: `tests/test_asset_detail_view_model_composer.py`
-- Test: `tests/test_mvp.py`
+- Test: `tests/test_operations.py`
 
 - [ ] **Step 1: Preserve criticality from contracted inputs**
 
@@ -606,15 +606,15 @@ It exposes context and review-priority explanation for downstream report/UI cons
 ### Task 4: Update Frontend UI Consumption And Remove Duplication
 
 **Files:**
-- Modify: `systems/frontend/src/features/mvp/api/mvpContracts.ts`
-- Modify: `systems/frontend/src/features/mvp/api/mvpAdapters.ts`
-- Modify: `systems/frontend/src/features/mvp/objects/MvpObjectsPage.tsx`
-- Modify: `systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx`
-- Modify: `systems/frontend/src/features/mvp/report/MvpReportsPage.tsx`
-- Modify: `systems/frontend/src/features/mvp/report/MvpExecutiveReportPage.tsx`
-- Modify as needed: `systems/frontend/src/features/mvp/report/MvpMapReportAssetDetailView.tsx`
-- Test: `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts`
-- Test: `systems/frontend/e2e/mvp-frontend-convergence.spec.ts`
+- Modify: `systems/frontend/src/features/operations/api/operationsContracts.ts`
+- Modify: `systems/frontend/src/features/operations/api/operationsAdapters.ts`
+- Modify: `systems/frontend/src/features/operations/objects/OperationsObjectsPage.tsx`
+- Modify: `systems/frontend/src/features/operations/operations/OperationsOperationsPage.tsx`
+- Modify: `systems/frontend/src/features/operations/report/OperationsReportsPage.tsx`
+- Modify: `systems/frontend/src/features/operations/report/OperationsExecutiveReportPage.tsx`
+- Modify as needed: `systems/frontend/src/features/operations/report/OperationsMapReportAssetDetailView.tsx`
+- Test: `systems/frontend/src/features/operations/api/operationsAdapters.test.ts`
+- Test: `systems/frontend/e2e/operations-frontend-convergence.spec.ts`
 
 - [ ] **Step 1: Update frontend contracts/adapters**
 
@@ -646,13 +646,13 @@ Add or update frontend unit/E2E coverage for:
 
 **Files:**
 - Modify: `tests/test_report_domain_migration.py`
-- Modify: `docs/mvp/functional-specification.md`
-- Modify: `docs/mvp/mvp-design-specification.md`
-- Modify: `docs/mvp/report-specification.md`
+- Modify: `docs/operations/functional-specification.md`
+- Modify: `docs/operations/operations-design-specification.md`
+- Modify: `docs/operations/report-specification.md`
 
 - [ ] **Step 1: Keep canonical module guard current**
 
-Ensure the ViewModel composer remains in `systems/backend/app/mvp/asset_detail_view_model.py`
+Ensure the ViewModel composer remains in `systems/backend/app/operations/asset_detail_view_model.py`
 and does not import generator/prototype/infra modules directly. Report may
 consume the ViewModel/result state but does not own a duplicate composer.
 
@@ -667,9 +667,9 @@ debugging.
 Expected verification:
 - contract fixture tests pass
 - composer tests pass
-- MVP API compatibility tests pass
+- Operations API compatibility tests pass
 - frontend adapter tests pass
-- MVP E2E for context/review-priority path passes
+- Operations E2E for context/review-priority path passes
 - whitespace check passes
 
 - [ ] **Step 4: Report evidence boundary**

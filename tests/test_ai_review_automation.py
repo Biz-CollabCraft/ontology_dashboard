@@ -74,7 +74,7 @@ DIFF
         self.assertIn("local semantic", reason)
 
         force, reason = review_force_vertex(
-            ["systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx"],
+            ["systems/frontend/src/features/operations/operations/OperationsOperationsPage.tsx"],
             explicit=True,
         )
         self.assertTrue(force)
@@ -120,9 +120,10 @@ DIFF
             repository_root / ".github/workflows/pr-comment-review.yml"
         ).read_text(encoding="utf-8")
 
-        review_section = architecture.split("\n  review:\n", 1)[1]
-        self.assertIn("${{ !cancelled() &&", review_section)
-        self.assertNotIn("${{ always() &&", review_section.split("\n    uses:", 1)[0])
+        self.assertIn("group: architecture-${{ github.ref }}", architecture)
+        self.assertIn("cancel-in-progress: true", architecture)
+        self.assertIn("name: Publish release marker", architecture)
+        self.assertNotIn("\n  review:\n", architecture)
 
         self.assertIn("name: Claim latest-head review slot", full_review)
         self.assertIn("stale review discarded before model spend", full_review)
@@ -205,7 +206,7 @@ canonical convergence
 
 CHANGED_FILES
 M\tsystems/backend/app/diagnosis/evidence.py
-M\tsystems/backend/app/mvp/service.py
+M\tsystems/backend/app/operations/service.py
 
 ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)
 green
@@ -218,7 +219,7 @@ def build_evidence_package(fixture, context_provider=None):
     provider = context_provider or FixtureContextProvider()
 
 """ + ("unrelated source\n" * 4000) + """
-systems/backend/app/mvp/service.py
+systems/backend/app/operations/service.py
 \"\"\"Canonical manufacturing demonstration application service.\"\"\"
 class ManufacturingPredictiveMaintenanceService:
     def _context_provider(self, fixture):
@@ -235,7 +236,7 @@ DIFF (untrusted review input)
         self.assertIn("RUNTIME_SCOPE_EVIDENCE", prompt)
         self.assertIn("Canonical manufacturing demonstration application service", prompt)
         self.assertIn("production/deployment caller or entrypoint", prompt)
-        self.assertIn("MVP/demo/test", prompt)
+        self.assertIn("Operations/demo/test", prompt)
         self.assertIn("legacy names, not runtime", prompt)
         self.assertIn("variable name", prompt)
         self.assertIn("File/module placement is also not caller evidence", prompt)
@@ -249,13 +250,13 @@ DIFF (untrusted review input)
             source_prompt="""
 
 TRUSTED_BASE_CONTEXT
-ManufacturingPredictiveMaintenanceService is the MVP/demo compatibility application service.
+ManufacturingPredictiveMaintenanceService is the Operations/demo compatibility application service.
 
 PR_TITLE (untrusted)
 x
 
 CHANGED_FILES
-M\tsystems/backend/app/mvp/service.py
+M\tsystems/backend/app/operations/service.py
 
 ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)
 green
@@ -275,17 +276,17 @@ x
         decision, confidence, reason = _normalize_scope_escalation(
             "ESCALATE",
             0.98,
-            "systems/backend/app/mvp/router.py production caller reaches FixtureContextProvider via the service.",
+            "systems/backend/app/operations/router.py production caller reaches FixtureContextProvider via the service.",
             source_prompt="""
 
 TRUSTED_BASE_CONTEXT
-ManufacturingPredictiveMaintenanceService is the MVP/demo compatibility application service.
+ManufacturingPredictiveMaintenanceService is the Operations/demo compatibility application service.
 
 PR_TITLE (untrusted)
 x
 
 CHANGED_FILES
-M\tsystems/backend/app/mvp/router.py
+M\tsystems/backend/app/operations/router.py
 
 ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)
 green
@@ -349,10 +350,10 @@ ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)
 green
 
 CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)
-# demo compatibility boundary: fixture provider retained for MVP
+# demo compatibility boundary: fixture provider retained for Operations
 
 DIFF (untrusted review input)
-+ # demo compatibility boundary: fixture provider retained for MVP
++ # demo compatibility boundary: fixture provider retained for Operations
 """,
             kind="pr",
         )
@@ -367,7 +368,7 @@ DIFF (untrusted review input)
             source_prompt="""
 
 TRUSTED_BASE_CONTEXT
-ManufacturingPredictiveMaintenanceService is the MVP/demo compatibility application service.
+ManufacturingPredictiveMaintenanceService is the Operations/demo compatibility application service.
 
 PR_TITLE (untrusted)
 x
@@ -439,13 +440,13 @@ DIFF
         self.assertIn("architecture", categories)
         self.assertIn("closed_loop", categories)
 
-    def test_context_router_selects_frontend_mvp_operations_docs(self):
+    def test_context_router_selects_frontend_operations_operations_docs(self):
         categories = route_context(
-            ["systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx"]
+            ["systems/frontend/src/features/operations/operations/OperationsOperationsPage.tsx"]
         )
         self.assertIn("project_intent", categories)
         self.assertIn("architecture", categories)
-        self.assertIn("mvp", categories)
+        self.assertIn("operations", categories)
         self.assertIn("frontend_operations", categories)
 
     def test_context_router_selects_deployment_docs_for_dockerignore(self):
@@ -453,17 +454,17 @@ DIFF
         self.assertIn("project_intent", categories)
         self.assertIn("deployment", categories)
 
-    def test_context_router_uses_current_mvp_paths_and_closed_loop_product_contract(self):
+    def test_context_router_uses_current_operations_paths_and_closed_loop_product_contract(self):
         categories = route_context(
-            ["systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx"]
+            ["systems/frontend/src/features/operations/operations/OperationsOperationsPage.tsx"]
         )
         paths = context_documents(categories, DEFAULT_CONTEXT_ROUTING)
-        self.assertIn("docs/mvp/current-mvp-implementation-baseline.md", paths)
-        self.assertIn("docs/mvp/functional-specification.md", paths)
+        self.assertIn("docs/operations/current-operations-implementation-baseline.md", paths)
+        self.assertIn("docs/operations/functional-specification.md", paths)
         self.assertIn("docs/closed-loop-product-consumption-contract.md", paths)
         self.assertIn("docs/closed-loop-runtime-overlay-contract.md", paths)
         self.assertNotIn(
-            "docs/mvp/history/2026-08-week2/frontend-implementation-import.md", paths
+            "docs/operations/history/2026-08-week2/frontend-implementation-import.md", paths
         )
 
     def test_architecture_context_includes_backend_migration_map(self):
@@ -485,7 +486,7 @@ DIFF
         repository_root = Path(__file__).resolve().parents[1]
         routing_file = repository_root / "docs/ai-code-review-context.json"
         declared = json.loads(routing_file.read_text(encoding="utf-8"))["routing"]
-        old_namespace = "docs/" + "mentoring-mvp-2026-08"
+        old_namespace = "docs/" + "mentoring-operations-2026-08"
 
         for routing_name, routing in (
             ("json", declared),
@@ -502,7 +503,7 @@ DIFF
         self.assertEqual(declared, DEFAULT_CONTEXT_ROUTING)
 
     def test_default_routing_does_not_use_week2_history_as_current_contract(self):
-        history_prefix = "docs/mvp/history/2026-08-week2/"
+        history_prefix = "docs/operations/history/2026-08-week2/"
         for category, rule in DEFAULT_CONTEXT_ROUTING.items():
             for path in rule.get("context", []):
                 with self.subTest(category=category, path=path):
@@ -514,7 +515,7 @@ DIFF
 +if (workOrder.status === \"approved\") actions.push(\"start\")
 """
         hints = detect_intent_risk_hints(
-            diff, ["systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx"]
+            diff, ["systems/frontend/src/features/operations/operations/OperationsOperationsPage.tsx"]
         )
         self.assertTrue(any("state machine" in hint for hint in hints))
 
@@ -524,7 +525,7 @@ DIFF
 +const id = `${projectId}-${eventId}-${Date.now()}`
 """
         hints = detect_intent_risk_hints(
-            diff, ["systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx"]
+            diff, ["systems/frontend/src/features/operations/operations/OperationsOperationsPage.tsx"]
         )
         self.assertTrue(any("identifiers" in hint for hint in hints))
 
@@ -809,8 +810,8 @@ DIFF
                 docker_verified="false",
                 frontend_required="false",
                 frontend_verified="false",
-                mvp_required="false",
-                mvp_verified="false",
+                operations_required="false",
+                operations_verified="false",
             )
         )
         self.assertEqual(evidence["missing_required"], [])
@@ -824,8 +825,8 @@ DIFF
                 docker_verified="false",
                 frontend_required="false",
                 frontend_verified="false",
-                mvp_required="false",
-                mvp_verified="false",
+                operations_required="false",
+                operations_verified="false",
             )
         )
         self.assertEqual(evidence["missing_required"], ["docker_runtime"])

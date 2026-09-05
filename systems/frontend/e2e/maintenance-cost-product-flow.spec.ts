@@ -3,7 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 const PROJECT = "manufacturing-demo-project";
 const WORKSPACE = "manufacturing-demo";
 const EVENT = "EVT-GS-004";
-const PATH = `/app/projects/${PROJECT}/mvp?view=overview&dashboard=workflow&role=process_manager&workspace_id=${WORKSPACE}&asset_id=CNC-S04-L02-03&event_id=${EVENT}`;
+const PATH = `/app/projects/${PROJECT}/operations?view=overview&dashboard=workflow&role=process_manager&workspace_id=${WORKSPACE}&asset_id=CNC-S04-L02-03&event_id=${EVENT}`;
 
 async function login(page: Page) {
   await page.goto(`/login?returnTo=${encodeURIComponent(PATH)}`);
@@ -142,7 +142,7 @@ test("runs cost analysis only on request and keeps the result read-only", async 
   });
 
   await login(page);
-  await page.locator(".mvp-factory-asset-node.is-selected").click();
+  await page.locator(".operations-factory-asset-node.is-selected").click();
   await page.getByRole("tab", { name: "처리", exact: true }).click();
   const panel = page.getByRole("region", { name: "정비 비용 분석" });
   const workflow = page.getByRole("region", { name: "Closed-loop 작업 실행" });
@@ -156,7 +156,7 @@ test("runs cost analysis only on request and keeps the result read-only", async 
   await expect(panel.getByText("계산상 최저비용", { exact: true })).toBeVisible();
   await expect(panel.locator("article")).toHaveCount(3);
   await expect(panel.getByText(/재점검 후/)).toHaveCount(0);
-  await expect(panel.getByText(/데모 참고값/)).toBeVisible();
+  await expect(panel.getByText(/현재 운영 기준값/)).toBeVisible();
   await expect(panel.getByText(/정비 추천·승인·WorkOrder·실행을 생성하지 않습니다/)).toBeVisible();
   await expect(panel.getByRole("button", { name: "이 시점 선택", exact: true })).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "즉시 복구안 선택", exact: true })).toHaveCount(0);
@@ -188,7 +188,7 @@ test("does not show cost analysis before an eligible inspection is completed", a
   });
 
   await login(page);
-  await page.locator(".mvp-factory-asset-node.is-selected").click();
+  await page.locator(".operations-factory-asset-node.is-selected").click();
   await page.getByRole("tab", { name: "처리", exact: true }).click();
 
   await expect(page.getByRole("region", { name: "정비 비용 분석" })).toHaveCount(0);
@@ -227,7 +227,7 @@ test("hides current cost analysis after an operations recommendation is created"
   });
 
   await login(page);
-  await page.locator(".mvp-factory-asset-node.is-selected").click();
+  await page.locator(".operations-factory-asset-node.is-selected").click();
   await page.getByRole("tab", { name: "처리", exact: true }).click();
 
   await expect(page.getByRole("region", { name: "정비 비용 분석" })).toHaveCount(0);
@@ -312,7 +312,7 @@ test("does not expose a previous inspection's cost analysis for a newer inspecti
   });
 
   await login(page);
-  await page.locator(".mvp-factory-asset-node.is-selected").click();
+  await page.locator(".operations-factory-asset-node.is-selected").click();
   await page.getByRole("tab", { name: "처리", exact: true }).click();
   const panel = page.getByRole("region", { name: "정비 비용 분석" });
 

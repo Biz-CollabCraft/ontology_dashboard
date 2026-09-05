@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
-from systems.backend.app.mvp.asset_detail_view_model import (
+from systems.backend.app.operations.asset_detail_view_model import (
     AssetDetailRequest,
     AssetDetailViewModelService,
     compose_asset_detail_view_model,
@@ -107,6 +107,7 @@ def _request() -> AssetDetailRequest:
         start=datetime(2026, 7, 31, 18, tzinfo=timezone.utc),
         end=datetime(2026, 8, 1, 0, tzinfo=timezone.utc),
         dataset_version_id="canonical-ai4i-physics-v3.1",
+        event_id="RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
         grain="1h",
     )
 
@@ -119,8 +120,8 @@ def test_service_reads_only_contracted_sources_and_returns_schema_valid_view_mod
 
     assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
     assert [name for name, _ in port.calls] == [
-        "asset_summary",
         "latest_result_artifact",
+        "asset_summary",
         "feature_series",
         "runtime_prediction_history",
         "equipment_history",
@@ -128,10 +129,38 @@ def test_service_reads_only_contracted_sources_and_returns_schema_valid_view_mod
     ]
     feature_call = dict(port.calls)["feature_series"]
     risk_call = dict(port.calls)["runtime_prediction_history"]
+    artifact_call = dict(port.calls)["latest_result_artifact"]
+    asset_call = dict(port.calls)["asset_summary"]
+    status_call = dict(port.calls)["data_status"]
+    assert artifact_call["event_id"] == _request().event_id
+    assert asset_call["event_id"] == _request().event_id
+    assert status_call["event_id"] == _request().event_id
     assert feature_call["dataset_version_id"] == "canonical-ai4i-physics-v3.1"
     assert feature_call["grain"] == "1h"
     assert risk_call["start"] == _request().start
     assert risk_call["end"] == _request().end
+
+
+def test_latest_detail_view_anchors_history_and_snapshot_to_selected_event() -> None:
+    port = FakeAssetDetailReadPort()
+    service = AssetDetailViewModelService(port)
+
+    payload = service.latest_detail_view(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        asset_id="CMP-S03-L03-01",
+        dataset_version_id="canonical-ai4i-physics-v3.1",
+        event_id="RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
+        history_window="24h",
+    )
+
+    feature_call = dict(port.calls)["feature_series"]
+    assert feature_call["end"] == datetime(2026, 7, 31, 15, tzinfo=timezone.utc)
+    assert feature_call["start"] == datetime(2026, 7, 30, 15, tzinfo=timezone.utc)
+    assert payload["snapshot_basis"]["event_id"] == (
+        "RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00"
+    )
 
 
 def test_service_rejects_mismatched_result_artifact_asset() -> None:
@@ -166,7 +195,7 @@ def test_service_requires_product_result_artifact() -> None:
 def test_composer_builds_view_model_without_generator_raw_file_dependency() -> None:
     operation_context = {
         "context_id": "production-planning-context-v1",
-        "source_type": "synthetic_capacity_model",
+        "source_type": "capacity_model",
         "temporal_scope": {
             "snapshot_id": "OPS-SNAPSHOT-2026-08-01-A-B",
             "timezone": "Asia/Seoul",
@@ -307,7 +336,7 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
         payload["inspection_targets"][0]["unavailable_reason"]
         == "field_inspection_location_reference_unavailable"
     )
-    assert payload["operation_context"]["source_type"] == "synthetic_capacity_model"
+    assert payload["operation_context"]["source_type"] == "capacity_model"
     assert payload["operation_context"]["event_impact"]["estimated_lost_units"] == 25
     assert payload["risk_series"][0]["source_ref"].startswith("diagnosis-runtime-history://")
     assert "features[].history.points" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
@@ -803,10 +832,10 @@ def test_composer_projects_closed_loop_lifecycle_action_and_timeline() -> None:
             ],
             "available_actions": [
                 {
-                    "action_id": "approve_inspection_work_order",
+                    "action_id": "accept_inspection_work_order",
                     "target_type": "work_order",
                     "target_id": "WO-INS-001",
-                    "label": "점검 승인",
+                    "label": "요청 수락·내게 배정",
                     "disabled_reason": None,
                 }
             ],
@@ -818,18 +847,18 @@ def test_composer_projects_closed_loop_lifecycle_action_and_timeline() -> None:
     closed_loop = payload["closed_loop"]
     assert closed_loop["lifecycle_summary"] == {
         "current_step": "inspection_requested",
-        "current_step_label": "점검 승인 대기",
+        "current_step_label": "현장 수락·배정 대기",
         "completed_steps": ["prediction", "evidence", "decision"],
         "next_step": "inspection_approved",
         "source": "backend_closed_loop_policy",
     }
     assert closed_loop["primary_action"] == {
-        "action_id": "approve_inspection_work_order",
+        "action_id": "accept_inspection_work_order",
         "target_type": "work_order",
         "target_id": "WO-INS-001",
-        "label": "점검 승인",
-        "owner_role": "process_manager",
-        "owner_label": "생산 운영 의사결정자",
+        "label": "요청 수락·내게 배정",
+        "owner_role": "process_engineer",
+        "owner_label": "현장 관리자",
         "disabled_reason": None,
         "requires_input": False,
     }
@@ -843,6 +872,57 @@ def test_composer_projects_closed_loop_lifecycle_action_and_timeline() -> None:
         "target_type": "work_order",
         "target_id": "WO-INS-001",
     }
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected_step", "expected_label"),
+    [
+        ("no_action_required", "inspection_closed_no_action", "점검 완료·조치 불필요"),
+        ("data_check_required", "inspection_data_check_required", "추가 데이터 확인 필요"),
+    ],
+)
+def test_composer_projects_terminal_and_hold_inspection_outcomes(
+    outcome: str,
+    expected_step: str,
+    expected_label: str,
+) -> None:
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=ARTIFACT,
+        closed_loop={
+            "work_orders": [
+                {
+                    "work_order_id": "WO-INS-001",
+                    "work_type": "inspection",
+                    "status": "completed",
+                    "created_at": "2026-08-06T03:10:00Z",
+                    "updated_at": "2026-08-06T03:20:00Z",
+                }
+            ],
+            "inspection_results": [
+                {
+                    "inspection_result_id": "INSPECTION-RESULT-001",
+                    "work_order_id": "WO-INS-001",
+                    "outcome": outcome,
+                    "recorded_at": "2026-08-06T03:20:00Z",
+                }
+            ],
+        },
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    summary = payload["closed_loop"]["lifecycle_summary"]
+    assert summary["current_step"] == expected_step
+    assert summary["current_step_label"] == expected_label
+    assert summary["next_step"] is None
+    assert summary["completed_steps"] == [
+        "prediction",
+        "evidence",
+        "decision",
+        "inspection_requested",
+        "inspection_approved",
+        "inspection_in_progress",
+    ]
 
 
 def test_composer_preserves_empty_recommendation_as_gap_without_synthesizing_action() -> None:

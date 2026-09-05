@@ -121,7 +121,7 @@ Generator raw 산출
 | `Product Result Artifact` | Backend Diagnosis가 검증/승격한 product-facing 판단 산출물. 화면/Closed-loop/AI가 신뢰할 수 있는 최소 판단 단위다. | Backend Diagnosis, repository, downstream read paths | raw result, model output |
 | `Evidence Projection` | Product Result Artifact에서 파생한 근거 중심 canonical projection. 판단값, provenance, limitations를 보존한다. | Backend API, report/evidence contracts | UI state, report text |
 | `Evidence Package` | 기존 report/legacy consumer 호환을 위한 evidence 형태. 신규 경계 설명에서는 Evidence Projection을 우선 이름으로 쓴다. | legacy report/tests | Product Result 원본 |
-| `AssetDetailViewModel` | UI가 소비하는 화면용 read model composer 결과. 저장된 product result 자체가 아니다. | MVP API, frontend | materialized product result |
+| `AssetDetailViewModel` | UI가 소비하는 화면용 read model composer 결과. 저장된 product result 자체가 아니다. | Operations API, frontend | materialized product result |
 | `Recommendation Input` | Closed-loop 정책/상태 전이 후보가 소비하는 decision용 projection. ViewModel 표시값이 아니라 Product Result/Evidence lineage에서 파생한다. | Closed-loop service | UI state, Agent Review Summary |
 | `Agent Review Packet` | AI 요약이 읽는 read-only 패킷. Product Result/Evidence/ViewModel/SOP/context를 조합하지만 mutation 권한은 없다. | AI summary provider, eval fixtures | agent decision, approval request |
 | `Domain Section` | Agent Review Packet 안에서 도메인별 출처, packet path, read-only 경계를 설명하는 lineage 항목. 물리 API 분리가 아니라 조립 경계 표시다. | Agent Review Packet, tool/eval traces | separate ViewModel, domain source of truth |

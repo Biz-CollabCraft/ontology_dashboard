@@ -48,8 +48,10 @@ def run_once(
     interval_seconds: float,
     max_iterations: int | None,
     stale_policy: str,
+    source: str,
+    require_live_provider: bool,
 ) -> dict:
-    from app.mvp.agent_review_summary_workflow import AgentReviewSummaryWorkflow
+    from app.operations.agent_review_summary_workflow import AgentReviewSummaryWorkflow
 
     result = AgentReviewSummaryWorkflow(service).run(
         project_id,
@@ -57,6 +59,7 @@ def run_once(
         limit=limit,
         trigger="polling_watcher",
         max_attempts=max_attempts,
+        source=source,
         operating_mode={
             "mode": "watch" if watch else "once",
             "target_scope": "project",
@@ -70,11 +73,24 @@ def run_once(
             ),
         },
     )
+    if require_live_provider:
+        result["live_provider_required"] = True
+        result["live_provider_ready"] = _live_provider_ready(result)
     return {
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "database": database,
         **result,
     }
+
+
+def _live_provider_ready(result: dict) -> bool:
+    items = result.get("items") or []
+    return bool(items) and all(
+        item.get("status") == "ready"
+        and item.get("mode") == "llm"
+        and not item.get("fallback_reason")
+        for item in items
+    )
 
 
 def main() -> None:
@@ -93,6 +109,21 @@ def main() -> None:
     )
     parser.add_argument("--limit", type=int)
     parser.add_argument("--max-attempts", type=int, default=2)
+    parser.add_argument(
+        "--source",
+        choices=("fixture", "live", "auto", "post-maintenance"),
+        default="fixture",
+        help=(
+            "Candidate source. fixture preserves local regression behavior; "
+            "live/post-maintenance read Product Result artifacts from the DB; "
+            "auto uses live candidates when available."
+        ),
+    )
+    parser.add_argument(
+        "--require-live-provider",
+        action="store_true",
+        help="Exit non-zero if any materialized item used deterministic fallback.",
+    )
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--interval-seconds", type=float, default=60.0)
     parser.add_argument("--max-iterations", type=int)
@@ -135,8 +166,12 @@ def main() -> None:
             interval_seconds=args.interval_seconds,
             max_iterations=args.max_iterations,
             stale_policy=args.stale_policy,
+            source=args.source,
+            require_live_provider=args.require_live_provider,
         )
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        if args.require_live_provider and not result.get("live_provider_ready"):
+            raise SystemExit(2)
         if not args.watch:
             return
         if args.max_iterations is not None and iteration >= args.max_iterations:

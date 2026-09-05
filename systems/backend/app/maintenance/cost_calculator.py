@@ -82,7 +82,7 @@ class MaintenanceCostAnalysisInput(FrozenModel):
     @model_validator(mode="after")
     def require_complete_scenario_set(self) -> MaintenanceCostAnalysisInput:
         if self.asset_id != self.equipment_id:
-            raise ValueError("MVP cost analysis requires equipment_id = asset_id")
+            raise ValueError("Operations cost analysis requires equipment_id = asset_id")
         timings = [scenario.execution_timing for scenario in self.scenarios]
         if len(set(timings)) != len(timings) or set(timings) != set(ExecutionTiming):
             raise ValueError("Maintenance cost analysis requires four unique timing scenarios")

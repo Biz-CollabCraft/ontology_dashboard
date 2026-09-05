@@ -351,7 +351,7 @@ gen_data (sensor_stream.jsonl append)
 
 ## 8. Mapping 정책 및 미구현 범위 분리 (Mapping Policy & Unimplemented Scope)
 
-### 8.1 Extraction 고정 Mapping MVP 계약
+### 8.1 Extraction 고정 Mapping Operations 계약
 `POST /extraction`은 최초 승인 Mapping(`generator-static-mapping-table`)을 기준으로 동일 Source의 append-only 증분 추출을 수행합니다.
 
 - **Logical Source Scope Single-Writer Lock**:

@@ -105,7 +105,7 @@ AI 예측 결과가 업무 화면과 조치 흐름에 들어가기 전, 데이�
 
 ### 2.4 AssetDetailViewModel 조합
 
-`systems/backend/app/mvp/asset_detail_view_model.py`의 `AssetDetailViewModelService.detail_view()`는 다음 read source를 모아 `compose_asset_detail_view_model()`에 넘긴다.
+`systems/backend/app/operations/asset_detail_view_model.py`의 `AssetDetailViewModelService.detail_view()`는 다음 read source를 모아 `compose_asset_detail_view_model()`에 넘긴다.
 
 - asset summary
 - latest result artifact

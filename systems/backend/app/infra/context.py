@@ -1,4 +1,4 @@
-"""Infrastructure context providers used by the manufacturing MVP."""
+"""Infrastructure context providers used by the manufacturing Operations."""
 
 from __future__ import annotations
 

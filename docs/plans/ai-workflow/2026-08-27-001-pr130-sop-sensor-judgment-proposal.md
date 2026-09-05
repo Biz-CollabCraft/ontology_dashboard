@@ -34,12 +34,12 @@ Product Result / Evidence
 현재 브랜치 기준으로 다음은 이미 구현되어 있다.
 
 - `contracts/schemas/agent-review-packet.schema.json`: read-only Agent Review Packet 계약
-- `systems/backend/app/mvp/agent_review_packet.py`: ViewModel과 SOP retrieval 결과를 Agent Packet으로 합성
-- `systems/backend/app/mvp/router.py`: `GET /api/objects/{asset_id}/agent-review-packet`
-- `systems/backend/app/mvp/sop_retrieval.py`: 로컬 SOP metadata 기반 deterministic retrieval
+- `systems/backend/app/operations/agent_review_packet.py`: ViewModel과 SOP retrieval 결과를 Agent Packet으로 합성
+- `systems/backend/app/operations/router.py`: `GET /api/objects/{asset_id}/agent-review-packet`
+- `systems/backend/app/operations/sop_retrieval.py`: 로컬 SOP metadata 기반 deterministic retrieval
 - `contracts/schemas/inspection-location-reference.schema.json`: component-to-field-location reference 계약
 - `data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json`: demo CNC 위치 reference fixture
-- `systems/frontend/src/features/mvp/overview/MvpWorkflowOverviewPage.tsx`: 현장 담당자 화면의 inline `AI 검토 요약`
+- `systems/frontend/src/features/operations/overview/OperationsWorkflowOverviewPage.tsx`: 현장 담당자 화면의 inline `AI 검토 요약`
 
 현재 기능의 성격은 LLM이 아니라 deterministic review draft다. SOP PDF ingestion, vector RAG, LlamaIndex orchestration, live provider 호출은 아직 구현 범위가 아니다.
 
@@ -165,7 +165,7 @@ procedure-grounding schema validation
 
 | `source_kind` | `maturity` | 소비 정책 |
 |---|---|---|
-| `demo_sop_fixture` | `fixture` | MVP demo guidance 허용 |
+| `demo_sop_fixture` | `fixture` | Operations demo guidance 허용 |
 | `site_sop` | `approved` | 현장 SOP guidance 허용 |
 | `site_sop` | `draft` | 검색 후보로만 보존, UI guidance 금지 |
 | `site_sop` | `retired` | 이력/감사 조회 외 신규 guidance 금지 |
@@ -223,9 +223,9 @@ SOP Grounding은 Product Evidence가 아니라 점검 참고 절차다. WorkOrde
 
 **Files:**
 
-- `systems/backend/app/mvp/agent_review_summary.py`
+- `systems/backend/app/operations/agent_review_summary.py`
 - `systems/backend/app/infra/llm.py`
-- `systems/backend/app/mvp/router.py`
+- `systems/backend/app/operations/router.py`
 - `tests/test_agent_review_summary.py`
 
 **Approach:** API는 packet endpoint를 오염시키지 않고 별도 summary endpoint로 둔다. 우선 후보는 `POST /api/objects/{asset_id}/agent-review-summary`다. provider unavailable, timeout, invalid JSON, schema violation, forbidden action 표현이 있으면 deterministic fallback을 반환한다.
@@ -246,7 +246,7 @@ SOP Grounding은 Product Evidence가 아니라 점검 참고 절차다. WorkOrde
 
 **Files:**
 
-- `systems/backend/app/mvp/agent_review_summary.py`
+- `systems/backend/app/operations/agent_review_summary.py`
 - `tests/test_agent_review_summary.py`
 
 **Approach:** prompt는 “packet only”를 명시하고, output validator가 금지 표현과 source citation을 검사한다. validator는 정교한 자연어 심판보다 먼저 deterministic rule로 시작한다.
@@ -266,10 +266,10 @@ SOP Grounding은 Product Evidence가 아니라 점검 참고 절차다. WorkOrde
 **Files:**
 
 - `systems/frontend/src/api.ts`
-- `systems/frontend/src/features/mvp/api/mvpContracts.ts`
-- `systems/frontend/src/features/mvp/api/mvpAdapters.ts`
-- `systems/frontend/src/features/mvp/overview/MvpWorkflowOverviewPage.tsx`
-- `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts`
+- `systems/frontend/src/features/operations/api/operationsContracts.ts`
+- `systems/frontend/src/features/operations/api/operationsAdapters.ts`
+- `systems/frontend/src/features/operations/overview/OperationsWorkflowOverviewPage.tsx`
+- `systems/frontend/src/features/operations/api/operationsAdapters.test.ts`
 
 **Approach:** 드롭다운이나 별도 실행 버튼 대신 현재처럼 inline 표시를 유지한다. summary API가 fallback이면 “검토 전용 / fallback” 성격만 작게 표시하고, 사용자가 action 가능 상태로 오해할 버튼은 만들지 않는다.
 

@@ -1,4 +1,4 @@
-"""Stable deterministic conversation contracts used by MVP orchestration."""
+"""Stable deterministic conversation contracts used by Operations orchestration."""
 
 from .conversation import IntentResult, IntentRouter, deterministic_answer
 

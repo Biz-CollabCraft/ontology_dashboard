@@ -20,6 +20,7 @@ from .evidence_baseline import build_history_baseline_window
 
 
 DEFAULT_POLICY_PATH = Path(__file__).with_name("threshold_policy.json")
+FIXTURE_POLICY_PATH = Path(__file__).with_name("fixture_threshold_policy.json")
 _TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
 _HEURISTIC_DEFAULT_ENVIRONMENTS = {"local", "demo", "test"}
 _RISK_UP_FEATURES = {
@@ -102,7 +103,7 @@ class HeuristicPredictor:
     model_version = "fixture-heuristic-v1"
 
     def __init__(self, policy_path: str | Path | None = None) -> None:
-        path = Path(policy_path) if policy_path else DEFAULT_POLICY_PATH
+        path = Path(policy_path) if policy_path else FIXTURE_POLICY_PATH
         self.policy = json.loads(path.read_text(encoding="utf-8"))
 
     def predict(self, fixture: dict[str, Any]) -> Prediction:
@@ -550,7 +551,7 @@ class ArtifactPredictor:
 
 
 def configured_predictor(asset_type: str | None = None) -> Predictor:
-    """Resolve runtime inference from injected artifact or explicit MVP fallback."""
+    """Resolve runtime inference from injected artifact or explicit Operations fallback."""
 
     # Preserve the historical no-argument resolver contract for compatibility
     # callers. Product runtime paths now pass the fixture asset family explicitly.

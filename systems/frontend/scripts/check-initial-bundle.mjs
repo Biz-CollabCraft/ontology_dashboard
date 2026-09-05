@@ -23,7 +23,10 @@ if (assetPaths.length === 0) {
 }
 
 const assets = await Promise.all(assetPaths.map(async (assetPath) => {
-  const normalizedPath = assetPath.replace(/^\//, "");
+  const assetsIndex = assetPath.indexOf("/assets/");
+  const normalizedPath = assetsIndex >= 0
+    ? assetPath.slice(assetsIndex + 1)
+    : assetPath.replace(/^\//, "");
   const filePath = resolve(distRoot, normalizedPath);
   const file = await stat(filePath);
   return { assetPath, bytes: file.size };

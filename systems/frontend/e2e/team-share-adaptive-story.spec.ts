@@ -71,7 +71,7 @@ test("legacy team share remains unchanged and complete adaptive story is indepen
     "/app/projects/manufacturing-demo-project/workspaces/manufacturing-demo/modeling",
   );
   await expect(page.getByRole("link", { name: /독립 HTML 열기/ })).toHaveAttribute("href", "/team-share-adaptive.html");
-  await expect(page.getByText("Manufacturing Gold Fixture Demo — Equipment Registry + Risk Events", { exact: true })).toBeVisible();
+  await expect(page.getByText("Hanbit Tech Operations Reference — Equipment Registry + Risk Events", { exact: true })).toBeVisible();
   await expect(page.getByText("UCI AI4I 2020 Manufacturing Predictive Maintenance — Physics & Maintenance Canonical V3.1", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("dsv-9fc144c7-d3f8-5b37-8465-04248165b7ce", { exact: false })).toBeVisible();
   await expect(page.getByText("68,208 timeline rows", { exact: false }).first()).toBeVisible();

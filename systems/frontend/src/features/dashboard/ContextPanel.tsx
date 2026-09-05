@@ -95,7 +95,7 @@ export function ContextPanel({
     ? `${activeSource.source_version} · ${activeSource.dataset_status === "published" ? t("dashboard.sourcePublished") : activeSource.dataset_status} · ${activeSource.release_ready ? "release ready" : "release checks pending"} · PostgreSQL Result Artifact · ${activeSource.result_artifact_count.toLocaleString(locale)} artifacts · ${activeSource.prediction_timeline_count.toLocaleString(locale)} timeline rows · relational ${activeSource.relational_status} · graph ${activeSource.graph.status} · ${activeSource.model_version ?? t("dashboard.sourceModelUnavailable")} · ${activeSource.selection_reason.replaceAll("_", " ")}`
     : dataConnection.error
       ? dataConnection.error
-      : `${dataConnection.datasetNames.join(" + ") || "Manufacturing Equipment Registry + Manufacturing Risk Events"} · ${dataConnection.sourceVersions.join(", ") || "gold-fixtures-2026-08-01"} · legacy/offline fallback${dataConnection.fallbackReason ? ` · ${dataConnection.fallbackReason}` : ""}`;
+      : `${dataConnection.datasetNames.join(" + ") || "Manufacturing Equipment Registry + Manufacturing Risk Events"} · ${dataConnection.sourceVersions.join(", ") || "reference-2026-08-01"} · offline reference${dataConnection.fallbackReason ? ` · ${dataConnection.fallbackReason}` : ""}`;
   const sourceSummary = activeSource
     ? `${activeSource.source_version} · ${activeSource.dataset_status === "published" ? t("dashboard.sourcePublished") : activeSource.dataset_status} · ${activeSource.result_artifact_count.toLocaleString(locale)} ${t("dashboard.sourceArtifacts")} · ${activeSource.model_version ?? t("dashboard.sourceModelUnavailable")}`
     : sourceDetail;
@@ -141,7 +141,7 @@ export function ContextPanel({
         </div>
         <div className={`dashboard-source-disclosure ${dataConnection.error && !activeSource ? "has-error" : ""}`}>
           <div>
-            <strong>{activeSource?.dataset_name ?? "Manufacturing Gold Fixture Demo"}</strong>
+            <strong>{activeSource?.dataset_name ?? "CollabCraft Operations Reference"}</strong>
             <small title={sourceDetail}>{sourceSummary}</small>
           </div>
           <button type="button" onClick={onOpenDatasets}>{t("common.inspect")} <ExternalLink size={11} /></button>

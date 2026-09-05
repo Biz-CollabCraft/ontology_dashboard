@@ -10,7 +10,7 @@
 
 - Project decision log: `/Users/hb/Documents/final/docs/project/DECISION_LOG.md`
 - Architecture boundary: `docs/architecture-decisions/ADR-004-product-result-evidence-viewmodel-trust-boundary.md`
-- MVP UI boundary: `docs/mvp/asset-detail-overview-ui-decision-log.md`
+- Operations UI boundary: `docs/operations/asset-detail-overview-ui-decision-log.md`
 - Team responsibility plan: `docs/final_team_role_and_step_plan.md`
 
 ## 1. 현재 구현 상태
@@ -21,7 +21,7 @@
   - `3430c4a feat: connect production planning operation context`
   - `9164ff4 fix: tighten operation context view model contract`
 - 검증:
-  - `python3 -m pytest -q tests/test_asset_detail_view_model_composer.py tests/test_asset_detail_view_model_contract.py tests/test_mvp.py` → 71 passed
+  - `python3 -m pytest -q tests/test_asset_detail_view_model_composer.py tests/test_asset_detail_view_model_contract.py tests/test_operations.py` → 71 passed
   - `python3 systems/verify_contract_vectors.py` → passed
   - `python3 systems/verify_architecture.py` → passed
 - 로컬 주의:
@@ -88,7 +88,7 @@ operation_context
 
 - Schema: `contracts/schemas/operation-context.schema.json`
 - Fixture: `data/fixtures/operation_context/production-planning-context-v1.json`
-- 근거 문서: `docs/mvp/production-planning-assumptions.md`
+- 근거 문서: `docs/operations/production-planning-assumptions.md`
 
 결정 사항:
 
@@ -365,8 +365,8 @@ UI 워크트리:
 ## 14. 다음 작업 순서
 
 1. UI 워크트리에서 `codex/operation-context-api`를 병합하거나 필요한 계약 변경을 반영한다.
-2. `mvpContracts.ts` / `mvpAdapters.ts`에 rich `operation_context`를 매핑한다.
-3. `MvpOverviewPage.tsx`의 hardcoded 생산계획 값을 API 우선으로 바꾼다.
+2. `operationsContracts.ts` / `operationsAdapters.ts`에 rich `operation_context`를 매핑한다.
+3. `OperationsOverviewPage.tsx`의 hardcoded 생산계획 값을 API 우선으로 바꾼다.
 4. factory/cell map을 line impact map으로 정리한다.
 5. 사이드뷰 헤더 아래 작업 상태 고정 바를 추가한다.
 6. `상태` 탭에 작업 상태 타임라인과 전체 피처/파생 그래프를 정렬한다.

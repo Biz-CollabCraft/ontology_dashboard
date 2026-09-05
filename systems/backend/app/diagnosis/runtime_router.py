@@ -12,7 +12,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.mvp.contracts import AppLocale
+from app.operations.contracts import AppLocale
 from app.dependencies import (
     client_ip,
     get_identity_service,
@@ -36,8 +36,6 @@ router = APIRouter(
 internal_router = APIRouter(prefix="/internal", tags=["prediction-result-inbox"])
 PREDICTION_RESULT_INGEST_TOKEN_ENV = "PREDICTION_RESULT_INGEST_TOKEN"
 PREDICTION_RESULT_INGEST_ORG_ENV = "PREDICTION_RESULT_INGEST_ORGANIZATION_ID"
-
-
 def require_scope(
     *,
     principal: Principal,
@@ -237,7 +235,11 @@ def dashboard_source(
     workspace_id: str,
     dataset_version_id: str | None = Query(default=None, max_length=160),
     selected_event_id: str | None = Query(default=None, max_length=320),
-    role: str = Query(default="manager", pattern="^(manager|engineer)$"),
+    role: str = Query(default="manager", pattern="^(manager|engineer|executive)$"),
+    report_type: str | None = Query(
+        default=None,
+        pattern="^(inspection-summary|operations-decision|executive-brief|maintenance-effect|weekly-risk)$",
+    ),
     intent: str = Query(
         default="overview",
         pattern="^(overview|explain-risk|compare|summarize-manager|detail-engineer|recommend-check|show-model-details)$",
@@ -257,7 +259,7 @@ def dashboard_source(
         workspace_id=workspace_id,
     )
     try:
-        return service.dashboard(
+        response = service.dashboard(
             organization_id=principal.organization_id,
             project_id=project_id,
             workspace_id=workspace_id,
@@ -265,10 +267,21 @@ def dashboard_source(
             dataset_version_id=dataset_version_id,
             selected_event_id=selected_event_id,
             role=role,
+            report_type=report_type,
             intent=intent,
             locale=locale,
             view=view,
-        ).model_dump(mode="json")
+        )
+        if selected_event_id and response.selected_event_id != selected_event_id:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "selected_snapshot_not_found",
+                    "message": "The explicitly selected Decision Case snapshot could not be restored.",
+                    "selected_event_id": selected_event_id,
+                },
+            )
+        return response.model_dump(mode="json")
     except KeyError as error:
         raise HTTPException(status_code=404, detail=f"Dataset Version not found: {error.args[0]}") from error
 

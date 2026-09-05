@@ -13,6 +13,14 @@ import joblib
 
 ARTIFACT_TYPE = "predictive_maintenance_model"
 ARTIFACT_SCHEMA_VERSION = "model-artifact-v1.0"
+# Older published artifacts used the repository-qualified diagnosis namespace.
+# It denotes the same runtime boundary as the current stable manifest value and
+# remains read-compatible; do not accept arbitrary runtime strings here.
+COMPATIBLE_DIAGNOSIS_RUNTIMES = {
+    None,
+    "app.diagnosis",
+    "ontology_dashboard.systems.backend.diagnosis",
+}
 REQUIRED_MANIFEST_FIELDS = {
     "artifact_type",
     "artifact_schema_version",
@@ -84,7 +92,7 @@ class LocalModelArtifactProvider:
 
         compatibility = manifest.get("compatibility") or {}
         runtime = compatibility.get("runtime")
-        if runtime not in {None, "app.diagnosis"}:
+        if runtime not in COMPATIBLE_DIAGNOSIS_RUNTIMES:
             raise ValueError(f"Model Artifact is incompatible with diagnosis runtime: {runtime}")
 
         root = manifest_path.parent

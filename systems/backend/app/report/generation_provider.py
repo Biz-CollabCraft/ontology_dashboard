@@ -8,7 +8,7 @@ from jsonschema import Draft202012Validator
 
 from .generation import render_report
 from .ports import ReportGenerationProviderPort
-from .report_schema import AppLocale, GroundedReport, Role
+from .report_schema import AppLocale, GroundedReport, ReportType, Role
 
 
 class ReportAgent:
@@ -22,7 +22,7 @@ class ReportAgent:
         self.report_schema = json.loads((self.root / "contracts" / "schemas" / "report.schema.json").read_text(encoding="utf-8"))
 
     def _prompt(self, role: Role, locale: AppLocale) -> str:
-        name = "manager-report.md" if role == "manager" else "engineer-report.md"
+        name = "manager-report.md" if role == "manager" else "executive-report.md" if role == "executive" else "engineer-report.md"
         base = (self.root / "prompts" / name).read_text(encoding="utf-8")
         language = "Korean" if locale == "ko-KR" else "English"
         return (
@@ -54,6 +54,11 @@ class ReportAgent:
         refs.update(factor["evidence_field_id"] for factor in evidence["top_factors"])
         refs.update(evidence["maintenance_context"]["source_refs"])
         refs.update(f"data_quality_warnings.{index}" for index, _ in enumerate(evidence["data_quality_warnings"]))
+        refs.update(
+            str(item.get("evidence_field_id"))
+            for item in evidence.get("company_context_documents") or []
+            if item.get("evidence_field_id")
+        )
         return refs
 
     def _validate_grounding(
@@ -91,11 +96,12 @@ class ReportAgent:
         locale: AppLocale,
         use_llm: bool,
         provider_available: bool,
+        report_type: ReportType | None = None,
     ) -> tuple[GroundedReport, dict[str, Any]]:
         if not use_llm:
-            return render_report(evidence, role, locale=locale, mode="deterministic"), {"provider": "none", "fallback": False}
+            return render_report(evidence, role, locale=locale, mode="deterministic", report_type=report_type), {"provider": "none", "fallback": False}
         if not provider_available or self.provider is None:
-            return render_report(evidence, role, locale=locale, mode="deterministic_fallback"), {
+            return render_report(evidence, role, locale=locale, mode="deterministic_fallback", report_type=report_type), {
                 "provider": getattr(self.provider, "name", "unknown"),
                 "fallback": True,
                 "reason": "fixture_provider_disabled",
@@ -103,16 +109,17 @@ class ReportAgent:
         try:
             payload = self.provider.generate_json(
                 self._prompt(role, locale),
-                {"evidence": evidence, "role": role, "locale": locale},
+                {"evidence": evidence, "role": role, "report_type": report_type, "locale": locale},
             )
             payload["mode"] = "llm"
             payload["locale"] = locale
+            payload["report_type"] = report_type or ("executive-brief" if role == "executive" else "inspection-summary" if role == "engineer" else "operations-decision")
             self._validate_schema(payload)
             report = GroundedReport.model_validate(payload)
             self._validate_grounding(report, evidence, role, locale)
             return report, {"provider": self.provider.name, "fallback": False}
         except Exception as exc:  # provider, timeout, parser, schema, and grounding failures all fail closed
-            return render_report(evidence, role, locale=locale, mode="deterministic_fallback"), {
+            return render_report(evidence, role, locale=locale, mode="deterministic_fallback", report_type=report_type), {
                 "provider": getattr(self.provider, "name", "unknown"),
                 "fallback": True,
                 "reason": type(exc).__name__,

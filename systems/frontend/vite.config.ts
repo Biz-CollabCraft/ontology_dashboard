@@ -1,16 +1,20 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
+const configuredBase = process.env.VITE_APP_BASE_PATH?.trim();
 const githubPagesBase = process.env.GITHUB_PAGES === "1"
   ? "/agentic-ontology-dashboard/"
   : "/";
+const appBase = configuredBase
+  ? `/${configuredBase.replace(/^\/+|\/+$/g, "")}/`
+  : githubPagesBase;
 
 const apiProxy = {
-  "/api": { target: "http://127.0.0.1:8100" },
-  "/health": { target: "http://127.0.0.1:8100" },
-  "/docs": { target: "http://127.0.0.1:8100" },
-  "/redoc": { target: "http://127.0.0.1:8100" },
-  "/openapi.json": { target: "http://127.0.0.1:8100" },
+  "/api": { target: "http://127.0.0.1:8000" },
+  "/health": { target: "http://127.0.0.1:8000" },
+  "/docs": { target: "http://127.0.0.1:8000" },
+  "/redoc": { target: "http://127.0.0.1:8000" },
+  "/openapi.json": { target: "http://127.0.0.1:8000" },
 };
 
 function interactiveTeamShareRoute(): Plugin {
@@ -39,7 +43,7 @@ function interactiveTeamShareRoute(): Plugin {
 }
 
 export default defineConfig({
-  base: githubPagesBase,
+  base: appBase,
   plugins: [interactiveTeamShareRoute(), react()],
   // ManufacturingApp is route-lazy, so Vite's initial source scan does not
   // always discover its heavy UI dependencies before the first browser load.
@@ -61,14 +65,14 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 3100,
     strictPort: true,
-    allowedHosts: ["dashboard.oosu.dev"],
+    allowedHosts: ["kosa165.iptime.org"],
     proxy: apiProxy,
   },
   preview: {
     host: "127.0.0.1",
     port: 3100,
     strictPort: true,
-    allowedHosts: ["dashboard.oosu.dev"],
+    allowedHosts: ["kosa165.iptime.org"],
     proxy: apiProxy,
   },
   test: { environment: "jsdom", include: ["src/**/*.test.ts", "src/**/*.test.tsx"] },

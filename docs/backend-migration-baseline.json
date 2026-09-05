@@ -930,27 +930,27 @@
       "target": "ontology_dashboard.service"
     },
     {
-      "source": "tests/test_mvp.py",
+      "source": "tests/test_operations.py",
       "kind": "static_import",
       "target": "ontology_dashboard.context"
     },
     {
-      "source": "tests/test_mvp.py",
+      "source": "tests/test_operations.py",
       "kind": "static_import",
       "target": "ontology_dashboard.contracts"
     },
     {
-      "source": "tests/test_mvp.py",
+      "source": "tests/test_operations.py",
       "kind": "static_import",
       "target": "ontology_dashboard.main"
     },
     {
-      "source": "tests/test_mvp.py",
+      "source": "tests/test_operations.py",
       "kind": "static_import",
       "target": "ontology_dashboard.planner"
     },
     {
-      "source": "tests/test_mvp.py",
+      "source": "tests/test_operations.py",
       "kind": "static_import",
       "target": "ontology_dashboard.service"
     },

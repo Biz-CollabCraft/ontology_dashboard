@@ -20,7 +20,11 @@ from .api_schema import (
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
 )
-from .maintenance_domain import IdempotencyConflict, InvalidTransition
+from .maintenance_domain import (
+    IdempotencyConflict,
+    InvalidTransition,
+    SourceSimulationSessionUnavailable,
+)
 from .maintenance_schema import WorkOrderStatus
 from .service import MaintenanceLoopService
 
@@ -56,6 +60,10 @@ def _execute(command: Callable[[], Any]) -> Any:
         return _error(409, "idempotency_key_conflict", str(exc))
     except InvalidTransition as exc:
         return _error(409, "invalid_state_transition", str(exc))
+    except PermissionError as exc:
+        return _error(403, "work_order_assignment_denied", str(exc))
+    except SourceSimulationSessionUnavailable as exc:
+        return _error(422, "source_simulation_session_unavailable", str(exc))
     except ValueError as exc:
         return _error(422, "contract_validation_failed", str(exc))
 
@@ -82,6 +90,28 @@ def create_maintenance_router(
     engineer_command = require_permission("field.tasks.update")
     technician_command = require_permission("field.tasks.update")
     events_read = require_permission("events.read")
+
+    @router.get("/inspection-work-orders")
+    def list_open_inspection_work_orders(
+        project_id: str,
+        workspace_id: str,
+        principal: Any = Depends(events_read),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        return _execute(
+            lambda: service.list_open_inspection_work_orders(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+            )
+        )
 
     @router.post("/inspection-work-orders")
     def request_inspection_work_order(
@@ -115,15 +145,15 @@ def create_maintenance_router(
             )
         )
 
-    @router.post("/inspection-work-orders/{work_order_id}/approve")
-    def approve_inspection_work_order(
+    @router.post("/inspection-work-orders/{work_order_id}/accept")
+    def accept_inspection_work_order(
         project_id: str,
         workspace_id: str,
         work_order_id: str,
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(manager_command),
+        principal: Any = Depends(engineer_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -134,7 +164,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "process_manager")
+        _require_product_role(principal, project_id, "process_engineer")
         return _execute(
             lambda: service.transition_inspection(
                 organization_id=principal.organization_id,

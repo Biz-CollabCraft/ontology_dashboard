@@ -289,14 +289,14 @@ materialization으로 연결한다. `I` 이후의 승인·작업·정비 상태�
   - `docs/backend-migration-map.md`
   - `docs/closed-loop-implementation-plan.md`
   - `docs/closed-loop-domain-contract.md`
-  - `docs/mvp/pdm-evidence-report-ui-integration-plan.md`
+  - `docs/operations/pdm-evidence-report-ui-integration-plan.md`
 - **Approach:** 결과 artifact에 Gold version, fixture checksum, policy/schema/model
   version, evaluator version, writer strategy, run timestamp, scenario count, pass/fail,
   mutation rejection, operational side-effect count, known limitations를 기록한다. 기존
   Closed-loop 문서에는 Diagnosis ownership, canonical Maintenance target, fixture 격리,
   imported/runtime writer 경계만 연결하고 상태 머신 설명을 복제하지 않는다.
 - **Patterns to follow:** `evaluation/results/README.md`, `docs/closed-loop-*`,
-  `docs/mvp/report-specification.md`의 claim/limitation 원칙.
+  `docs/operations/report-specification.md`의 claim/limitation 원칙.
 - **Test scenarios:**
   - 결과 JSON이 schema와 required provenance를 만족한다.
   - Gold 8/8 통과와 field/business validation 미실시가 동시에 표현된다.
@@ -376,7 +376,7 @@ materialization으로 연결한다. `I` 이후의 승인·작업·정비 상태�
   `source_product_result_id + source_action_id` 멱등성 키
 - `docs/closed-loop-product-consumption-contract.md`: 역할별 추천 소비,
   `available_actions`, Backend 권한 검증
-- `docs/mvp/pdm-evidence-report-ui-integration-plan.md`: producer action/basis grounding,
+- `docs/operations/pdm-evidence-report-ui-integration-plan.md`: producer action/basis grounding,
   recommendation과 WorkOrder 분리, runtime/imported writer 선택과 Evidence unavailable 경계
 - `docs/architecture.md`: `systems/backend/ontology_dashboard` legacy migration source 및
   신규 기능 추가 금지 원칙

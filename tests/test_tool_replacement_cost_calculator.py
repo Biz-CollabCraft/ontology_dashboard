@@ -170,7 +170,7 @@ def test_calculator_is_deterministic_and_sums_derived_components() -> None:
     assert immediate.total_expected_cost == money(120000, 160000, 247000)
 
 
-def test_calculator_input_rejects_mismatched_mvp_identity() -> None:
+def test_calculator_input_rejects_mismatched_operations_identity() -> None:
     payload = analysis_input().model_dump()
     payload["equipment_id"] = "CNC-OTHER"
 
