@@ -1,3 +1,6 @@
+import pytest
+from app.dependencies import build_manufacturing_service
+from pathlib import Path
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -33,6 +36,7 @@ def _runtime_result():
         recommended_action=SimpleNamespace(action="request_inspection"),
         provenance=SimpleNamespace(
             model_version="independent-logreg-v3.1",
+            result_artifact_source_sha256="test-runtime-source",
             schema_version="result-artifact-v1.0",
             prediction_task="binary_failure_within_horizon",
             prediction_id="RESULT#CNC-S01-L04-03#1",
@@ -81,22 +85,26 @@ class _RuntimeService:
         return {"items": []}
 
 
-def test_runtime_operation_context_is_explicit_and_actionable():
-    result = _runtime_result()
-    context = _runtime_operation_context(result, "RESULT#CNC-S01-L04-03#1")
+@pytest.fixture(autouse=True)
+def scoped_context_database(tmp_path, monkeypatch):
+    service = build_manufacturing_service(tmp_path / "runtime-context.db", root=Path(__file__).resolve().parents[1])
+    monkeypatch.setattr("app.operations.router.get_service", lambda: service)
+    monkeypatch.setattr("app.operations.router.get_operational_context_repository", lambda: service.operational_context_repository)
+    return service
 
-    assert context["source_type"] == "capacity_model"
-    assert context["production_plan"]["planned_units"] == 16200
-    assert context["capacity_model"]["daily_capacity_units"] == 16200
-    assert context["event_impact"]["line"] == "S01-L04"
-    assert context["event_impact"]["estimated_lost_units"] > 0
-    assert context["event_impact"]["basis"]["estimated_downtime_minutes"] == 120
-    assert any("결산" in item for item in context["limitations"])
+
+def test_runtime_operation_context_withholds_unconnected_values():
+    result = _runtime_result()
+    context = _runtime_operation_context(result, result.artifact_id, principal=_principal(), project_id="manufacturing-demo-project", workspace_id="manufacturing-demo")
+    assert context["production_impact"] is None
+    assert "production_plan" not in context
+    assert "event_impact" not in context
+    assert context["limitations"]
 
 
 def test_runtime_sop_retrieval_returns_grounded_source_for_cnc_result():
     result = _runtime_result()
-    context = _runtime_operation_context(result, "RESULT#CNC-S01-L04-03#1")
+    context = _runtime_operation_context(result, "RESULT#CNC-S01-L04-03#1", principal=_principal(), project_id="manufacturing-demo-project", workspace_id="manufacturing-demo")
 
     retrieval, guidance = _runtime_sop_context(result, context)
 
@@ -116,7 +124,7 @@ def test_runtime_sop_retrieval_normalizes_temporal_model_features_to_sensor_keys
         SimpleNamespace(feature="rotational_speed_rpm_6h_abs_mean"),
         SimpleNamespace(feature="rotational_speed_rpm_current"),
     ]
-    context = _runtime_operation_context(result, "RESULT#CNC-S01-L04-03#temporal")
+    context = _runtime_operation_context(result, "RESULT#CNC-S01-L04-03#temporal", principal=_principal(), project_id="manufacturing-demo-project", workspace_id="manufacturing-demo")
 
     retrieval, guidance = _runtime_sop_context(result, context)
 
@@ -127,7 +135,7 @@ def test_runtime_sop_retrieval_normalizes_temporal_model_features_to_sensor_keys
     assert "factor_keys" in guidance[0]["matched_fields"]
 
 
-def test_exact_runtime_event_connects_sop_inspection_target_and_assistant_evidence():
+def test_exact_runtime_event_connects_sop_inspection_target_and_assistant_evidence(scoped_context_database):
     result = _runtime_result()
     service = _RuntimeService(result)
     event_id = result.artifact_id
@@ -153,10 +161,19 @@ def test_exact_runtime_event_connects_sop_inspection_target_and_assistant_eviden
     )
     evidence = _packet_evidence(
         packet,
+        service=scoped_context_database,
         project_id="manufacturing-demo-project",
         workspace_id="manufacturing-demo",
         top_k=8,
     )
+
+    from app.operations.asset_detail_view_model import _evidence_context
+    assert _evidence_context(packet["evidence_context"]) == detail["evidence_context"]
+    import json
+    from jsonschema import Draft202012Validator
+    for name, payload in (("agent-review-packet", packet), ("asset-detail-view-model", detail)):
+        schema = json.loads((Path(__file__).resolve().parents[1] / "contracts/schemas" / f"{name}.schema.json").read_text())
+        assert list(Draft202012Validator(schema).iter_errors(payload)) == []
 
     assert packet["snapshot_basis"]["event_id"] == event_id
     assert packet["sop_retrieval"]["returned_count"] >= 1

@@ -80,10 +80,37 @@ class MockJsonProvider:
             "title": editable.get("title") or "설비 검토 요약",
             "summary": editable.get("summary") or "제공된 입력을 검토해야 합니다.",
             "role_summaries": [
-                {"role": item["role"], "quote": item.get("quote") or "검토 필요"}
+                {
+                    "role": item["role"],
+                    "quote": item.get("quote")
+                    or _mock_role_quote(str(item["role"]), payload),
+                }
                 for item in role_rows
             ],
         }
+
+
+def _mock_role_quote(role: str, payload: dict[str, Any]) -> str:
+    if role != "process_manager":
+        return "관측값을 기록한 후 정비팀 또는 생산 관리자에게 전달해야 합니다."
+    context = payload.get("summary_context") or payload.get("raw_input") or {}
+    operation = context.get("operation_context") or {}
+    impact = _mock_production_impact_label(operation.get("production_impact"))
+    lost_units = operation.get("estimated_lost_units")
+    lost_units_text = f"약 {int(lost_units)}건" if isinstance(lost_units, (int, float)) else "추정 물량"
+    return (
+        f"생산 영향이 {impact}으로 분류되며, {lost_units_text} 손실 가능성이 있습니다. "
+        "점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+    )
+
+
+def _mock_production_impact_label(value: Any) -> str:
+    return {
+        "none": "없음",
+        "low": "낮은 수준",
+        "medium": "중간 수준",
+        "high": "높은 수준",
+    }.get(str(value), "미제공")
 
 
 class FaultInjectingProvider:
@@ -677,9 +704,11 @@ def _load_legacy_harness() -> Any:
 
 
 def main() -> None:
+    _load_legacy_harness()._load_dotenv(ROOT / ".env")
     parser = argparse.ArgumentParser(description="Run minimal B1/B2/B3 baseline simulation.")
     parser.add_argument("--mode", choices=("mock", "live"), default="mock")
     parser.add_argument("--iterations", type=int, default=3)
+    parser.add_argument("--model", default="gpt-4o-mini")
     parser.add_argument("--seed", type=int, default=20260902)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--run-id")
@@ -687,6 +716,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.mode == "live" and (not args.run_id or not args.candidate_sha):
         raise SystemExit("live evaluation requires --run-id and --candidate-sha")
+    if args.mode == "live":
+        os.environ.setdefault("LLM_PROVIDER", "openai-compatible")
+        os.environ["LLM_MODEL"] = args.model
     provider: JsonProvider = MockJsonProvider() if args.mode == "mock" else configured_provider()
     started = time.perf_counter()
     result = run_suite(provider=provider, iterations=args.iterations, seed=args.seed)

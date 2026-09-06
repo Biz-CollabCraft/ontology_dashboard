@@ -176,6 +176,12 @@ def test_service_exposes_s0_s1_selection_trace(tmp_path: Path) -> None:
         root=ROOT,
     )
 
+    from scripts.build_operational_context_demo_seed import build_seed
+    from app.infra.db.operational_context_repository import ContextSnapshot
+    service.operational_context_repository.import_snapshots([
+        ContextSnapshot.model_validate(row) for row in build_seed(organization_id="ORG-001")
+    ])
+
     result = service.agent_review_evidence_selection(
         "CNC-S04-L02-03",
         decision_as_of=IDENTITY.decision_as_of,

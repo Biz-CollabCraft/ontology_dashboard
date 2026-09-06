@@ -241,6 +241,7 @@ def _summary_context_sha256(packet: dict[str, Any]) -> str:
             "review_priority": packet.get("review_priority"),
             "model_expression_context": packet.get("model_expression_context") or {},
             "operation_context_summary": packet.get("operation_context_summary") or {},
+            "evidence_context": packet.get("evidence_context") or {},
             "maintenance_history_summary": packet.get("maintenance_history_summary") or {},
             "sop_guidance": packet.get("sop_guidance") or [],
             "inspection_targets": packet.get("inspection_targets") or [],

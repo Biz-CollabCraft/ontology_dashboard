@@ -7,6 +7,7 @@ from typing import Any
 from app.operations.agent_context_tool_pipeline import run_read_only_tool_pipeline
 from app.operations.agent_review_summary import (
     compose_deterministic_agent_review_summary,
+    FORBIDDEN_PROSE_CLAIMS,
 )
 from app.operations.ports import AgentReviewLLMPort
 
@@ -26,6 +27,11 @@ Hard contract:
 - Return only title, summary, and role_summaries[*].quote edits.
 - Keep role_summaries[*].role values exactly as provided in baseline_editable_fields.
 - All prose must stay read-only Korean and grounded in summary_context.
+- Write summary and each role quote in 1-2 concise Korean sentences focused on the
+  next decision, actual workflow state, and essential missing evidence for that role.
+- Avoid generic instructions to check evidence, repetitive disclaimers, and repeating
+  every table value. Retain necessary conditional assumptions and contract-required facts.
+- Zero conditional production exposure is not permission to continue operating safely.
 
 Role workflow:
 - field_operator prose is for the shop-floor operator or line owner. It should say what
@@ -35,9 +41,15 @@ Role workflow:
 - process_manager prose is for the production decision owner. It should explain production
   impact, priority/approval review, and line or cell sequencing implications. It must not
   claim that repair, approval, or work execution has already happened.
-""".strip()
+- In process_manager prose, preserve estimated_lost_units as a Korean count such as
+  "25건" and mention inspection approval as "점검 승인 여부" or "점검 승인 검토".
+- If confidence_label is data_quality_hold, do not present production_impact as a confirmed
+  ordinary impact level. Say that production impact and estimated lost units are not confirmed,
+  mention unresolved similar-history context when present, and keep inspection approval as a
+  review after data supplementation.
+""".strip() + "\nValidator wording constraints: do not use these literal phrases in editable prose, including negated or historical mentions: " + ", ".join(FORBIDDEN_PROSE_CLAIMS)
 
-AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v1.2-role-workflow"
+AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v1.7-source-footnote-brief"
 AGENT_REVIEW_SUMMARY_PAYLOAD_PROFILE = "compact-editable-v1"
 
 
@@ -49,21 +61,45 @@ class AgentReviewSummaryProvider:
         self.name = getattr(provider, "name", "none")
 
     def generate(self, packet: dict[str, Any]) -> dict[str, Any]:
+        summary, _metadata = self.generate_with_metadata(packet)
+        return summary
+
+    def generate_with_metadata(self, packet: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         if self.provider is None:
             raise RuntimeError("agent_review_summary_provider_disabled")
         baseline_summary = compose_deterministic_agent_review_summary(packet)
-        payload = self.provider.generate_json(
-            AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT,
-            build_tool_selected_agent_review_summary_prompt_payload(
-                packet=packet,
-                baseline_summary=baseline_summary,
-            ),
-            response_schema=agent_review_summary_editable_schema(),
-            response_schema_name="agent_review_summary_editable",
+        prompt_payload = build_tool_selected_agent_review_summary_prompt_payload(
+            packet=packet,
+            baseline_summary=baseline_summary,
         )
-        return _merge_llm_editable_fields(
+        if hasattr(self.provider, "generate_json_with_metadata"):
+            result = self.provider.generate_json_with_metadata(
+                AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT,
+                prompt_payload,
+                response_schema=agent_review_summary_editable_schema(),
+                response_schema_name="agent_review_summary_editable",
+            )
+            payload = result["payload"]
+            metadata = dict(result.get("provider_metadata") or {})
+        else:
+            payload = self.provider.generate_json(
+                AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT,
+                prompt_payload,
+                response_schema=agent_review_summary_editable_schema(),
+                response_schema_name="agent_review_summary_editable",
+            )
+            metadata = {"usage": None, "usage_measurement": "not_reported"}
+        summary = _merge_llm_editable_fields(
             baseline_summary=baseline_summary,
             candidate=payload,
+        )
+        return (
+            summary,
+            {
+                "provider": self.name,
+                "usage": metadata.get("usage"),
+                "usage_measurement": metadata.get("usage_measurement") or "not_reported",
+            },
         )
 
 
@@ -344,34 +380,22 @@ def agent_review_summary_editable_schema() -> dict[str, Any]:
 
 
 def _compact_maintenance_history(history: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "provider": history.get("provider"),
-        "open_work_order_exists": history.get("open_work_order_exists"),
-        "similar_events_30d": history.get("similar_events_30d"),
-        "work_orders": [
-            _pick(
-                item,
-                "record_id",
-                "status",
-                "requested_at",
-                "approved_at",
-                "completed_at",
-                "source_ref",
-            )
-            for item in history.get("work_orders") or []
-            if isinstance(item, dict)
-        ],
-        "activities": [
-            _pick(item, "record_id", "activity_type", "occurred_at", "source_ref")
-            for item in history.get("activities") or []
-            if isinstance(item, dict)
-        ],
-        "similar_events": [
-            _pick(item, "observed_at", "status_grade", "failure_type", "component_label")
-            for item in history.get("similar_events") or []
-            if isinstance(item, dict)
+    result = {
+        'provider': history.get('provider'),
+        'open_work_order_exists': history.get('open_work_order_exists'),
+        'similar_events_30d': history.get('similar_events_30d'),
+        'similar_events': [
+            _pick(item, 'observed_at', 'status_grade', 'failure_type', 'component_label')
+            for item in history.get('similar_events') or [] if isinstance(item, dict)
         ],
     }
+    for kind in ('work_orders', 'inspection_results', 'maintenance_actions', 'maintenance_events', 'activities'):
+        result[kind] = [
+            _pick(item, 'record_id', 'record_type', 'status', 'activity_type',
+                  'recorded_at', 'summary', 'source_ref', 'owner_record_provenance')
+            for item in history.get(kind) or [] if isinstance(item, dict)
+        ]
+    return result
 
 
 def _compact_ontology_context(context: dict[str, Any]) -> dict[str, Any]:

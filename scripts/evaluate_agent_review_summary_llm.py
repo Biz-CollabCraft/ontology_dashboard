@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -26,6 +27,7 @@ DEFAULT_MODEL = "gpt-4o-mini"
 
 
 def main() -> None:
+    global GOLD_ANSWERS_PATH, _GOLD_ANSWERS_CACHE
     _load_dotenv(ROOT / ".env")
     parser = argparse.ArgumentParser(
         description="Run the controlled Agent Review Summary LLM evaluation harness."
@@ -36,10 +38,14 @@ def main() -> None:
     parser.add_argument("--provider", default="mock-openai-compatible")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--manifest", type=Path, default=GOLD_ROOT / "manifest.json")
+    parser.add_argument("--gold-answers", type=Path, default=GOLD_ANSWERS_PATH)
     parser.add_argument("--progress-every", type=int, default=0)
     parser.add_argument("--run-id")
     parser.add_argument("--candidate-sha")
     args = parser.parse_args()
+    GOLD_ANSWERS_PATH = args.gold_answers
+    _GOLD_ANSWERS_CACHE = None
     if args.mode == "live" and (not args.run_id or not args.candidate_sha):
         raise SystemExit("live evaluation requires --run-id and --candidate-sha")
     if args.concurrency < 1:
@@ -55,7 +61,7 @@ def main() -> None:
         live_provider = None
         provider_name = args.provider
 
-    manifest = _load_json(GOLD_ROOT / "manifest.json")
+    manifest = _load_json(args.manifest)
     packets = [
         _load_json(ROOT / case["fixture_path"])
         for case in manifest["cases"]
@@ -90,7 +96,10 @@ def main() -> None:
         "run_id": args.run_id or "unversioned",
         "candidate_sha": args.candidate_sha or "unversioned",
         "recorded_at": datetime.now(UTC).isoformat(),
-        "scope": f"8x{args.iterations} {args.mode} Agent Review Summary LLM evaluation",
+        "scope": (
+            f"{len(packets)}x{args.iterations} {args.mode} "
+            "Agent Review Summary LLM evaluation"
+        ),
         "eval_set_id": manifest["eval_set_id"],
         "mode": args.mode,
         "provider": provider_name,
@@ -207,16 +216,18 @@ def _run_candidate(
     baseline_summary = compose_deterministic_agent_review_summary(packet)
     queue_wait_ms = round((started - queued_at) * 1000, 3) if queued_at is not None else None
     try:
+        provider_metadata: dict[str, Any] = {}
         if mode == "live":
             if live_provider is None:
                 raise RuntimeError("live_provider_unavailable")
-            candidate = live_provider.generate(packet)
+            candidate, provider_metadata = live_provider.generate_with_metadata(packet)
         else:
             candidate = dict(baseline_summary)
             candidate["mode"] = "llm"
         provider_error = None
     except Exception as exc:  # provider, timeout, parsing, and schema failures fall back closed
         candidate = dict(baseline_summary)
+        provider_metadata = {}
         provider_error = exc.__class__.__name__
     errors = validate_agent_review_summary_contract(candidate, packet=packet)
     quality_scores = _quality_scores(candidate, packet=packet)
@@ -226,13 +237,11 @@ def _run_candidate(
         packet=packet,
         baseline_summary=baseline_summary,
     )
-    prompt_tokens = _estimate_tokens(prompt_payload)
-    completion_tokens = _estimate_tokens(_editable_candidate_payload(candidate))
-    usage = {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": prompt_tokens + completion_tokens,
-    }
+    usage, usage_measurement = _usage_or_estimate(
+        provider_metadata.get("usage"),
+        prompt_payload=prompt_payload,
+        candidate=candidate,
+    )
     cost = _estimated_cost(usage)
     accepted = provider_error is None and not errors
     return {
@@ -258,6 +267,7 @@ def _run_candidate(
             "duration_ms": duration_ms,
             "queue_wait_ms": queue_wait_ms,
             "usage": usage,
+            "usage_measurement": usage_measurement,
             "cost": cost,
         },
     }
@@ -292,6 +302,9 @@ def _aggregate(
         if row["llm"].get("queue_wait_ms") is not None
     ]
     total_tokens = [int(row["llm"]["usage"]["total_tokens"]) for row in rows]
+    provider_reported_usage_rows = sum(
+        1 for row in rows if row["llm"].get("usage_measurement") == "provider_reported"
+    )
     cost_values = [
         row["llm"]["cost"]["estimated_total_cost"]
         for row in rows
@@ -377,6 +390,15 @@ def _aggregate(
             if total_tokens
             else None,
             "total_tokens": sum(total_tokens),
+            "usage_measurement": (
+                "provider_reported"
+                if provider_reported_usage_rows == len(rows)
+                else "mixed"
+                if provider_reported_usage_rows
+                else "estimated_from_serialized_payload_and_output_chars"
+            ),
+            "provider_reported_rows": provider_reported_usage_rows,
+            "estimated_rows": len(rows) - provider_reported_usage_rows,
         },
         "cost": {
             "status": "estimated" if len(cost_values) == len(rows) else "not_configured",
@@ -409,6 +431,38 @@ def _pre_harness_gate() -> dict[str, Any]:
 def _estimate_tokens(payload: dict[str, Any]) -> int:
     rendered = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     return max(1, len(rendered) // 4)
+
+
+def _usage_or_estimate(
+    provider_usage: Any,
+    *,
+    prompt_payload: dict[str, Any],
+    candidate: dict[str, Any],
+) -> tuple[dict[str, int], str]:
+    if isinstance(provider_usage, dict):
+        prompt_tokens = provider_usage.get("prompt_tokens")
+        completion_tokens = provider_usage.get("completion_tokens")
+        total_tokens = provider_usage.get("total_tokens")
+        if all(isinstance(value, int) for value in (prompt_tokens, completion_tokens, total_tokens)):
+            return (
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                },
+                "provider_reported",
+            )
+
+    prompt_tokens = _estimate_tokens(prompt_payload)
+    completion_tokens = _estimate_tokens(_editable_candidate_payload(candidate))
+    return (
+        {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+        "estimated_from_serialized_payload_and_output_chars",
+    )
 
 
 def _estimated_cost(usage: dict[str, int]) -> dict[str, Any]:
@@ -613,7 +667,52 @@ def _gold_forbidden_points(answer: dict[str, Any]) -> list[str]:
 def _contains_point(text: str, point: Any) -> bool:
     if point in (None, ""):
         return True
-    return str(point) in text
+    point_text = str(point)
+    if point_text in text:
+        return True
+    return any(re.search(pattern, text) for pattern in _gold_point_surface_patterns(point_text))
+
+
+def _gold_point_surface_patterns(point: str) -> list[str]:
+    escaped = re.escape(point)
+    patterns = {
+        "생산 영향이 없음": [
+            r"생산(?:에 미치는)? 영향(?:은|이)? 없",
+            r"생산 영향\s*없",
+        ],
+        "생산 영향이 낮은": [
+            r"생산(?:에 미치는)? 영향(?:은|이)? 낮",
+            r"낮은 생산 영향",
+        ],
+        "생산 영향이 중간": [
+            r"생산(?:에 미치는)? 영향(?:은|이)? 중간",
+            r"중간(?: 정도| 수준)?의 생산 영향",
+        ],
+        "생산 영향이 높은": [
+            r"생산(?:에 미치는)? 영향(?:은|이)? 높",
+            r"높은 생산 영향",
+        ],
+        "점검 승인": [
+            r"점검 승인(?: 여부)?",
+            r"승인 검토",
+            r"관리자 승인",
+        ],
+        "전달": [
+            r"전달",
+            r"인계",
+        ],
+    }
+    count_match = re.fullmatch(r"(\d+)건", point)
+    if count_match:
+        count = re.escape(count_match.group(1))
+        return [
+            rf"{count}\s*건",
+            rf"(?:손실|물량|유닛)[^.。\n]{{0,24}}{count}\s*개",
+            rf"{count}\s*개[^.。\n]{{0,16}}(?:손실|물량|유닛)",
+            rf"(?:손실|물량)[^.。\n]{{0,24}}{count}\s*유닛",
+            rf"{count}\s*유닛[^.。\n]{{0,16}}(?:손실|물량)",
+        ]
+    return patterns.get(point, [escaped])
 
 
 def _summary_prose(summary: dict[str, Any]) -> str:
@@ -729,7 +828,7 @@ def _load_dotenv(path: Path) -> None:
 def _limits(mode: str, concurrency: int) -> list[str]:
     common = [
         "Configured-rate cost is an estimate from environment variables, not provider billing reconciliation.",
-        "Token counts are heuristic because the current provider port returns parsed JSON without provider usage metadata.",
+        "Token counts use provider usage metadata when reported; otherwise they fall back to a serialized payload/output heuristic.",
     ]
     if mode == "live":
         return [

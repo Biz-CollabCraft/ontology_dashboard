@@ -1,0 +1,271 @@
+{
+  "gold_answer_set_id": "agent-review-summary-holdout-gold-answers-v1",
+  "purpose": "Holdout reference answers for process-manager overfit checks.",
+  "limits": [
+    "Generated from existing packet shapes with changed identifiers, values, and paraphrased surfaces.",
+    "This remains fixture-based evidence, not operational production proof."
+  ],
+  "global_must_not_claim": [
+    "수리 완료",
+    "승인 완료",
+    "작업 지시",
+    "자동 실행",
+    "교체 완료",
+    "고장 확정"
+  ],
+  "cases": {
+    "HGS-001": {
+      "must_mention": [
+        "warning",
+        "73.1%",
+        "공구/마모 계통",
+        "동력 전달 계통",
+        "생산 영향이 높은",
+        "124건"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": [
+          "공구 매거진",
+          "스핀들 공구 체결부",
+          "주축 모터",
+          "기록",
+          "전달"
+        ],
+        "process_manager": [
+          "생산 영향이 높은",
+          "124건",
+          "점검 승인"
+        ]
+      },
+      "must_not_claim": [
+        "critical",
+        "25건",
+        "승인 완료",
+        "작업 지시"
+      ]
+    },
+    "HGS-002": {
+      "must_mention": [
+        "attention",
+        "41.7%",
+        "열 방산 계통",
+        "동력 전달 계통",
+        "생산 영향이 낮은",
+        "7건"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": [
+          "스핀들 냉각 라인",
+          "가공부 열 배출 경로",
+          "주축 모터",
+          "기록",
+          "전달"
+        ],
+        "process_manager": [
+          "생산 영향이 낮은",
+          "7건",
+          "점검 승인"
+        ]
+      },
+      "must_not_claim": [
+        "critical",
+        "32건",
+        "수리 완료",
+        "작업 지시"
+      ]
+    },
+    "HGS-003": {
+      "must_mention": [
+        "critical",
+        "93.4%",
+        "동력 전달 계통",
+        "생산 영향이 높은",
+        "88건",
+        "점검 요청"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": [
+          "주축 모터",
+          "커플링",
+          "동력 전달 하우징",
+          "요청됨",
+          "기록",
+          "전달"
+        ],
+        "process_manager": [
+          "생산 영향이 높은",
+          "88건",
+          "점검 승인"
+        ]
+      },
+      "must_not_claim": [
+        "수리 완료",
+        "승인 완료",
+        "자동 실행",
+        "51건"
+      ]
+    },
+    "HGS-004": {
+      "must_mention": [
+        "normal",
+        "9.4%",
+        "공구/마모 계통",
+        "동력 전달 계통",
+        "생산 영향이 없음",
+        "0건"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": [
+          "공구 매거진",
+          "스핀들 공구 체결부",
+          "주축 모터",
+          "기록",
+          "전달"
+        ],
+        "process_manager": [
+          "생산 영향이 없음",
+          "0건",
+          "점검 승인"
+        ]
+      },
+      "must_not_claim": [
+        "warning",
+        "critical",
+        "18건",
+        "작업 지시"
+      ]
+    },
+    "HGS-005": {
+      "must_mention": [
+        "warning",
+        "58.8%",
+        "공구/마모 계통",
+        "동력 전달 계통",
+        "생산 영향이 중간",
+        "16건"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": [
+          "공구 매거진",
+          "스핀들 공구 체결부",
+          "주축 모터",
+          "기록",
+          "전달"
+        ],
+        "process_manager": [
+          "생산 영향이 중간",
+          "16건",
+          "점검 승인"
+        ]
+      },
+      "must_not_claim": [
+        "critical",
+        "13건",
+        "수리 완료",
+        "승인 완료"
+      ]
+    },
+    "HGS-006": {
+      "must_mention": [
+        "warning",
+        "64.2%",
+        "동력 전달 계통",
+        "열 방산 계통",
+        "생산 영향이 중간",
+        "19건"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": [
+          "주축 모터",
+          "커플링",
+          "스핀들 냉각 라인",
+          "기록",
+          "전달"
+        ],
+        "process_manager": [
+          "생산 영향이 중간",
+          "19건",
+          "점검 승인"
+        ]
+      },
+      "must_not_claim": [
+        "normal",
+        "0건",
+        "수리 완료",
+        "작업 지시"
+      ]
+    },
+    "HGS-007": {
+      "must_mention": [
+        "데이터 품질 보류",
+        "위험 등급",
+        "예측 위험도",
+        "확정하지 않습니다",
+        "근거 공백"
+      ],
+      "visible_limitations": [
+        "데이터 품질 보류",
+        "근거 공백"
+      ],
+      "role_points": {
+        "field_operator": [
+          "데이터 품질 보류",
+          "의심 계통",
+          "참고 부품 후보는 이 패킷에 없습니다",
+          "기록",
+          "전달"
+        ],
+        "process_manager": [
+          "추정 물량 손실",
+          "유사 이력은 아직",
+          "점검 승인"
+        ]
+      },
+      "must_not_claim": [
+        "normal",
+        "warning",
+        "critical",
+        "수리 완료",
+        "작업 지시",
+        "고장 확정"
+      ]
+    },
+    "HGS-008": {
+      "must_mention": [
+        "warning",
+        "86.9%",
+        "공구/마모 계통",
+        "동력 전달 계통",
+        "생산 영향이 중간",
+        "46건"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "field_operator": [
+          "공구 매거진",
+          "스핀들 공구 체결부",
+          "주축 모터",
+          "기록",
+          "전달"
+        ],
+        "process_manager": [
+          "생산 영향이 중간",
+          "46건",
+          "점검 승인"
+        ]
+      },
+      "must_not_claim": [
+        "critical",
+        "25건",
+        "수리 완료",
+        "승인 완료"
+      ]
+    }
+  }
+}

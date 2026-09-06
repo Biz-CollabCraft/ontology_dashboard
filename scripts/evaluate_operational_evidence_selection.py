@@ -40,6 +40,11 @@ def evaluate(candidate_sha: str) -> dict[str, Any]:
             Path(directory) / "selection-eval.db",
             root=ROOT,
         )
+        from scripts.build_operational_context_demo_seed import build_seed
+        from app.infra.db.operational_context_repository import ContextSnapshot
+        service.operational_context_repository.import_snapshots([
+            ContextSnapshot.model_validate(row) for row in build_seed(organization_id="ORG-001")
+        ])
         selection = service.agent_review_evidence_selection(
             ASSET_ID,
             PROJECT_ID,

@@ -363,7 +363,7 @@ class AuditRepository:
                 """
                 UPDATE agent_review_workflow_runs
                 SET status=?, completed_at=?, updated_at=?, error_type=?, error_message=?, trace_json=?
-                WHERE workflow_run_id=?
+                WHERE workflow_run_id=? AND status='running'
                 """,
                 tuple(payload.values()),
             )
@@ -454,6 +454,28 @@ class AuditRepository:
             if column not in {"summary_id", "summary_key", "created_at"}
         )
         with self._connect() as connection:
+            if payload['workflow_run_id'] is not None:
+                # This conditional write locks the reservation until summary and
+                # completion commit together. A reclaimed worker owns no row.
+                terminal = 'partial' if payload['status'] == 'fallback' else 'completed'
+                cursor = connection.execute(
+                    """
+                    UPDATE agent_review_workflow_runs
+                    SET status=?, completed_at=?, updated_at=?, trace_json=?
+                    WHERE workflow_run_id=? AND status='running'
+                      AND summary_key=? AND organization_id=? AND project_id=?
+                      AND workspace_id=? AND asset_id=?
+                    """,
+                    (terminal, now, now, json.dumps({
+                        'stage': 'finished', 'provider': record['trace'].get('provider'),
+                        'fallback': record['trace'].get('fallback'),
+                        'reason': record['trace'].get('reason'),
+                        'validation_errors': record['trace'].get('validation_errors') or [],
+                    }, ensure_ascii=False), payload['workflow_run_id'], payload['summary_key'],
+                     payload['organization_id'], payload['project_id'], payload['workspace_id'], payload['asset_id']),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError('agent_review_summary_lease_lost')
             connection.execute(
                 f"""
                 INSERT INTO agent_review_summaries ({columns})
@@ -466,6 +488,24 @@ class AuditRepository:
                 "SELECT * FROM agent_review_summaries WHERE summary_key=?",
                 (payload["summary_key"],),
             ).fetchone()
+            if payload["workflow_run_id"] is not None:
+                saved = self._summary_record_from_row(dict(row))
+                materialization = {
+                    key: saved.get(key) for key in (
+                        "summary_id", "summary_key", "workflow_run_id", "status",
+                        "source_sha256", "prompt_version", "model_version",
+                        "generated_at", "created_at", "updated_at", "fallback_reason",
+                    )
+                }
+                materialization.update(reused=False, context_sha256=record["trace"].get("context_sha256"))
+                connection.execute(
+                    "UPDATE agent_review_workflow_runs SET trace_json=? WHERE workflow_run_id=?",
+                    (json.dumps({
+                        "stage": "finished", "materialization": materialization,
+                        **{key: record["trace"].get(key) for key in ("provider", "fallback", "reason", "validation_errors")},
+                    }, ensure_ascii=False), payload["workflow_run_id"]),
+                )
+
         if row is None:
             raise RuntimeError("agent_review_summary_persist_failed")
         return self._summary_record_from_row(dict(row))

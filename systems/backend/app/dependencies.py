@@ -115,6 +115,7 @@ from app.infra.db.role_workflow_repository import RoleWorkflowRepository
 from app.infra.db.operations_audit_repository import AuditRepository
 from app.operations.role_workflow_service import RoleWorkflowService
 from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider
+from app.infra.db.operational_context_repository import OperationalContextRepository
 from app.operations.context_providers import default_agent_review_context_registry
 from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.operations.service import ManufacturingPredictiveMaintenanceService
@@ -230,6 +231,7 @@ def build_manufacturing_service(
         domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
         maintenance_lineage_query=maintenance_lineage_query,
         company_context_query=company_context_repository,
+        operational_context_repository=OperationalContextRepository(str(target)),
         runtime_asset_detail_service=runtime_asset_detail_service,
         workspace_id=MANUFACTURING_WORKSPACE,
     )
@@ -248,6 +250,13 @@ def get_service() -> ManufacturingPredictiveMaintenanceService:
     # first service is cached, exhausting low-limit Team DB roles.
     with _SERVICE_BUILD_LOCK:
         return _cached_manufacturing_service(database_target())
+
+
+@lru_cache(maxsize=1)
+def get_operational_context_repository() -> OperationalContextRepository:
+    target = database_target()
+    migrate(str(target))
+    return OperationalContextRepository(str(target))
 
 
 @lru_cache(maxsize=1)

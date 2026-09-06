@@ -299,7 +299,7 @@ def _history_record(item: dict[str, Any], *, source_prefix: str) -> dict[str, An
         or item.get("id")
         or ""
     )
-    return {
+    record = {
         "record_id": record_id,
         "record_type": record_type,
         "status": str(item.get("status") or item.get("outcome") or ""),
@@ -316,6 +316,24 @@ def _history_record(item: dict[str, Any], *, source_prefix: str) -> dict[str, An
         ),
         "source_ref": f"{source_prefix}/{record_id}" if record_id else source_prefix,
     }
+
+    return preserve_owner_record_provenance(item, record)
+
+
+def preserve_owner_record_provenance(item: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+    # Preserve only fields already provided by the canonical owner. Do not infer actors
+    # from assignment or turn a recording timestamp into approval/start time.
+    provenance_fields = (
+        'actor_id', 'actor_user_id', 'actor_display_name', 'recorded_by', 'assigned_to', 'assigned_at',
+        'created_at', 'updated_at', 'completed_at', 'recorded_at',
+        'work_order_id', 'event_id', 'asset_id', 'equipment_id',
+        'maintenance_action_id', 'maintenance_event_id',
+        'recommendation_id', 'recommendation_decision_id',
+    )
+    provenance = {key: item[key] for key in provenance_fields if isinstance(item.get(key), str)}
+    if provenance:
+        record['owner_record_provenance'] = provenance
+    return record
 
 
 def _dedupe_gap_dicts(gaps: Any) -> list[dict[str, str]]:

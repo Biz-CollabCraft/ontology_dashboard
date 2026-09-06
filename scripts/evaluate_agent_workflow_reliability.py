@@ -36,7 +36,7 @@ from app.operations.operational_context_ports import (  # noqa: E402
     FixtureProductionDecisionContextReadPort,
     FixtureQualityDeliveryContextReadPort,
 )
-from app.operations.operational_context_sqlite import (  # noqa: E402
+from app.infra.db.operational_context_sqlite import (  # noqa: E402
     OPERATIONAL_CONTEXT_SNAPSHOT_DDL,
     SqliteOperationalContextReadPort,
 )
