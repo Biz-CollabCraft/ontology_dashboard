@@ -1,6 +1,7 @@
 import type { OperationsAsset, OperationsBootstrapModel, OperationsRiskStatus } from "../api/operationsContracts";
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
+import { LogOut } from "lucide-react";
 import type { OpenInspectionWorkOrderReadModel } from "../../../api";
 import { displayAssetName, displayAssetShortName, displaySensorLabel } from "../displayLabels";
 
@@ -102,6 +103,7 @@ export function EngineerFactoryStandalone({
   maintenanceDirectiveError = false,
   onSelectAsset,
   onRefresh,
+  onLogout,
 }: {
   model: OperationsBootstrapModel;
   selectedAssetId: string | null;
@@ -109,6 +111,7 @@ export function EngineerFactoryStandalone({
   maintenanceDirectiveError?: boolean;
   onSelectAsset: (assetId: string, eventId: string | null) => void;
   onRefresh: () => void;
+  onLogout?: () => void | Promise<void>;
 }) {
   const [sensorDetailOpen, setSensorDetailOpen] = useState(false);
   const [expandedSensor, setExpandedSensor] = useState<string | null>(null);
@@ -140,7 +143,7 @@ export function EngineerFactoryStandalone({
     <main className="engineer-lite-board">
       <header className="engineer-factory-header">
         <div><strong>공장 현황</strong><span>{model.context.workspaceName} · {groups.size}개 라인 · 설비 {model.assets.length}대</span></div>
-        <div className="engineer-factory-live"><i /><b>실시간 수집 중</b><span>기준 시각 {formatTimestamp(model.context.observedAt ?? model.context.refreshedAt)}</span><button type="button" onClick={onRefresh} aria-label="공장 현황 새로고침">↻ 새로고침</button></div>
+        <div className="engineer-factory-live"><i /><b>실시간 수집 중</b><span>기준 시각 {formatTimestamp(model.context.observedAt ?? model.context.refreshedAt)}</span><button type="button" onClick={onRefresh} aria-label="공장 현황 새로고침">↻ 새로고침</button>{onLogout ? <button type="button" className="engineer-logout-button" onClick={() => void onLogout()} aria-label="로그아웃" title="로그아웃"><LogOut size={14} /><span>로그아웃</span></button> : null}</div>
       </header>
 
       <section className="engineer-factory-kpis">

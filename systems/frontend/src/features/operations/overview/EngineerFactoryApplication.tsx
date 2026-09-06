@@ -3,6 +3,8 @@ import { getOpenInspectionWorkOrders, type OpenInspectionWorkOrderReadModel } fr
 import type { OperationsBootstrapModel } from "../api/operationsContracts";
 import { loadEngineerFilesystemOverview } from "../api/operationsApi";
 import { EngineerFactoryLoading, EngineerFactoryStandalone } from "./EngineerFactoryStandalone";
+import { useAuth } from "../../auth/AuthContext";
+import { navigate } from "../../../routing";
 import "../operations.css";
 
 const REFRESH_INTERVAL_MS = 10_000;
@@ -17,6 +19,7 @@ function readSelection() {
 }
 
 export default function EngineerFactoryApplication({ projectId }: { projectId: string }) {
+  const { logout } = useAuth();
   const [selection, setSelection] = useState(readSelection);
   const [model, setModel] = useState<OperationsBootstrapModel | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,9 +78,14 @@ export default function EngineerFactoryApplication({ projectId }: { projectId: s
     setSelection((current) => ({ ...current, assetId, eventId }));
   }, []);
 
+  const signOut = useCallback(async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  }, [logout]);
+
   if (!model && !error) return <EngineerFactoryLoading />;
   if (!model) {
     return <main className="engineer-lite-board"><section className="engineer-factory-card engineer-load-error"><strong>공장 현황을 불러오지 못했습니다</strong><p>{error}</p><button type="button" onClick={refresh}>다시 연결</button></section></main>;
   }
-  return <EngineerFactoryStandalone model={model} selectedAssetId={selection.assetId} maintenanceDirectives={maintenanceDirectives} maintenanceDirectiveError={maintenanceDirectiveError} onSelectAsset={selectAsset} onRefresh={refresh} />;
+  return <EngineerFactoryStandalone model={model} selectedAssetId={selection.assetId} maintenanceDirectives={maintenanceDirectives} maintenanceDirectiveError={maintenanceDirectiveError} onSelectAsset={selectAsset} onRefresh={refresh} onLogout={signOut} />;
 }
