@@ -1,5 +1,9 @@
 # 3역할 공통 근거 백엔드 검증
 
+## 산출물 보존 정책
+
+이 디렉터리는 최종 검증 요약 README만 Git에 유지한다. pytest 원문 로그와 API proof JSON은 재현 가능한 generated artifact로 취급하며 저장소에는 커밋하지 않는다. 아래 파일명은 당시 실행 결과를 식별하기 위한 기록이다.
+
 ## 기준과 선택 범위
 
 - 새 격리 worktree, 브랜치 `codex/three-role-backend-read-contract`.

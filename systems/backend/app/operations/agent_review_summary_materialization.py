@@ -16,7 +16,7 @@ from app.operations.agent_review_summary_provider import (
 )
 from app.operations.ports import AuditRepositoryPort
 
-SUMMARY_MATERIALIZATION_VERSION = "agent-review-summary-materialization-v1.1"
+SUMMARY_MATERIALIZATION_VERSION = "agent-review-summary-materialization-v1.2"
 
 
 class AgentReviewSummaryMaterializer:
@@ -190,14 +190,20 @@ def summary_key_payload(
 ) -> dict[str, Any]:
     basis = packet.get("snapshot_basis") or {}
     source_sha256 = str(basis.get("source_sha256") or _sha256_json(basis))
+    evidence_basis_sha256 = _sha256_json(basis)
     return {
         "materialization_version": SUMMARY_MATERIALIZATION_VERSION,
         "organization_id": organization_id,
         "project_id": project_id,
         "workspace_id": workspace_id,
         "asset_id": str(packet.get("asset_id") or ""),
+        "artifact_id": str(basis.get("artifact_id") or ""),
         "event_id": str(basis.get("event_id") or ""),
+        "decision_as_of": str(basis.get("observed_at") or ""),
+        "evidence_payload_reference": str(basis.get("evidence_payload_reference") or ""),
+        "evidence_model_version": str(basis.get("model_version") or ""),
         "dataset_version": str(basis.get("dataset_version") or ""),
+        "evidence_basis_sha256": evidence_basis_sha256,
         "history_window": history_window,
         "packet_schema_version": str(packet.get("schema_version") or ""),
         "summary_schema_version": "agent-review-summary-v1.0",
@@ -260,6 +266,8 @@ def _materialization_trace(record: dict[str, Any], *, reused: bool) -> dict[str,
         "status": record["status"],
         "reused": reused,
         "source_sha256": record["source_sha256"],
+        "evidence_basis_sha256": _sha256_json(record.get("snapshot_basis") or {}),
+        "decision_as_of": (record.get("snapshot_basis") or {}).get("observed_at"),
         "context_sha256": (record.get("trace") or {}).get("context_sha256"),
         "prompt_version": record["prompt_version"],
         "model_version": record["model_version"],
@@ -282,6 +290,8 @@ def _pending_materialization_trace(
         "status": "pending",
         "reused": False,
         "source_sha256": key_payload["source_sha256"],
+        "evidence_basis_sha256": key_payload["evidence_basis_sha256"],
+        "decision_as_of": key_payload["decision_as_of"],
         "context_sha256": key_payload["context_sha256"],
         "prompt_version": key_payload["prompt_version"],
         "model_version": key_payload["model_version"],

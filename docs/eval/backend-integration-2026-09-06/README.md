@@ -4,6 +4,10 @@
 
 **최신 상태:** 아래 이전 candidate 기록 이후 운영 Context DB 이관과 runtime Packet 계약 보정을 구현했다. 최신 검증은 문서 끝의 “운영 Context DB 이관 후 검증”을 기준으로 한다. 이전 live LLM 수치를 이번 코드의 품질 증거로 재사용하지 않는다.
 
+## 산출물 보존 정책
+
+이 문서는 검증의 최종 요약과 재현 명령만 Git에 유지한다. 실행 중 생성되는 JSON 응답, 브라우저 캡처, 로그와 임시 검증 스크립트는 로컬/CI 산출물이며 `.gitignore` 대상이다. 아래 파일명 언급은 당시 실행 산출물의 이름을 기록한 것이며 저장소에 영구 보존한다는 의미가 아니다.
+
 ## 1. PR #166 검토 결과
 
 PR #166 (`release: 데모 기준선을 main에 고정`)은 이미 merge됐다. 기준은 main `ec7d05f326ce346ec0c28c9cbb36191b589caccb`; 새 브랜치 `codex/backend-integration-main`에 필요한 기능만 manual port했다. 원본 브랜치 전체 merge나 demo 브랜치 역통합은 하지 않았다.

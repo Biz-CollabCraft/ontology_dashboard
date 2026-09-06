@@ -1,5 +1,9 @@
 # 독립 공장 현황 페이지 연결 검증 — 2026-09-06
 
+## 산출물 보존 정책
+
+이 디렉터리는 최종 검증 요약 README만 Git에 유지한다. PNG 캡처, JSON 응답, txt 로그, 비교/검증용 임시 스크립트는 재생성 가능한 로컬/CI 산출물로 분류해 커밋하지 않는다. 아래 파일명은 당시 검증 기록을 식별하기 위한 이름이다.
+
 ## 결과와 범위
 
 기존 HTML의 템플릿·스타일과 필수 support.js를 선택 복사해 독립 Vite HTML entry로 연결했다. 부모 React 페이지나 iframe 없이 인증된 API를 직접 호출한다. 기존 support.js 자체의 React 18 템플릿 렌더러는 그대로 사용한다. 기존 React 앱으로 컴포넌트를 이식한 구현은 아니다.
@@ -74,10 +78,6 @@ Nginx 검증 컨테이너 `ontology-standalone-page-web`는 실제 dist와 저�
 - technician seed 계정은 maintenance_technician과 process_engineer 복수 역할을 가진 기존 테스트 계정이다. 화면에서 실제 primary 역할을 maintenance_technician으로 표시한 검증이며, 순수 단일 역할 technician 계정까지 검증한 것은 아니다.
 - 모의 저장 검증: CSRF·Idempotency-Key 존재, 중복 요청 1회, 성공 후 재조회·새로고침, 충돌 시 성공 안내 없음.
 - 원본과 같은 Backend payload, **1440×1000**에서 주요 header/section 위치·크기·font·background·gap 일치 (`design-comparison.json`). 픽셀 완전 동일성 검증은 아니다. 저장 상태 표시와 데이터 연결 문구는 수정 범위에 해당한다.
-
-![새 메인](main-1440.png)
-![원본 비교](original-1440.png)
-![공통 사이드뷰](sideview.png)
 
 비교 재실행은 frontend에서 `ORIGINAL_HTML`과 `ORIGINAL_SUPPORT`를 원본 경로로 지정하고 `node scripts/compare-standalone.mjs`를 실행한다. 브라우저 검증은 `PLAYWRIGHT_EXTERNAL_SERVERS=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:13311 npx playwright test e2e/standalone-original.spec.ts --project=chromium`으로 실행한다. 기존 demo seed 계정이 있는 로컬 테스트 Backend가 필요하다.
 

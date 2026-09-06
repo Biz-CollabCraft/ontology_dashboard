@@ -119,6 +119,7 @@ def test_deterministic_agent_review_summary_explains_factor_bundle_focus() -> No
 
     assert summary["confidence_label"] == "partial"
     assert "약 51건" in process_quote
+    assert "데모 가정 기준" in process_quote
     assert "요청됨 상태" in process_quote
     assert "requested" not in process_quote
     assert len(summary["inspection_focus"]) == 1

@@ -1497,6 +1497,34 @@ def test_agent_review_summary_materialization_key_changes_with_context_diff(
     assert len({base_key, model_key, history_key}) == 3
 
 
+def test_agent_review_summary_materialization_key_changes_with_snapshot_binding(
+    service: FactorySignalService,
+) -> None:
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+    packet["snapshot_basis"]["source_sha256"] = "a" * 64
+    same_source_new_as_of = json.loads(json.dumps(packet))
+    same_source_new_as_of["snapshot_basis"]["observed_at"] = "2026-08-01T00:05:00+09:00"
+    same_source_new_ref = json.loads(json.dumps(packet))
+    same_source_new_ref["snapshot_basis"]["evidence_payload_reference"] = "evidence://replacement"
+
+    payloads = [
+        summary_key_payload(
+            packet=item,
+            organization_id="org-ontology-demo",
+            project_id="manufacturing-demo-project",
+            workspace_id="manufacturing-demo",
+            history_window="24h",
+            provider=None,
+        )
+        for item in (packet, same_source_new_as_of, same_source_new_ref)
+    ]
+
+    assert len({payload["source_sha256"] for payload in payloads}) == 1
+    assert len({payload["evidence_basis_sha256"] for payload in payloads}) == 3
+    assert len({summary_key(payload) for payload in payloads}) == 3
+    assert payloads[1]["decision_as_of"] == "2026-08-01T00:05:00+09:00"
+
+
 def test_agent_review_summary_materialization_key_changes_with_tenant_scope(
     service: FactorySignalService,
 ) -> None:

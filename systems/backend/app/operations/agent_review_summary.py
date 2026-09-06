@@ -258,6 +258,7 @@ def _role_summaries(
     asset_label = _asset_label(packet)
     status = str(risk.get("status_grade") or "데이터 품질 보류")
     production_impact = _production_impact_label(operation_context.get("production_impact"))
+    production_impact_basis = _production_impact_basis_label(operation_context)
     downtime = operation_context.get("estimated_downtime_minutes")
     lost_units = operation_context.get("estimated_lost_units")
     lost_units_text = (
@@ -279,7 +280,7 @@ def _role_summaries(
         )
     else:
         manager_quote = (
-            f"{asset_label} 위험 감지 건은 현재 생산 영향이 {production_impact}으로 분류되며, "
+            f"{asset_label} 위험 감지 건은 {production_impact_basis} 생산 영향이 {production_impact}으로 분류되며, "
             f"{downtime_text} 기준 {lost_units_text} 손실 가능성이 있습니다. "
             f"모델 근거는 {factor_text}이고 {work_request_text} "
             f"{similar_event_text} 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
@@ -348,6 +349,25 @@ def _production_impact_label(value: Any) -> str:
         "high": "높은 수준",
     }
     return labels.get(str(value), "미제공")
+
+
+def _production_impact_basis_label(operation_context: dict[str, Any]) -> str:
+    source_ref = str(operation_context.get("source_ref") or "").lower()
+    limitations = " ".join(
+        str(item).lower() for item in operation_context.get("limitations") or []
+    )
+    demo_markers = (
+        "production-planning-context",
+        "demo assumption",
+        "synthetic",
+        "not a mes",
+        "not an erp",
+        "not an aps",
+        "planning impact estimates",
+    )
+    if any(marker in source_ref or marker in limitations for marker in demo_markers):
+        return "데모 가정 기준"
+    return "현재 근거 기준"
 
 
 def _component_text(targets: list[dict[str, Any]]) -> str:

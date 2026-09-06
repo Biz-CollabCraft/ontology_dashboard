@@ -47,9 +47,12 @@ Role workflow:
   ordinary impact level. Say that production impact and estimated lost units are not confirmed,
   mention unresolved similar-history context when present, and keep inspection approval as a
   review after data supplementation.
+- If operation_context_summary limitations or source_ref indicate synthetic/demo/planning assumptions,
+  explicitly call production impact and lost-unit values "데모 가정 기준" or "조건부 예상".
+  Never phrase those values as observed MES/ERP/APS facts or realized production loss.
 """.strip() + "\nValidator wording constraints: do not use these literal phrases in editable prose, including negated or historical mentions: " + ", ".join(FORBIDDEN_PROSE_CLAIMS)
 
-AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v1.7-source-footnote-brief"
+AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v1.8-demo-impact-boundary"
 AGENT_REVIEW_SUMMARY_PAYLOAD_PROFILE = "compact-editable-v1"
 
 

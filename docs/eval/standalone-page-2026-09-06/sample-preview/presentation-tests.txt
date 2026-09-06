@@ -1,8 +1,0 @@
-
- RUN  v4.1.10 /Users/hb/.codex/worktrees/d436/ontology-dashboard/systems/frontend
-
-
- Test Files  2 passed (2)
-      Tests  9 passed (9)
-   Start at  19:25:33
-   Duration  1.32s (transform 119ms, setup 0ms, import 154ms, tests 125ms, environment 1.93s)
