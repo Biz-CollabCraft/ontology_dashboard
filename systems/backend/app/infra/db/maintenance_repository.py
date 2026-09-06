@@ -1799,7 +1799,7 @@ class MaintenanceRepository:
                 WHERE organization_id=? AND project_id=? AND workspace_id=?
                   AND work_type=?
                   AND status IN (?,?,?)
-                ORDER BY created_at DESC,work_order_id DESC
+                ORDER BY created_at ASC,work_order_id ASC
                 """,
                 (
                     scope.organization_id,

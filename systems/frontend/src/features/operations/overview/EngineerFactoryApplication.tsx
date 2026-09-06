@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { getOpenInspectionWorkOrders, type OpenInspectionWorkOrderReadModel } from "../../../api";
 import type { OperationsBootstrapModel } from "../api/operationsContracts";
 import { loadEngineerFilesystemOverview } from "../api/operationsApi";
 import { EngineerFactoryLoading, EngineerFactoryStandalone } from "./EngineerFactoryStandalone";
@@ -19,6 +20,8 @@ export default function EngineerFactoryApplication({ projectId }: { projectId: s
   const [selection, setSelection] = useState(readSelection);
   const [model, setModel] = useState<OperationsBootstrapModel | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [maintenanceDirectives, setMaintenanceDirectives] = useState<OpenInspectionWorkOrderReadModel[]>([]);
+  const [maintenanceDirectiveError, setMaintenanceDirectiveError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = useCallback(() => setRefreshKey((value) => value + 1), []);
 
@@ -36,10 +39,11 @@ export default function EngineerFactoryApplication({ projectId }: { projectId: s
     loadEngineerFilesystemOverview(projectId, selection.workspaceId ?? "manufacturing-demo")
       .then((payload) => {
         if (cancelled) return;
+        const highestRiskAsset = [...payload.assets].sort((a, b) => (b.failureProbability ?? -1) - (a.failureProbability ?? -1))[0];
         setModel(payload);
         setSelection((current) => ({
           workspaceId: current.workspaceId ?? payload.context.workspaceId,
-          assetId: payload.assets.some((asset) => asset.assetId === current.assetId) ? current.assetId : payload.assets[0]?.assetId ?? null,
+          assetId: payload.assets.some((asset) => asset.assetId === current.assetId) ? current.assetId : highestRiskAsset?.assetId ?? null,
           eventId: current.eventId,
         }));
       })
@@ -48,6 +52,19 @@ export default function EngineerFactoryApplication({ projectId }: { projectId: s
       });
     return () => { cancelled = true; };
   }, [projectId, refreshKey, selection.eventId, selection.workspaceId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMaintenanceDirectiveError(false);
+    getOpenInspectionWorkOrders(projectId, selection.workspaceId ?? "manufacturing-demo")
+      .then((payload) => {
+        if (!cancelled) setMaintenanceDirectives(payload.items);
+      })
+      .catch(() => {
+        if (!cancelled) setMaintenanceDirectiveError(true);
+      });
+    return () => { cancelled = true; };
+  }, [projectId, refreshKey, selection.workspaceId]);
 
   const selectAsset = useCallback((assetId: string, eventId: string | null) => {
     const query = new URLSearchParams(window.location.search);
@@ -62,5 +79,5 @@ export default function EngineerFactoryApplication({ projectId }: { projectId: s
   if (!model) {
     return <main className="engineer-lite-board"><section className="engineer-factory-card engineer-load-error"><strong>공장 현황을 불러오지 못했습니다</strong><p>{error}</p><button type="button" onClick={refresh}>다시 연결</button></section></main>;
   }
-  return <EngineerFactoryStandalone model={model} selectedAssetId={selection.assetId} onSelectAsset={selectAsset} onRefresh={refresh} />;
+  return <EngineerFactoryStandalone model={model} selectedAssetId={selection.assetId} maintenanceDirectives={maintenanceDirectives} maintenanceDirectiveError={maintenanceDirectiveError} onSelectAsset={selectAsset} onRefresh={refresh} />;
 }

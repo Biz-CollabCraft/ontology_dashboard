@@ -150,6 +150,13 @@ export interface OperationsAsset {
   observedAt: string | null;
   eventId: string | null;
   topFactors: OperationsFactor[];
+  sensorHistory?: Array<{
+    feature: string;
+    label: string;
+    unit: string | null;
+    points: Array<{ observedAt: string; value: number }>;
+  }>;
+  riskHistory?: Array<{ observedAt: string; value: number }>;
   provenance: OperationsProvenance;
 }
 
