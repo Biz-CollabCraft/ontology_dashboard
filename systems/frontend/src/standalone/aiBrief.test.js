@@ -1,0 +1,4 @@
+import {it,expect} from 'vitest';
+import {acceptedBrief,briefPresentation} from './aiBrief.js';
+it('accepts only validated stored LLM prose for this asset',()=>{const r={summary:{asset_id:'A',mode:'llm',summary:'근거'},trace:{fallback:false,materialization:{status:'ready'}}};expect(acceptedBrief(r,'A')).toBe(r.summary);expect(()=>acceptedBrief(r,'B')).toThrow();expect(acceptedBrief({...r,trace:{fallback:true,materialization:{status:'fallback'}}},'A')).toBeNull();expect(acceptedBrief({summary:null},'A')).toBeNull();});
+it('does not grant generation rights through display tabs',()=>{expect(briefPresentation({detail:{},canGenerateAi:false}).aiDisabled).toBe(true);expect(briefPresentation({detail:{},canGenerateAi:true,aiGenerating:true}).aiDisabled).toBe(true);expect(briefPresentation({detail:{},canGenerateAi:true,aiError:'403'}).aiStatus).toBe('403');});

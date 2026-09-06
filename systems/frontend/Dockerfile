@@ -12,7 +12,7 @@ RUN npm ci --no-audit --no-fund
 COPY systems/frontend /workspace/systems/frontend
 COPY docs /workspace/docs
 
-ARG VITE_API_BASE_URL=http://127.0.0.1:8100
+ARG VITE_API_BASE_URL=""
 ARG VITE_FEATURE_ONTOLOGY_WORKBENCH=true
 ARG VITE_FEATURE_DATASET_CATALOG=false
 ARG VITE_FEATURE_GOVERNANCE_WORKBENCH=false

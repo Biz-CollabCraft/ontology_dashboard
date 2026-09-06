@@ -2,7 +2,6 @@ import { FormEvent, useState } from "react";
 import { ApiError } from "../../api";
 import {
   navigate,
-  operationsProjectPath,
   safeApplicationReturnPath,
 } from "../../routing";
 import type { AuthUser } from "../../types";
@@ -62,25 +61,7 @@ function roleAwareLandingPath(user: AuthUser): string {
   if (user.is_admin) return user.default_path;
   const projectId = user.active_project_id ?? user.project_scopes[0] ?? null;
   if (!projectId) return user.default_path;
-  const roles = user.active_project_roles.length
-    ? user.active_project_roles
-    : user.roles;
-  const params = new URLSearchParams({ dashboard: "workflow" });
-  if (roles.includes("executive_viewer")) {
-    params.set("view", "reports");
-    params.set("report", "executive-brief");
-    params.set("role", "process_manager");
-  } else if (roles.includes("process_manager")) {
-    params.set("view", "operations");
-    params.set("role", "process_manager");
-  } else if (roles.includes("maintenance_technician")) {
-    params.set("view", "operations");
-    params.set("role", "field_operator");
-  } else {
-    params.set("view", "overview");
-    params.set("role", "field_operator");
-  }
-  return `${operationsProjectPath(projectId)}?${params.toString()}`;
+  return `/factory-status-original/index.html?project=${encodeURIComponent(projectId)}`;
 }
 
 export function LoginPage() {
