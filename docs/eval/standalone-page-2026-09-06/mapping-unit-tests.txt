@@ -1,0 +1,12 @@
+
+> ontology-dashboard-web@0.1.0 test
+> vitest run --run src/standalone/presentation.test.js src/routing.test.ts
+
+
+ RUN  v4.1.10 /Users/hb/.codex/worktrees/d436/ontology-dashboard/systems/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  16:52:08
+   Duration  1.07s (transform 50ms, setup 0ms, import 66ms, tests 3ms, environment 904ms)

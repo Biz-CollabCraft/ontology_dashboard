@@ -1,0 +1,143 @@
+{
+  "identity": {
+    "organization_id": "org-ontology-demo",
+    "project_id": "manufacturing-demo-project",
+    "workspace_id": "manufacturing-demo",
+    "asset_id": "CMP-S03-L03-01",
+    "evidence_snapshot_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00",
+    "decision_as_of": "2026-08-29T14:00:00Z"
+  },
+  "dataset_version_id": "dsv-9fc144c7-d3f8-5b37-8465-04248165b7ce",
+  "edges": [
+    {
+      "to_asset_id": "CNC-S03-L03-01",
+      "source_sha256": "4602eb35b30f33da0df197d320a9779f91cd40fcb5dc98d194826c6d92945613"
+    },
+    {
+      "to_asset_id": "CNC-S03-L03-02",
+      "source_sha256": "4602eb35b30f33da0df197d320a9779f91cd40fcb5dc98d194826c6d92945613"
+    },
+    {
+      "to_asset_id": "CNC-S03-L03-03",
+      "source_sha256": "4602eb35b30f33da0df197d320a9779f91cd40fcb5dc98d194826c6d92945613"
+    },
+    {
+      "to_asset_id": "CNC-S03-L03-04",
+      "source_sha256": "4602eb35b30f33da0df197d320a9779f91cd40fcb5dc98d194826c6d92945613"
+    }
+  ],
+  "inputs": [
+    {
+      "asset_id": "CNC-S03-L03-01",
+      "domain": "production",
+      "source_context_id": "e305363cc978269e0ff2339db73ecddb60e3f206aa34e01c0ad41c9c737d9f4b",
+      "schema_id": "operational-context.production",
+      "schema_version": 1,
+      "source_classification": "synthetic_demo_context",
+      "valid_from": "2026-08-28T15:00:00Z",
+      "valid_to": "2026-08-29T15:00:00Z",
+      "source_sha256": "d0961816587ea7c0b883c50b41cb18d0792efa645925c5c50a582049371e1c7e",
+      "binding_sha256": "c3e0410a02a255b80ee9a70147b8679dcad5cbbbe0d80838c34b7715b3b88dfb",
+      "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-01#2026-08-29T23:00:00+09:00"
+    },
+    {
+      "asset_id": "CNC-S03-L03-01",
+      "domain": "quality_delivery",
+      "source_context_id": "585738ae0f3455d954f84e73fc38f87c807917d32dc36b47534c502bea67cdc0",
+      "schema_id": "operational-context.quality_delivery",
+      "schema_version": 1,
+      "source_classification": "synthetic_demo_context",
+      "valid_from": "2026-08-28T15:00:00Z",
+      "valid_to": "2026-08-29T15:00:00Z",
+      "source_sha256": "10260e0708b17a494efaed3c76502d3442058ced4028ade5c39185fb152f821f",
+      "binding_sha256": "0718a8f517922ab035bd46d55be15c1bd2fc7712cb5e4f5026dccbf7cb6b39be",
+      "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-01#2026-08-29T23:00:00+09:00"
+    },
+    {
+      "asset_id": "CNC-S03-L03-02",
+      "domain": "production",
+      "source_context_id": "7479ea93512abccafbc0b5e7da9a575bf21c127443e2afc42296b7b179d629d1",
+      "schema_id": "operational-context.production",
+      "schema_version": 1,
+      "source_classification": "synthetic_demo_context",
+      "valid_from": "2026-08-28T15:00:00Z",
+      "valid_to": "2026-08-29T15:00:00Z",
+      "source_sha256": "adaf7e7c414034af9f7e1c0048981c336ea5c436765f9a07aafe225bf33b679f",
+      "binding_sha256": "4ff6f6884a303acb465a5a24216887cea39195d24600f660dc98500f24963121",
+      "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-02#2026-08-29T23:00:00+09:00"
+    },
+    {
+      "asset_id": "CNC-S03-L03-02",
+      "domain": "quality_delivery",
+      "source_context_id": "4478e9d8a45aaf904a13bcf7585c24d0ff72239b675bbcec5e23f7ff65226b45",
+      "schema_id": "operational-context.quality_delivery",
+      "schema_version": 1,
+      "source_classification": "synthetic_demo_context",
+      "valid_from": "2026-08-28T15:00:00Z",
+      "valid_to": "2026-08-29T15:00:00Z",
+      "source_sha256": "71babecde0911f342e9e459445b886e70e96e138baa57c71ce47cb6dc0c00870",
+      "binding_sha256": "f8192a6d9f798bb9010c3a0ac10933befa6ca3a31325c144554e1373ad543b12",
+      "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-02#2026-08-29T23:00:00+09:00"
+    },
+    {
+      "asset_id": "CNC-S03-L03-03",
+      "domain": "production",
+      "source_context_id": "4e2b2f41e2b1d7376fe36879bad0c49ec89b318033684f4438ef860fd6a19809",
+      "schema_id": "operational-context.production",
+      "schema_version": 1,
+      "source_classification": "synthetic_demo_context",
+      "valid_from": "2026-08-28T15:00:00Z",
+      "valid_to": "2026-08-29T15:00:00Z",
+      "source_sha256": "57bd4a566eca401d9e06c900bbbade9cbfd93f450db43fda08897b90d4b4cc6e",
+      "binding_sha256": "2682fae47ed4806647d9be90df0e0b7eeff2d245f838a6e17353930c52c6c932",
+      "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-03#2026-08-29T23:00:00+09:00"
+    },
+    {
+      "asset_id": "CNC-S03-L03-03",
+      "domain": "quality_delivery",
+      "source_context_id": "e48ea0343b7a47b33814d002336a15c07a71337be73ac6a4e60e917c14008eb0",
+      "schema_id": "operational-context.quality_delivery",
+      "schema_version": 1,
+      "source_classification": "synthetic_demo_context",
+      "valid_from": "2026-08-28T15:00:00Z",
+      "valid_to": "2026-08-29T15:00:00Z",
+      "source_sha256": "784accbe3c71fa50fa81d31ce3df98d01fa8c794a303fc36f4ecb80aa4ca68c9",
+      "binding_sha256": "2b22e797d992deb43e3de93664fbe3e9cfc123274d8a2d3656621311510e6aa1",
+      "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-03#2026-08-29T23:00:00+09:00"
+    },
+    {
+      "asset_id": "CNC-S03-L03-04",
+      "domain": "production",
+      "source_context_id": "8fc85aec4122516512e7d03c1ca59b86ae70a44fee7e89e3391887e108e79388",
+      "schema_id": "operational-context.production",
+      "schema_version": 1,
+      "source_classification": "synthetic_demo_context",
+      "valid_from": "2026-08-28T15:00:00Z",
+      "valid_to": "2026-08-29T15:00:00Z",
+      "source_sha256": "b76d90b0e7426985303c584e89386a0d8c7b3fdb3aacbd88824c556a25cdd885",
+      "binding_sha256": "60baba70b53d82a6d40d9b4b4ce5a80a1549a50ddd60b69e88f30c116a185516",
+      "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-04#2026-08-29T23:00:00+09:00"
+    },
+    {
+      "asset_id": "CNC-S03-L03-04",
+      "domain": "quality_delivery",
+      "source_context_id": "b55a1a2014e67f75e18d37ec920cf9499806bd4cf8bda49289c55b4d29344860",
+      "schema_id": "operational-context.quality_delivery",
+      "schema_version": 1,
+      "source_classification": "synthetic_demo_context",
+      "valid_from": "2026-08-28T15:00:00Z",
+      "valid_to": "2026-08-29T15:00:00Z",
+      "source_sha256": "18096f397e0af9bcc137e44b6f342e315460469da70c3ae09ada4bc57613b018",
+      "binding_sha256": "d4ce7a6c2c69cbc1b202dedb4cb72bd4e1f7733d2bc4e81b045a86f76da25914",
+      "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-04#2026-08-29T23:00:00+09:00"
+    }
+  ],
+  "assumptions": [
+    "기존 SUPPLIES_AIR_TO는 공급 연결 근거이며 고장 인과관계를 뜻하지 않습니다.",
+    "계산 가정: 검토 구간 동안 예비 공기 공급 없음, 압축기 정지 시 연결 절삭기의 잔여 재공 처리능력 0개.",
+    "운전 지속 시 연결된 잔여 재공 전량 처리 가능 가정. 안전한 운전 권고나 실제 생산 회복을 뜻하지 않습니다.",
+    "압축기의 직접 생산량이 아니라 공급 대상 절삭기의 주문·재공을 합산합니다. 공장 합계에 중복 합산하지 않습니다.",
+    "공급 대상: CNC-S03-L03-01, CNC-S03-L03-02, CNC-S03-L03-03, CNC-S03-L03-04"
+  ],
+  "required_units": 200
+}

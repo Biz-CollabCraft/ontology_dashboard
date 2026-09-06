@@ -1,0 +1,52 @@
+{
+  "target": "isolated_local_postgresql",
+  "applied_migrations": [
+    "0050_operational_context_versions_and_bindings"
+  ],
+  "preview": {
+    "validated": 14,
+    "applied": false
+  },
+  "first": {
+    "validated": 14,
+    "applied": true,
+    "inserted": 14,
+    "unchanged": 0
+  },
+  "repeat": {
+    "validated": 14,
+    "applied": true,
+    "inserted": 0,
+    "unchanged": 14
+  },
+  "counts": {
+    "operational_context_snapshots": 14,
+    "operational_context_sources": 14,
+    "operational_context_bindings": 14
+  },
+  "schemas": [
+    {
+      "schema_id": "operational-context.maintenance_readiness",
+      "schema_version": 1,
+      "n": 2
+    },
+    {
+      "schema_id": "operational-context.planning",
+      "schema_version": 1,
+      "n": 8
+    },
+    {
+      "schema_id": "operational-context.production",
+      "schema_version": 1,
+      "n": 2
+    },
+    {
+      "schema_id": "operational-context.quality_delivery",
+      "schema_version": 1,
+      "n": 2
+    }
+  ],
+  "originals_preserved": true,
+  "original_digest_before": "d281c080dd002325c5700648f34de15e0ff1383ef429c22c258335324868e4f1",
+  "original_digest_after": "d281c080dd002325c5700648f34de15e0ff1383ef429c22c258335324868e4f1"
+}

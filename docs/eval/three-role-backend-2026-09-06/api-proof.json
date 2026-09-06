@@ -1,0 +1,821 @@
+{
+  "scope": "local ASGI HTTP with fixture event and isolated PostgreSQL context; no live provider",
+  "imported": {
+    "inserted": 14,
+    "unchanged": 0
+  },
+  "api_status": 200,
+  "snapshot_mismatch_status": 409,
+  "repeat_fingerprint_equal": true,
+  "response": {
+    "schema_version": "operational-context-read-v1",
+    "identity": {
+      "organization_id": "org-ontology-demo",
+      "project_id": "manufacturing-demo-project",
+      "workspace_id": "manufacturing-demo",
+      "asset_id": "CNC-S04-L02-03",
+      "evidence_snapshot_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+      "decision_as_of": "2026-08-01T00:00:00+09:00"
+    },
+    "retrieved_at": "2026-09-06T06:19:02.120704Z",
+    "context_fingerprint": "8ba44f2013070cb4d65909addb88b6acc5fcb221d8b4664148e6454aebddc7ed",
+    "domains": {
+      "production": {
+        "context": {
+          "owner_domain": "production",
+          "scope": {
+            "organization_id": "org-ontology-demo",
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "asset_id": "CNC-S04-L02-03"
+          },
+          "status": "available",
+          "source_version": "OPS-DECISION-SNAPSHOT-2026-08-01-01",
+          "source_updated_at": "2026-07-31T15:00:00Z",
+          "retrieved_at": "2026-09-06T06:19:02.120704Z",
+          "as_of": "2026-08-01T00:00:00+09:00",
+          "freshness": {
+            "policy_version": "db-context-asof-v2",
+            "max_age_seconds": 172800,
+            "state": "fresh"
+          },
+          "source_refs": [
+            "data/fixtures/operation_context/operational-decision-context-evidence-aligned-v1.json"
+          ],
+          "data": {
+            "alternative_resources": [
+              {
+                "available_from": "2026-08-01T11:00:00+09:00",
+                "available_to": "2026-08-01T15:00:00+09:00",
+                "compatible_product_ids": [
+                  "MOTOR-HOUSING"
+                ],
+                "gross_capacity_units": 60,
+                "limitations": [
+                  "Capacity is a deterministic demo assumption, not an MES/APS availability fact."
+                ],
+                "net_transferable_units": 50,
+                "operation_ids": [
+                  "OP-MILL-20"
+                ],
+                "relationship_state": "assumed_demo",
+                "resource_id": "CNC-03",
+                "setup_minutes": 30,
+                "source_refs": [
+                  "operational-decision-context-demo-v1#/alternative_resources/0"
+                ]
+              }
+            ],
+            "limitations": [
+              "This is synthetic plan/candidate context and not an actual MES, ERP, APS, quality, or delivery record.",
+              "No execution, reservation, assignment, or production completion fact may be inferred from this fixture."
+            ],
+            "production_orders": [
+              {
+                "assigned_asset_id": "CNC-S04-L02-03",
+                "completed_quantity": 600,
+                "due_at": "2026-08-02T18:00:00+09:00",
+                "operation_id": "OP-MILL-20",
+                "order_id": "DEMO-PO-001",
+                "priority": 1,
+                "product_id": "MOTOR-HOUSING",
+                "product_label": "Motor Housing",
+                "relationship_state": "assumed_demo",
+                "required_quantity": 800,
+                "source_refs": [
+                  "operational-decision-context-demo-v1#/production_orders/0"
+                ]
+              }
+            ],
+            "source_classification": "synthetic_demo_context",
+            "wip": [
+              {
+                "asset_id": "CNC-S04-L02-03",
+                "lot_ids": [
+                  "DEMO-LOT-014",
+                  "DEMO-LOT-015"
+                ],
+                "operation_id": "OP-MILL-20",
+                "order_id": "DEMO-PO-001",
+                "quantity": 200,
+                "relationship_state": "assumed_demo",
+                "source_refs": [
+                  "operational-decision-context-demo-v1#/wip/0"
+                ],
+                "status": "in_process",
+                "wip_id": "DEMO-WIP-001"
+              }
+            ]
+          },
+          "limitations": [
+            "This is synthetic plan/candidate context and not an actual MES, ERP, APS, quality, or delivery record.",
+            "No execution, reservation, assignment, or production completion fact may be inferred from this fixture.",
+            "Context source: synthetic_demo_context; version OPS-DECISION-SNAPSHOT-2026-08-01-01; schema operational-context.production v1."
+          ]
+        },
+        "provenance": {
+          "source_context_id": "7dba1f53ca4f6fb194790d9621af276f0fff806773ed35fb79070c5279afc443",
+          "schema_id": "operational-context.production",
+          "schema_version": 1,
+          "source_classification": "synthetic_demo_context",
+          "valid_from": "2026-07-31T15:00:00Z",
+          "valid_to": "2026-08-02T15:00:00Z",
+          "source_sha256": "f396fc16c2846d66f0ccc89718c9a9fe1c394aa563671d8a1140919cfa59b481",
+          "binding_sha256": "ccb1ba2931e4e143273b47dd9ebcbae363c07c5cf7dcb8b54a5b5b9cd04b5428",
+          "bound_evidence_snapshot_id": null
+        },
+        "reason_codes": []
+      },
+      "maintenance_readiness": {
+        "context": {
+          "owner_domain": "maintenance_readiness",
+          "scope": {
+            "organization_id": "org-ontology-demo",
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "asset_id": "CNC-S04-L02-03"
+          },
+          "status": "available",
+          "source_version": "MAINT-READINESS-SNAPSHOT-2026-08-01-01",
+          "source_updated_at": "2026-07-31T15:00:00Z",
+          "retrieved_at": "2026-09-06T06:19:02.120704Z",
+          "as_of": "2026-08-01T00:00:00+09:00",
+          "freshness": {
+            "policy_version": "db-context-asof-v2",
+            "max_age_seconds": 172800,
+            "state": "fresh"
+          },
+          "source_refs": [
+            "data/fixtures/operation_context/maintenance-readiness-context-evidence-aligned-v1.json"
+          ],
+          "data": {
+            "action_code": "TOOL_REPLACEMENT",
+            "asset_id": "CNC-S04-L02-03",
+            "inventory_snapshots": [
+              {
+                "available_quantity": 0,
+                "expected_replenishment_at": "2026-08-02T09:00:00+09:00",
+                "inventory_location_ref": "STORE-A/RACK-02",
+                "on_hand_quantity": 2,
+                "part_id": "PART-001",
+                "relationship_state": "assumed_demo",
+                "reserved_quantity": 2,
+                "source_refs": [
+                  "maintenance-readiness-context-demo-v1#/inventory_snapshots/0"
+                ]
+              },
+              {
+                "available_quantity": 0,
+                "expected_replenishment_at": null,
+                "inventory_location_ref": null,
+                "on_hand_quantity": 0,
+                "part_id": "PART-002",
+                "relationship_state": "not_connected",
+                "reserved_quantity": 0,
+                "source_refs": [
+                  "maintenance-readiness-context-demo-v1#/inventory_snapshots/1"
+                ]
+              }
+            ],
+            "limitations": [
+              "This fixture is synthetic readiness context and is not a CMMS, WMS, HR, scheduling, reservation, issue, assignment, or execution record.",
+              "Candidate part and technician records must not be represented as confirmed inventory reservation or assignment."
+            ],
+            "maintenance_windows": [
+              {
+                "active_work_order_conflict": false,
+                "approval_required": true,
+                "asset_id": "CNC-S04-L02-03",
+                "available_from": "2026-08-01T14:00:00+09:00",
+                "available_to": "2026-08-01T16:00:00+09:00",
+                "expected_duration_minutes": 90,
+                "relationship_state": "assumed_demo",
+                "source_refs": [
+                  "maintenance-readiness-context-demo-v1#/maintenance_windows/0"
+                ],
+                "window_id": "MWIN-001"
+              }
+            ],
+            "part_requirements": [
+              {
+                "acceptable_part_ids": [
+                  "PART-001",
+                  "PART-002"
+                ],
+                "action_candidate_id": "ACTION-CANDIDATE-GS-004-TOOL",
+                "action_code": "TOOL_REPLACEMENT",
+                "maintenance_action_id": null,
+                "part_requirement_id": "PREQ-001",
+                "relationship_state": "assumed_demo",
+                "required_part_spec": "TOOL-INSERT-TYPE-A",
+                "required_quantity": 1,
+                "requirement_version": "part-requirement-v1",
+                "source_refs": [
+                  "maintenance-readiness-context-demo-v1#/part_requirements/0"
+                ],
+                "status": "candidate",
+                "target_component_id": "tooling"
+              }
+            ],
+            "required_skill_codes": [
+              "CNC-TOOLING-L2"
+            ],
+            "source_classification": "synthetic_demo_context",
+            "technician_candidates": [
+              {
+                "assignment_state": "candidate_only",
+                "available_from": "2026-08-01T13:30:00+09:00",
+                "available_to": "2026-08-01T17:00:00+09:00",
+                "relationship_state": "assumed_demo",
+                "skill_codes": [
+                  "CNC-TOOLING-L2"
+                ],
+                "source_refs": [
+                  "maintenance-readiness-context-demo-v1#/technician_candidates/0"
+                ],
+                "technician_id": "DEMO-TECH-001"
+              }
+            ]
+          },
+          "limitations": [
+            "This fixture is synthetic readiness context and is not a CMMS, WMS, HR, scheduling, reservation, issue, assignment, or execution record.",
+            "Candidate part and technician records must not be represented as confirmed inventory reservation or assignment.",
+            "Context source: synthetic_demo_context; version MAINT-READINESS-SNAPSHOT-2026-08-01-01; schema operational-context.maintenance_readiness v1."
+          ]
+        },
+        "provenance": {
+          "source_context_id": "0f9e2534f3fcb7d0f701f134a0334925175434252621e9448905e99b21a30810",
+          "schema_id": "operational-context.maintenance_readiness",
+          "schema_version": 1,
+          "source_classification": "synthetic_demo_context",
+          "valid_from": "2026-07-31T15:00:00Z",
+          "valid_to": "2026-08-02T15:00:00Z",
+          "source_sha256": "75582f36729eab91c1faf262a80837b76ae6723a9fb4fff3a169be647f3d2eaa",
+          "binding_sha256": "9fd212c79b85438bac939f6bd368a0e8ef5180232f35a3f7d81e913fc1119c01",
+          "bound_evidence_snapshot_id": null
+        },
+        "reason_codes": []
+      },
+      "quality_delivery": {
+        "context": {
+          "owner_domain": "quality_delivery",
+          "scope": {
+            "organization_id": "org-ontology-demo",
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "asset_id": "CNC-S04-L02-03"
+          },
+          "status": "available",
+          "source_version": "QUALITY-DELIVERY-SNAPSHOT-2026-08-01-01",
+          "source_updated_at": "2026-07-31T15:00:00Z",
+          "retrieved_at": "2026-09-06T06:19:02.120704Z",
+          "as_of": "2026-08-01T00:00:00+09:00",
+          "freshness": {
+            "policy_version": "db-context-asof-v2",
+            "max_age_seconds": 172800,
+            "state": "fresh"
+          },
+          "source_refs": [
+            "data/fixtures/operation_context/quality-delivery-context-evidence-aligned-v1.json"
+          ],
+          "data": {
+            "asset_id": "CNC-S04-L02-03",
+            "delivery_commitments": [
+              {
+                "committed_quantity": 800,
+                "delivery_id": "DEMO-DELIVERY-009",
+                "due_at": "2026-08-02T18:00:00+09:00",
+                "order_id": "DEMO-PO-001",
+                "priority": 1,
+                "relationship_state": "assumed_demo",
+                "source_refs": [
+                  "quality-delivery-context-demo-v1#/delivery_commitments/0"
+                ]
+              }
+            ],
+            "limitations": [
+              "This fixture is synthetic quality and delivery context, not an actual QMS, ERP, MES, or customer commitment.",
+              "Quality hold and delivery exposure are demo assumptions and must not be represented as execution facts."
+            ],
+            "quality_lots": [
+              {
+                "lot_id": "DEMO-LOT-014",
+                "order_id": "DEMO-PO-001",
+                "quality_state": "released",
+                "quantity": 120,
+                "relationship_state": "assumed_demo",
+                "release_required": false,
+                "source_refs": [
+                  "quality-delivery-context-demo-v1#/quality_lots/0"
+                ],
+                "wip_id": "DEMO-WIP-001"
+              },
+              {
+                "lot_id": "DEMO-LOT-015",
+                "order_id": "DEMO-PO-001",
+                "quality_state": "hold",
+                "quantity": 80,
+                "relationship_state": "assumed_demo",
+                "release_required": true,
+                "source_refs": [
+                  "quality-delivery-context-demo-v1#/quality_lots/1"
+                ],
+                "wip_id": "DEMO-WIP-001"
+              }
+            ],
+            "source_classification": "synthetic_demo_context"
+          },
+          "limitations": [
+            "This fixture is synthetic quality and delivery context, not an actual QMS, ERP, MES, or customer commitment.",
+            "Quality hold and delivery exposure are demo assumptions and must not be represented as execution facts.",
+            "Context source: synthetic_demo_context; version QUALITY-DELIVERY-SNAPSHOT-2026-08-01-01; schema operational-context.quality_delivery v1."
+          ]
+        },
+        "provenance": {
+          "source_context_id": "b8246beeba779ea807b0dde15373c9a4c0110444b6a3afc0b4685f260f5f7c08",
+          "schema_id": "operational-context.quality_delivery",
+          "schema_version": 1,
+          "source_classification": "synthetic_demo_context",
+          "valid_from": "2026-07-31T15:00:00Z",
+          "valid_to": "2026-08-02T15:00:00Z",
+          "source_sha256": "e9de63dd35574e0f20e3a7d1d4c4731ad9a59b0476e6d4577cf51539b24d9278",
+          "binding_sha256": "99702263ca6f50922d4beadc58abb4ca2754e910a1bda5c350379a59f54a294a",
+          "bound_evidence_snapshot_id": null
+        },
+        "reason_codes": []
+      },
+      "impact_policy": {
+        "context": {
+          "owner_domain": "impact_policy",
+          "scope": {
+            "organization_id": "org-ontology-demo",
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "asset_id": "CNC-S04-L02-03"
+          },
+          "status": "not_connected",
+          "source_version": null,
+          "source_updated_at": null,
+          "retrieved_at": "2026-09-06T06:19:02.120704Z",
+          "as_of": "2026-08-01T00:00:00+09:00",
+          "freshness": {
+            "policy_version": "db-context-asof-v2",
+            "max_age_seconds": 0,
+            "state": "unknown"
+          },
+          "source_refs": [],
+          "data": {},
+          "limitations": [
+            "No matching scoped operational snapshot at the selected as-of; values withheld."
+          ]
+        },
+        "provenance": null,
+        "reason_codes": [
+          "NO_MATCHING_SCOPE_SNAPSHOT_AT_AS_OF"
+        ]
+      },
+      "planning": {
+        "context": {
+          "owner_domain": "planning",
+          "scope": {
+            "organization_id": "org-ontology-demo",
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "asset_id": "CNC-S04-L02-03"
+          },
+          "status": "available",
+          "source_version": "OPS-SNAPSHOT-2026-08-01-A-B",
+          "source_updated_at": "2026-07-31T15:00:00Z",
+          "retrieved_at": "2026-09-06T06:19:02.120704Z",
+          "as_of": "2026-08-01T00:00:00+09:00",
+          "freshness": {
+            "policy_version": "db-context-asof-v2",
+            "max_age_seconds": 172800,
+            "state": "fresh"
+          },
+          "source_refs": [
+            "data/fixtures/operation_context/production-planning-context-v1.json"
+          ],
+          "data": {
+            "capacity_model": {
+              "active_asset_count": 80,
+              "asset_units_per_hour": 12.69,
+              "basis": "80 assets, 16h/day, OEE 0.846, cycle 4.0min 기준",
+              "daily_capacity_units": 16200,
+              "oee": 0.846,
+              "planned_operating_hours": 16,
+              "standard_cycle_minutes_per_unit": 4.0
+            },
+            "context_id": "production-planning-context-v1",
+            "production_plan": {
+              "plan_date": "2026-08-01",
+              "plan_id": "PLAN-2026-08-01-GS-DEMO",
+              "planned_units": 16200,
+              "product_mix": [
+                {
+                  "planned_units": 8100,
+                  "share": 0.5,
+                  "variant": "L"
+                },
+                {
+                  "planned_units": 4860,
+                  "share": 0.3,
+                  "variant": "M"
+                },
+                {
+                  "planned_units": 3240,
+                  "share": 0.2,
+                  "variant": "H"
+                }
+              ]
+            },
+            "source_type": "capacity_model",
+            "temporal_scope": {
+              "generated_at": "2026-08-01T00:00:00+09:00",
+              "snapshot_id": "OPS-SNAPSHOT-2026-08-01-A-B",
+              "timezone": "Asia/Seoul",
+              "valid_from": "2026-08-01T00:00:00+09:00",
+              "valid_to": "2026-08-02T00:00:00+09:00"
+            },
+            "event_impact": {
+              "basis": {
+                "asset_units_per_hour": 12.69,
+                "estimated_downtime_minutes": 240,
+                "formula": "estimated_downtime_minutes / 60 * asset_units_per_hour"
+              },
+              "equipment_id": "CNC-S04-L02-03",
+              "estimated_lost_units": 51,
+              "event_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+              "impact_status": "estimated",
+              "line": "S04-L02",
+              "product_variant": "L",
+              "screen_priority": "plan_at_risk"
+            },
+            "limitations": [
+              "This context is not a MES, ERP, APS, or customer-order record.",
+              "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+              "AI4I provides Product Type L/M/H but no real SKU or product name.",
+              "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+              "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
+            ],
+            "load_level": "high",
+            "production_impact": "high",
+            "runtime_hours_7d": 124.0
+          },
+          "limitations": [
+            "This context is not a MES, ERP, APS, or customer-order record.",
+            "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+            "AI4I provides Product Type L/M/H but no real SKU or product name.",
+            "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+            "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss.",
+            "Context source: synthetic_demo_context; version OPS-SNAPSHOT-2026-08-01-A-B; schema operational-context.planning v1."
+          ]
+        },
+        "provenance": {
+          "source_context_id": "25be9d131c8c812388ba9a94569d32ab3de8f028c36a4ca710ea2ac1270632b5",
+          "schema_id": "operational-context.planning",
+          "schema_version": 1,
+          "source_classification": "synthetic_demo_context",
+          "valid_from": "2026-07-31T15:00:00Z",
+          "valid_to": "2026-08-01T15:00:00Z",
+          "source_sha256": "d9f3739a0ef3f3d7e070659a54390e7aa545d39473cba6372cb9f0a631042b1c",
+          "binding_sha256": "37341f97de9c1622d1daa1e36366e926bb5321225976fc2fe5dbdfcf8656a614",
+          "bound_evidence_snapshot_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00"
+        },
+        "reason_codes": []
+      }
+    },
+    "production_impact": {
+      "schema_version": "operational-impact-simulation-v1.0",
+      "simulation_policy_version": "unavailable-db-policy-v1",
+      "evidence_snapshot_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+      "risk_status": "critical",
+      "context_version_set": {
+        "maintenance_readiness": "MAINT-READINESS-SNAPSHOT-2026-08-01-01",
+        "production": "OPS-DECISION-SNAPSHOT-2026-08-01-01",
+        "quality_delivery": "QUALITY-DELIVERY-SNAPSHOT-2026-08-01-01"
+      },
+      "assumptions": {
+        "policy_version": "unavailable-db-policy-v1",
+        "primary_capacity_units": {},
+        "alternative_capacity_allowed": {},
+        "source_refs": [
+          "unavailable:impact-policy"
+        ]
+      },
+      "options": [
+        {
+          "option": "stop_now",
+          "state": "not_calculable",
+          "preconditions": [],
+          "reason_codes": [
+            "MISSING_OPTION_ASSUMPTION"
+          ],
+          "required_units": null,
+          "primary_capacity_after_action": null,
+          "gross_exposed_units": null,
+          "alternative_absorbed_units": null,
+          "remaining_exposed_units": null,
+          "intermediate_values": {},
+          "limitations": []
+        },
+        {
+          "option": "planned_maintenance",
+          "state": "not_calculable",
+          "preconditions": [
+            "maintenance readiness must be satisfied"
+          ],
+          "reason_codes": [
+            "MAINTENANCE_BLOCKED"
+          ],
+          "required_units": null,
+          "primary_capacity_after_action": null,
+          "gross_exposed_units": null,
+          "alternative_absorbed_units": null,
+          "remaining_exposed_units": null,
+          "intermediate_values": {},
+          "limitations": [
+            "Impact is withheld until maintenance prerequisites are ready."
+          ]
+        },
+        {
+          "option": "continue_operation",
+          "state": "not_calculable",
+          "preconditions": [],
+          "reason_codes": [
+            "MISSING_OPTION_ASSUMPTION"
+          ],
+          "required_units": null,
+          "primary_capacity_after_action": null,
+          "gross_exposed_units": null,
+          "alternative_absorbed_units": null,
+          "remaining_exposed_units": null,
+          "intermediate_values": {},
+          "limitations": []
+        }
+      ],
+      "source_refs": [
+        "unavailable:impact-policy",
+        "data/fixtures/operation_context/operational-decision-context-evidence-aligned-v1.json",
+        "data/fixtures/operation_context/maintenance-readiness-context-evidence-aligned-v1.json",
+        "data/fixtures/operation_context/quality-delivery-context-evidence-aligned-v1.json"
+      ],
+      "limitations": [
+        "Conditional deterministic comparison only; not realized production loss.",
+        "The simulation does not calculate or change failure probability.",
+        "The simulation does not select or execute an action."
+      ]
+    },
+    "limitations": [
+      "Conditional production comparison is not realized loss or production recovery.",
+      "Inspection downtime estimates are not substituted for capacity policy inputs.",
+      "Schedule agreement, maintenance authorization and work start remain separate owner records."
+    ]
+  },
+  "later_asof_response": {
+    "schema_version": "operational-context-read-v1",
+    "identity": {
+      "organization_id": "org-ontology-demo",
+      "project_id": "manufacturing-demo-project",
+      "workspace_id": "manufacturing-demo",
+      "asset_id": "CNC-S04-L02-03",
+      "evidence_snapshot_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+      "decision_as_of": "2026-08-29T00:00:00+09:00"
+    },
+    "retrieved_at": "2026-09-06T06:19:02.239133Z",
+    "context_fingerprint": "ed178e64cb6a84d6daabc0069d8de1916d615e5684bd6272b06c55a105ea59c7",
+    "domains": {
+      "production": {
+        "context": {
+          "owner_domain": "production",
+          "scope": {
+            "organization_id": "org-ontology-demo",
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "asset_id": "CNC-S04-L02-03"
+          },
+          "status": "not_connected",
+          "source_version": null,
+          "source_updated_at": null,
+          "retrieved_at": "2026-09-06T06:19:02.239133Z",
+          "as_of": "2026-08-29T00:00:00+09:00",
+          "freshness": {
+            "policy_version": "db-context-asof-v2",
+            "max_age_seconds": 0,
+            "state": "unknown"
+          },
+          "source_refs": [],
+          "data": {},
+          "limitations": [
+            "No matching scoped operational snapshot at the selected as-of; values withheld."
+          ]
+        },
+        "provenance": null,
+        "reason_codes": [
+          "NO_MATCHING_SCOPE_SNAPSHOT_AT_AS_OF"
+        ]
+      },
+      "maintenance_readiness": {
+        "context": {
+          "owner_domain": "maintenance_readiness",
+          "scope": {
+            "organization_id": "org-ontology-demo",
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "asset_id": "CNC-S04-L02-03"
+          },
+          "status": "not_connected",
+          "source_version": null,
+          "source_updated_at": null,
+          "retrieved_at": "2026-09-06T06:19:02.239133Z",
+          "as_of": "2026-08-29T00:00:00+09:00",
+          "freshness": {
+            "policy_version": "db-context-asof-v2",
+            "max_age_seconds": 0,
+            "state": "unknown"
+          },
+          "source_refs": [],
+          "data": {},
+          "limitations": [
+            "No matching scoped operational snapshot at the selected as-of; values withheld."
+          ]
+        },
+        "provenance": null,
+        "reason_codes": [
+          "NO_MATCHING_SCOPE_SNAPSHOT_AT_AS_OF"
+        ]
+      },
+      "quality_delivery": {
+        "context": {
+          "owner_domain": "quality_delivery",
+          "scope": {
+            "organization_id": "org-ontology-demo",
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "asset_id": "CNC-S04-L02-03"
+          },
+          "status": "not_connected",
+          "source_version": null,
+          "source_updated_at": null,
+          "retrieved_at": "2026-09-06T06:19:02.239133Z",
+          "as_of": "2026-08-29T00:00:00+09:00",
+          "freshness": {
+            "policy_version": "db-context-asof-v2",
+            "max_age_seconds": 0,
+            "state": "unknown"
+          },
+          "source_refs": [],
+          "data": {},
+          "limitations": [
+            "No matching scoped operational snapshot at the selected as-of; values withheld."
+          ]
+        },
+        "provenance": null,
+        "reason_codes": [
+          "NO_MATCHING_SCOPE_SNAPSHOT_AT_AS_OF"
+        ]
+      },
+      "impact_policy": {
+        "context": {
+          "owner_domain": "impact_policy",
+          "scope": {
+            "organization_id": "org-ontology-demo",
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "asset_id": "CNC-S04-L02-03"
+          },
+          "status": "not_connected",
+          "source_version": null,
+          "source_updated_at": null,
+          "retrieved_at": "2026-09-06T06:19:02.239133Z",
+          "as_of": "2026-08-29T00:00:00+09:00",
+          "freshness": {
+            "policy_version": "db-context-asof-v2",
+            "max_age_seconds": 0,
+            "state": "unknown"
+          },
+          "source_refs": [],
+          "data": {},
+          "limitations": [
+            "No matching scoped operational snapshot at the selected as-of; values withheld."
+          ]
+        },
+        "provenance": null,
+        "reason_codes": [
+          "NO_MATCHING_SCOPE_SNAPSHOT_AT_AS_OF"
+        ]
+      },
+      "planning": {
+        "context": {
+          "owner_domain": "planning",
+          "scope": {
+            "organization_id": "org-ontology-demo",
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "asset_id": "CNC-S04-L02-03"
+          },
+          "status": "not_connected",
+          "source_version": null,
+          "source_updated_at": null,
+          "retrieved_at": "2026-09-06T06:19:02.239133Z",
+          "as_of": "2026-08-29T00:00:00+09:00",
+          "freshness": {
+            "policy_version": "db-context-asof-v2",
+            "max_age_seconds": 0,
+            "state": "unknown"
+          },
+          "source_refs": [],
+          "data": {},
+          "limitations": [
+            "No matching scoped operational snapshot at the selected as-of; values withheld."
+          ]
+        },
+        "provenance": null,
+        "reason_codes": [
+          "NO_MATCHING_SCOPE_SNAPSHOT_AT_AS_OF"
+        ]
+      }
+    },
+    "production_impact": {
+      "schema_version": "operational-impact-simulation-v1.0",
+      "simulation_policy_version": "unavailable-db-policy-v1",
+      "evidence_snapshot_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+      "risk_status": "critical",
+      "context_version_set": {},
+      "assumptions": {
+        "policy_version": "unavailable-db-policy-v1",
+        "primary_capacity_units": {},
+        "alternative_capacity_allowed": {},
+        "source_refs": [
+          "unavailable:impact-policy"
+        ]
+      },
+      "options": [
+        {
+          "option": "stop_now",
+          "state": "not_calculable",
+          "preconditions": [],
+          "reason_codes": [
+            "CONTEXT_NOT_AVAILABLE:maintenance_readiness",
+            "CONTEXT_NOT_AVAILABLE:production",
+            "CONTEXT_NOT_AVAILABLE:quality_delivery"
+          ],
+          "required_units": null,
+          "primary_capacity_after_action": null,
+          "gross_exposed_units": null,
+          "alternative_absorbed_units": null,
+          "remaining_exposed_units": null,
+          "intermediate_values": {},
+          "limitations": []
+        },
+        {
+          "option": "planned_maintenance",
+          "state": "not_calculable",
+          "preconditions": [],
+          "reason_codes": [
+            "CONTEXT_NOT_AVAILABLE:maintenance_readiness",
+            "CONTEXT_NOT_AVAILABLE:production",
+            "CONTEXT_NOT_AVAILABLE:quality_delivery"
+          ],
+          "required_units": null,
+          "primary_capacity_after_action": null,
+          "gross_exposed_units": null,
+          "alternative_absorbed_units": null,
+          "remaining_exposed_units": null,
+          "intermediate_values": {},
+          "limitations": []
+        },
+        {
+          "option": "continue_operation",
+          "state": "not_calculable",
+          "preconditions": [],
+          "reason_codes": [
+            "CONTEXT_NOT_AVAILABLE:maintenance_readiness",
+            "CONTEXT_NOT_AVAILABLE:production",
+            "CONTEXT_NOT_AVAILABLE:quality_delivery"
+          ],
+          "required_units": null,
+          "primary_capacity_after_action": null,
+          "gross_exposed_units": null,
+          "alternative_absorbed_units": null,
+          "remaining_exposed_units": null,
+          "intermediate_values": {},
+          "limitations": []
+        }
+      ],
+      "source_refs": [
+        "unavailable:impact-policy"
+      ],
+      "limitations": [
+        "Conditional deterministic comparison only; not realized production loss.",
+        "The simulation does not calculate or change failure probability.",
+        "The simulation does not select or execute an action."
+      ]
+    },
+    "limitations": [
+      "Conditional production comparison is not realized loss or production recovery.",
+      "Inspection downtime estimates are not substituted for capacity policy inputs.",
+      "Schedule agreement, maintenance authorization and work start remain separate owner records."
+    ]
+  }
+}

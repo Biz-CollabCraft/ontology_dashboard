@@ -1,0 +1,13 @@
+{
+  "script": "scripts/run_local_live.sh",
+  "web_status": 200,
+  "backend_ready": {
+    "status": "ready",
+    "service": "ontology-dashboard"
+  },
+  "database_host_port": 55432,
+  "assets": 100,
+  "result_artifacts": 100,
+  "live_runtime_generation": "verified_after_explicit_runtime_payload_approval",
+  "note": "SKIP_POSTGRES=1 reuses isolated PostgreSQL. Launcher displays free port 55433 but actual configured DB URL and verified connection use 55432."
+}

@@ -1,0 +1,37 @@
+[
+  {
+    asset: 'CMP-S03-L03-01',
+    contextError: null,
+    syntheticVisible: true,
+    planVisible: false,
+    command: null
+  },
+  {
+    asset: 'CNC-S03-L03-03',
+    contextError: null,
+    syntheticVisible: true,
+    planVisible: false,
+    command: null
+  },
+  {
+    asset: 'CNC-S03-L03-02',
+    contextError: null,
+    syntheticVisible: true,
+    planVisible: false,
+    command: null
+  },
+  {
+    asset: 'CNC-S03-L03-01',
+    contextError: null,
+    syntheticVisible: true,
+    planVisible: false,
+    command: null
+  },
+  {
+    asset: 'CNC-S03-L03-04',
+    contextError: null,
+    syntheticVisible: true,
+    planVisible: false,
+    command: null
+  }
+]

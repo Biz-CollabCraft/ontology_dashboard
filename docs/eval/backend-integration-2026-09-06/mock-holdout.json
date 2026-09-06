@@ -1,0 +1,1067 @@
+{
+  "result_id": "agent-summary-llm-eval-mock-c1-2026-09-05",
+  "run_id": "integration-mock-holdout",
+  "candidate_sha": "cbf4126c",
+  "recorded_at": "2026-09-05T17:10:35.768682+00:00",
+  "scope": "8x1 mock Agent Review Summary LLM evaluation",
+  "eval_set_id": "agent-review-packet-holdout-v1",
+  "mode": "mock",
+  "provider": "mock-openai-compatible",
+  "model": "gpt-4o-mini",
+  "prompt_version": "agent-review-summary-prompt-v1.3-hold-boundary",
+  "prompt_payload_profile": "compact-editable-v1",
+  "concurrency": 1,
+  "sample_size": 8,
+  "case_count": 8,
+  "iterations_per_case": 1,
+  "batch_wall_clock_ms": 21.628,
+  "pre_harness_gate": {
+    "ready_for_120_run": true,
+    "source": "not_recorded"
+  },
+  "aggregate": {
+    "sample_size": 8,
+    "accepted_llm_candidates": 8,
+    "acceptance_rate": 1.0,
+    "fallback_summaries": 0,
+    "fallback_rate": 0.0,
+    "contract_error_rows": 0,
+    "quality_scores": {
+      "coverage_candidate": 1.0,
+      "usefulness_candidate": 1.0,
+      "korean_quality_candidate": 1.0,
+      "overall_candidate": 1.0
+    },
+    "gold_accuracy": {
+      "accuracy_goldset_score": 1.0,
+      "role_accuracy_score": 1.0,
+      "boundary_accuracy_score": 1.0,
+      "missing_required_points": 0,
+      "must_not_claim_violations": 0
+    },
+    "grounding": {
+      "rows_with_grounded_source_refs": 8,
+      "grounding_rate": 1.0
+    },
+    "latency_ms": {
+      "p50": 2.305,
+      "p95": 4.344,
+      "average": 2.63
+    },
+    "queue_wait_ms": {
+      "p50": 11.034,
+      "p95": 19.69,
+      "average": 10.395
+    },
+    "batch": {
+      "wall_clock_ms": 21.628,
+      "throughput_per_minute": 22193.452931
+    },
+    "tokens": {
+      "average_total_tokens": 1818.0,
+      "total_tokens": 14544,
+      "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
+      "provider_reported_rows": 0,
+      "estimated_rows": 8
+    },
+    "cost": {
+      "status": "not_configured",
+      "estimated_total_cost": null,
+      "estimated_average_cost_per_summary": null,
+      "currency": null,
+      "pricing_version": null
+    }
+  },
+  "rows": [
+    {
+      "case_id": "EVT-HGS-001",
+      "scenario_id": "HGS-001",
+      "asset_id": "CNC-H01-L02-01",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "mock",
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "quality_scores": {
+        "coverage_candidate": 1.0,
+        "usefulness_candidate": 1.0,
+        "korean_quality_candidate": 1.0,
+        "overall_candidate": 1.0,
+        "checks": {
+          "coverage": {
+            "status_grade_present": true,
+            "primary_component_present": true,
+            "inspection_location_present": true,
+            "production_context_present": true,
+            "history_context_present": true,
+            "data_gap_present_when_needed": true
+          },
+          "usefulness": {
+            "field_operator_has_action_focus": true,
+            "field_operator_has_record_handoff_focus": true,
+            "manager_has_decision_context": true,
+            "roles_are_distinct": true,
+            "summary_is_not_generic": true
+          },
+          "korean_quality": {
+            "contains_korean": true,
+            "avoids_internal_terms": true,
+            "uses_field_language": true,
+            "concise_for_side_panel": true
+          }
+        },
+        "limits": [
+          "Coverage, usefulness, and Korean scores are deterministic heuristics for triage, not human acceptance.",
+          "Use gold_accuracy for reference-answer accuracy and keep human review before release gating usefulness or Korean quality."
+        ]
+      },
+      "gold_accuracy": {
+        "answer_set_id": "agent-review-summary-holdout-gold-answers-v1",
+        "accuracy_goldset_score": 1.0,
+        "required_fact_score": 1.0,
+        "role_accuracy_score": 1.0,
+        "boundary_accuracy_score": 1.0,
+        "matched_required_points": [
+          "warning",
+          "73.1%",
+          "공구/마모 계통",
+          "동력 전달 계통",
+          "생산 영향이 높은",
+          "124건"
+        ],
+        "missing_required_points": [],
+        "must_not_claim_violations": [],
+        "unsupported_claim_count": 0,
+        "role_scores": {
+          "field_operator": {
+            "score": 1.0,
+            "matched_points": [
+              "공구 매거진",
+              "스핀들 공구 체결부",
+              "주축 모터",
+              "기록",
+              "전달"
+            ],
+            "missing_points": []
+          },
+          "process_manager": {
+            "score": 1.0,
+            "matched_points": [
+              "생산 영향이 높은",
+              "124건",
+              "점검 승인"
+            ],
+            "missing_points": []
+          }
+        },
+        "limits": [
+          "Gold accuracy is a lightweight reference-answer score over required facts and forbidden claims.",
+          "It is not exhaustive free-form claim extraction."
+        ]
+      },
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "editable_output": {
+        "title": "AI 검토 요약 · Holdout 1구역 · 2셀 · CNC 가공기 1 · warning",
+        "summary": "Holdout 1구역 · 2셀 · CNC 가공기 1는 현재 warning 상태이며 예측 위험도는 73.1%입니다. 공구/마모 계통, 동력 전달 계통 중심으로 이력, 현장 위치, 관측 근거를 함께 확인해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "field_operator",
+            "quote": "Holdout 1구역 · 2셀 · CNC 가공기 1: warning 알림. 공구 매거진 및 스핀들 공구 체결부, 주축 모터, 커플링, 동력 전달 하우징에서 공구/마모 계통, 동력 전달 계통을 확인합니다. 공구 마모, 과부하 지표, 토크와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 참고 부품 후보는 카바이드 절삭 인서트 1개, 주축 구동 커플링 키트입니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "Holdout 1구역 · 2셀 · CNC 가공기 1 위험 감지 건은 현재 생산 영향이 높은 수준으로 분류되며, 360분 기준 약 124건 손실 가능성이 있습니다. 모델 근거는 공구 마모, 과부하 지표, 토크이고 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 최근 유사 이력은 7월 18일 1건으로 확인됩니다. 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+          }
+        ]
+      },
+      "llm": {
+        "duration_ms": 3.874,
+        "queue_wait_ms": 0.006,
+        "usage": {
+          "prompt_tokens": 1753,
+          "completion_tokens": 187,
+          "total_tokens": 1940
+        },
+        "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
+        "cost": {
+          "status": "not_configured",
+          "estimated_total_cost": null
+        }
+      }
+    },
+    {
+      "case_id": "EVT-HGS-002",
+      "scenario_id": "HGS-002",
+      "asset_id": "CNC-H02-L03-02",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "mock",
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "quality_scores": {
+        "coverage_candidate": 1.0,
+        "usefulness_candidate": 1.0,
+        "korean_quality_candidate": 1.0,
+        "overall_candidate": 1.0,
+        "checks": {
+          "coverage": {
+            "status_grade_present": true,
+            "primary_component_present": true,
+            "inspection_location_present": true,
+            "production_context_present": true,
+            "history_context_present": true,
+            "data_gap_present_when_needed": true
+          },
+          "usefulness": {
+            "field_operator_has_action_focus": true,
+            "field_operator_has_record_handoff_focus": true,
+            "manager_has_decision_context": true,
+            "roles_are_distinct": true,
+            "summary_is_not_generic": true
+          },
+          "korean_quality": {
+            "contains_korean": true,
+            "avoids_internal_terms": true,
+            "uses_field_language": true,
+            "concise_for_side_panel": true
+          }
+        },
+        "limits": [
+          "Coverage, usefulness, and Korean scores are deterministic heuristics for triage, not human acceptance.",
+          "Use gold_accuracy for reference-answer accuracy and keep human review before release gating usefulness or Korean quality."
+        ]
+      },
+      "gold_accuracy": {
+        "answer_set_id": "agent-review-summary-holdout-gold-answers-v1",
+        "accuracy_goldset_score": 1.0,
+        "required_fact_score": 1.0,
+        "role_accuracy_score": 1.0,
+        "boundary_accuracy_score": 1.0,
+        "matched_required_points": [
+          "attention",
+          "41.7%",
+          "열 방산 계통",
+          "동력 전달 계통",
+          "생산 영향이 낮은",
+          "7건"
+        ],
+        "missing_required_points": [],
+        "must_not_claim_violations": [],
+        "unsupported_claim_count": 0,
+        "role_scores": {
+          "field_operator": {
+            "score": 1.0,
+            "matched_points": [
+              "스핀들 냉각 라인",
+              "가공부 열 배출 경로",
+              "주축 모터",
+              "기록",
+              "전달"
+            ],
+            "missing_points": []
+          },
+          "process_manager": {
+            "score": 1.0,
+            "matched_points": [
+              "생산 영향이 낮은",
+              "7건",
+              "점검 승인"
+            ],
+            "missing_points": []
+          }
+        },
+        "limits": [
+          "Gold accuracy is a lightweight reference-answer score over required facts and forbidden claims.",
+          "It is not exhaustive free-form claim extraction."
+        ]
+      },
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "editable_output": {
+        "title": "AI 검토 요약 · Holdout 2구역 · 3셀 · CNC 가공기 2 · attention",
+        "summary": "Holdout 2구역 · 3셀 · CNC 가공기 2는 현재 attention 상태이며 예측 위험도는 41.7%입니다. 열 방산 계통, 동력 전달 계통 중심으로 이력, 현장 위치, 관측 근거를 함께 확인해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "field_operator",
+            "quote": "Holdout 2구역 · 3셀 · CNC 가공기 2: attention 알림. 스핀들 냉각 라인 및 가공부 열 배출 경로, 주축 모터, 커플링, 동력 전달 하우징에서 열 방산 계통, 동력 전달 계통을 확인합니다. 공정·공기 온도 차이, 토크, 기계 동력와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 참고 부품 후보는 냉각 팬 유닛, 주축 구동 커플링 키트입니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "Holdout 2구역 · 3셀 · CNC 가공기 2 위험 감지 건은 현재 생산 영향이 낮은 수준으로 분류되며, 35분 기준 약 7건 손실 가능성이 있습니다. 모델 근거는 공정·공기 온도 차이, 토크, 기계 동력이고 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 최근 유사 이력은 7월 24일 1건으로 확인됩니다. 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+          }
+        ]
+      },
+      "llm": {
+        "duration_ms": 2.41,
+        "queue_wait_ms": 3.98,
+        "usage": {
+          "prompt_tokens": 1762,
+          "completion_tokens": 189,
+          "total_tokens": 1951
+        },
+        "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
+        "cost": {
+          "status": "not_configured",
+          "estimated_total_cost": null
+        }
+      }
+    },
+    {
+      "case_id": "EVT-HGS-003",
+      "scenario_id": "HGS-003",
+      "asset_id": "CNC-H03-L04-03",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "mock",
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "quality_scores": {
+        "coverage_candidate": 1.0,
+        "usefulness_candidate": 1.0,
+        "korean_quality_candidate": 1.0,
+        "overall_candidate": 1.0,
+        "checks": {
+          "coverage": {
+            "status_grade_present": true,
+            "primary_component_present": true,
+            "inspection_location_present": true,
+            "production_context_present": true,
+            "history_context_present": true,
+            "data_gap_present_when_needed": true
+          },
+          "usefulness": {
+            "field_operator_has_action_focus": true,
+            "field_operator_has_record_handoff_focus": true,
+            "manager_has_decision_context": true,
+            "roles_are_distinct": true,
+            "summary_is_not_generic": true
+          },
+          "korean_quality": {
+            "contains_korean": true,
+            "avoids_internal_terms": true,
+            "uses_field_language": true,
+            "concise_for_side_panel": true
+          }
+        },
+        "limits": [
+          "Coverage, usefulness, and Korean scores are deterministic heuristics for triage, not human acceptance.",
+          "Use gold_accuracy for reference-answer accuracy and keep human review before release gating usefulness or Korean quality."
+        ]
+      },
+      "gold_accuracy": {
+        "answer_set_id": "agent-review-summary-holdout-gold-answers-v1",
+        "accuracy_goldset_score": 1.0,
+        "required_fact_score": 1.0,
+        "role_accuracy_score": 1.0,
+        "boundary_accuracy_score": 1.0,
+        "matched_required_points": [
+          "critical",
+          "93.4%",
+          "동력 전달 계통",
+          "생산 영향이 높은",
+          "88건",
+          "점검 요청"
+        ],
+        "missing_required_points": [],
+        "must_not_claim_violations": [],
+        "unsupported_claim_count": 0,
+        "role_scores": {
+          "field_operator": {
+            "score": 1.0,
+            "matched_points": [
+              "주축 모터",
+              "커플링",
+              "동력 전달 하우징",
+              "요청됨",
+              "기록",
+              "전달"
+            ],
+            "missing_points": []
+          },
+          "process_manager": {
+            "score": 1.0,
+            "matched_points": [
+              "생산 영향이 높은",
+              "88건",
+              "점검 승인"
+            ],
+            "missing_points": []
+          }
+        },
+        "limits": [
+          "Gold accuracy is a lightweight reference-answer score over required facts and forbidden claims.",
+          "It is not exhaustive free-form claim extraction."
+        ]
+      },
+      "grounded_source_refs": 13,
+      "source_ref_status": "grounded",
+      "editable_output": {
+        "title": "AI 검토 요약 · Holdout 3구역 · 4셀 · CNC 가공기 3 · critical",
+        "summary": "Holdout 3구역 · 4셀 · CNC 가공기 3는 현재 critical 상태이며 예측 위험도는 93.4%입니다. 동력 전달 계통 중심으로 이력, 현장 위치, 관측 근거를 함께 확인해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "field_operator",
+            "quote": "Holdout 3구역 · 4셀 · CNC 가공기 3: critical 알림. 주축 모터, 커플링, 동력 전달 하우징에서 동력 전달 계통을 확인합니다. 기계 동력, 과부하 지표, 토크와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름에는 점검 요청이 요청됨 상태로 접수되어 있습니다. 참고 부품 후보는 주축 구동 커플링 키트입니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "Holdout 3구역 · 4셀 · CNC 가공기 3 위험 감지 건은 현재 생산 영향이 높은 수준으로 분류되며, 410분 기준 약 88건 손실 가능성이 있습니다. 모델 근거는 기계 동력, 과부하 지표, 토크이고 작업 처리 흐름에는 점검 요청이 요청됨 상태로 접수되어 있습니다. 최근 유사 이력은 7월 22일 1건으로 확인됩니다. 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+          }
+        ]
+      },
+      "llm": {
+        "duration_ms": 2.168,
+        "queue_wait_ms": 6.464,
+        "usage": {
+          "prompt_tokens": 1585,
+          "completion_tokens": 176,
+          "total_tokens": 1761
+        },
+        "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
+        "cost": {
+          "status": "not_configured",
+          "estimated_total_cost": null
+        }
+      }
+    },
+    {
+      "case_id": "EVT-HGS-004",
+      "scenario_id": "HGS-004",
+      "asset_id": "CNC-H04-L01-01",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "mock",
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "quality_scores": {
+        "coverage_candidate": 1.0,
+        "usefulness_candidate": 1.0,
+        "korean_quality_candidate": 1.0,
+        "overall_candidate": 1.0,
+        "checks": {
+          "coverage": {
+            "status_grade_present": true,
+            "primary_component_present": true,
+            "inspection_location_present": true,
+            "production_context_present": true,
+            "history_context_present": true,
+            "data_gap_present_when_needed": true
+          },
+          "usefulness": {
+            "field_operator_has_action_focus": true,
+            "field_operator_has_record_handoff_focus": true,
+            "manager_has_decision_context": true,
+            "roles_are_distinct": true,
+            "summary_is_not_generic": true
+          },
+          "korean_quality": {
+            "contains_korean": true,
+            "avoids_internal_terms": true,
+            "uses_field_language": true,
+            "concise_for_side_panel": true
+          }
+        },
+        "limits": [
+          "Coverage, usefulness, and Korean scores are deterministic heuristics for triage, not human acceptance.",
+          "Use gold_accuracy for reference-answer accuracy and keep human review before release gating usefulness or Korean quality."
+        ]
+      },
+      "gold_accuracy": {
+        "answer_set_id": "agent-review-summary-holdout-gold-answers-v1",
+        "accuracy_goldset_score": 1.0,
+        "required_fact_score": 1.0,
+        "role_accuracy_score": 1.0,
+        "boundary_accuracy_score": 1.0,
+        "matched_required_points": [
+          "normal",
+          "9.4%",
+          "공구/마모 계통",
+          "동력 전달 계통",
+          "생산 영향이 없음",
+          "0건"
+        ],
+        "missing_required_points": [],
+        "must_not_claim_violations": [],
+        "unsupported_claim_count": 0,
+        "role_scores": {
+          "field_operator": {
+            "score": 1.0,
+            "matched_points": [
+              "공구 매거진",
+              "스핀들 공구 체결부",
+              "주축 모터",
+              "기록",
+              "전달"
+            ],
+            "missing_points": []
+          },
+          "process_manager": {
+            "score": 1.0,
+            "matched_points": [
+              "생산 영향이 없음",
+              "0건",
+              "점검 승인"
+            ],
+            "missing_points": []
+          }
+        },
+        "limits": [
+          "Gold accuracy is a lightweight reference-answer score over required facts and forbidden claims.",
+          "It is not exhaustive free-form claim extraction."
+        ]
+      },
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "editable_output": {
+        "title": "AI 검토 요약 · Holdout 4구역 · 1셀 · CNC 가공기 1 · normal",
+        "summary": "Holdout 4구역 · 1셀 · CNC 가공기 1는 현재 normal 상태이며 예측 위험도는 9.4%입니다. 공구/마모 계통, 동력 전달 계통 중심으로 이력, 현장 위치, 관측 근거를 함께 확인해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "field_operator",
+            "quote": "Holdout 4구역 · 1셀 · CNC 가공기 1: normal 알림. 공구 매거진 및 스핀들 공구 체결부, 주축 모터, 커플링, 동력 전달 하우징에서 공구/마모 계통, 동력 전달 계통을 확인합니다. 공구 마모, 과부하 지표, 기계 동력와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 참고 부품 후보는 카바이드 절삭 인서트 1개, 주축 구동 커플링 키트입니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "Holdout 4구역 · 1셀 · CNC 가공기 1 위험 감지 건은 현재 생산 영향이 없음으로 분류되며, 20분 기준 약 0건 손실 가능성이 있습니다. 모델 근거는 공구 마모, 과부하 지표, 기계 동력이고 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 최근 유사 이력은 7월 18일 1건으로 확인됩니다. 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+          }
+        ]
+      },
+      "llm": {
+        "duration_ms": 2.273,
+        "queue_wait_ms": 8.696,
+        "usage": {
+          "prompt_tokens": 1749,
+          "completion_tokens": 186,
+          "total_tokens": 1935
+        },
+        "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
+        "cost": {
+          "status": "not_configured",
+          "estimated_total_cost": null
+        }
+      }
+    },
+    {
+      "case_id": "EVT-HGS-005",
+      "scenario_id": "HGS-005",
+      "asset_id": "CNC-H05-L05-02",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "mock",
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "quality_scores": {
+        "coverage_candidate": 1.0,
+        "usefulness_candidate": 1.0,
+        "korean_quality_candidate": 1.0,
+        "overall_candidate": 1.0,
+        "checks": {
+          "coverage": {
+            "status_grade_present": true,
+            "primary_component_present": true,
+            "inspection_location_present": true,
+            "production_context_present": true,
+            "history_context_present": true,
+            "data_gap_present_when_needed": true
+          },
+          "usefulness": {
+            "field_operator_has_action_focus": true,
+            "field_operator_has_record_handoff_focus": true,
+            "manager_has_decision_context": true,
+            "roles_are_distinct": true,
+            "summary_is_not_generic": true
+          },
+          "korean_quality": {
+            "contains_korean": true,
+            "avoids_internal_terms": true,
+            "uses_field_language": true,
+            "concise_for_side_panel": true
+          }
+        },
+        "limits": [
+          "Coverage, usefulness, and Korean scores are deterministic heuristics for triage, not human acceptance.",
+          "Use gold_accuracy for reference-answer accuracy and keep human review before release gating usefulness or Korean quality."
+        ]
+      },
+      "gold_accuracy": {
+        "answer_set_id": "agent-review-summary-holdout-gold-answers-v1",
+        "accuracy_goldset_score": 1.0,
+        "required_fact_score": 1.0,
+        "role_accuracy_score": 1.0,
+        "boundary_accuracy_score": 1.0,
+        "matched_required_points": [
+          "warning",
+          "58.8%",
+          "공구/마모 계통",
+          "동력 전달 계통",
+          "생산 영향이 중간",
+          "16건"
+        ],
+        "missing_required_points": [],
+        "must_not_claim_violations": [],
+        "unsupported_claim_count": 0,
+        "role_scores": {
+          "field_operator": {
+            "score": 1.0,
+            "matched_points": [
+              "공구 매거진",
+              "스핀들 공구 체결부",
+              "주축 모터",
+              "기록",
+              "전달"
+            ],
+            "missing_points": []
+          },
+          "process_manager": {
+            "score": 1.0,
+            "matched_points": [
+              "생산 영향이 중간",
+              "16건",
+              "점검 승인"
+            ],
+            "missing_points": []
+          }
+        },
+        "limits": [
+          "Gold accuracy is a lightweight reference-answer score over required facts and forbidden claims.",
+          "It is not exhaustive free-form claim extraction."
+        ]
+      },
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "editable_output": {
+        "title": "AI 검토 요약 · Holdout 5구역 · 5셀 · CNC 가공기 2 · warning",
+        "summary": "Holdout 5구역 · 5셀 · CNC 가공기 2는 현재 warning 상태이며 예측 위험도는 58.8%입니다. 공구/마모 계통, 동력 전달 계통 중심으로 이력, 현장 위치, 관측 근거를 함께 확인해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "field_operator",
+            "quote": "Holdout 5구역 · 5셀 · CNC 가공기 2: warning 알림. 공구 매거진 및 스핀들 공구 체결부, 주축 모터, 커플링, 동력 전달 하우징에서 공구/마모 계통, 동력 전달 계통을 확인합니다. 공구 마모, 토크, 기계 동력와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 참고 부품 후보는 카바이드 절삭 인서트 1개, 주축 구동 커플링 키트입니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "Holdout 5구역 · 5셀 · CNC 가공기 2 위험 감지 건은 현재 생산 영향이 중간 수준으로 분류되며, 75분 기준 약 16건 손실 가능성이 있습니다. 모델 근거는 공구 마모, 토크, 기계 동력이고 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 최근 유사 이력은 7월 18일 1건으로 확인됩니다. 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+          }
+        ]
+      },
+      "llm": {
+        "duration_ms": 4.344,
+        "queue_wait_ms": 11.034,
+        "usage": {
+          "prompt_tokens": 1635,
+          "completion_tokens": 186,
+          "total_tokens": 1821
+        },
+        "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
+        "cost": {
+          "status": "not_configured",
+          "estimated_total_cost": null
+        }
+      }
+    },
+    {
+      "case_id": "EVT-HGS-006",
+      "scenario_id": "HGS-006",
+      "asset_id": "CNC-H06-L02-03",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "mock",
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "quality_scores": {
+        "coverage_candidate": 1.0,
+        "usefulness_candidate": 1.0,
+        "korean_quality_candidate": 1.0,
+        "overall_candidate": 1.0,
+        "checks": {
+          "coverage": {
+            "status_grade_present": true,
+            "primary_component_present": true,
+            "inspection_location_present": true,
+            "production_context_present": true,
+            "history_context_present": true,
+            "data_gap_present_when_needed": true
+          },
+          "usefulness": {
+            "field_operator_has_action_focus": true,
+            "field_operator_has_record_handoff_focus": true,
+            "manager_has_decision_context": true,
+            "roles_are_distinct": true,
+            "summary_is_not_generic": true
+          },
+          "korean_quality": {
+            "contains_korean": true,
+            "avoids_internal_terms": true,
+            "uses_field_language": true,
+            "concise_for_side_panel": true
+          }
+        },
+        "limits": [
+          "Coverage, usefulness, and Korean scores are deterministic heuristics for triage, not human acceptance.",
+          "Use gold_accuracy for reference-answer accuracy and keep human review before release gating usefulness or Korean quality."
+        ]
+      },
+      "gold_accuracy": {
+        "answer_set_id": "agent-review-summary-holdout-gold-answers-v1",
+        "accuracy_goldset_score": 1.0,
+        "required_fact_score": 1.0,
+        "role_accuracy_score": 1.0,
+        "boundary_accuracy_score": 1.0,
+        "matched_required_points": [
+          "warning",
+          "64.2%",
+          "동력 전달 계통",
+          "열 방산 계통",
+          "생산 영향이 중간",
+          "19건"
+        ],
+        "missing_required_points": [],
+        "must_not_claim_violations": [],
+        "unsupported_claim_count": 0,
+        "role_scores": {
+          "field_operator": {
+            "score": 1.0,
+            "matched_points": [
+              "주축 모터",
+              "커플링",
+              "스핀들 냉각 라인",
+              "기록",
+              "전달"
+            ],
+            "missing_points": []
+          },
+          "process_manager": {
+            "score": 1.0,
+            "matched_points": [
+              "생산 영향이 중간",
+              "19건",
+              "점검 승인"
+            ],
+            "missing_points": []
+          }
+        },
+        "limits": [
+          "Gold accuracy is a lightweight reference-answer score over required facts and forbidden claims.",
+          "It is not exhaustive free-form claim extraction."
+        ]
+      },
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "editable_output": {
+        "title": "AI 검토 요약 · Holdout 6구역 · 2셀 · CNC 가공기 3 · warning",
+        "summary": "Holdout 6구역 · 2셀 · CNC 가공기 3는 현재 warning 상태이며 예측 위험도는 64.2%입니다. 동력 전달 계통, 열 방산 계통 중심으로 이력, 현장 위치, 관측 근거를 함께 확인해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "field_operator",
+            "quote": "Holdout 6구역 · 2셀 · CNC 가공기 3: warning 알림. 주축 모터, 커플링, 동력 전달 하우징, 스핀들 냉각 라인 및 가공부 열 배출 경로에서 동력 전달 계통, 열 방산 계통을 확인합니다. 기계 동력, 토크, 공정·공기 온도 차이와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 참고 부품 후보는 주축 구동 커플링 키트, 냉각 팬 유닛입니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "Holdout 6구역 · 2셀 · CNC 가공기 3 위험 감지 건은 현재 생산 영향이 중간 수준으로 분류되며, 90분 기준 약 19건 손실 가능성이 있습니다. 모델 근거는 기계 동력, 토크, 공정·공기 온도 차이이고 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 최근 유사 이력은 7월 22일 1건으로 확인됩니다. 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+          }
+        ]
+      },
+      "llm": {
+        "duration_ms": 2.305,
+        "queue_wait_ms": 15.456,
+        "usage": {
+          "prompt_tokens": 1641,
+          "completion_tokens": 187,
+          "total_tokens": 1828
+        },
+        "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
+        "cost": {
+          "status": "not_configured",
+          "estimated_total_cost": null
+        }
+      }
+    },
+    {
+      "case_id": "EVT-HGS-007",
+      "scenario_id": "HGS-007",
+      "asset_id": "CNC-H07-L05-01",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "mock",
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "quality_scores": {
+        "coverage_candidate": 1.0,
+        "usefulness_candidate": 1.0,
+        "korean_quality_candidate": 1.0,
+        "overall_candidate": 1.0,
+        "checks": {
+          "coverage": {
+            "status_grade_present": true,
+            "primary_component_present": true,
+            "inspection_location_present": true,
+            "production_context_present": true,
+            "history_context_present": true,
+            "data_gap_present_when_needed": true
+          },
+          "usefulness": {
+            "field_operator_has_action_focus": true,
+            "field_operator_has_record_handoff_focus": true,
+            "manager_has_decision_context": true,
+            "roles_are_distinct": true,
+            "summary_is_not_generic": true
+          },
+          "korean_quality": {
+            "contains_korean": true,
+            "avoids_internal_terms": true,
+            "uses_field_language": true,
+            "concise_for_side_panel": true
+          }
+        },
+        "limits": [
+          "Coverage, usefulness, and Korean scores are deterministic heuristics for triage, not human acceptance.",
+          "Use gold_accuracy for reference-answer accuracy and keep human review before release gating usefulness or Korean quality."
+        ]
+      },
+      "gold_accuracy": {
+        "answer_set_id": "agent-review-summary-holdout-gold-answers-v1",
+        "accuracy_goldset_score": 1.0,
+        "required_fact_score": 1.0,
+        "role_accuracy_score": 1.0,
+        "boundary_accuracy_score": 1.0,
+        "matched_required_points": [
+          "데이터 품질 보류",
+          "위험 등급",
+          "예측 위험도",
+          "확정하지 않습니다",
+          "근거 공백",
+          "데이터 품질 보류",
+          "근거 공백"
+        ],
+        "missing_required_points": [],
+        "must_not_claim_violations": [],
+        "unsupported_claim_count": 0,
+        "role_scores": {
+          "field_operator": {
+            "score": 1.0,
+            "matched_points": [
+              "데이터 품질 보류",
+              "의심 계통",
+              "참고 부품 후보는 이 패킷에 없습니다",
+              "기록",
+              "전달"
+            ],
+            "missing_points": []
+          },
+          "process_manager": {
+            "score": 1.0,
+            "matched_points": [
+              "추정 물량 손실",
+              "유사 이력은 아직",
+              "점검 승인"
+            ],
+            "missing_points": []
+          }
+        },
+        "limits": [
+          "Gold accuracy is a lightweight reference-answer score over required facts and forbidden claims.",
+          "It is not exhaustive free-form claim extraction."
+        ]
+      },
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "editable_output": {
+        "title": "AI 검토 요약 · Holdout 7구역 · 5셀 · CNC 가공기 1 · 데이터 품질 보류",
+        "summary": "Holdout 7구역 · 5셀 · CNC 가공기 1는 데이터 품질 보류 상태라 위험 등급과 예측 위험도를 확정하지 않습니다. 근거 공백이 있어 확정 판단보다 데이터 보강과 이력 조회가 우선입니다.",
+        "role_summaries": [
+          {
+            "role": "field_operator",
+            "quote": "Holdout 7구역 · 5셀 · CNC 가공기 1: 데이터 품질 보류 알림. 연결된 점검 위치에서 의심 계통을 확인합니다. 패킷 근거와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 참고 부품 후보는 이 패킷에 없습니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "Holdout 7구역 · 5셀 · CNC 가공기 1는 데이터 품질 보류 상태라 생산 영향과 추정 물량 손실을 확정하지 않습니다. 유사 이력은 아직 전용 이력 계약 미연결 상태입니다. 점검 승인 여부는 데이터 보강과 이력 조회 후 검토해야 합니다."
+          }
+        ]
+      },
+      "llm": {
+        "duration_ms": 1.798,
+        "queue_wait_ms": 17.83,
+        "usage": {
+          "prompt_tokens": 1223,
+          "completion_tokens": 148,
+          "total_tokens": 1371
+        },
+        "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
+        "cost": {
+          "status": "not_configured",
+          "estimated_total_cost": null
+        }
+      }
+    },
+    {
+      "case_id": "EVT-HGS-008",
+      "scenario_id": "HGS-008",
+      "asset_id": "CNC-H08-L04-02",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "mock",
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "quality_scores": {
+        "coverage_candidate": 1.0,
+        "usefulness_candidate": 1.0,
+        "korean_quality_candidate": 1.0,
+        "overall_candidate": 1.0,
+        "checks": {
+          "coverage": {
+            "status_grade_present": true,
+            "primary_component_present": true,
+            "inspection_location_present": true,
+            "production_context_present": true,
+            "history_context_present": true,
+            "data_gap_present_when_needed": true
+          },
+          "usefulness": {
+            "field_operator_has_action_focus": true,
+            "field_operator_has_record_handoff_focus": true,
+            "manager_has_decision_context": true,
+            "roles_are_distinct": true,
+            "summary_is_not_generic": true
+          },
+          "korean_quality": {
+            "contains_korean": true,
+            "avoids_internal_terms": true,
+            "uses_field_language": true,
+            "concise_for_side_panel": true
+          }
+        },
+        "limits": [
+          "Coverage, usefulness, and Korean scores are deterministic heuristics for triage, not human acceptance.",
+          "Use gold_accuracy for reference-answer accuracy and keep human review before release gating usefulness or Korean quality."
+        ]
+      },
+      "gold_accuracy": {
+        "answer_set_id": "agent-review-summary-holdout-gold-answers-v1",
+        "accuracy_goldset_score": 1.0,
+        "required_fact_score": 1.0,
+        "role_accuracy_score": 1.0,
+        "boundary_accuracy_score": 1.0,
+        "matched_required_points": [
+          "warning",
+          "86.9%",
+          "공구/마모 계통",
+          "동력 전달 계통",
+          "생산 영향이 중간",
+          "46건"
+        ],
+        "missing_required_points": [],
+        "must_not_claim_violations": [],
+        "unsupported_claim_count": 0,
+        "role_scores": {
+          "field_operator": {
+            "score": 1.0,
+            "matched_points": [
+              "공구 매거진",
+              "스핀들 공구 체결부",
+              "주축 모터",
+              "기록",
+              "전달"
+            ],
+            "missing_points": []
+          },
+          "process_manager": {
+            "score": 1.0,
+            "matched_points": [
+              "생산 영향이 중간",
+              "46건",
+              "점검 승인"
+            ],
+            "missing_points": []
+          }
+        },
+        "limits": [
+          "Gold accuracy is a lightweight reference-answer score over required facts and forbidden claims.",
+          "It is not exhaustive free-form claim extraction."
+        ]
+      },
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "editable_output": {
+        "title": "AI 검토 요약 · Holdout 8구역 · 4셀 · CNC 가공기 2 · warning",
+        "summary": "Holdout 8구역 · 4셀 · CNC 가공기 2는 현재 warning 상태이며 예측 위험도는 86.9%입니다. 공구/마모 계통, 동력 전달 계통 중심으로 이력, 현장 위치, 관측 근거를 함께 확인해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "field_operator",
+            "quote": "Holdout 8구역 · 4셀 · CNC 가공기 2: warning 알림. 공구 매거진 및 스핀들 공구 체결부, 주축 모터, 커플링, 동력 전달 하우징에서 공구/마모 계통, 동력 전달 계통을 확인합니다. 공구 마모, 과부하 지표, 토크와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 참고 부품 후보는 카바이드 절삭 인서트 1개, 주축 구동 커플링 키트입니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "Holdout 8구역 · 4셀 · CNC 가공기 2 위험 감지 건은 현재 생산 영향이 중간 수준으로 분류되며, 210분 기준 약 46건 손실 가능성이 있습니다. 모델 근거는 공구 마모, 과부하 지표, 토크이고 작업 처리 흐름은 아직 연결된 요청 상태가 없습니다. 최근 유사 이력은 7월 18일 1건으로 확인됩니다. 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+          }
+        ]
+      },
+      "llm": {
+        "duration_ms": 1.865,
+        "queue_wait_ms": 19.69,
+        "usage": {
+          "prompt_tokens": 1751,
+          "completion_tokens": 186,
+          "total_tokens": 1937
+        },
+        "usage_measurement": "estimated_from_serialized_payload_and_output_chars",
+        "cost": {
+          "status": "not_configured",
+          "estimated_total_cost": null
+        }
+      }
+    }
+  ],
+  "limits": [
+    "This run validates the 120-run harness and validator aggregation with controlled mock candidates.",
+    "This run does not call a live LLM provider and must not be reported as live model quality.",
+    "Configured-rate cost is an estimate from environment variables, not provider billing reconciliation.",
+    "Token counts use provider usage metadata when reported; otherwise they fall back to a serialized payload/output heuristic."
+  ],
+  "ready_for_live_120_run": false,
+  "operating_gate": {
+    "status": "partial",
+    "allowed_fallback_rows": 0,
+    "observed_fallback_rows": 0
+  }
+}

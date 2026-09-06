@@ -1,0 +1,464 @@
+{
+  "http": 200,
+  "post": {
+    "summary": {
+      "asset_id": "CMP-S03-L03-01",
+      "boundary_note": "이 초안은 담당자 검토를 돕기 위한 read-only 문서이며 작업요청 생성, 정비 승인, 자동 승인을 수행하지 않습니다.",
+      "confidence_label": "partial",
+      "data_footnotes": [
+        {
+          "code": "operation_context.load_level",
+          "note": "부하 수준이 없어 생산 맥락의 압박도를 확정하기 어렵습니다.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "operation_context.runtime_hours_7d",
+          "note": "최근 7일 가동 시간이 없어 누적 운전 맥락을 확정하기 어렵습니다.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "operation_context.production_impact",
+          "note": "생산 영향도가 없어 공정 우선순위 판단이 제한됩니다.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "review_priority",
+          "note": "우선순위 입력 일부가 없어 자동 산정 결과를 확정하지 않습니다.",
+          "owner_domain": "report",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "operation_context.limitations.1",
+          "note": "No matching scoped operational snapshot at the selected as-of; values withheld.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        }
+      ],
+      "evidence_gaps": [
+        {
+          "field": "operation_context.load_level",
+          "owner_domain": "operations",
+          "reason": "operation_context_missing_or_unresolved"
+        },
+        {
+          "field": "operation_context.runtime_hours_7d",
+          "owner_domain": "operations",
+          "reason": "operation_context_missing_or_unresolved"
+        },
+        {
+          "field": "operation_context.production_impact",
+          "owner_domain": "operations",
+          "reason": "operation_context_missing_or_unresolved"
+        },
+        {
+          "field": "review_priority",
+          "owner_domain": "report",
+          "reason": "review_priority_inputs_missing_or_unresolved"
+        }
+      ],
+      "generated_at": "2026-08-29T14:00:00+00:00",
+      "history_summary": [
+        "최근 정비 이력: 기록된 정비 완료 · 이상 해소 여부는 별도 확인 · 2026-08-09T10:00:00+00:00 · 20일 전",
+        "열린 작업요청: 없음",
+        "최근 30일 유사 이벤트: 2건"
+      ],
+      "inspection_focus": [],
+      "limitations": [
+        "Agent Review Packet is read-only and does not mutate Recommendation, WorkOrder, MaintenanceAction, MaintenanceEvent, or Replay state.",
+        "SOP grounding supports inspection and replacement timing review drafts; it is not Product Evidence or a repair instruction.",
+        "운영 조치 검토 기준 0.60, 정책 DEMO-ACTION-POLICY-v1. 기존 위험 등급과 작업 권한은 변경하지 않음. 출처 synthetic_demo:factory-status-history-and-policy-v1"
+      ],
+      "mode": "llm",
+      "packet_schema_version": "agent-review-packet-v1.0",
+      "role_summaries": [
+        {
+          "label": "현장 담당자",
+          "quote": "COMPRESSOR · CMP-S03-L03-01: critical 알림. 연결된 점검 위치에서 의심 계통을 확인합니다. rotation raw 6h mean, rotation raw 6h abs mean, rotation raw 6h std와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름에는 열린 점검 요청이 없습니다. 참고 부품 후보는 이 패킷에 없습니다.",
+          "role": "field_operator",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_mean",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_abs_mean"
+          ]
+        },
+        {
+          "label": "공정 관리자",
+          "quote": "COMPRESSOR · CMP-S03-L03-01 위험 감지 건은 현재 생산 영향이 미제공으로 분류되며, 예상 정지 기준 추정 물량 손실 가능성이 있습니다. 모델 근거는 rotation raw 6h mean, rotation raw 6h abs mean, rotation raw 6h std이고 작업 처리 흐름에는 열린 점검 요청이 없습니다. 최근 30일 유사 이력은 2건입니다. 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다.",
+          "role": "process_manager",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_mean",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_abs_mean"
+          ]
+        }
+      ],
+      "schema_version": "agent-review-summary-v1.0",
+      "source_refs": [
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload",
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_mean",
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_abs_mean",
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_std",
+        "equipment-history://1",
+        "synthetic_demo:factory-status-history-and-policy-v1"
+      ],
+      "summary": "COMPRESSOR · CMP-S03-L03-01는 현재 critical 상태이며 예측 위험도는 82.5%입니다. 근거 공백이 있어 확정 판단보다 데이터 보강과 이력 조회가 우선입니다.",
+      "title": "AI 검토 요약 · COMPRESSOR · CMP-S03-L03-01 · critical"
+    },
+    "trace": {
+      "context_sha256": "c5a1755b1037685af4891c281f8879f2bdcd962992a256e4c6c61a0242143ce2",
+      "fallback": false,
+      "provider": "openai-compatible",
+      "reason": null,
+      "validation_errors": [],
+      "materialization": {
+        "summary_id": "279db77b-5618-4328-9714-e06cd9470a77",
+        "summary_key": "agent-review-summary:88acd2ca436a364a2357e8cb7c3d02a275b6c959febac8d292c53688a7b12486",
+        "workflow_run_id": "97b82745-0fc9-4e25-a025-f40b226c1308",
+        "status": "ready",
+        "reused": false,
+        "source_sha256": "af5c8a1bc8be83152e4b08451c9052a409c1c545c78bcb88dede41c6e2d9a64d",
+        "context_sha256": "c5a1755b1037685af4891c281f8879f2bdcd962992a256e4c6c61a0242143ce2",
+        "prompt_version": "agent-review-summary-prompt-v1.4-owner-provenance",
+        "model_version": "openai-compatible:gpt-4o-mini",
+        "generated_at": "2026-08-29T14:00:00+00:00",
+        "created_at": "2026-09-06T13:13:10.912940+00:00",
+        "updated_at": "2026-09-06T13:13:10.912940+00:00",
+        "fallback_reason": null
+      },
+      "workflow_run": {
+        "workflow_run_id": "97b82745-0fc9-4e25-a025-f40b226c1308",
+        "trigger": "ui_manual_regeneration",
+        "engine": "simple",
+        "status": "completed",
+        "started_at": "2026-09-06T13:13:07.375440+00:00",
+        "completed_at": "2026-09-06T13:13:10.912940+00:00",
+        "updated_at": "2026-09-06T13:13:10.912940+00:00",
+        "asset_id": "CMP-S03-L03-01",
+        "event_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00",
+        "dataset_version_id": "dsv-9fc144c7-d3f8-5b37-8465-04248165b7ce",
+        "history_window": "24h",
+        "summary_key": "agent-review-summary:88acd2ca436a364a2357e8cb7c3d02a275b6c959febac8d292c53688a7b12486",
+        "source_sha256": "af5c8a1bc8be83152e4b08451c9052a409c1c545c78bcb88dede41c6e2d9a64d",
+        "context_sha256": "c5a1755b1037685af4891c281f8879f2bdcd962992a256e4c6c61a0242143ce2",
+        "error_type": null,
+        "error_message": null,
+        "trace": {
+          "stage": "finished",
+          "materialization": {
+            "summary_id": "279db77b-5618-4328-9714-e06cd9470a77",
+            "summary_key": "agent-review-summary:88acd2ca436a364a2357e8cb7c3d02a275b6c959febac8d292c53688a7b12486",
+            "workflow_run_id": "97b82745-0fc9-4e25-a025-f40b226c1308",
+            "status": "ready",
+            "source_sha256": "af5c8a1bc8be83152e4b08451c9052a409c1c545c78bcb88dede41c6e2d9a64d",
+            "prompt_version": "agent-review-summary-prompt-v1.4-owner-provenance",
+            "model_version": "openai-compatible:gpt-4o-mini",
+            "generated_at": "2026-08-29T14:00:00+00:00",
+            "created_at": "2026-09-06T13:13:10.912940+00:00",
+            "updated_at": "2026-09-06T13:13:10.912940+00:00",
+            "fallback_reason": null,
+            "reused": false,
+            "context_sha256": "c5a1755b1037685af4891c281f8879f2bdcd962992a256e4c6c61a0242143ce2"
+          },
+          "provider": "openai-compatible",
+          "fallback": false,
+          "reason": null,
+          "validation_errors": []
+        }
+      }
+    }
+  },
+  "state": {
+    "brief": {
+      "asset_id": "CMP-S03-L03-01",
+      "boundary_note": "이 초안은 담당자 검토를 돕기 위한 read-only 문서이며 작업요청 생성, 정비 승인, 자동 승인을 수행하지 않습니다.",
+      "confidence_label": "partial",
+      "data_footnotes": [
+        {
+          "code": "operation_context.load_level",
+          "note": "부하 수준이 없어 생산 맥락의 압박도를 확정하기 어렵습니다.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "operation_context.runtime_hours_7d",
+          "note": "최근 7일 가동 시간이 없어 누적 운전 맥락을 확정하기 어렵습니다.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "operation_context.production_impact",
+          "note": "생산 영향도가 없어 공정 우선순위 판단이 제한됩니다.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "review_priority",
+          "note": "우선순위 입력 일부가 없어 자동 산정 결과를 확정하지 않습니다.",
+          "owner_domain": "report",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "operation_context.limitations.1",
+          "note": "No matching scoped operational snapshot at the selected as-of; values withheld.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        }
+      ],
+      "evidence_gaps": [
+        {
+          "field": "operation_context.load_level",
+          "owner_domain": "operations",
+          "reason": "operation_context_missing_or_unresolved"
+        },
+        {
+          "field": "operation_context.runtime_hours_7d",
+          "owner_domain": "operations",
+          "reason": "operation_context_missing_or_unresolved"
+        },
+        {
+          "field": "operation_context.production_impact",
+          "owner_domain": "operations",
+          "reason": "operation_context_missing_or_unresolved"
+        },
+        {
+          "field": "review_priority",
+          "owner_domain": "report",
+          "reason": "review_priority_inputs_missing_or_unresolved"
+        }
+      ],
+      "generated_at": "2026-08-29T14:00:00+00:00",
+      "history_summary": [
+        "최근 정비 이력: 기록된 정비 완료 · 이상 해소 여부는 별도 확인 · 2026-08-09T10:00:00+00:00 · 20일 전",
+        "열린 작업요청: 없음",
+        "최근 30일 유사 이벤트: 2건"
+      ],
+      "inspection_focus": [],
+      "limitations": [
+        "Agent Review Packet is read-only and does not mutate Recommendation, WorkOrder, MaintenanceAction, MaintenanceEvent, or Replay state.",
+        "SOP grounding supports inspection and replacement timing review drafts; it is not Product Evidence or a repair instruction.",
+        "운영 조치 검토 기준 0.60, 정책 DEMO-ACTION-POLICY-v1. 기존 위험 등급과 작업 권한은 변경하지 않음. 출처 synthetic_demo:factory-status-history-and-policy-v1"
+      ],
+      "mode": "llm",
+      "packet_schema_version": "agent-review-packet-v1.0",
+      "role_summaries": [
+        {
+          "label": "현장 담당자",
+          "quote": "COMPRESSOR · CMP-S03-L03-01: critical 알림. 연결된 점검 위치에서 의심 계통을 확인합니다. rotation raw 6h mean, rotation raw 6h abs mean, rotation raw 6h std와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름에는 열린 점검 요청이 없습니다. 참고 부품 후보는 이 패킷에 없습니다.",
+          "role": "field_operator",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_mean",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_abs_mean"
+          ]
+        },
+        {
+          "label": "공정 관리자",
+          "quote": "COMPRESSOR · CMP-S03-L03-01 위험 감지 건은 현재 생산 영향이 미제공으로 분류되며, 예상 정지 기준 추정 물량 손실 가능성이 있습니다. 모델 근거는 rotation raw 6h mean, rotation raw 6h abs mean, rotation raw 6h std이고 작업 처리 흐름에는 열린 점검 요청이 없습니다. 최근 30일 유사 이력은 2건입니다. 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다.",
+          "role": "process_manager",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_mean",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_abs_mean"
+          ]
+        }
+      ],
+      "schema_version": "agent-review-summary-v1.0",
+      "source_refs": [
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload",
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_mean",
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_abs_mean",
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_std",
+        "equipment-history://1",
+        "synthetic_demo:factory-status-history-and-policy-v1"
+      ],
+      "summary": "COMPRESSOR · CMP-S03-L03-01는 현재 critical 상태이며 예측 위험도는 82.5%입니다. 근거 공백이 있어 확정 판단보다 데이터 보강과 이력 조회가 우선입니다.",
+      "title": "AI 검토 요약 · COMPRESSOR · CMP-S03-L03-01 · critical"
+    },
+    "error": null,
+    "trace": {
+      "context_sha256": "c5a1755b1037685af4891c281f8879f2bdcd962992a256e4c6c61a0242143ce2",
+      "fallback": false,
+      "provider": "openai-compatible",
+      "reason": null,
+      "validation_errors": [],
+      "materialization": {
+        "summary_id": "279db77b-5618-4328-9714-e06cd9470a77",
+        "summary_key": "agent-review-summary:88acd2ca436a364a2357e8cb7c3d02a275b6c959febac8d292c53688a7b12486",
+        "workflow_run_id": "97b82745-0fc9-4e25-a025-f40b226c1308",
+        "status": "ready",
+        "reused": true,
+        "source_sha256": "af5c8a1bc8be83152e4b08451c9052a409c1c545c78bcb88dede41c6e2d9a64d",
+        "context_sha256": "c5a1755b1037685af4891c281f8879f2bdcd962992a256e4c6c61a0242143ce2",
+        "prompt_version": "agent-review-summary-prompt-v1.4-owner-provenance",
+        "model_version": "openai-compatible:gpt-4o-mini",
+        "generated_at": "2026-08-29T14:00:00+00:00",
+        "created_at": "2026-09-06T13:13:10.912940+00:00",
+        "updated_at": "2026-09-06T13:13:10.912940+00:00",
+        "fallback_reason": null
+      }
+    }
+  },
+  "reload": {
+    "brief": {
+      "asset_id": "CMP-S03-L03-01",
+      "boundary_note": "이 초안은 담당자 검토를 돕기 위한 read-only 문서이며 작업요청 생성, 정비 승인, 자동 승인을 수행하지 않습니다.",
+      "confidence_label": "partial",
+      "data_footnotes": [
+        {
+          "code": "operation_context.load_level",
+          "note": "부하 수준이 없어 생산 맥락의 압박도를 확정하기 어렵습니다.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "operation_context.runtime_hours_7d",
+          "note": "최근 7일 가동 시간이 없어 누적 운전 맥락을 확정하기 어렵습니다.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "operation_context.production_impact",
+          "note": "생산 영향도가 없어 공정 우선순위 판단이 제한됩니다.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "review_priority",
+          "note": "우선순위 입력 일부가 없어 자동 산정 결과를 확정하지 않습니다.",
+          "owner_domain": "report",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        },
+        {
+          "code": "operation_context.limitations.1",
+          "note": "No matching scoped operational snapshot at the selected as-of; values withheld.",
+          "owner_domain": "operations",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload"
+          ]
+        }
+      ],
+      "evidence_gaps": [
+        {
+          "field": "operation_context.load_level",
+          "owner_domain": "operations",
+          "reason": "operation_context_missing_or_unresolved"
+        },
+        {
+          "field": "operation_context.runtime_hours_7d",
+          "owner_domain": "operations",
+          "reason": "operation_context_missing_or_unresolved"
+        },
+        {
+          "field": "operation_context.production_impact",
+          "owner_domain": "operations",
+          "reason": "operation_context_missing_or_unresolved"
+        },
+        {
+          "field": "review_priority",
+          "owner_domain": "report",
+          "reason": "review_priority_inputs_missing_or_unresolved"
+        }
+      ],
+      "generated_at": "2026-08-29T14:00:00+00:00",
+      "history_summary": [
+        "최근 정비 이력: 기록된 정비 완료 · 이상 해소 여부는 별도 확인 · 2026-08-09T10:00:00+00:00 · 20일 전",
+        "열린 작업요청: 없음",
+        "최근 30일 유사 이벤트: 2건"
+      ],
+      "inspection_focus": [],
+      "limitations": [
+        "Agent Review Packet is read-only and does not mutate Recommendation, WorkOrder, MaintenanceAction, MaintenanceEvent, or Replay state.",
+        "SOP grounding supports inspection and replacement timing review drafts; it is not Product Evidence or a repair instruction.",
+        "운영 조치 검토 기준 0.60, 정책 DEMO-ACTION-POLICY-v1. 기존 위험 등급과 작업 권한은 변경하지 않음. 출처 synthetic_demo:factory-status-history-and-policy-v1"
+      ],
+      "mode": "llm",
+      "packet_schema_version": "agent-review-packet-v1.0",
+      "role_summaries": [
+        {
+          "label": "현장 담당자",
+          "quote": "COMPRESSOR · CMP-S03-L03-01: critical 알림. 연결된 점검 위치에서 의심 계통을 확인합니다. rotation raw 6h mean, rotation raw 6h abs mean, rotation raw 6h std와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. 작업 처리 흐름에는 열린 점검 요청이 없습니다. 참고 부품 후보는 이 패킷에 없습니다.",
+          "role": "field_operator",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_mean",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_abs_mean"
+          ]
+        },
+        {
+          "label": "공정 관리자",
+          "quote": "COMPRESSOR · CMP-S03-L03-01 위험 감지 건은 현재 생산 영향이 미제공으로 분류되며, 예상 정지 기준 추정 물량 손실 가능성이 있습니다. 모델 근거는 rotation raw 6h mean, rotation raw 6h abs mean, rotation raw 6h std이고 작업 처리 흐름에는 열린 점검 요청이 없습니다. 최근 30일 유사 이력은 2건입니다. 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다.",
+          "role": "process_manager",
+          "source_refs": [
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_mean",
+            "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_abs_mean"
+          ]
+        }
+      ],
+      "schema_version": "agent-review-summary-v1.0",
+      "source_refs": [
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload",
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_mean",
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_abs_mean",
+        "result-artifact:RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00#evidence_payload#factor:rotation_raw_6h_std",
+        "equipment-history://1",
+        "synthetic_demo:factory-status-history-and-policy-v1"
+      ],
+      "summary": "COMPRESSOR · CMP-S03-L03-01는 현재 critical 상태이며 예측 위험도는 82.5%입니다. 근거 공백이 있어 확정 판단보다 데이터 보강과 이력 조회가 우선입니다.",
+      "title": "AI 검토 요약 · COMPRESSOR · CMP-S03-L03-01 · critical"
+    },
+    "trace": {
+      "context_sha256": "c5a1755b1037685af4891c281f8879f2bdcd962992a256e4c6c61a0242143ce2",
+      "fallback": false,
+      "provider": "openai-compatible",
+      "reason": null,
+      "validation_errors": [],
+      "materialization": {
+        "summary_id": "279db77b-5618-4328-9714-e06cd9470a77",
+        "summary_key": "agent-review-summary:88acd2ca436a364a2357e8cb7c3d02a275b6c959febac8d292c53688a7b12486",
+        "workflow_run_id": "97b82745-0fc9-4e25-a025-f40b226c1308",
+        "status": "ready",
+        "reused": true,
+        "source_sha256": "af5c8a1bc8be83152e4b08451c9052a409c1c545c78bcb88dede41c6e2d9a64d",
+        "context_sha256": "c5a1755b1037685af4891c281f8879f2bdcd962992a256e4c6c61a0242143ce2",
+        "prompt_version": "agent-review-summary-prompt-v1.4-owner-provenance",
+        "model_version": "openai-compatible:gpt-4o-mini",
+        "generated_at": "2026-08-29T14:00:00+00:00",
+        "created_at": "2026-09-06T13:13:10.912940+00:00",
+        "updated_at": "2026-09-06T13:13:10.912940+00:00",
+        "fallback_reason": null
+      }
+    }
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "observed_at": "2026-09-06T02:14:14.386460+00:00",
+  "target_host": "kosa165.iptime.org",
+  "read_only": true,
+  "validated_count": 14,
+  "checks": [
+    {
+      "domain": "production",
+      "asset_id": "CNC-S04-L02-03",
+      "source_version": "OPS-DECISION-SNAPSHOT-2026-09-02-01",
+      "schema_id": "operational-context.production",
+      "schema_version": 1,
+      "as_of": "2026-09-02T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "production",
+      "asset_id": "CNC-S04-L02-03",
+      "source_version": "OPS-DECISION-SNAPSHOT-2026-08-01-01",
+      "schema_id": "operational-context.production",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "maintenance_readiness",
+      "asset_id": "CNC-S04-L02-03",
+      "source_version": "MAINT-READINESS-SNAPSHOT-2026-09-02-01",
+      "schema_id": "operational-context.maintenance_readiness",
+      "schema_version": 1,
+      "as_of": "2026-09-02T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "maintenance_readiness",
+      "asset_id": "CNC-S04-L02-03",
+      "source_version": "MAINT-READINESS-SNAPSHOT-2026-08-01-01",
+      "schema_id": "operational-context.maintenance_readiness",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "quality_delivery",
+      "asset_id": "CNC-S04-L02-03",
+      "source_version": "QUALITY-DELIVERY-SNAPSHOT-2026-09-02-01",
+      "schema_id": "operational-context.quality_delivery",
+      "schema_version": 1,
+      "as_of": "2026-09-02T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "quality_delivery",
+      "asset_id": "CNC-S04-L02-03",
+      "source_version": "QUALITY-DELIVERY-SNAPSHOT-2026-08-01-01",
+      "schema_id": "operational-context.quality_delivery",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "planning",
+      "asset_id": "CNC-S01-L01-01",
+      "source_version": "OPS-SNAPSHOT-2026-08-01-A-B",
+      "schema_id": "operational-context.planning",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "planning",
+      "asset_id": "CNC-S04-L04-01",
+      "source_version": "OPS-SNAPSHOT-2026-08-01-A-B",
+      "schema_id": "operational-context.planning",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "planning",
+      "asset_id": "CNC-S01-L04-03",
+      "source_version": "OPS-SNAPSHOT-2026-08-01-A-B",
+      "schema_id": "operational-context.planning",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "planning",
+      "asset_id": "CNC-S04-L02-03",
+      "source_version": "OPS-SNAPSHOT-2026-08-01-A-B",
+      "schema_id": "operational-context.planning",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "planning",
+      "asset_id": "CNC-S03-L01-03",
+      "source_version": "OPS-SNAPSHOT-2026-08-01-A-B",
+      "schema_id": "operational-context.planning",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "planning",
+      "asset_id": "CNC-S02-L02-02",
+      "source_version": "OPS-SNAPSHOT-2026-08-01-A-B",
+      "schema_id": "operational-context.planning",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "planning",
+      "asset_id": "CNC-S04-L05-01",
+      "source_version": "OPS-SNAPSHOT-2026-08-01-A-B",
+      "schema_id": "operational-context.planning",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    },
+    {
+      "domain": "planning",
+      "asset_id": "CNC-S04-L04-02",
+      "source_version": "OPS-SNAPSHOT-2026-08-01-A-B",
+      "schema_id": "operational-context.planning",
+      "schema_version": 1,
+      "as_of": "2026-08-01T00:00:00+09:00",
+      "status": "available",
+      "exact_payload_match": true
+    }
+  ]
+}

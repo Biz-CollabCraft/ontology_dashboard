@@ -1,0 +1,330 @@
+{
+  "results": [
+    {
+      "role": "process_engineer",
+      "error": null,
+      "records": {
+        "status": "available",
+        "identity": {
+          "organization_id": "org-ontology-demo",
+          "project_id": "manufacturing-demo-project",
+          "workspace_id": "manufacturing-demo",
+          "asset_id": "CNC-S04-L02-04",
+          "evidence_snapshot_id": "RESULT#CNC-S04-L02-04#2026-08-29T23:00:00+09:00",
+          "decision_as_of": "2026-08-29T14:00:00Z"
+        },
+        "counts": {
+          "running": 92,
+          "stopped": 5,
+          "maintenance": 3,
+          "unknown": 0
+        },
+        "total": 100,
+        "similar_events_30d": 2,
+        "incident_refs": [
+          "DEMO-INCIDENT:CNC-S04-L02-04:5",
+          "DEMO-INCIDENT:CNC-S04-L02-04:15"
+        ],
+        "history_coverage_complete": true,
+        "policy": {
+          "attention_threshold": 0.3,
+          "action_threshold": 0.6,
+          "version": "DEMO-ACTION-POLICY-v1",
+          "model_version": "independent-logreg-v3.1",
+          "asset_type": "cnc"
+        },
+        "provenance": {
+          "bundle_id": "DEMO-FACTORY-RECORDS-20260829-v1",
+          "source_classification": "synthetic_demo_context",
+          "source_ref": "synthetic_demo:factory-status-history-and-policy-v1",
+          "dataset_version_id": "dsv-9fc144c7-d3f8-5b37-8465-04248165b7ce",
+          "generated_at": "2026-08-29T14:00:00+00:00"
+        },
+        "limitations": [
+          "같은 설비·같은 고장 유형의 사건을 (기준 시각-30일, 기준 시각] 구간에서 집계합니다.",
+          "상태 집계와 조치 정책은 기존 예측 위험 등급·작업 승인을 변경하지 않습니다."
+        ]
+      },
+      "recordsError": null,
+      "mc": {
+        "lastMaintenanceDaysAgo": 0,
+        "similarEvents30d": 2,
+        "openWorkOrderExists": false
+      },
+      "threshold": 0.6,
+      "command": null
+    },
+    {
+      "role": "process_engineer",
+      "error": null,
+      "records": {
+        "status": "available",
+        "identity": {
+          "organization_id": "org-ontology-demo",
+          "project_id": "manufacturing-demo-project",
+          "workspace_id": "manufacturing-demo",
+          "asset_id": "CMP-S03-L03-01",
+          "evidence_snapshot_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00",
+          "decision_as_of": "2026-08-29T14:00:00Z"
+        },
+        "counts": {
+          "running": 92,
+          "stopped": 5,
+          "maintenance": 3,
+          "unknown": 0
+        },
+        "total": 100,
+        "similar_events_30d": 2,
+        "incident_refs": [
+          "DEMO-INCIDENT:CMP-S03-L03-01:5",
+          "DEMO-INCIDENT:CMP-S03-L03-01:15"
+        ],
+        "history_coverage_complete": true,
+        "policy": {
+          "attention_threshold": 0.3,
+          "action_threshold": 0.6,
+          "version": "DEMO-ACTION-POLICY-v1",
+          "model_version": "independent-logreg-v3.1",
+          "asset_type": "compressor"
+        },
+        "provenance": {
+          "bundle_id": "DEMO-FACTORY-RECORDS-20260829-v1",
+          "source_classification": "synthetic_demo_context",
+          "source_ref": "synthetic_demo:factory-status-history-and-policy-v1",
+          "dataset_version_id": "dsv-9fc144c7-d3f8-5b37-8465-04248165b7ce",
+          "generated_at": "2026-08-29T14:00:00+00:00"
+        },
+        "limitations": [
+          "같은 설비·같은 고장 유형의 사건을 (기준 시각-30일, 기준 시각] 구간에서 집계합니다.",
+          "상태 집계와 조치 정책은 기존 예측 위험 등급·작업 승인을 변경하지 않습니다."
+        ]
+      },
+      "recordsError": null,
+      "mc": {
+        "lastMaintenanceDaysAgo": 20,
+        "similarEvents30d": 2,
+        "openWorkOrderExists": false
+      },
+      "threshold": 0.6,
+      "command": null
+    },
+    {
+      "role": "process_manager",
+      "error": null,
+      "records": {
+        "status": "available",
+        "identity": {
+          "organization_id": "org-ontology-demo",
+          "project_id": "manufacturing-demo-project",
+          "workspace_id": "manufacturing-demo",
+          "asset_id": "CNC-S04-L02-04",
+          "evidence_snapshot_id": "RESULT#CNC-S04-L02-04#2026-08-29T23:00:00+09:00",
+          "decision_as_of": "2026-08-29T14:00:00Z"
+        },
+        "counts": {
+          "running": 92,
+          "stopped": 5,
+          "maintenance": 3,
+          "unknown": 0
+        },
+        "total": 100,
+        "similar_events_30d": 2,
+        "incident_refs": [
+          "DEMO-INCIDENT:CNC-S04-L02-04:5",
+          "DEMO-INCIDENT:CNC-S04-L02-04:15"
+        ],
+        "history_coverage_complete": true,
+        "policy": {
+          "attention_threshold": 0.3,
+          "action_threshold": 0.6,
+          "version": "DEMO-ACTION-POLICY-v1",
+          "model_version": "independent-logreg-v3.1",
+          "asset_type": "cnc"
+        },
+        "provenance": {
+          "bundle_id": "DEMO-FACTORY-RECORDS-20260829-v1",
+          "source_classification": "synthetic_demo_context",
+          "source_ref": "synthetic_demo:factory-status-history-and-policy-v1",
+          "dataset_version_id": "dsv-9fc144c7-d3f8-5b37-8465-04248165b7ce",
+          "generated_at": "2026-08-29T14:00:00+00:00"
+        },
+        "limitations": [
+          "같은 설비·같은 고장 유형의 사건을 (기준 시각-30일, 기준 시각] 구간에서 집계합니다.",
+          "상태 집계와 조치 정책은 기존 예측 위험 등급·작업 승인을 변경하지 않습니다."
+        ]
+      },
+      "recordsError": null,
+      "mc": {
+        "lastMaintenanceDaysAgo": 0,
+        "similarEvents30d": 2,
+        "openWorkOrderExists": false
+      },
+      "threshold": 0.6,
+      "command": null
+    },
+    {
+      "role": "process_manager",
+      "error": null,
+      "records": {
+        "status": "available",
+        "identity": {
+          "organization_id": "org-ontology-demo",
+          "project_id": "manufacturing-demo-project",
+          "workspace_id": "manufacturing-demo",
+          "asset_id": "CMP-S03-L03-01",
+          "evidence_snapshot_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00",
+          "decision_as_of": "2026-08-29T14:00:00Z"
+        },
+        "counts": {
+          "running": 92,
+          "stopped": 5,
+          "maintenance": 3,
+          "unknown": 0
+        },
+        "total": 100,
+        "similar_events_30d": 2,
+        "incident_refs": [
+          "DEMO-INCIDENT:CMP-S03-L03-01:5",
+          "DEMO-INCIDENT:CMP-S03-L03-01:15"
+        ],
+        "history_coverage_complete": true,
+        "policy": {
+          "attention_threshold": 0.3,
+          "action_threshold": 0.6,
+          "version": "DEMO-ACTION-POLICY-v1",
+          "model_version": "independent-logreg-v3.1",
+          "asset_type": "compressor"
+        },
+        "provenance": {
+          "bundle_id": "DEMO-FACTORY-RECORDS-20260829-v1",
+          "source_classification": "synthetic_demo_context",
+          "source_ref": "synthetic_demo:factory-status-history-and-policy-v1",
+          "dataset_version_id": "dsv-9fc144c7-d3f8-5b37-8465-04248165b7ce",
+          "generated_at": "2026-08-29T14:00:00+00:00"
+        },
+        "limitations": [
+          "같은 설비·같은 고장 유형의 사건을 (기준 시각-30일, 기준 시각] 구간에서 집계합니다.",
+          "상태 집계와 조치 정책은 기존 예측 위험 등급·작업 승인을 변경하지 않습니다."
+        ]
+      },
+      "recordsError": null,
+      "mc": {
+        "lastMaintenanceDaysAgo": 20,
+        "similarEvents30d": 2,
+        "openWorkOrderExists": false
+      },
+      "threshold": 0.6,
+      "command": null
+    },
+    {
+      "role": "maintenance_technician",
+      "error": null,
+      "records": {
+        "status": "available",
+        "identity": {
+          "organization_id": "org-ontology-demo",
+          "project_id": "manufacturing-demo-project",
+          "workspace_id": "manufacturing-demo",
+          "asset_id": "CNC-S04-L02-04",
+          "evidence_snapshot_id": "RESULT#CNC-S04-L02-04#2026-08-29T23:00:00+09:00",
+          "decision_as_of": "2026-08-29T14:00:00Z"
+        },
+        "counts": {
+          "running": 92,
+          "stopped": 5,
+          "maintenance": 3,
+          "unknown": 0
+        },
+        "total": 100,
+        "similar_events_30d": 2,
+        "incident_refs": [
+          "DEMO-INCIDENT:CNC-S04-L02-04:5",
+          "DEMO-INCIDENT:CNC-S04-L02-04:15"
+        ],
+        "history_coverage_complete": true,
+        "policy": {
+          "attention_threshold": 0.3,
+          "action_threshold": 0.6,
+          "version": "DEMO-ACTION-POLICY-v1",
+          "model_version": "independent-logreg-v3.1",
+          "asset_type": "cnc"
+        },
+        "provenance": {
+          "bundle_id": "DEMO-FACTORY-RECORDS-20260829-v1",
+          "source_classification": "synthetic_demo_context",
+          "source_ref": "synthetic_demo:factory-status-history-and-policy-v1",
+          "dataset_version_id": "dsv-9fc144c7-d3f8-5b37-8465-04248165b7ce",
+          "generated_at": "2026-08-29T14:00:00+00:00"
+        },
+        "limitations": [
+          "같은 설비·같은 고장 유형의 사건을 (기준 시각-30일, 기준 시각] 구간에서 집계합니다.",
+          "상태 집계와 조치 정책은 기존 예측 위험 등급·작업 승인을 변경하지 않습니다."
+        ]
+      },
+      "recordsError": null,
+      "mc": {
+        "lastMaintenanceDaysAgo": 0,
+        "similarEvents30d": 2,
+        "openWorkOrderExists": false
+      },
+      "threshold": 0.6,
+      "command": null
+    },
+    {
+      "role": "maintenance_technician",
+      "error": null,
+      "records": {
+        "status": "available",
+        "identity": {
+          "organization_id": "org-ontology-demo",
+          "project_id": "manufacturing-demo-project",
+          "workspace_id": "manufacturing-demo",
+          "asset_id": "CMP-S03-L03-01",
+          "evidence_snapshot_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00",
+          "decision_as_of": "2026-08-29T14:00:00Z"
+        },
+        "counts": {
+          "running": 92,
+          "stopped": 5,
+          "maintenance": 3,
+          "unknown": 0
+        },
+        "total": 100,
+        "similar_events_30d": 2,
+        "incident_refs": [
+          "DEMO-INCIDENT:CMP-S03-L03-01:5",
+          "DEMO-INCIDENT:CMP-S03-L03-01:15"
+        ],
+        "history_coverage_complete": true,
+        "policy": {
+          "attention_threshold": 0.3,
+          "action_threshold": 0.6,
+          "version": "DEMO-ACTION-POLICY-v1",
+          "model_version": "independent-logreg-v3.1",
+          "asset_type": "compressor"
+        },
+        "provenance": {
+          "bundle_id": "DEMO-FACTORY-RECORDS-20260829-v1",
+          "source_classification": "synthetic_demo_context",
+          "source_ref": "synthetic_demo:factory-status-history-and-policy-v1",
+          "dataset_version_id": "dsv-9fc144c7-d3f8-5b37-8465-04248165b7ce",
+          "generated_at": "2026-08-29T14:00:00+00:00"
+        },
+        "limitations": [
+          "같은 설비·같은 고장 유형의 사건을 (기준 시각-30일, 기준 시각] 구간에서 집계합니다.",
+          "상태 집계와 조치 정책은 기존 예측 위험 등급·작업 승인을 변경하지 않습니다."
+        ]
+      },
+      "recordsError": null,
+      "mc": {
+        "lastMaintenanceDaysAgo": 20,
+        "similarEvents30d": 2,
+        "openWorkOrderExists": false
+      },
+      "threshold": 0.6,
+      "command": null
+    }
+  ],
+  "wrongSnapshotStatus": 409,
+  "wrongWorkspaceStatus": 403
+}

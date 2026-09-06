@@ -1,0 +1,15 @@
+
+Running 9 tests using 1 worker
+
+
+
+[1/9] [chromium] › e2e/standalone-original.spec.ts:5:1 › real PG: default entry and login redirect without iframe
+[2/9] [chromium] › e2e/standalone-original.spec.ts:6:173 › real PG: process_manager tabs do not grant permissions
+[3/9] [chromium] › e2e/standalone-original.spec.ts:6:173 › real PG: process_engineer tabs do not grant permissions
+[4/9] [chromium] › e2e/standalone-original.spec.ts:6:173 › real PG: maintenance_technician tabs do not grant permissions
+[5/9] [chromium] › e2e/standalone-original.spec.ts:7:1 › real PG: asset/snapshot reload/direct URL and side view
+[6/9] [chromium] › e2e/standalone-original.spec.ts:8:1 › real PG: wrong URL snapshot held and React route retained
+[7/9] [chromium] › e2e/standalone-original.spec.ts:9:1 › fault injection: late response cannot replace newer asset
+[8/9] [chromium] › e2e/standalone-original.spec.ts:10:31 › mock workflow only: save 200, duplicate click and requery
+[9/9] [chromium] › e2e/standalone-original.spec.ts:10:31 › mock workflow only: save 409, duplicate click and requery
+  9 passed (27.7s)

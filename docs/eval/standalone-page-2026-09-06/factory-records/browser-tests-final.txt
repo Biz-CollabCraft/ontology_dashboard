@@ -1,0 +1,19 @@
+
+Running 11 tests using 1 worker
+
+(node:7000) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/11] [chromium] › e2e/standalone-original.spec.ts:6:1 › real PG: default entry and login redirect without iframe
+[2/11] [chromium] › e2e/standalone-original.spec.ts:7:173 › real PG: process_manager tabs do not grant permissions
+[3/11] [chromium] › e2e/standalone-original.spec.ts:7:173 › real PG: process_engineer tabs do not grant permissions
+[4/11] [chromium] › e2e/standalone-original.spec.ts:7:173 › real PG: maintenance_technician tabs do not grant permissions
+[5/11] [chromium] › e2e/standalone-original.spec.ts:8:1 › real PG: asset/snapshot reload/direct URL and side view
+[6/11] [chromium] › e2e/standalone-original.spec.ts:9:1 › real PG: wrong URL snapshot held and React route retained
+[7/11] [chromium] › e2e/standalone-original.spec.ts:10:1 › fault injection: late response cannot replace newer asset
+[8/11] [chromium] › e2e/standalone-original.spec.ts:11:31 › mock workflow only: save 200, duplicate click and requery
+[9/11] [chromium] › e2e/standalone-original.spec.ts:11:31 › mock workflow only: save 409, duplicate click and requery
+[10/11] [chromium] › e2e/standalone-original.spec.ts:23:1 › real PG: Korean signal history and field values reach rendered UI
+[11/11] [chromium] › e2e/standalone-original.spec.ts:30:1 › real PG: runtime context and persisted maintenance reach selected detail
+  11 passed (1.3m)

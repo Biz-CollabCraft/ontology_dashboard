@@ -1,0 +1,46 @@
+{
+  "observed_at": "2026-09-06T02:12:39.265397+00:00",
+  "target_host": "kosa165.iptime.org",
+  "target_scope": [
+    "org-ontology-demo",
+    "manufacturing-demo-project",
+    "manufacturing-demo"
+  ],
+  "project": {
+    "id": "manufacturing-demo-project",
+    "organization_id": "org-ontology-demo",
+    "display_name": "Manufacturing Demo"
+  },
+  "applied": true,
+  "pending_migrations": [
+    "0049_versioned_operational_context",
+    "0050_operational_context_versions_and_bindings"
+  ],
+  "migration_checksums": {
+    "0049_versioned_operational_context": "0961dd62d15f6596890bd5339022b0f8936d1de367b8bbf1833cf8793320f2e1",
+    "0050_operational_context_versions_and_bindings": "953d7a2d377d75cbaebf61613fd9c5894055a6d3946a34f0bb9b6b235917d69f"
+  },
+  "manifest_sha256": "1690678f20df0723f04ff274d1184a58391181647898c7e839b3a8690db52ad0",
+  "manifest_count": 14,
+  "source_classification": "synthetic_demo_context",
+  "counts_before": {
+    "operational_context_snapshots": null,
+    "operational_context_sources": null,
+    "operational_context_bindings": null
+  },
+  "transaction": "schema_and_seed_one_transaction",
+  "import_result": {
+    "inserted": 14,
+    "unchanged": 0
+  },
+  "counts_after": {
+    "operational_context_snapshots": 0,
+    "operational_context_sources": 14,
+    "operational_context_bindings": 14
+  },
+  "migration_recheck": [
+    "0049_versioned_operational_context",
+    "0050_operational_context_versions_and_bindings"
+  ],
+  "committed": true
+}

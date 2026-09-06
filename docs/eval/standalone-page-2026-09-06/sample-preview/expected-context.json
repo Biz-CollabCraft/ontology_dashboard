@@ -1,0 +1,2297 @@
+{
+  "validation_environment": "temporary_sqlite_context_preview_only",
+  "live_database_applied": false,
+  "bundle": "DEMO-S03L03-20260829-v1",
+  "first_import": {
+    "inserted": 24,
+    "unchanged": 0
+  },
+  "repeat_import": {
+    "inserted": 0,
+    "unchanged": 24
+  },
+  "views": [
+    {
+      "schema_version": "operational-context-read-v1",
+      "identity": {
+        "organization_id": "org-ontology-demo",
+        "project_id": "manufacturing-demo-project",
+        "workspace_id": "manufacturing-demo",
+        "asset_id": "CMP-S03-L03-01",
+        "evidence_snapshot_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00",
+        "decision_as_of": "2026-08-29T14:00:00Z"
+      },
+      "retrieved_at": "2026-08-29T14:00:00Z",
+      "context_fingerprint": "c648fee88f6d5d4990f796f64a713a4024519cdd0ca13d7df134f5a8b013f53f",
+      "domains": {
+        "production": {
+          "context": {
+            "owner_domain": "production",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CMP-S03-L03-01"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CMP-S03-L03-01:production",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CMP-S03-L03-01"
+            ],
+            "data": {
+              "alternative_resources": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+                "압축기와 절삭기 생산의 의존관계가 미등록이므로 생산 손실량을 계산하지 않습니다."
+              ],
+              "production_orders": [],
+              "source_classification": "synthetic_demo_context",
+              "wip": []
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "압축기와 절삭기 생산의 의존관계가 미등록이므로 생산 손실량을 계산하지 않습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CMP-S03-L03-01:production; schema operational-context.production v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "df11ab0a0697a70229522a71ae4b1144ff913de75d0d6093a987893b62ae882c",
+            "schema_id": "operational-context.production",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "d10c274da60492f3cfd413be77d8a6755631aff93031ea5170592313ae2c6953",
+            "binding_sha256": "488c74bf36d5c7e4a9e45db79e8d7cb625146e4a3142bac6292617a45248bc6c",
+            "bound_evidence_snapshot_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "maintenance_readiness": {
+          "context": {
+            "owner_domain": "maintenance_readiness",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CMP-S03-L03-01"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CMP-S03-L03-01:maintenance_readiness",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CMP-S03-L03-01"
+            ],
+            "data": {
+              "action_code": "DEMO_INSPECTION",
+              "asset_id": "CMP-S03-L03-01",
+              "inventory_snapshots": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+                "실제 Action Candidate와 연결되지 않은 시연 항목입니다. 착수·승인 근거로 사용할 수 없습니다."
+              ],
+              "maintenance_windows": [],
+              "part_requirements": [],
+              "required_skill_codes": [
+                "DEMO_MECHANICAL_INSPECTION"
+              ],
+              "source_classification": "synthetic_demo_context",
+              "technician_candidates": []
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "실제 Action Candidate와 연결되지 않은 시연 항목입니다. 착수·승인 근거로 사용할 수 없습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CMP-S03-L03-01:maintenance_readiness; schema operational-context.maintenance_readiness v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "bd64eec6970d830f1858dbe728accf16674bfe6331b6c92ac29965ed904a43a5",
+            "schema_id": "operational-context.maintenance_readiness",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "dc737917f4ccc66a28440696d1af45338d832842cc8ec409fef507cd7ab8bce2",
+            "binding_sha256": "837bbde4cf7eb4809f3ca4bd2fe09d4894990c1bfe7db0a628e7ccef4767070e",
+            "bound_evidence_snapshot_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "quality_delivery": {
+          "context": {
+            "owner_domain": "quality_delivery",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CMP-S03-L03-01"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CMP-S03-L03-01:quality_delivery",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CMP-S03-L03-01"
+            ],
+            "data": {
+              "asset_id": "CMP-S03-L03-01",
+              "delivery_commitments": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다."
+              ],
+              "quality_lots": [],
+              "source_classification": "synthetic_demo_context"
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CMP-S03-L03-01:quality_delivery; schema operational-context.quality_delivery v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "1c5a821b78c64e2196cde9d3ac9f3c52c752ef30abbf39adc48cfc49253de382",
+            "schema_id": "operational-context.quality_delivery",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "42668aa95b711b35422735bd8ca14956b7e83c7299d22a60ab55d1d3ff6086b5",
+            "binding_sha256": "12701648320c461817ba48da538846c7c8055be288a3000ff85e95a17c8f9b5e",
+            "bound_evidence_snapshot_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "impact_policy": {
+          "context": {
+            "owner_domain": "impact_policy",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CMP-S03-L03-01"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CMP-S03-L03-01:impact_policy",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CMP-S03-L03-01"
+            ],
+            "data": {
+              "alternative_capacity_allowed": {},
+              "policy_version": "DEMO-S03L03-20260829-v1",
+              "primary_capacity_units": {},
+              "source_refs": [
+                "synthetic_demo:DEMO-S03L03-20260829-v1:CMP-S03-L03-01"
+              ]
+            },
+            "limitations": [
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CMP-S03-L03-01:impact_policy; schema operational-context.impact_policy v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "24047e2cd569c35e5f3daa297296b8d145bd60a45879a7c5b2fb2302291507a0",
+            "schema_id": "operational-context.impact_policy",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "09c150eca6f0a4b6027e905226bd2724349bdc46f583b6a0dba9ada2c81e9972",
+            "binding_sha256": "be7a90969b974644d2aacb1090e089941ccf3ec24eef297c445dde23e9b1af02",
+            "bound_evidence_snapshot_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "planning": {
+          "context": {
+            "owner_domain": "planning",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CMP-S03-L03-01"
+            },
+            "status": "not_connected",
+            "source_version": null,
+            "source_updated_at": null,
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 0,
+              "state": "unknown"
+            },
+            "source_refs": [],
+            "data": {},
+            "limitations": [
+              "No matching scoped operational snapshot at the selected as-of; values withheld."
+            ]
+          },
+          "provenance": null,
+          "reason_codes": [
+            "NO_MATCHING_SCOPE_SNAPSHOT_AT_AS_OF"
+          ]
+        }
+      },
+      "production_impact": {
+        "schema_version": "operational-impact-simulation-v1.0",
+        "simulation_policy_version": "DEMO-S03L03-20260829-v1",
+        "evidence_snapshot_id": "RESULT#CMP-S03-L03-01#2026-08-29T23:00:00+09:00",
+        "risk_status": "critical",
+        "context_version_set": {
+          "maintenance_readiness": "DEMO-S03L03-20260829-v1:CMP-S03-L03-01:maintenance_readiness",
+          "production": "DEMO-S03L03-20260829-v1:CMP-S03-L03-01:production",
+          "quality_delivery": "DEMO-S03L03-20260829-v1:CMP-S03-L03-01:quality_delivery"
+        },
+        "assumptions": {
+          "policy_version": "DEMO-S03L03-20260829-v1",
+          "primary_capacity_units": {},
+          "alternative_capacity_allowed": {},
+          "source_refs": [
+            "synthetic_demo:DEMO-S03L03-20260829-v1:CMP-S03-L03-01"
+          ]
+        },
+        "options": [
+          {
+            "option": "stop_now",
+            "state": "not_calculable",
+            "preconditions": [],
+            "reason_codes": [
+              "MISSING_WIP"
+            ],
+            "required_units": null,
+            "primary_capacity_after_action": null,
+            "gross_exposed_units": null,
+            "alternative_absorbed_units": null,
+            "remaining_exposed_units": null,
+            "intermediate_values": {},
+            "limitations": []
+          },
+          {
+            "option": "planned_maintenance",
+            "state": "not_calculable",
+            "preconditions": [],
+            "reason_codes": [
+              "MISSING_WIP"
+            ],
+            "required_units": null,
+            "primary_capacity_after_action": null,
+            "gross_exposed_units": null,
+            "alternative_absorbed_units": null,
+            "remaining_exposed_units": null,
+            "intermediate_values": {},
+            "limitations": []
+          },
+          {
+            "option": "continue_operation",
+            "state": "not_calculable",
+            "preconditions": [],
+            "reason_codes": [
+              "MISSING_WIP"
+            ],
+            "required_units": null,
+            "primary_capacity_after_action": null,
+            "gross_exposed_units": null,
+            "alternative_absorbed_units": null,
+            "remaining_exposed_units": null,
+            "intermediate_values": {},
+            "limitations": []
+          }
+        ],
+        "source_refs": [
+          "synthetic_demo:DEMO-S03L03-20260829-v1:CMP-S03-L03-01"
+        ],
+        "limitations": [
+          "Conditional deterministic comparison only; not realized production loss.",
+          "The simulation does not calculate or change failure probability.",
+          "The simulation does not select or execute an action."
+        ]
+      },
+      "limitations": [
+        "Conditional production comparison is not realized loss or production recovery.",
+        "Inspection downtime estimates are not substituted for capacity policy inputs.",
+        "Schedule agreement, maintenance authorization and work start remain separate owner records."
+      ]
+    },
+    {
+      "schema_version": "operational-context-read-v1",
+      "identity": {
+        "organization_id": "org-ontology-demo",
+        "project_id": "manufacturing-demo-project",
+        "workspace_id": "manufacturing-demo",
+        "asset_id": "CNC-S03-L03-03",
+        "evidence_snapshot_id": "RESULT#CNC-S03-L03-03#2026-08-29T23:00:00+09:00",
+        "decision_as_of": "2026-08-29T14:00:00Z"
+      },
+      "retrieved_at": "2026-08-29T14:00:00Z",
+      "context_fingerprint": "821cc20a25861451937ed75b6b5ca18cdaf2b80a675ac7e8bdf3b2b55e9bebb1",
+      "domains": {
+        "production": {
+          "context": {
+            "owner_domain": "production",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-03"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:production",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+            ],
+            "data": {
+              "alternative_resources": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다."
+              ],
+              "production_orders": [
+                {
+                  "assigned_asset_id": "CNC-S03-L03-03",
+                  "completed_quantity": 150,
+                  "due_at": "2026-08-29T15:00:00+00:00",
+                  "operation_id": "DEMO-CUTTING",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:order",
+                  "priority": 1,
+                  "product_id": "DEMO-PART-A",
+                  "product_label": "시연 부품 A",
+                  "relationship_state": "assumed_demo",
+                  "required_quantity": 200,
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+                  ]
+                }
+              ],
+              "source_classification": "synthetic_demo_context",
+              "wip": [
+                {
+                  "asset_id": "CNC-S03-L03-03",
+                  "lot_ids": [
+                    "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:lot"
+                  ],
+                  "operation_id": "DEMO-CUTTING",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:order",
+                  "quantity": 50,
+                  "relationship_state": "assumed_demo",
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+                  ],
+                  "status": "in_process",
+                  "wip_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:wip"
+                }
+              ]
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-03:production; schema operational-context.production v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "4e2b2f41e2b1d7376fe36879bad0c49ec89b318033684f4438ef860fd6a19809",
+            "schema_id": "operational-context.production",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "57bd4a566eca401d9e06c900bbbade9cbfd93f450db43fda08897b90d4b4cc6e",
+            "binding_sha256": "2682fae47ed4806647d9be90df0e0b7eeff2d245f838a6e17353930c52c6c932",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-03#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "maintenance_readiness": {
+          "context": {
+            "owner_domain": "maintenance_readiness",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-03"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:maintenance_readiness",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+            ],
+            "data": {
+              "action_code": "DEMO_INSPECTION",
+              "asset_id": "CNC-S03-L03-03",
+              "inventory_snapshots": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+                "실제 Action Candidate와 연결되지 않은 시연 항목입니다. 착수·승인 근거로 사용할 수 없습니다."
+              ],
+              "maintenance_windows": [],
+              "part_requirements": [],
+              "required_skill_codes": [
+                "DEMO_MECHANICAL_INSPECTION"
+              ],
+              "source_classification": "synthetic_demo_context",
+              "technician_candidates": []
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "실제 Action Candidate와 연결되지 않은 시연 항목입니다. 착수·승인 근거로 사용할 수 없습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-03:maintenance_readiness; schema operational-context.maintenance_readiness v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "17c5ece8e2baf7f37c3e5578a41bfd25377c6b3a211aed451f1a4b32ebe612f9",
+            "schema_id": "operational-context.maintenance_readiness",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "e29a880306ae7f4c32a34d4e631e4d5e956a10ca394de821e59080d8c95301c7",
+            "binding_sha256": "cb97b7d89324e6e6b28b786053c8c0a22b9af074ca3ea97cd9cdcb675b654a07",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-03#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "quality_delivery": {
+          "context": {
+            "owner_domain": "quality_delivery",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-03"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:quality_delivery",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+            ],
+            "data": {
+              "asset_id": "CNC-S03-L03-03",
+              "delivery_commitments": [
+                {
+                  "committed_quantity": 200,
+                  "delivery_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:order:delivery",
+                  "due_at": "2026-08-29T15:00:00+00:00",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:order",
+                  "priority": 1,
+                  "relationship_state": "assumed_demo",
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+                  ]
+                }
+              ],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다."
+              ],
+              "quality_lots": [
+                {
+                  "lot_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:lot",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:order",
+                  "quality_state": "unverified",
+                  "quantity": 50,
+                  "relationship_state": "assumed_demo",
+                  "release_required": true,
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+                  ],
+                  "wip_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:wip"
+                }
+              ],
+              "source_classification": "synthetic_demo_context"
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-03:quality_delivery; schema operational-context.quality_delivery v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "e48ea0343b7a47b33814d002336a15c07a71337be73ac6a4e60e917c14008eb0",
+            "schema_id": "operational-context.quality_delivery",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "784accbe3c71fa50fa81d31ce3df98d01fa8c794a303fc36f4ecb80aa4ca68c9",
+            "binding_sha256": "2b22e797d992deb43e3de93664fbe3e9cfc123274d8a2d3656621311510e6aa1",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-03#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "impact_policy": {
+          "context": {
+            "owner_domain": "impact_policy",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-03"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:impact_policy",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+            ],
+            "data": {
+              "alternative_capacity_allowed": {
+                "continue_operation": false,
+                "stop_now": false
+              },
+              "policy_version": "DEMO-S03L03-20260829-v1",
+              "primary_capacity_units": {
+                "continue_operation": 50,
+                "stop_now": 0
+              },
+              "source_refs": [
+                "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+              ]
+            },
+            "limitations": [
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-03:impact_policy; schema operational-context.impact_policy v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "2d33674514c8e82b892975d8f109f779d679f6aafa47df5f74845f3f9ecea9a6",
+            "schema_id": "operational-context.impact_policy",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "df836a53c5ae7433396b99381755a8c3e75ad83e804a45413c22f8c387439240",
+            "binding_sha256": "658e8b54eed91e4c19f9ff586d989eb90e55dff2ddbb5071adf73e93fcf589a7",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-03#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "planning": {
+          "context": {
+            "owner_domain": "planning",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-03"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:planning",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+            ],
+            "data": {
+              "capacity_model": {
+                "active_asset_count": 1,
+                "asset_units_per_hour": 25,
+                "basis": "시연 가정: 시간당 25개 × 8시간 = 200개. 실제 가동 실적이 아닙니다.",
+                "daily_capacity_units": 200,
+                "oee": 1,
+                "planned_operating_hours": 8,
+                "standard_cycle_minutes_per_unit": 2.4
+              },
+              "context_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:planning",
+              "production_plan": {
+                "plan_date": "2026-08-29",
+                "plan_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:order:plan",
+                "planned_units": 200,
+                "product_mix": [
+                  {
+                    "planned_units": 200,
+                    "share": 1,
+                    "variant": "시연 부품 A"
+                  }
+                ]
+              },
+              "source_type": "capacity_model",
+              "temporal_scope": {
+                "generated_at": "2026-08-29T14:00:00+00:00",
+                "snapshot_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:planning",
+                "timezone": "Asia/Seoul",
+                "valid_from": "2026-08-28T15:00:00+00:00",
+                "valid_to": "2026-08-29T15:00:00+00:00"
+              },
+              "event_impact": {
+                "basis": {
+                  "asset_units_per_hour": 25,
+                  "estimated_downtime_minutes": 60,
+                  "formula": "시연 정지시간 60분 ÷ 60 × 시간당 25개 = 25개. 실제 예측 정지시간이 아닙니다."
+                },
+                "equipment_id": "CNC-S03-L03-03",
+                "estimated_lost_units": 25,
+                "event_id": "RESULT#CNC-S03-L03-03#2026-08-29T23:00:00+09:00",
+                "impact_status": "estimated",
+                "line": "S03-L03",
+                "product_variant": "시연 부품 A",
+                "screen_priority": "monitor"
+              },
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+                "설비별 계획 200개; 절삭기 4대 합계 800개. 압축기를 합산하지 않습니다.",
+                "정지 1시간의 계획 영향 25개와 잔여 재공 50개의 선택지 노출량은 서로 다른 지표입니다."
+              ]
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "설비별 계획 200개; 절삭기 4대 합계 800개. 압축기를 합산하지 않습니다.",
+              "정지 1시간의 계획 영향 25개와 잔여 재공 50개의 선택지 노출량은 서로 다른 지표입니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-03:planning; schema operational-context.planning v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "840b2fb1b667c099c745ae430acc0944196abe9de63f0c273ff2ea9cdb732eb5",
+            "schema_id": "operational-context.planning",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "2d3b17a6fd71d287d4674dc7a76f20b34e0c301e1168b3315b743f05345a6f85",
+            "binding_sha256": "65f8cbcadb5b97cdc75e7cf9c3584ba20db9efb508135de7cf0e8332dbda300d",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-03#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        }
+      },
+      "production_impact": {
+        "schema_version": "operational-impact-simulation-v1.0",
+        "simulation_policy_version": "DEMO-S03L03-20260829-v1",
+        "evidence_snapshot_id": "RESULT#CNC-S03-L03-03#2026-08-29T23:00:00+09:00",
+        "risk_status": "attention",
+        "context_version_set": {
+          "maintenance_readiness": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:maintenance_readiness",
+          "production": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:production",
+          "quality_delivery": "DEMO-S03L03-20260829-v1:CNC-S03-L03-03:quality_delivery"
+        },
+        "assumptions": {
+          "policy_version": "DEMO-S03L03-20260829-v1",
+          "primary_capacity_units": {
+            "continue_operation": 50,
+            "stop_now": 0
+          },
+          "alternative_capacity_allowed": {
+            "continue_operation": false,
+            "stop_now": false
+          },
+          "source_refs": [
+            "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+          ]
+        },
+        "options": [
+          {
+            "option": "stop_now",
+            "state": "calculated",
+            "preconditions": [
+              "human stop approval"
+            ],
+            "reason_codes": [],
+            "required_units": 50,
+            "primary_capacity_after_action": 0,
+            "gross_exposed_units": 50,
+            "alternative_absorbed_units": 0,
+            "remaining_exposed_units": 50,
+            "intermediate_values": {
+              "required_units": 50,
+              "primary_capacity_after_action": 0,
+              "verified_alternative_capacity": 0,
+              "gross_exposed_units": 50,
+              "absorbed_units": 0
+            },
+            "limitations": [
+              "Calculated from versioned synthetic assumptions."
+            ]
+          },
+          {
+            "option": "planned_maintenance",
+            "state": "not_calculable",
+            "preconditions": [
+              "maintenance readiness must be satisfied"
+            ],
+            "reason_codes": [
+              "MAINTENANCE_BLOCKED"
+            ],
+            "required_units": null,
+            "primary_capacity_after_action": null,
+            "gross_exposed_units": null,
+            "alternative_absorbed_units": null,
+            "remaining_exposed_units": null,
+            "intermediate_values": {},
+            "limitations": [
+              "Impact is withheld until maintenance prerequisites are ready."
+            ]
+          },
+          {
+            "option": "continue_operation",
+            "state": "calculated",
+            "preconditions": [
+              "human continue approval",
+              "continued observation"
+            ],
+            "reason_codes": [],
+            "required_units": 50,
+            "primary_capacity_after_action": 50,
+            "gross_exposed_units": 0,
+            "alternative_absorbed_units": 0,
+            "remaining_exposed_units": 0,
+            "intermediate_values": {
+              "required_units": 50,
+              "primary_capacity_after_action": 50,
+              "verified_alternative_capacity": 0,
+              "gross_exposed_units": 0,
+              "absorbed_units": 0
+            },
+            "limitations": [
+              "Calculated from versioned synthetic assumptions."
+            ]
+          }
+        ],
+        "source_refs": [
+          "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-03"
+        ],
+        "limitations": [
+          "Conditional deterministic comparison only; not realized production loss.",
+          "The simulation does not calculate or change failure probability.",
+          "The simulation does not select or execute an action."
+        ]
+      },
+      "limitations": [
+        "Conditional production comparison is not realized loss or production recovery.",
+        "Inspection downtime estimates are not substituted for capacity policy inputs.",
+        "Schedule agreement, maintenance authorization and work start remain separate owner records."
+      ]
+    },
+    {
+      "schema_version": "operational-context-read-v1",
+      "identity": {
+        "organization_id": "org-ontology-demo",
+        "project_id": "manufacturing-demo-project",
+        "workspace_id": "manufacturing-demo",
+        "asset_id": "CNC-S03-L03-02",
+        "evidence_snapshot_id": "RESULT#CNC-S03-L03-02#2026-08-29T23:00:00+09:00",
+        "decision_as_of": "2026-08-29T14:00:00Z"
+      },
+      "retrieved_at": "2026-08-29T14:00:00Z",
+      "context_fingerprint": "f7c2f5bd02688b4bfb685f2cf400a59a1955ca215d12eb9f4c0345ead8793464",
+      "domains": {
+        "production": {
+          "context": {
+            "owner_domain": "production",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-02"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:production",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+            ],
+            "data": {
+              "alternative_resources": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다."
+              ],
+              "production_orders": [
+                {
+                  "assigned_asset_id": "CNC-S03-L03-02",
+                  "completed_quantity": 150,
+                  "due_at": "2026-08-29T15:00:00+00:00",
+                  "operation_id": "DEMO-CUTTING",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:order",
+                  "priority": 1,
+                  "product_id": "DEMO-PART-A",
+                  "product_label": "시연 부품 A",
+                  "relationship_state": "assumed_demo",
+                  "required_quantity": 200,
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+                  ]
+                }
+              ],
+              "source_classification": "synthetic_demo_context",
+              "wip": [
+                {
+                  "asset_id": "CNC-S03-L03-02",
+                  "lot_ids": [
+                    "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:lot"
+                  ],
+                  "operation_id": "DEMO-CUTTING",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:order",
+                  "quantity": 50,
+                  "relationship_state": "assumed_demo",
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+                  ],
+                  "status": "in_process",
+                  "wip_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:wip"
+                }
+              ]
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-02:production; schema operational-context.production v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "7479ea93512abccafbc0b5e7da9a575bf21c127443e2afc42296b7b179d629d1",
+            "schema_id": "operational-context.production",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "adaf7e7c414034af9f7e1c0048981c336ea5c436765f9a07aafe225bf33b679f",
+            "binding_sha256": "4ff6f6884a303acb465a5a24216887cea39195d24600f660dc98500f24963121",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-02#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "maintenance_readiness": {
+          "context": {
+            "owner_domain": "maintenance_readiness",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-02"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:maintenance_readiness",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+            ],
+            "data": {
+              "action_code": "DEMO_INSPECTION",
+              "asset_id": "CNC-S03-L03-02",
+              "inventory_snapshots": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+                "실제 Action Candidate와 연결되지 않은 시연 항목입니다. 착수·승인 근거로 사용할 수 없습니다."
+              ],
+              "maintenance_windows": [],
+              "part_requirements": [],
+              "required_skill_codes": [
+                "DEMO_MECHANICAL_INSPECTION"
+              ],
+              "source_classification": "synthetic_demo_context",
+              "technician_candidates": []
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "실제 Action Candidate와 연결되지 않은 시연 항목입니다. 착수·승인 근거로 사용할 수 없습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-02:maintenance_readiness; schema operational-context.maintenance_readiness v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "b489376f6f665bef74908215fcf7ab3b1a6ca75079339dbe12a314813c9476b1",
+            "schema_id": "operational-context.maintenance_readiness",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "5212c947ffb8443f055a1ecfb0deec2c3749c056f0696fcefe76e76f8ed6ba8d",
+            "binding_sha256": "1f7145b0d73144eea9ebbb643f75cb08a23a19d349fdb7ed75881172581d3c16",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-02#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "quality_delivery": {
+          "context": {
+            "owner_domain": "quality_delivery",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-02"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:quality_delivery",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+            ],
+            "data": {
+              "asset_id": "CNC-S03-L03-02",
+              "delivery_commitments": [
+                {
+                  "committed_quantity": 200,
+                  "delivery_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:order:delivery",
+                  "due_at": "2026-08-29T15:00:00+00:00",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:order",
+                  "priority": 1,
+                  "relationship_state": "assumed_demo",
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+                  ]
+                }
+              ],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다."
+              ],
+              "quality_lots": [
+                {
+                  "lot_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:lot",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:order",
+                  "quality_state": "unverified",
+                  "quantity": 50,
+                  "relationship_state": "assumed_demo",
+                  "release_required": true,
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+                  ],
+                  "wip_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:wip"
+                }
+              ],
+              "source_classification": "synthetic_demo_context"
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-02:quality_delivery; schema operational-context.quality_delivery v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "4478e9d8a45aaf904a13bcf7585c24d0ff72239b675bbcec5e23f7ff65226b45",
+            "schema_id": "operational-context.quality_delivery",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "71babecde0911f342e9e459445b886e70e96e138baa57c71ce47cb6dc0c00870",
+            "binding_sha256": "f8192a6d9f798bb9010c3a0ac10933befa6ca3a31325c144554e1373ad543b12",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-02#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "impact_policy": {
+          "context": {
+            "owner_domain": "impact_policy",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-02"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:impact_policy",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+            ],
+            "data": {
+              "alternative_capacity_allowed": {
+                "continue_operation": false,
+                "stop_now": false
+              },
+              "policy_version": "DEMO-S03L03-20260829-v1",
+              "primary_capacity_units": {
+                "continue_operation": 50,
+                "stop_now": 0
+              },
+              "source_refs": [
+                "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+              ]
+            },
+            "limitations": [
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-02:impact_policy; schema operational-context.impact_policy v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "a8e7c643f91c03d37c5364db5f6aeb0bffb85ad3884ee2d9591b03b9f904c24a",
+            "schema_id": "operational-context.impact_policy",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "1964db182f4b1de237b94d9a37c625878218dbb50c00fab4f6a18d3b6a53abf4",
+            "binding_sha256": "08122bfa720bb982271166218a19b51da4262a37bd661f24fa9fad774e72ad0e",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-02#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "planning": {
+          "context": {
+            "owner_domain": "planning",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-02"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:planning",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+            ],
+            "data": {
+              "capacity_model": {
+                "active_asset_count": 1,
+                "asset_units_per_hour": 25,
+                "basis": "시연 가정: 시간당 25개 × 8시간 = 200개. 실제 가동 실적이 아닙니다.",
+                "daily_capacity_units": 200,
+                "oee": 1,
+                "planned_operating_hours": 8,
+                "standard_cycle_minutes_per_unit": 2.4
+              },
+              "context_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:planning",
+              "production_plan": {
+                "plan_date": "2026-08-29",
+                "plan_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:order:plan",
+                "planned_units": 200,
+                "product_mix": [
+                  {
+                    "planned_units": 200,
+                    "share": 1,
+                    "variant": "시연 부품 A"
+                  }
+                ]
+              },
+              "source_type": "capacity_model",
+              "temporal_scope": {
+                "generated_at": "2026-08-29T14:00:00+00:00",
+                "snapshot_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:planning",
+                "timezone": "Asia/Seoul",
+                "valid_from": "2026-08-28T15:00:00+00:00",
+                "valid_to": "2026-08-29T15:00:00+00:00"
+              },
+              "event_impact": {
+                "basis": {
+                  "asset_units_per_hour": 25,
+                  "estimated_downtime_minutes": 60,
+                  "formula": "시연 정지시간 60분 ÷ 60 × 시간당 25개 = 25개. 실제 예측 정지시간이 아닙니다."
+                },
+                "equipment_id": "CNC-S03-L03-02",
+                "estimated_lost_units": 25,
+                "event_id": "RESULT#CNC-S03-L03-02#2026-08-29T23:00:00+09:00",
+                "impact_status": "estimated",
+                "line": "S03-L03",
+                "product_variant": "시연 부품 A",
+                "screen_priority": "monitor"
+              },
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+                "설비별 계획 200개; 절삭기 4대 합계 800개. 압축기를 합산하지 않습니다.",
+                "정지 1시간의 계획 영향 25개와 잔여 재공 50개의 선택지 노출량은 서로 다른 지표입니다."
+              ]
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "설비별 계획 200개; 절삭기 4대 합계 800개. 압축기를 합산하지 않습니다.",
+              "정지 1시간의 계획 영향 25개와 잔여 재공 50개의 선택지 노출량은 서로 다른 지표입니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-02:planning; schema operational-context.planning v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "952b6f7a51cdf188bdbc1ace0e91cff19faf457f62edbb733d71e5abfac6d672",
+            "schema_id": "operational-context.planning",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "86ae3608813e8fc3428f4cb2d64ddf1b27847c47d9ab53089e3a1d453a60cc42",
+            "binding_sha256": "4ba03e3919ce3d1d7144a5d5cdf50b09cc37965f249e1ecc7053ec91ac49ca04",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-02#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        }
+      },
+      "production_impact": {
+        "schema_version": "operational-impact-simulation-v1.0",
+        "simulation_policy_version": "DEMO-S03L03-20260829-v1",
+        "evidence_snapshot_id": "RESULT#CNC-S03-L03-02#2026-08-29T23:00:00+09:00",
+        "risk_status": "attention",
+        "context_version_set": {
+          "maintenance_readiness": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:maintenance_readiness",
+          "production": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:production",
+          "quality_delivery": "DEMO-S03L03-20260829-v1:CNC-S03-L03-02:quality_delivery"
+        },
+        "assumptions": {
+          "policy_version": "DEMO-S03L03-20260829-v1",
+          "primary_capacity_units": {
+            "continue_operation": 50,
+            "stop_now": 0
+          },
+          "alternative_capacity_allowed": {
+            "continue_operation": false,
+            "stop_now": false
+          },
+          "source_refs": [
+            "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+          ]
+        },
+        "options": [
+          {
+            "option": "stop_now",
+            "state": "calculated",
+            "preconditions": [
+              "human stop approval"
+            ],
+            "reason_codes": [],
+            "required_units": 50,
+            "primary_capacity_after_action": 0,
+            "gross_exposed_units": 50,
+            "alternative_absorbed_units": 0,
+            "remaining_exposed_units": 50,
+            "intermediate_values": {
+              "required_units": 50,
+              "primary_capacity_after_action": 0,
+              "verified_alternative_capacity": 0,
+              "gross_exposed_units": 50,
+              "absorbed_units": 0
+            },
+            "limitations": [
+              "Calculated from versioned synthetic assumptions."
+            ]
+          },
+          {
+            "option": "planned_maintenance",
+            "state": "not_calculable",
+            "preconditions": [
+              "maintenance readiness must be satisfied"
+            ],
+            "reason_codes": [
+              "MAINTENANCE_BLOCKED"
+            ],
+            "required_units": null,
+            "primary_capacity_after_action": null,
+            "gross_exposed_units": null,
+            "alternative_absorbed_units": null,
+            "remaining_exposed_units": null,
+            "intermediate_values": {},
+            "limitations": [
+              "Impact is withheld until maintenance prerequisites are ready."
+            ]
+          },
+          {
+            "option": "continue_operation",
+            "state": "calculated",
+            "preconditions": [
+              "human continue approval",
+              "continued observation"
+            ],
+            "reason_codes": [],
+            "required_units": 50,
+            "primary_capacity_after_action": 50,
+            "gross_exposed_units": 0,
+            "alternative_absorbed_units": 0,
+            "remaining_exposed_units": 0,
+            "intermediate_values": {
+              "required_units": 50,
+              "primary_capacity_after_action": 50,
+              "verified_alternative_capacity": 0,
+              "gross_exposed_units": 0,
+              "absorbed_units": 0
+            },
+            "limitations": [
+              "Calculated from versioned synthetic assumptions."
+            ]
+          }
+        ],
+        "source_refs": [
+          "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-02"
+        ],
+        "limitations": [
+          "Conditional deterministic comparison only; not realized production loss.",
+          "The simulation does not calculate or change failure probability.",
+          "The simulation does not select or execute an action."
+        ]
+      },
+      "limitations": [
+        "Conditional production comparison is not realized loss or production recovery.",
+        "Inspection downtime estimates are not substituted for capacity policy inputs.",
+        "Schedule agreement, maintenance authorization and work start remain separate owner records."
+      ]
+    },
+    {
+      "schema_version": "operational-context-read-v1",
+      "identity": {
+        "organization_id": "org-ontology-demo",
+        "project_id": "manufacturing-demo-project",
+        "workspace_id": "manufacturing-demo",
+        "asset_id": "CNC-S03-L03-01",
+        "evidence_snapshot_id": "RESULT#CNC-S03-L03-01#2026-08-29T23:00:00+09:00",
+        "decision_as_of": "2026-08-29T14:00:00Z"
+      },
+      "retrieved_at": "2026-08-29T14:00:00Z",
+      "context_fingerprint": "07d392640a13d0fcd5834ee9dc84513cfe6576eb00766b79d22f3a3456cf8e10",
+      "domains": {
+        "production": {
+          "context": {
+            "owner_domain": "production",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-01"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:production",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+            ],
+            "data": {
+              "alternative_resources": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다."
+              ],
+              "production_orders": [
+                {
+                  "assigned_asset_id": "CNC-S03-L03-01",
+                  "completed_quantity": 150,
+                  "due_at": "2026-08-29T15:00:00+00:00",
+                  "operation_id": "DEMO-CUTTING",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:order",
+                  "priority": 1,
+                  "product_id": "DEMO-PART-A",
+                  "product_label": "시연 부품 A",
+                  "relationship_state": "assumed_demo",
+                  "required_quantity": 200,
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+                  ]
+                }
+              ],
+              "source_classification": "synthetic_demo_context",
+              "wip": [
+                {
+                  "asset_id": "CNC-S03-L03-01",
+                  "lot_ids": [
+                    "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:lot"
+                  ],
+                  "operation_id": "DEMO-CUTTING",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:order",
+                  "quantity": 50,
+                  "relationship_state": "assumed_demo",
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+                  ],
+                  "status": "in_process",
+                  "wip_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:wip"
+                }
+              ]
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-01:production; schema operational-context.production v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "e305363cc978269e0ff2339db73ecddb60e3f206aa34e01c0ad41c9c737d9f4b",
+            "schema_id": "operational-context.production",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "d0961816587ea7c0b883c50b41cb18d0792efa645925c5c50a582049371e1c7e",
+            "binding_sha256": "c3e0410a02a255b80ee9a70147b8679dcad5cbbbe0d80838c34b7715b3b88dfb",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-01#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "maintenance_readiness": {
+          "context": {
+            "owner_domain": "maintenance_readiness",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-01"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:maintenance_readiness",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+            ],
+            "data": {
+              "action_code": "DEMO_INSPECTION",
+              "asset_id": "CNC-S03-L03-01",
+              "inventory_snapshots": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+                "실제 Action Candidate와 연결되지 않은 시연 항목입니다. 착수·승인 근거로 사용할 수 없습니다."
+              ],
+              "maintenance_windows": [],
+              "part_requirements": [],
+              "required_skill_codes": [
+                "DEMO_MECHANICAL_INSPECTION"
+              ],
+              "source_classification": "synthetic_demo_context",
+              "technician_candidates": []
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "실제 Action Candidate와 연결되지 않은 시연 항목입니다. 착수·승인 근거로 사용할 수 없습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-01:maintenance_readiness; schema operational-context.maintenance_readiness v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "05e21123a9f186a2c7da500f78c65c38a3b2e0fca2d448cdfca21381b16e36fd",
+            "schema_id": "operational-context.maintenance_readiness",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "757d2c3c348644a37921dc6f8ad9b0fec29c80c9498ebaffcf01c04dfb23393d",
+            "binding_sha256": "043f7fc8c0be7feef469d04b10fdf0b1ef00dd3b4f1e5c9f99abd3b3a34eb51c",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-01#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "quality_delivery": {
+          "context": {
+            "owner_domain": "quality_delivery",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-01"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:quality_delivery",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+            ],
+            "data": {
+              "asset_id": "CNC-S03-L03-01",
+              "delivery_commitments": [
+                {
+                  "committed_quantity": 200,
+                  "delivery_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:order:delivery",
+                  "due_at": "2026-08-29T15:00:00+00:00",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:order",
+                  "priority": 1,
+                  "relationship_state": "assumed_demo",
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+                  ]
+                }
+              ],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다."
+              ],
+              "quality_lots": [
+                {
+                  "lot_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:lot",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:order",
+                  "quality_state": "unverified",
+                  "quantity": 50,
+                  "relationship_state": "assumed_demo",
+                  "release_required": true,
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+                  ],
+                  "wip_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:wip"
+                }
+              ],
+              "source_classification": "synthetic_demo_context"
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-01:quality_delivery; schema operational-context.quality_delivery v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "585738ae0f3455d954f84e73fc38f87c807917d32dc36b47534c502bea67cdc0",
+            "schema_id": "operational-context.quality_delivery",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "10260e0708b17a494efaed3c76502d3442058ced4028ade5c39185fb152f821f",
+            "binding_sha256": "0718a8f517922ab035bd46d55be15c1bd2fc7712cb5e4f5026dccbf7cb6b39be",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-01#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "impact_policy": {
+          "context": {
+            "owner_domain": "impact_policy",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-01"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:impact_policy",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+            ],
+            "data": {
+              "alternative_capacity_allowed": {
+                "continue_operation": false,
+                "stop_now": false
+              },
+              "policy_version": "DEMO-S03L03-20260829-v1",
+              "primary_capacity_units": {
+                "continue_operation": 50,
+                "stop_now": 0
+              },
+              "source_refs": [
+                "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+              ]
+            },
+            "limitations": [
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-01:impact_policy; schema operational-context.impact_policy v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "5cb623bffc73f075a3f557f27abadd998fad6efa18ffb1ac7354a428992723a4",
+            "schema_id": "operational-context.impact_policy",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "6a095d287594df7942fcf4139c0453577e8ffe2c4a09fea8b63c44e772028976",
+            "binding_sha256": "365a1c51f062c53bf953ea1f680c3b69dc46498a08b1aa8f32721d04557f05cc",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-01#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "planning": {
+          "context": {
+            "owner_domain": "planning",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-01"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:planning",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+            ],
+            "data": {
+              "capacity_model": {
+                "active_asset_count": 1,
+                "asset_units_per_hour": 25,
+                "basis": "시연 가정: 시간당 25개 × 8시간 = 200개. 실제 가동 실적이 아닙니다.",
+                "daily_capacity_units": 200,
+                "oee": 1,
+                "planned_operating_hours": 8,
+                "standard_cycle_minutes_per_unit": 2.4
+              },
+              "context_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:planning",
+              "production_plan": {
+                "plan_date": "2026-08-29",
+                "plan_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:order:plan",
+                "planned_units": 200,
+                "product_mix": [
+                  {
+                    "planned_units": 200,
+                    "share": 1,
+                    "variant": "시연 부품 A"
+                  }
+                ]
+              },
+              "source_type": "capacity_model",
+              "temporal_scope": {
+                "generated_at": "2026-08-29T14:00:00+00:00",
+                "snapshot_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:planning",
+                "timezone": "Asia/Seoul",
+                "valid_from": "2026-08-28T15:00:00+00:00",
+                "valid_to": "2026-08-29T15:00:00+00:00"
+              },
+              "event_impact": {
+                "basis": {
+                  "asset_units_per_hour": 25,
+                  "estimated_downtime_minutes": 60,
+                  "formula": "시연 정지시간 60분 ÷ 60 × 시간당 25개 = 25개. 실제 예측 정지시간이 아닙니다."
+                },
+                "equipment_id": "CNC-S03-L03-01",
+                "estimated_lost_units": 25,
+                "event_id": "RESULT#CNC-S03-L03-01#2026-08-29T23:00:00+09:00",
+                "impact_status": "estimated",
+                "line": "S03-L03",
+                "product_variant": "시연 부품 A",
+                "screen_priority": "monitor"
+              },
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+                "설비별 계획 200개; 절삭기 4대 합계 800개. 압축기를 합산하지 않습니다.",
+                "정지 1시간의 계획 영향 25개와 잔여 재공 50개의 선택지 노출량은 서로 다른 지표입니다."
+              ]
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "설비별 계획 200개; 절삭기 4대 합계 800개. 압축기를 합산하지 않습니다.",
+              "정지 1시간의 계획 영향 25개와 잔여 재공 50개의 선택지 노출량은 서로 다른 지표입니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-01:planning; schema operational-context.planning v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "96309882cd55a2eba8d54f50f7ec12f865205d322b18d9401fea467cffe2ba9f",
+            "schema_id": "operational-context.planning",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "81ff958cb922736a26cc2c457663ebddab32b2d9d698ab6bb1300843df40a023",
+            "binding_sha256": "0bfc0646b7c3ec6b5fc8060806cd45392ca8480a7eee38c99e552f01d9138687",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-01#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        }
+      },
+      "production_impact": {
+        "schema_version": "operational-impact-simulation-v1.0",
+        "simulation_policy_version": "DEMO-S03L03-20260829-v1",
+        "evidence_snapshot_id": "RESULT#CNC-S03-L03-01#2026-08-29T23:00:00+09:00",
+        "risk_status": "normal",
+        "context_version_set": {
+          "maintenance_readiness": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:maintenance_readiness",
+          "production": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:production",
+          "quality_delivery": "DEMO-S03L03-20260829-v1:CNC-S03-L03-01:quality_delivery"
+        },
+        "assumptions": {
+          "policy_version": "DEMO-S03L03-20260829-v1",
+          "primary_capacity_units": {
+            "continue_operation": 50,
+            "stop_now": 0
+          },
+          "alternative_capacity_allowed": {
+            "continue_operation": false,
+            "stop_now": false
+          },
+          "source_refs": [
+            "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+          ]
+        },
+        "options": [
+          {
+            "option": "stop_now",
+            "state": "calculated",
+            "preconditions": [
+              "human stop approval"
+            ],
+            "reason_codes": [],
+            "required_units": 50,
+            "primary_capacity_after_action": 0,
+            "gross_exposed_units": 50,
+            "alternative_absorbed_units": 0,
+            "remaining_exposed_units": 50,
+            "intermediate_values": {
+              "required_units": 50,
+              "primary_capacity_after_action": 0,
+              "verified_alternative_capacity": 0,
+              "gross_exposed_units": 50,
+              "absorbed_units": 0
+            },
+            "limitations": [
+              "Calculated from versioned synthetic assumptions."
+            ]
+          },
+          {
+            "option": "planned_maintenance",
+            "state": "not_calculable",
+            "preconditions": [
+              "maintenance readiness must be satisfied"
+            ],
+            "reason_codes": [
+              "MAINTENANCE_BLOCKED"
+            ],
+            "required_units": null,
+            "primary_capacity_after_action": null,
+            "gross_exposed_units": null,
+            "alternative_absorbed_units": null,
+            "remaining_exposed_units": null,
+            "intermediate_values": {},
+            "limitations": [
+              "Impact is withheld until maintenance prerequisites are ready."
+            ]
+          },
+          {
+            "option": "continue_operation",
+            "state": "calculated",
+            "preconditions": [
+              "human continue approval",
+              "continued observation"
+            ],
+            "reason_codes": [],
+            "required_units": 50,
+            "primary_capacity_after_action": 50,
+            "gross_exposed_units": 0,
+            "alternative_absorbed_units": 0,
+            "remaining_exposed_units": 0,
+            "intermediate_values": {
+              "required_units": 50,
+              "primary_capacity_after_action": 50,
+              "verified_alternative_capacity": 0,
+              "gross_exposed_units": 0,
+              "absorbed_units": 0
+            },
+            "limitations": [
+              "Calculated from versioned synthetic assumptions."
+            ]
+          }
+        ],
+        "source_refs": [
+          "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-01"
+        ],
+        "limitations": [
+          "Conditional deterministic comparison only; not realized production loss.",
+          "The simulation does not calculate or change failure probability.",
+          "The simulation does not select or execute an action."
+        ]
+      },
+      "limitations": [
+        "Conditional production comparison is not realized loss or production recovery.",
+        "Inspection downtime estimates are not substituted for capacity policy inputs.",
+        "Schedule agreement, maintenance authorization and work start remain separate owner records."
+      ]
+    },
+    {
+      "schema_version": "operational-context-read-v1",
+      "identity": {
+        "organization_id": "org-ontology-demo",
+        "project_id": "manufacturing-demo-project",
+        "workspace_id": "manufacturing-demo",
+        "asset_id": "CNC-S03-L03-04",
+        "evidence_snapshot_id": "RESULT#CNC-S03-L03-04#2026-08-29T23:00:00+09:00",
+        "decision_as_of": "2026-08-29T14:00:00Z"
+      },
+      "retrieved_at": "2026-08-29T14:00:00Z",
+      "context_fingerprint": "40dc3129f401618f36a71f5fd551f3ad541421d83fc80bdc00ba01f1a48893f9",
+      "domains": {
+        "production": {
+          "context": {
+            "owner_domain": "production",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-04"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:production",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+            ],
+            "data": {
+              "alternative_resources": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다."
+              ],
+              "production_orders": [
+                {
+                  "assigned_asset_id": "CNC-S03-L03-04",
+                  "completed_quantity": 150,
+                  "due_at": "2026-08-29T15:00:00+00:00",
+                  "operation_id": "DEMO-CUTTING",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:order",
+                  "priority": 1,
+                  "product_id": "DEMO-PART-A",
+                  "product_label": "시연 부품 A",
+                  "relationship_state": "assumed_demo",
+                  "required_quantity": 200,
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+                  ]
+                }
+              ],
+              "source_classification": "synthetic_demo_context",
+              "wip": [
+                {
+                  "asset_id": "CNC-S03-L03-04",
+                  "lot_ids": [
+                    "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:lot"
+                  ],
+                  "operation_id": "DEMO-CUTTING",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:order",
+                  "quantity": 50,
+                  "relationship_state": "assumed_demo",
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+                  ],
+                  "status": "in_process",
+                  "wip_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:wip"
+                }
+              ]
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-04:production; schema operational-context.production v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "8fc85aec4122516512e7d03c1ca59b86ae70a44fee7e89e3391887e108e79388",
+            "schema_id": "operational-context.production",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "b76d90b0e7426985303c584e89386a0d8c7b3fdb3aacbd88824c556a25cdd885",
+            "binding_sha256": "60baba70b53d82a6d40d9b4b4ce5a80a1549a50ddd60b69e88f30c116a185516",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-04#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "maintenance_readiness": {
+          "context": {
+            "owner_domain": "maintenance_readiness",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-04"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:maintenance_readiness",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+            ],
+            "data": {
+              "action_code": "DEMO_INSPECTION",
+              "asset_id": "CNC-S03-L03-04",
+              "inventory_snapshots": [],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+                "실제 Action Candidate와 연결되지 않은 시연 항목입니다. 착수·승인 근거로 사용할 수 없습니다."
+              ],
+              "maintenance_windows": [],
+              "part_requirements": [],
+              "required_skill_codes": [
+                "DEMO_MECHANICAL_INSPECTION"
+              ],
+              "source_classification": "synthetic_demo_context",
+              "technician_candidates": []
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "실제 Action Candidate와 연결되지 않은 시연 항목입니다. 착수·승인 근거로 사용할 수 없습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-04:maintenance_readiness; schema operational-context.maintenance_readiness v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "198b1dbe1b82cac701e6c52cb41da0e7265e9e7e98cd0e86094b502e71fb259b",
+            "schema_id": "operational-context.maintenance_readiness",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "cc00220c8e573533a52919d4f84c0f312558b01ce8fb9791b186f2395402e380",
+            "binding_sha256": "4451e785787aaefe7c34bf5081fe3b87791763de66e23b62f63372e28503ecf2",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-04#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "quality_delivery": {
+          "context": {
+            "owner_domain": "quality_delivery",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-04"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:quality_delivery",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+            ],
+            "data": {
+              "asset_id": "CNC-S03-L03-04",
+              "delivery_commitments": [
+                {
+                  "committed_quantity": 200,
+                  "delivery_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:order:delivery",
+                  "due_at": "2026-08-29T15:00:00+00:00",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:order",
+                  "priority": 1,
+                  "relationship_state": "assumed_demo",
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+                  ]
+                }
+              ],
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다."
+              ],
+              "quality_lots": [
+                {
+                  "lot_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:lot",
+                  "order_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:order",
+                  "quality_state": "unverified",
+                  "quantity": 50,
+                  "relationship_state": "assumed_demo",
+                  "release_required": true,
+                  "source_refs": [
+                    "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+                  ],
+                  "wip_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:wip"
+                }
+              ],
+              "source_classification": "synthetic_demo_context"
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-04:quality_delivery; schema operational-context.quality_delivery v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "b55a1a2014e67f75e18d37ec920cf9499806bd4cf8bda49289c55b4d29344860",
+            "schema_id": "operational-context.quality_delivery",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "18096f397e0af9bcc137e44b6f342e315460469da70c3ae09ada4bc57613b018",
+            "binding_sha256": "d4ce7a6c2c69cbc1b202dedb4cb72bd4e1f7733d2bc4e81b045a86f76da25914",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-04#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "impact_policy": {
+          "context": {
+            "owner_domain": "impact_policy",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-04"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:impact_policy",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+            ],
+            "data": {
+              "alternative_capacity_allowed": {
+                "continue_operation": false,
+                "stop_now": false
+              },
+              "policy_version": "DEMO-S03L03-20260829-v1",
+              "primary_capacity_units": {
+                "continue_operation": 50,
+                "stop_now": 0
+              },
+              "source_refs": [
+                "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+              ]
+            },
+            "limitations": [
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-04:impact_policy; schema operational-context.impact_policy v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "342d49691797249dbf2d0626b59510ce9dd2705a7eff62734117615f37de636e",
+            "schema_id": "operational-context.impact_policy",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "3d4b47c0157ba7518e50c9f3df5389c19bf43348fab7e77fc9fba1385a58012b",
+            "binding_sha256": "5432368de8bf60bc58cc26bf64a5321901b9e79025110c93bdbd5ee1972a0568",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-04#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        },
+        "planning": {
+          "context": {
+            "owner_domain": "planning",
+            "scope": {
+              "organization_id": "org-ontology-demo",
+              "project_id": "manufacturing-demo-project",
+              "workspace_id": "manufacturing-demo",
+              "asset_id": "CNC-S03-L03-04"
+            },
+            "status": "available",
+            "source_version": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:planning",
+            "source_updated_at": "2026-08-29T14:00:00Z",
+            "retrieved_at": "2026-08-29T14:00:00Z",
+            "as_of": "2026-08-29T14:00:00Z",
+            "freshness": {
+              "policy_version": "db-context-asof-v2",
+              "max_age_seconds": 172800,
+              "state": "fresh"
+            },
+            "source_refs": [
+              "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+            ],
+            "data": {
+              "capacity_model": {
+                "active_asset_count": 1,
+                "asset_units_per_hour": 25,
+                "basis": "시연 가정: 시간당 25개 × 8시간 = 200개. 실제 가동 실적이 아닙니다.",
+                "daily_capacity_units": 200,
+                "oee": 1,
+                "planned_operating_hours": 8,
+                "standard_cycle_minutes_per_unit": 2.4
+              },
+              "context_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:planning",
+              "production_plan": {
+                "plan_date": "2026-08-29",
+                "plan_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:order:plan",
+                "planned_units": 200,
+                "product_mix": [
+                  {
+                    "planned_units": 200,
+                    "share": 1,
+                    "variant": "시연 부품 A"
+                  }
+                ]
+              },
+              "source_type": "capacity_model",
+              "temporal_scope": {
+                "generated_at": "2026-08-29T14:00:00+00:00",
+                "snapshot_id": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:planning",
+                "timezone": "Asia/Seoul",
+                "valid_from": "2026-08-28T15:00:00+00:00",
+                "valid_to": "2026-08-29T15:00:00+00:00"
+              },
+              "event_impact": {
+                "basis": {
+                  "asset_units_per_hour": 25,
+                  "estimated_downtime_minutes": 60,
+                  "formula": "시연 정지시간 60분 ÷ 60 × 시간당 25개 = 25개. 실제 예측 정지시간이 아닙니다."
+                },
+                "equipment_id": "CNC-S03-L03-04",
+                "estimated_lost_units": 25,
+                "event_id": "RESULT#CNC-S03-L03-04#2026-08-29T23:00:00+09:00",
+                "impact_status": "estimated",
+                "line": "S03-L03",
+                "product_variant": "시연 부품 A",
+                "screen_priority": "monitor"
+              },
+              "limitations": [
+                "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+                "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+                "설비별 계획 200개; 절삭기 4대 합계 800개. 압축기를 합산하지 않습니다.",
+                "정지 1시간의 계획 영향 25개와 잔여 재공 50개의 선택지 노출량은 서로 다른 지표입니다."
+              ]
+            },
+            "limitations": [
+              "시연용 가정이며 실제 생산·재고·인력·승인 사실이 아닙니다.",
+              "정비 완료·위험 등급·예측 결과는 변경하지 않습니다.",
+              "설비별 계획 200개; 절삭기 4대 합계 800개. 압축기를 합산하지 않습니다.",
+              "정지 1시간의 계획 영향 25개와 잔여 재공 50개의 선택지 노출량은 서로 다른 지표입니다.",
+              "Context source: synthetic_demo_context; version DEMO-S03L03-20260829-v1:CNC-S03-L03-04:planning; schema operational-context.planning v1."
+            ]
+          },
+          "provenance": {
+            "source_context_id": "ed6b6c39d4954022bd0697fc74136394f86eb5880d516ea45c00ca0c1b0b9b55",
+            "schema_id": "operational-context.planning",
+            "schema_version": 1,
+            "source_classification": "synthetic_demo_context",
+            "valid_from": "2026-08-28T15:00:00Z",
+            "valid_to": "2026-08-29T15:00:00Z",
+            "source_sha256": "3549af8e2f27c6e509c8f2cb500097c1d484b4af0a8a188d99f2b6e2ac45e197",
+            "binding_sha256": "43473d99ddc258fec635abef36fa58a5b8885fdb332fe6c959dc0299ac06a87f",
+            "bound_evidence_snapshot_id": "RESULT#CNC-S03-L03-04#2026-08-29T23:00:00+09:00"
+          },
+          "reason_codes": []
+        }
+      },
+      "production_impact": {
+        "schema_version": "operational-impact-simulation-v1.0",
+        "simulation_policy_version": "DEMO-S03L03-20260829-v1",
+        "evidence_snapshot_id": "RESULT#CNC-S03-L03-04#2026-08-29T23:00:00+09:00",
+        "risk_status": "normal",
+        "context_version_set": {
+          "maintenance_readiness": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:maintenance_readiness",
+          "production": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:production",
+          "quality_delivery": "DEMO-S03L03-20260829-v1:CNC-S03-L03-04:quality_delivery"
+        },
+        "assumptions": {
+          "policy_version": "DEMO-S03L03-20260829-v1",
+          "primary_capacity_units": {
+            "continue_operation": 50,
+            "stop_now": 0
+          },
+          "alternative_capacity_allowed": {
+            "continue_operation": false,
+            "stop_now": false
+          },
+          "source_refs": [
+            "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+          ]
+        },
+        "options": [
+          {
+            "option": "stop_now",
+            "state": "calculated",
+            "preconditions": [
+              "human stop approval"
+            ],
+            "reason_codes": [],
+            "required_units": 50,
+            "primary_capacity_after_action": 0,
+            "gross_exposed_units": 50,
+            "alternative_absorbed_units": 0,
+            "remaining_exposed_units": 50,
+            "intermediate_values": {
+              "required_units": 50,
+              "primary_capacity_after_action": 0,
+              "verified_alternative_capacity": 0,
+              "gross_exposed_units": 50,
+              "absorbed_units": 0
+            },
+            "limitations": [
+              "Calculated from versioned synthetic assumptions."
+            ]
+          },
+          {
+            "option": "planned_maintenance",
+            "state": "not_calculable",
+            "preconditions": [
+              "maintenance readiness must be satisfied"
+            ],
+            "reason_codes": [
+              "MAINTENANCE_BLOCKED"
+            ],
+            "required_units": null,
+            "primary_capacity_after_action": null,
+            "gross_exposed_units": null,
+            "alternative_absorbed_units": null,
+            "remaining_exposed_units": null,
+            "intermediate_values": {},
+            "limitations": [
+              "Impact is withheld until maintenance prerequisites are ready."
+            ]
+          },
+          {
+            "option": "continue_operation",
+            "state": "calculated",
+            "preconditions": [
+              "human continue approval",
+              "continued observation"
+            ],
+            "reason_codes": [],
+            "required_units": 50,
+            "primary_capacity_after_action": 50,
+            "gross_exposed_units": 0,
+            "alternative_absorbed_units": 0,
+            "remaining_exposed_units": 0,
+            "intermediate_values": {
+              "required_units": 50,
+              "primary_capacity_after_action": 50,
+              "verified_alternative_capacity": 0,
+              "gross_exposed_units": 0,
+              "absorbed_units": 0
+            },
+            "limitations": [
+              "Calculated from versioned synthetic assumptions."
+            ]
+          }
+        ],
+        "source_refs": [
+          "synthetic_demo:DEMO-S03L03-20260829-v1:CNC-S03-L03-04"
+        ],
+        "limitations": [
+          "Conditional deterministic comparison only; not realized production loss.",
+          "The simulation does not calculate or change failure probability.",
+          "The simulation does not select or execute an action."
+        ]
+      },
+      "limitations": [
+        "Conditional production comparison is not realized loss or production recovery.",
+        "Inspection downtime estimates are not substituted for capacity policy inputs.",
+        "Schedule agreement, maintenance authorization and work start remain separate owner records."
+      ]
+    }
+  ]
+}

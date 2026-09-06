@@ -1,0 +1,55 @@
+
+Running 11 tests using 1 worker
+
+(node:5085) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/11] [chromium] › e2e/standalone-original.spec.ts:6:1 › real PG: default entry and login redirect without iframe
+[2/11] [chromium] › e2e/standalone-original.spec.ts:7:173 › real PG: process_manager tabs do not grant permissions
+[3/11] [chromium] › e2e/standalone-original.spec.ts:7:173 › real PG: process_engineer tabs do not grant permissions
+[4/11] [chromium] › e2e/standalone-original.spec.ts:7:173 › real PG: maintenance_technician tabs do not grant permissions
+[5/11] [chromium] › e2e/standalone-original.spec.ts:8:1 › real PG: asset/snapshot reload/direct URL and side view
+  1) [chromium] › e2e/standalone-original.spec.ts:8:1 › real PG: asset/snapshot reload/direct URL and side view
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "CNC-S04-L02-03"
+    Received: undefined
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+       6 | test('real PG: default entry and login redirect without iframe',async({page})=>{await page.goto('/');await expect(page).toHaveURL(/\/login\?/);await page.getByLabel('이메일',{exact:true}).fill('manager@ontology.local');await page.getByLabel('비밀번호',{exact:true}).fill('Manager!2026');await page.getByRole('button',{name:'로그인',exact:true}).click();await expect(page).toHaveURL(/factory-status-original/);await ready(page);expect(await page.locator('iframe').count()).toBe(0);});
+       7 | for(const [name,password,role] of [['manager','Manager','process_manager'],['engineer','Engineer','process_engineer'],['technician','Technician','maintenance_technician']])test(`real PG: ${role} tabs do not grant permissions`,async({page})=>{await login(page,name,password);await page.goto(path);await ready(page);expect(await page.evaluate(()=>(window as any).factoryState.role)).toBe(role);let writes=0;page.on('request',r=>{if(r.method()==='POST'&&r.url().includes('/maintenance/'))writes++;});await page.getByRole('button',{name:/보전팀 · 작업 큐/}).click();await page.getByRole('button',{name:/생산관리자 · 오늘/}).click();expect(await page.evaluate(()=>(window as any).factoryState.role)).toBe(role);expect(await page.evaluate(()=>(window as any).factoryState.command)).toBeNull();expect(writes).toBe(0);await page.screenshot({path:`../../docs/eval/standalone-page-2026-09-06/${role}.png`});});
+    >  8 | test('real PG: asset/snapshot reload/direct URL and side view',async({page})=>{await login(page);await page.goto(path);await ready(page);const a=await page.evaluate(()=>(window as any).factoryState.model.assets[1]);await page.getByTitle(text(a.displayName),{exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).factoryState.detail?.event.assetId)).toBe(a.assetId);await page.getByTitle(text(a.displayName),{exact:true}).click();await expect(page.getByRole('heading',{name:'정비 · 생산 현황',exact:true})).toBeVisible();await expect(page.locator('#dc-root [title^="근거 산출물"]')).toHaveCount(1);await expect(page.locator('#dc-root')).not.toContainText('서버 저장 완료');await expect(page.locator('#dc-root')).not.toContainText('넘김 완료');await page.screenshot({path:'../../docs/eval/standalone-page-2026-09-06/sideview.png'});const url=page.url();expect(url).toContain('snapshot=');expect(url).toContain('asof=');await page.reload();await ready(page);expect(await page.evaluate(()=>(window as any).factoryState.selectedAssetId)).toBe(a.assetId);await page.goto(url);await ready(page);expect(await page.evaluate(()=>(window as any).factoryState.detail.event.assetId)).toBe(a.assetId);});
+         |                                                                                                                                                                                                                                                                                                                                                                                     ^
+       9 | test('real PG: wrong URL snapshot held and React route retained',async({page})=>{await login(page);await page.goto(path);await ready(page);const u=new URL(page.url());u.searchParams.set('snapshot','wrong');await page.goto(u.href);await page.waitForFunction(()=>(window as any).factoryState.error);expect(await page.evaluate(()=>(window as any).factoryState.command)).toBeNull();expect(await page.evaluate(()=>(window as any).factoryState.error)).toContain('snapshot');await page.goto('/app/projects/manufacturing-demo-project/operations');await expect(page).toHaveURL(/\/app\/projects/);expect(await page.locator('#root').count()).toBe(1);});
+      10 | test('fault injection: late response cannot replace newer asset',async({page})=>{await login(page);await page.goto(path);await ready(page);const aa=await page.evaluate(()=>(window as any).factoryState.model.assets.slice(1,3));await page.route('**/detail-view?**',async r=>{if(r.request().url().includes(encodeURIComponent(aa[0].assetId)))await new Promise(resolve=>setTimeout(resolve,900));await r.continue().catch(()=>{});});await page.getByTitle(text(aa[0].displayName),{exact:true}).click();await page.getByTitle(text(aa[1].displayName),{exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).factoryState.detail?.event.assetId)).toBe(aa[1].assetId);await page.waitForTimeout(1100);expect(await page.evaluate(()=>(window as any).factoryState.detail.event.assetId)).toBe(aa[1].assetId);});
+      11 | for(const status of [200,409])test(`mock workflow only: save ${status}, duplicate click and requery`,async({page})=>{
+        at /Users/hb/.codex/worktrees/d436/ontology-dashboard/systems/frontend/e2e/standalone-original.spec.ts:8:373
+
+    Error Context: test-results/standalone-original-real-P-7ffbb-ad-direct-URL-and-side-view-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/standalone-original-real-P-7ffbb-ad-direct-URL-and-side-view-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/standalone-original-real-P-7ffbb-ad-direct-URL-and-side-view-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+(node:5504) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[6/11] [chromium] › e2e/standalone-original.spec.ts:9:1 › real PG: wrong URL snapshot held and React route retained
+[7/11] [chromium] › e2e/standalone-original.spec.ts:10:1 › fault injection: late response cannot replace newer asset
+[8/11] [chromium] › e2e/standalone-original.spec.ts:11:31 › mock workflow only: save 200, duplicate click and requery
+[9/11] [chromium] › e2e/standalone-original.spec.ts:11:31 › mock workflow only: save 409, duplicate click and requery
+[10/11] [chromium] › e2e/standalone-original.spec.ts:23:1 › real PG: Korean signal history and field values reach rendered UI
+[11/11] [chromium] › e2e/standalone-original.spec.ts:30:1 › real PG: runtime context and persisted maintenance reach selected detail
+  1 failed
+    [chromium] › e2e/standalone-original.spec.ts:8:1 › real PG: asset/snapshot reload/direct URL and side view
+  10 passed (2.0m)
