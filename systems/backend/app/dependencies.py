@@ -580,19 +580,27 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
             project_context=context,
             connection_factory=postgres_repository_connection,
         )
+        diagnosis_runtime = get_predictive_maintenance_runtime_service()
+        event_evidence_query = _RuntimeThenDemoEvidenceProjection(
+            diagnosis_runtime,
+            get_service(),
+        )
+        replay_session_query = diagnosis_runtime
     else:
         repository = MaintenanceRepository(
             target,
             project_context=RuntimeProjectContextResolver(target),
         )
-    diagnosis_runtime = get_predictive_maintenance_runtime_service()
+        # The demo server intentionally uses the local SQLite/file contract.
+        # Do not initialize the PostgreSQL-only live runtime merely to list or
+        # advance inspection work orders. The manufacturing service already
+        # exposes the same evidence projection boundary for this scope.
+        event_evidence_query = get_service()
+        replay_session_query = None
     return MaintenanceLoopService(
         repository,
-        event_evidence_query=_RuntimeThenDemoEvidenceProjection(
-            diagnosis_runtime,
-            get_service(),
-        ),
-        replay_session_query=diagnosis_runtime,
+        event_evidence_query=event_evidence_query,
+        replay_session_query=replay_session_query,
         cost_basis_provider=JsonMaintenanceCostBasisProvider(
             ROOT
             / "data"

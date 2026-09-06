@@ -1155,7 +1155,7 @@ def get_asset_detail_view(
                 return canonical
         except KeyError as exc:
             raise EventNotFound(event_id) from exc
-    if event_id:
+    if event_id and runtime_detail is not None:
         try:
             return _runtime_asset_detail_view_model(
                 asset_id=asset_id,
