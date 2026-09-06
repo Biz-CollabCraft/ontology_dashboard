@@ -22,6 +22,15 @@ const DEMO_ACCOUNTS = [
     password: "Engineer!2026",
   },
   {
+    label: { ko: "보전팀", en: "Maintenance" },
+    description: {
+      ko: "요청 접수 · 현장 점검 · 조치안 협의 · 정비 결과 회신",
+      en: "Request intake · field inspection · maintenance plan · completion reply",
+    },
+    email: "technician@ontology.local",
+    password: "Technician!2026",
+  },
+  {
     label: { ko: "운영 관리", en: "Operations" },
     description: {
       ko: "판단 대기 · 생산 영향 · 정비 승인 · 보고 초안",
@@ -71,10 +80,10 @@ function roleAwareLandingPath(user: AuthUser): string {
     params.set("report", "executive-brief");
     params.set("role", "process_manager");
   } else if (roles.includes("process_manager")) {
-    params.set("view", "operations");
+    params.set("view", "overview");
     params.set("role", "process_manager");
   } else if (roles.includes("maintenance_technician")) {
-    params.set("view", "operations");
+    params.set("view", "overview");
     params.set("role", "field_operator");
   } else {
     params.set("view", "overview");

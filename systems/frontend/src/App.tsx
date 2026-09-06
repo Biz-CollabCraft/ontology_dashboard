@@ -288,7 +288,7 @@ function AppRouter() {
   const operationsProjectRoute = matchOperationsProjectPath(pathname);
   if (operationsProjectRoute) {
     const query = new URLSearchParams(window.location.search);
-    const engineerFactoryRoute = query.get("role") === "field_operator"
+    const engineerFactoryRoute = query.get("dashboard") === "workflow"
       && (query.get("view") === "overview" || pathname.endsWith("/factory-status"));
     if (engineerFactoryRoute) {
       const workspaceId = query.get("workspace_id");

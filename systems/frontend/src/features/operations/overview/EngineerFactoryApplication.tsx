@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { getOpenInspectionWorkOrders, type OpenInspectionWorkOrderReadModel } from "../../../api";
 import type { OperationsBootstrapModel } from "../api/operationsContracts";
-import { loadEngineerFilesystemOverview } from "../api/operationsApi";
+import { loadEngineerFilesystemOverview, loadOperationsBootstrap } from "../api/operationsApi";
 import { EngineerFactoryLoading, EngineerFactoryStandalone } from "./EngineerFactoryStandalone";
+import { RoleFactoryStandalone } from "./RoleFactoryStandalone";
 import { useAuth } from "../../auth/AuthContext";
 import { navigate } from "../../../routing";
 import "../operations.css";
@@ -19,7 +20,9 @@ function readSelection() {
 }
 
 export default function EngineerFactoryApplication({ projectId }: { projectId: string }) {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+  const roles = user?.active_project_roles.length ? user.active_project_roles : user?.roles ?? [];
+  const persona = roles.includes("process_manager") ? "production" : roles.includes("maintenance_technician") ? "maintenance" : "engineering";
   const [selection, setSelection] = useState(readSelection);
   const [model, setModel] = useState<OperationsBootstrapModel | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +42,10 @@ export default function EngineerFactoryApplication({ projectId }: { projectId: s
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    loadEngineerFilesystemOverview(projectId, selection.workspaceId ?? "manufacturing-demo")
+    const loadOverview = persona === "production"
+      ? loadOperationsBootstrap(projectId, selection.workspaceId ?? "manufacturing-demo", selection.eventId)
+      : loadEngineerFilesystemOverview(projectId, selection.workspaceId ?? "manufacturing-demo");
+    loadOverview
       .then((payload) => {
         if (cancelled) return;
         const highestRiskAsset = [...payload.assets].sort((a, b) => (b.failureProbability ?? -1) - (a.failureProbability ?? -1))[0];
@@ -54,7 +60,7 @@ export default function EngineerFactoryApplication({ projectId }: { projectId: s
         if (!cancelled) setError(reason instanceof Error ? reason.message : "공장 현황 데이터를 불러오지 못했습니다.");
       });
     return () => { cancelled = true; };
-  }, [projectId, refreshKey, selection.eventId, selection.workspaceId]);
+  }, [persona, projectId, refreshKey, selection.eventId, selection.workspaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +92,9 @@ export default function EngineerFactoryApplication({ projectId }: { projectId: s
   if (!model && !error) return <EngineerFactoryLoading />;
   if (!model) {
     return <main className="engineer-lite-board"><section className="engineer-factory-card engineer-load-error"><strong>공장 현황을 불러오지 못했습니다</strong><p>{error}</p><button type="button" onClick={refresh}>다시 연결</button></section></main>;
+  }
+  if (persona !== "engineering") {
+    return <RoleFactoryStandalone projectId={projectId} workspaceId={selection.workspaceId ?? "manufacturing-demo"} persona={persona} model={model} workOrders={maintenanceDirectives} workOrderError={maintenanceDirectiveError} onRefresh={refresh} onLogout={signOut} />;
   }
   return <EngineerFactoryStandalone model={model} selectedAssetId={selection.assetId} maintenanceDirectives={maintenanceDirectives} maintenanceDirectiveError={maintenanceDirectiveError} onSelectAsset={selectAsset} onRefresh={refresh} onLogout={signOut} />;
 }
