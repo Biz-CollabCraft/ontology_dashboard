@@ -113,7 +113,7 @@ async function ensureObservationConnection(): Promise<void> {
   }
 }
 
-async function getAssetDetailViewModel(
+export async function loadOperationsAssetDetail(
   projectId: string,
   workspaceId: string,
   assetId: string,
@@ -353,7 +353,7 @@ export async function loadOperationsEventDetail(input: {
   const activityPromise: Promise<unknown | null> = usesRuntimeProductResult
     ? Promise.resolve(null)
     : getEventActivity(input.event.eventId);
-  const assetDetailPromise = getAssetDetailViewModel(
+  const assetDetailPromise = loadOperationsAssetDetail(
     input.projectId,
     input.workspaceId,
     input.event.assetId,
