@@ -13,12 +13,13 @@ const checks = [
   ["parts-condition", "관련 부품 상태"],
 ] as const;
 
-export function InspectionWorkOrderEditor({ item, currentUserId, projectId, workspaceId, onRefresh }: {
+export function InspectionWorkOrderEditor({ item, currentUserId, projectId, workspaceId, onRefresh, onConnectionChange }: {
   item: OpenInspectionWorkOrderReadModel;
   currentUserId: string;
   projectId: string;
   workspaceId: string;
   onRefresh: () => void;
+  onConnectionChange?: (value: { workOrderId: string; state: "loading" | "online" | "offline" }) => void;
 }) {
   const [status, setStatus] = useState<string>(item.status);
   const [coordination, setCoordination] = useState<InspectionCoordination | null>(null);
@@ -88,7 +89,7 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
   }
 
   return <form className="inspection-work-editor" onSubmit={(event) => void submit(event)} aria-label="작업 결과 작성">
-    {status !== "requested" ? <ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="maintenance" workOrderId={item.work_order_id} canRequest={mine && status === "approved"} onStateChange={setCoordination} /> : null}
+    {status !== "requested" ? <ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="maintenance" workOrderId={item.work_order_id} canRequest={mine && status === "approved"} onStateChange={setCoordination} onConnectionChange={onConnectionChange} /> : null}
     <header><strong>{item.equipment_id || item.asset_id}</strong><span>#{item.work_order_id.slice(-8)} · {label}</span></header>
     <p>담당 {item.assigned_to_display_name || (item.assigned_to ? "담당 보전팀" : "배정 대기")}</p>
     {message ? <p role="status" className="inspection-work-message">{message}</p> : null}

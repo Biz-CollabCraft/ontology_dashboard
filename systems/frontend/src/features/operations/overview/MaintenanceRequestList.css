@@ -1,0 +1,14 @@
+.role-work-queue .maintenance-request-item{display:grid;width:100%;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;align-items:center;padding:12px;border:1px solid var(--operations-border-strong);border-left:5px solid var(--operations-accent);background:var(--operations-surface);color:var(--ef-text);text-align:left;cursor:pointer}
+.role-work-queue .maintenance-request-item:hover,.role-work-queue .maintenance-request-item[aria-pressed="true"]{background:#edf5ff;border-color:#4f8fd6}
+.role-work-queue .maintenance-request-item:focus-visible{outline:2px solid #2166d5;outline-offset:-2px}
+.maintenance-request-item>b{min-width:0;overflow-wrap:anywhere;font-size:13px}
+.maintenance-request-item .maintenance-request-owner{justify-self:end;text-align:right;font-size:11px;color:var(--ef-muted)}
+.maintenance-request-item>small{font-size:10px;color:var(--ef-muted)}
+.maintenance-request-item .maintenance-request-state{justify-self:end;border-radius:999px;padding:3px 8px;background:#e7edf5;color:#40546c;font-size:11px;font-weight:700}
+.maintenance-request-item .state-approved{background:#e7f0ff;color:#1856ac}
+.maintenance-request-item .state-in_progress{background:#fff3cc;color:#775500}
+.maintenance-request-item .state-completed{background:#e2f5eb;color:#127448}
+.maintenance-work-status{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.maintenance-work-status .maintenance-connection{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border:1px solid currentColor;border-radius:999px;font-size:10px;white-space:nowrap}
+.maintenance-connection i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.maintenance-work-status .is-online{color:#13834e}.maintenance-work-status .is-offline{color:#cf303d}.maintenance-work-status .is-loading{color:#697c94}

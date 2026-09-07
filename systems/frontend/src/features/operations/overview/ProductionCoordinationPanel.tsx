@@ -3,15 +3,19 @@ import { listInspectionCoordinations, requestInspectionCoordination, respondInsp
 import "./ProductionCoordinationPanel.css";
 
 const labels = { pending: "생산관리자 확인 대기", confirmed: "생산관리자 확인 완료", changes_requested: "재협의 필요" };
-export function ProductionCoordinationPanel({ projectId, workspaceId, mode, workOrderId, canRequest = false, onStateChange }: {
+export function ProductionCoordinationPanel({ projectId, workspaceId, mode, workOrderId, canRequest = false, onStateChange, onConnectionChange }: {
   projectId: string; workspaceId: string; mode: "maintenance" | "production";
   workOrderId?: string; canRequest?: boolean; onStateChange?: (value: InspectionCoordination | null) => void;
+  onConnectionChange?: (value: { workOrderId: string; state: "loading" | "online" | "offline" }) => void;
 }) {
   const [items, setItems] = useState<InspectionCoordination[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    if (workOrderId) onConnectionChange?.({ workOrderId, state: loading ? "loading" : error ? "offline" : "online" });
+  }, [workOrderId, loading, error, onConnectionChange]);
   useEffect(() => {
     let alive = true;
     let inflight = false;
@@ -35,7 +39,7 @@ export function ProductionCoordinationPanel({ projectId, workspaceId, mode, work
     : items.find((item) => item.work_order_id === selectedId) ?? items[0];
   const reload = useCallback(() => { onStateChange?.(null); setRevision((value) => value + 1); }, [onStateChange]);
   return <section className="production-coordination" aria-label="생산 협의 현황">
-    <header><strong>생산 협의·작업 일정</strong><span>{loading ? "연결 확인 중" : error ? "연결 확인 필요" : "연결 정상"}</span><button type="button" onClick={reload}>새로고침</button></header>
+    <header><strong>생산 협의·작업 일정</strong>{!onConnectionChange ? <span role="status">{loading ? "연결 확인 중" : error ? "연결 확인 필요" : "연결 정상"}</span> : null}{mode === "production" ? <button type="button" onClick={reload}>새로고침</button> : null}</header>
     {error ? <p role="status">협의 현황을 불러오지 못했습니다. 저장된 이력은 유지됩니다.</p> : null}
     <div className="production-coordination-content">
       {mode === "production" ? <div className="production-coordination-list">

@@ -1,4 +1,5 @@
 import { LogOut } from "lucide-react";
+import "./MaintenanceRequestList.css";
 import type { ComponentProps } from "react";
 import { ProductionRequestBoard } from "./ProductionRequestBoard";
 import { useEffect, useState } from "react";
@@ -90,6 +91,7 @@ function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, w
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
+  const [coordinationConnection, setCoordinationConnection] = useState<{ workOrderId: string; state: "loading" | "online" | "offline" } | null>(null);
   const selectedWorkOrder = workOrders.find((item) => item.work_order_id === selectedWorkOrderId) ?? workOrders.find((item) => item.assigned_to === currentUserId) ?? workOrders[0];
   const risky = [...model.assets].filter((asset) => asset.status !== "normal").sort((a, b) => severity(b) - severity(a) || (b.failureProbability ?? -1) - (a.failureProbability ?? -1));
   const urgent = risky.filter((asset) => tone(asset) === "critical");
@@ -124,7 +126,7 @@ function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, w
   return <main className={`engineer-lite-board role-factory-board role-factory-${persona}`}>
     <header className="engineer-factory-header">
       <div><strong>{title}</strong><span>{model.context.workspaceName} · {subtitle}</span></div>
-      <div className="engineer-factory-live"><i /><b>실시간 연결</b><span>{model.assets.length}대 기준</span><button type="button" onClick={onRefresh}>↻ 새로고침</button><OperationsAccountBadge {...currentUser} /><button type="button" onClick={() => void onLogout()}><LogOut size={14} /> 로그아웃</button></div>
+      <div className="engineer-factory-live"><span>{model.assets.length}대 기준</span><OperationsAccountBadge {...currentUser} /><button type="button" onClick={() => void onLogout()}><LogOut size={14} /> 로그아웃</button></div>
     </header>
 
     <section className="engineer-factory-kpis">
@@ -148,15 +150,24 @@ function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, w
 
     <section className="role-factory-grid">
       <section className="engineer-factory-card role-work-queue">
-        <header><strong>{persona === "maintenance" ? "보전 요청 큐" : "생산 영향 우선순위"}</strong><span>{persona === "maintenance" ? "먼저 접수된 순" : "위험도 높은 순"}</span></header>
+        <header><strong>{persona === "maintenance" ? "보전 요청 목록" : "생산 영향 우선순위"}</strong><span>{persona === "maintenance" ? "먼저 접수된 순" : "위험도 높은 순"}</span></header>
         <div>{persona === "maintenance" ? (
-          workOrderError ? <p className="role-empty-state">정비 요청 연결을 확인해 주세요.</p> : workOrders.length ? workOrders.map((item) => <article key={item.work_order_id}><b>{item.equipment_id || item.asset_id}</b><span>담당 {item.assigned_to_display_name || (item.assigned_to ? "담당 보전팀" : "배정 대기")}</span><small>#{item.work_order_id.slice(-8)} · {item.status === "in_progress" ? "점검 중" : item.status === "approved" ? "착수 준비" : "접수 대기"}</small><button type="button" aria-pressed={selectedWorkOrder?.work_order_id === item.work_order_id} onClick={() => setSelectedWorkOrderId(item.work_order_id)}>{item.status === "requested" ? "요청 확인" : item.status === "approved" ? "승인 작업 확인" : "작업 결과 작성"}</button></article>) : <p className="role-empty-state">현재 정비 요청이 없습니다.</p>
+          workOrderError ? <p className="role-empty-state">정비 요청 연결을 확인해 주세요.</p> : workOrders.length ? workOrders.map((item) => <button className="maintenance-request-item" type="button" key={item.work_order_id} aria-pressed={selectedWorkOrder?.work_order_id === item.work_order_id} onClick={() => setSelectedWorkOrderId(item.work_order_id)}>
+            <b>{item.equipment_id || item.asset_id}</b>
+            <span className="maintenance-request-owner">담당 {item.assigned_to_display_name || (item.assigned_to ? "담당 보전팀" : "배정 대기")}</span>
+            <small>#{item.work_order_id.slice(-8)}</small>
+            <span className={`maintenance-request-state state-${item.status}`}>{item.status === "in_progress" ? "점검 중" : item.status === "approved" ? "착수 준비" : "접수 대기"}</span>
+          </button>) : <p className="role-empty-state">현재 정비 요청이 없습니다.</p>
         ) : risky.map((asset) => <button type="button" key={asset.assetId} aria-pressed={selectedAsset?.assetId === asset.assetId} className={`role-impact-item tone-${tone(asset)}${selectedAsset?.assetId === asset.assetId ? " is-selected" : ""}`} onClick={() => { setSelectedAsset(asset); setDetailOpen(false); }}><b>{asset.displayName}</b><span>{asset.line}{asset.cell && asset.cell !== asset.line ? ` · ${asset.cell}` : ""}</span><strong>{pct(asset.failureProbability)}</strong><small>{statusLabel(asset)} · {failureLabel(asset.predictedFailureType)}</small></button>)}</div>
       </section>
 
       <section className="engineer-factory-card role-primary-work">
-        <header><strong>{persona === "maintenance" ? "현장 작업 준비" : "생산 대응 검토"}</strong><span>업무 단계별 확인</span></header>
-        {persona === "maintenance" && selectedWorkOrder ? <InspectionWorkOrderEditor key={selectedWorkOrder.work_order_id} item={selectedWorkOrder} currentUserId={currentUserId} projectId={projectId} workspaceId={workspaceId} onRefresh={onRefresh} /> : persona === "maintenance" ? <div className="role-step-list">
+        <header><strong>{persona === "maintenance" ? "현장 작업 준비" : "생산 대응 검토"}</strong><div className="maintenance-work-status"><span>업무 단계별 확인</span>{persona === "maintenance" ? (() => {
+          const state = workOrderError ? "offline" : !selectedWorkOrder || selectedWorkOrder.status === "requested" ? "online"
+            : coordinationConnection?.workOrderId === selectedWorkOrder.work_order_id ? coordinationConnection.state : "loading";
+          return <span role="status" className={`maintenance-connection is-${state}`}><i/>{state === "online" ? "연결 정상" : state === "offline" ? "연결 확인 필요" : "연결 확인 중"}</span>;
+        })() : null}</div></header>
+        {persona === "maintenance" && selectedWorkOrder ? <InspectionWorkOrderEditor key={selectedWorkOrder.work_order_id} item={selectedWorkOrder} currentUserId={currentUserId} projectId={projectId} workspaceId={workspaceId} onRefresh={onRefresh} onConnectionChange={setCoordinationConnection} /> : persona === "maintenance" ? <div className="role-step-list">
           <article><b>1. 요청 접수</b><p>설비, 이상 근거, 요청 시각과 중복 요청 여부를 확인합니다.</p></article>
           <article><b>2. 현장 점검</b><p>안전 절차와 센서·부품 점검 결과를 기록합니다.</p></article>
           <article><b>3. 조치안 협의</b><p>방법, 필요 부품, 예상 정지 시간과 영향 품목을 생산관리자에게 전달합니다.</p></article>
