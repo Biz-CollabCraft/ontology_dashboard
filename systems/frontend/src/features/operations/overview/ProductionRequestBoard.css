@@ -1,5 +1,11 @@
 .production-request-board{height:100dvh;min-height:0;box-sizing:border-box;overflow:hidden;gap:12px}
 .prb-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;flex:none}
+.prb-impact-kpis{flex:none;min-width:0;padding:10px 12px;border:1px solid var(--ef-border);border-radius:5px;background:var(--operations-surface)}
+.prb-impact-kpis>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.prb-impact-kpis>header strong{font-size:14px}.prb-impact-kpis>header span{font-size:11px;color:var(--ef-muted)}
+.prb-impact-kpis .prb-metric-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.prb-impact-kpis .prb-metric{padding:8px;gap:5px}
+@media(max-width:700px){.prb-impact-kpis .prb-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .prb-overall-kpi{container-type:inline-size;text-align:left!important}
 .prb-kpi-heading{display:flex;align-items:center;gap:6px}.prb-kpi-heading b{font-size:13px;flex:none}.prb-kpi-heading span{border-left:1px solid var(--ef-border);padding-left:6px;font-size:11px;color:var(--ef-muted)}
 .prb-queue-counts{margin:0 0 8px;color:var(--ef-muted)}

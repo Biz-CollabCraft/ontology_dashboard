@@ -103,6 +103,10 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
       <OverallKpi label="영향 가능 라인" value={number(impactedLines, "개")} description="현재 위험 설비가 포함된 라인입니다."/>
       <OverallKpi label="예상 정지 영향" value={downtimeLabel} description="전체 현황 기준 · 부족분·납기 산정의 입력값입니다."/>
     </section>
+    <section className="prb-impact-kpis" aria-label="선택 요청 생산 영향 지표">
+      <header><strong>{selected ? name + " · 생산 영향 요약" : "생산 영향 요약"}</strong><span>{selected ? "선택한 정비 요청 기준" : "정비 요청을 선택하세요"}</span></header>
+      <ImpactMetrics item={selected} detail={detail} requestedLoss={requestedLoss} loading={Boolean(selected && (!active || active.detailLoading))}/>
+    </section>
     <div className="prb-columns">
       <section className="prb-card prb-queue" aria-label="정비 요청 큐">
         <header><strong>정비 요청 큐</strong><div className="prb-queue-tools"><select aria-label="정비 요청 정렬" title="정렬 방법" value={sortOrder} onChange={e => setSortOrder(e.target.value as QueueSort)}><option value="time">시간순</option><option value="risk">위험 점수순</option></select><select aria-label="정비 요청 상태" title="작업 상태" value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}><option value="active">진행 중</option><option value="completed">완료</option><option value="all">전체</option></select></div></header>
@@ -123,7 +127,7 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
         <header><strong>생산 대응 검토</strong><span>{name}</span></header>
         {selected ? <>
           <div className="prb-scroll prb-review-top">
-            <ImpactSummary name={name} item={selected} detail={detail} requestedLoss={requestedLoss} loading={!active || active.detailLoading}/>
+            <ImpactSummary name={name} item={selected} detail={detail} requestedLoss={requestedLoss} loading={!active || active.detailLoading} showMetrics={false}/>
             {active?.detailError ? <p role="status">생산 영향 연결 확인 필요 · 다른 장비의 수치로 대체하지 않습니다.</p> : null}
             <CostComparison analysis={cost} loading={!active || active.costLoading} error={active?.costError ?? false}/>
           </div>
@@ -185,13 +189,17 @@ function OverallKpi({ label, value, description }: { label: string; value: strin
   return <article className="prb-metric prb-overall-kpi"><div className="prb-kpi-heading"><b>{label}</b><span>{description}</span></div><strong>{value}</strong></article>;
 }
 function Metric({ label, value }: { label: string; value: string }) { return <article className="prb-metric"><span>{label}</span><strong>{value}</strong></article>; }
-function ImpactSummary({ name, item, detail, requestedLoss, loading }: { name: string; item: ProductionQueueItem; detail: AssetDetailViewModel | null; requestedLoss: number | null; loading: boolean }) {
+function ImpactSummary({ name, item, detail, requestedLoss, loading, showMetrics = true }: { name: string; item: ProductionQueueItem; detail: AssetDetailViewModel | null; requestedLoss: number | null; loading: boolean; showMetrics?: boolean }) {
   const c = item.coordination;
   return <section className="prb-impact-summary"><h3>{name} · 생산 영향 요약</h3><p>{c?.request.work_summary ?? "보전팀에서 작업 내용과 정지 시간을 작성하기 전입니다."}</p>
-    <div className="prb-metric-grid"><Metric label="요청 정지 시간" value={number(c?.request.downtime_minutes, "분")}/><Metric label="요청 정지 예상 손실" value={loading ? "조회 중" : number(requestedLoss, "개")}/><Metric label="기존 고장 예측 손실" value={loading ? "조회 중" : number(detail?.operation_context.event_impact?.estimated_lost_units, "개")}/><Metric label="일일 생산 계획" value={loading ? "조회 중" : number(detail?.operation_context.production_plan?.planned_units, "개")}/></div>
+    {showMetrics ? <ImpactMetrics item={item} detail={detail} requestedLoss={requestedLoss} loading={loading}/> : null}
     <p>협의 영향 품목: {c?.request.affected_items ?? "미작성"} · 요청 메모: {c?.request.note || "없음"}</p>
     <small>요청 시간 기준 손실과 기존 고장 예측 손실은 별도 시나리오이며 합산하지 않습니다.</small>
   </section>;
+}
+function ImpactMetrics({ item, detail, requestedLoss, loading }: { item: ProductionQueueItem | null; detail: AssetDetailViewModel | null; requestedLoss: number | null; loading: boolean }) {
+  const c = item?.coordination;
+  return (<div className="prb-metric-grid"><Metric label="요청 정지 시간" value={number(c?.request.downtime_minutes, "분")}/><Metric label="요청 정지 예상 손실" value={loading ? "조회 중" : number(requestedLoss, "개")}/><Metric label="기존 고장 예측 손실" value={loading ? "조회 중" : number(detail?.operation_context.event_impact?.estimated_lost_units, "개")}/><Metric label="일일 생산 계획" value={loading ? "조회 중" : number(detail?.operation_context.production_plan?.planned_units, "개")}/></div>);
 }
 function CostComparison({ analysis, loading, error }: { analysis: MaintenanceCostAnalysisReadModel | null; loading: boolean; error: boolean }) {
   return <section className="prb-cost"><h3>손익·비용 대조</h3>

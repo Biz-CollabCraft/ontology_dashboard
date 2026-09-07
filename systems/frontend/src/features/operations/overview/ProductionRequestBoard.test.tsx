@@ -75,11 +75,11 @@ it("changes the queue, impact drawer and approval target together without openin
 });
 it("never shows the previous equipment numbers while a new detail request is pending", async () => {
   await render();
-  expect(host.querySelector(".prb-review")?.textContent).toContain("111개");
+  expect(host.querySelector(".prb-impact-kpis")?.textContent).toContain("111개");
   vi.mocked(loadOperationsAssetDetail).mockImplementation(() => new Promise(() => {}));
   await chooseB();
-  expect(host.querySelector(".prb-review")?.textContent).not.toContain("111개");
-  expect(host.querySelector(".prb-review")?.textContent).toContain("조회 중");
+  expect(host.querySelector(".prb-impact-kpis")?.textContent).not.toContain("111개");
+  expect(host.querySelector(".prb-impact-kpis")?.textContent).toContain("조회 중");
 });
 it("requires explicit schedule and note, preserves failed input and retries with the same idempotency key", async () => {
   await render(); await chooseB();
@@ -189,6 +189,20 @@ it("sorts by current equipment risk, pins selection, and returns to time order",
   expect(respondInspectionCoordination).not.toHaveBeenCalled();
   await act(async () => { sort.value = "time"; sort.dispatchEvent(new Event("change", { bubbles: true })); });
   expect(host.querySelector(".prb-queue-item")?.textContent).toContain("정상 CNC");
+});
+it("places the four selected impact metrics directly below overall KPIs without duplicating them in the central review", async () => {
+  await render();
+  const row = host.querySelector(".prb-impact-kpis")!;
+  expect(host.querySelector(".prb-kpis")?.nextElementSibling).toBe(row);
+  expect(row.querySelectorAll(".prb-metric")).toHaveLength(4);
+  expect(row.textContent).toContain("111개");
+  expect(host.querySelector(".prb-review .prb-metric-grid")).toBeNull();
+  await chooseB();
+  expect(row.textContent).toContain("압축기 B");
+  expect(row.textContent).toContain("222개");
+  expect(row.textContent).not.toContain("111개");
+  await click("선택 설비 영향 확인");
+  expect(host.querySelectorAll('[role="dialog"] .prb-metric-grid .prb-metric')).toHaveLength(4);
 });
 it("orders by original request time, not later assignment or consultation time", () => {
   const orders = [{ work_order_id: first.work_order_id, asset_id: first.asset_id, event_id: first.event_id, status: "requested", created_at: "2026-09-06T00:00:00Z", assigned_at: null }] as OpenInspectionWorkOrderReadModel[];
