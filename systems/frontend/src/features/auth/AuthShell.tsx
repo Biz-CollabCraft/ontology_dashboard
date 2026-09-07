@@ -19,7 +19,7 @@ const PRODUCT_STORIES = [
     eyebrow: "ONE CASE · ROLE COMPOSED",
     title: { ko: "같은 사건을 역할마다 필요한 깊이로 봅니다.", en: "See the same case at the depth each role needs." },
     detail: {
-      ko: "엔지니어는 센서와 점검 근거, 운영 관리자는 생산 영향과 승인, 경영진은 KPI와 의사결정 병목을 같은 Case에서 확인합니다.",
+      ko: "엔지니어는 설비 이상과 근거, 보전팀은 점검과 정비, 생산 관리자는 생산 영향과 작업 승인을 확인합니다. 경영진 보고는 유지됩니다.",
       en: "Engineers review sensor and inspection evidence, operations managers review impact and approvals, and executives review KPI and decision bottlenecks from the same case.",
     },
     visual: "roles" as const,

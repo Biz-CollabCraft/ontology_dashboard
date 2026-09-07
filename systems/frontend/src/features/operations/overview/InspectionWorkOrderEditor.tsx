@@ -94,7 +94,7 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
     <p>담당 {item.assigned_to_display_name || (item.assigned_to ? "담당 보전팀" : "배정 대기")}</p>
     {message ? <p role="status" className="inspection-work-message">{message}</p> : null}
     {!canAct && status !== "completed" ? <p>이 작업은 배정된 보전팀 담당자만 시작하고 결과를 기록할 수 있습니다.</p> : null}
-    {status === "approved" ? <p>{awaitingProduction ? "요청을 접수했습니다. 생산관리자의 작업·정지 일정 확인 후 현장 점검을 시작할 수 있습니다." : "생산 협의가 확인됐습니다. 현장 착수 조건을 확인하고 ‘현장 점검 시작’을 누르면 결과 작성이 열립니다."}</p> : null}
+    {status === "approved" ? <p>{awaitingProduction ? "요청을 접수했습니다. 생산 관리자의 작업·정지 일정 확인 후 현장 점검을 시작할 수 있습니다." : "생산 협의가 확인됐습니다. 현장 착수 조건을 확인하고 ‘현장 점검 시작’을 누르면 결과 작성이 열립니다."}</p> : null}
     {canComplete ? <fieldset disabled={busy}>
       <legend>작업·점검 결과</legend>
       <label>점검 판단<select required value={outcome} onChange={(event) => setOutcome(event.target.value as InspectionOutcome)}>

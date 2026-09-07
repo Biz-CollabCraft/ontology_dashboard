@@ -33,7 +33,7 @@ it("removes revoked approvals on automatic refresh", async () => {
   await render();
   await act(async () => {await vi.advanceTimersByTimeAsync(10000);});
   expect(host.querySelectorAll(".maintenance-request-item")).toHaveLength(0);
-  expect(host.textContent).toContain("현재 생산관리자가 승인한 작업이 없습니다");
+  expect(host.textContent).toContain("현재 생산 관리자가 승인한 작업이 없습니다");
 });
 it("does not expose stale approvals as actionable when disconnected", async () => {
   vi.mocked(listInspectionCoordinations).mockResolvedValueOnce({items:[coordination("A")]} as never).mockRejectedValue(new Error("offline"));

@@ -31,7 +31,7 @@ const DEMO_ACCOUNTS = [
     password: "Technician!2026",
   },
   {
-    label: { ko: "운영 관리", en: "Operations" },
+    label: { ko: "생산 관리자", en: "Production Manager" },
     description: {
       ko: "판단 대기 · 생산 영향 · 정비 승인 · 보고 초안",
       en: "Pending decisions · production impact · maintenance approval · report draft",
@@ -148,7 +148,7 @@ export function LoginPage() {
       description={
         english
           ? "Connect the same equipment event and evidence across engineering investigation, operational decisions, and executive reporting."
-          : "같은 설비 이상 사건과 근거를 엔지니어의 조사, 운영 관리자의 판단, 경영진의 보고 언어로 연결합니다."
+          : "같은 설비 이상 사건과 근거를 엔지니어의 조사, 생산 관리자의 판단, 경영진의 보고 언어로 연결합니다."
       }
     >
       <form className="auth-form" onSubmit={submit}>

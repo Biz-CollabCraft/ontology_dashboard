@@ -37,14 +37,14 @@ export function MaintenanceApprovalList({ projectId, workspaceId, workOrders, wo
     </div></header>
     <div>{connection === "loading" ? <p>승인 목록을 불러오는 중입니다.</p>
       : connection === "offline" ? <p>승인 목록 연결을 확인해 주세요.</p>
-      : !approved.length ? <p>현재 생산관리자가 승인한 작업이 없습니다.</p>
+      : !approved.length ? <p>현재 생산 관리자가 승인한 작업이 없습니다.</p>
       : approved.map(({order, coordination: c}) => <button type="button" className="maintenance-request-item" key={order.work_order_id}
         aria-pressed={selectedId === order.work_order_id} onClick={() => onSelect(order.work_order_id)}>
         <b>{order.equipment_id || order.asset_id}</b>
         <span className="maintenance-request-owner">담당 {order.assigned_to_display_name || (order.assigned_to ? "담당 보전팀" : "배정 대기")}</span>
         <small>#{order.work_order_id.slice(-8)}</small>
         <span className={`maintenance-request-state state-${order.status}`}>{order.status === "in_progress" ? "작업 진행 중" : "생산 승인 완료"}</span>
-        <small className="maintenance-approval-detail">승인 {c.responded_by_name || "생산관리자"}{c.responded_at ? ` · ${new Date(c.responded_at).toLocaleString("ko-KR")}` : ""}</small>
+        <small className="maintenance-approval-detail">승인 {c.responded_by_name || "생산 관리자"}{c.responded_at ? ` · ${new Date(c.responded_at).toLocaleString("ko-KR")}` : ""}</small>
         <small className="maintenance-approval-detail">작업 일정: {c.response?.scheduled_window || "일정 확인 필요"}</small>
       </button>)}</div>
   </aside>;

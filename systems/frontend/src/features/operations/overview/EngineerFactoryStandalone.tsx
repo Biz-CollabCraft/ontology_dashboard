@@ -461,7 +461,7 @@ export function EngineerFactoryStandalone({
             ↻ 새로고침
           </button>
           {onLogout ? (
-            <OperationsAccountBadge displayName={currentUser?.displayName ?? "사용자"} title={currentUser?.title ?? "설비 엔지니어"} />
+            <OperationsAccountBadge displayName={currentUser?.displayName ?? "사용자"} title={currentUser?.title ?? "엔지니어"} />
           ) : null}
           {onLogout ? (
             <button

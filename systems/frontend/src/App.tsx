@@ -20,6 +20,7 @@ import {
   usePathname,
 } from "./routing";
 import { ApiError, getProject, getProjectWorkspaces } from "./api";
+import { currentRoleRedirect } from "./currentRoleRoutes";
 import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import { DisplayPreferencesProvider } from "./ui/foundry/displayPreferences";
 import { I18nProvider } from "./ui/i18n/I18nProvider";
@@ -84,21 +85,8 @@ const GovernanceWorkbenchPage = lazy(() =>
 const MLValidatorWorkbench = lazy(() =>
   import("./features/modeling/MLValidatorWorkbench").then((module) => ({ default: module.MLValidatorWorkbench })),
 );
-const ReferenceGallery = lazy(() =>
-  import("./features/reference/ReferenceGallery").then((module) => ({ default: module.ReferenceGallery })),
-);
-const TeamShareStory = lazy(() =>
-  import("./features/teamshare/TeamShareStory").then((module) => ({ default: module.TeamShareStory })),
-);
-const AdaptiveTeamShareStory = lazy(() =>
-  import("./features/teamshare/AdaptiveTeamShareStory").then((module) => ({ default: module.AdaptiveTeamShareStory })),
-);
-const EChartsComparisonEmbed = lazy(() =>
-  import("./features/visualization/EChartsComparisonEmbed").then((module) => ({ default: module.EChartsComparisonEmbed })),
-);
 
 const LAST_VALID_PROJECT_KEY = "ontology-dashboard:last-valid-project";
-const IS_PUBLIC_STORY = import.meta.env.VITE_PUBLIC_STORY === "1";
 
 function RouteLoading({ operation }: { operation: string }) {
   const sessionBootstrap = operation === "Checking session" || operation === "Loading sign in";
@@ -252,11 +240,6 @@ function AppRouter() {
   const pathname = usePathname();
   const { user, loading } = useAuth();
 
-  if (pathname === "/reference") return <ReferenceGallery />;
-  if (pathname === "/team-share") return <TeamShareStory />;
-  if (pathname === "/team-share-adaptive") return <AdaptiveTeamShareStory />;
-  if (pathname === "/visualization-compare/echarts") return <EChartsComparisonEmbed />;
-  if (pathname === "/loader") return <RouteLoading operation="Checking session" />;
 
   if (loading) {
     return isReliabilityPreviewLocation()
@@ -274,6 +257,9 @@ function AppRouter() {
   }
 
   if (pathname === "/admin") return user.is_admin ? <AdminApp /> : <ForbiddenPage />;
+
+  const roleRedirect = currentRoleRedirect(user, pathname, window.location.search);
+  if (roleRedirect) return <Redirect to={roleRedirect} />;
 
   if (pathname === "/backup") {
     const backupProjectId = user.active_project_id ?? user.project_scopes[0] ?? null;
@@ -464,26 +450,11 @@ function AppRouter() {
 }
 
 export default function App() {
-  if (window.location.pathname === "/visualization-compare/echarts") {
-    return (
-      <I18nProvider>
-        <Suspense fallback={<RouteLoading operation="Loading ECharts comparison" />}>
-          <EChartsComparisonEmbed />
-        </Suspense>
-      </I18nProvider>
-    );
-  }
   return (
     <I18nProvider>
-      {IS_PUBLIC_STORY ? (
-        <Suspense fallback={<RouteLoading operation="Loading Team Share" />}>
-          <TeamShareStory />
-        </Suspense>
-      ) : (
-        <AuthProvider>
-          <DisplayScopedRouter />
-        </AuthProvider>
-      )}
+      <AuthProvider>
+        <DisplayScopedRouter />
+      </AuthProvider>
     </I18nProvider>
   );
 }

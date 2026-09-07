@@ -3,7 +3,7 @@ import { listInspectionCoordinations, requestInspectionCoordination, respondInsp
 import "./ProductionCoordinationPanel.css";
 import "./ProductionReviewLayout.css";
 
-const labels = { pending: "생산관리자 확인 대기", confirmed: "생산관리자 확인 완료", changes_requested: "재협의 필요" };
+const labels = { pending: "생산 관리자 확인 대기", confirmed: "생산 관리자 확인 완료", changes_requested: "재협의 필요" };
 export function ProductionCoordinationPanel({ projectId, workspaceId, mode, workOrderId, canRequest = false, onStateChange, onConnectionChange }: {
   projectId: string; workspaceId: string; mode: "maintenance" | "production";
   workOrderId?: string; canRequest?: boolean; onStateChange?: (value: InspectionCoordination | null) => void;
@@ -53,11 +53,11 @@ export function ProductionCoordinationPanel({ projectId, workspaceId, mode, work
         <strong>{selected.asset_id} · {labels[selected.status]}</strong>
         <p>요청자 {selected.requested_by_name} · {new Date(selected.requested_at).toLocaleString("ko-KR")}</p>
         <dl><div><dt>작업 내용</dt><dd>{selected.request.work_summary}</dd></div><div><dt>예상 정지 시간</dt><dd>{selected.request.downtime_minutes}분</dd></div><div><dt>영향 품목</dt><dd>{selected.request.affected_items}</dd></div><div><dt>요청 메모</dt><dd>{selected.request.note || "없음"}</dd></div></dl>
-        {selected.response ? <div className="coordination-response"><b>{labels[selected.status]}</b><p>생산관리자 {selected.responded_by_name} · {new Date(selected.responded_at!).toLocaleString("ko-KR")}</p><p>일정: {selected.response.scheduled_window}</p><p>생산 대응: {selected.response.production_response}</p></div> : null}
+        {selected.response ? <div className="coordination-response"><b>{labels[selected.status]}</b><p>생산 관리자 {selected.responded_by_name} · {new Date(selected.responded_at!).toLocaleString("ko-KR")}</p><p>일정: {selected.response.scheduled_window}</p><p>생산 대응: {selected.response.production_response}</p></div> : null}
         {selected.work_order_status === "in_progress" ? <p>보전팀 작업 진행 중</p> : null}
         {selected.inspection_result ? <div className="coordination-response"><b>점검 결과 반영 완료</b>{selected.inspection_result.findings.map((finding, index) => <p key={index}>{finding}</p>)}<p>{selected.inspection_result.note}</p></div> : null}
         {selected.history && selected.history.length > 1 ? <details><summary>협의 이력 {selected.history.length}건</summary>{selected.history.map((entry, index) => <p key={index}>{labels[entry.status]} · {entry.responded_by_name || entry.requested_by_name} · {entry.response?.production_response || entry.request.work_summary}</p>)}</details> : null}
-      </article> : mode === "maintenance" && !loading && !error ? <p>접수 후 생산관리자와 작업·정지 일정을 협의해 주세요.</p> : null}
+      </article> : mode === "maintenance" && !loading && !error ? <p>접수 후 생산 관리자와 작업·정지 일정을 협의해 주세요.</p> : null}
       {mode === "maintenance" && canRequest && !loading && !error && selected?.status !== "pending" ? <CoordinationRequestForm key={workOrderId} projectId={projectId} workspaceId={workspaceId} workOrderId={workOrderId!} onSaved={reload} hasConfirmation={selected?.status === "confirmed"} /> : null}
       {mode === "production" && selected?.status === "pending" && !error ? <CoordinationReplyForm key={selected.request_id} item={selected} projectId={projectId} workspaceId={workspaceId} onSaved={reload} /> : null}
     </div>
@@ -91,7 +91,7 @@ function CoordinationRequestForm({ projectId, workspaceId, workOrderId, onSaved,
   const { busy, message, run } = useCommand();
   const payload = { work_summary: summary.trim(), downtime_minutes: Number(downtime), affected_items: affected.trim(), note: note.trim() };
   const valid = Boolean(summary.trim() && affected.trim() && downtime.trim() && Number.isInteger(Number(downtime)) && Number(downtime) >= 0 && Number(downtime) <= 43200);
-  return <details className="coordination-request-form" open={!hasConfirmation}><summary>{hasConfirmation ? "작업 내용 변경·재협의 요청" : "생산관리자에게 협의 요청"}</summary>
+  return <details className="coordination-request-form" open={!hasConfirmation}><summary>{hasConfirmation ? "작업 내용 변경·재협의 요청" : "생산 관리자에게 협의 요청"}</summary>
     {hasConfirmation ? <p>새 요청을 보내면 기존 확인은 이력으로 남고, 새 회신 전까지 시작할 수 없습니다.</p> : null}
     <label>작업 내용<textarea maxLength={2000} value={summary} onChange={(e) => setSummary(e.target.value)} disabled={busy}/></label>
     <label>예상 정지 시간(분)<input type="number" min={0} max={43200} step={1} value={downtime} onChange={(e) => setDowntime(e.target.value)} disabled={busy}/></label>
@@ -110,7 +110,7 @@ function CoordinationReplyForm({ item, projectId, workspaceId, onSaved }: {
   const [response, setResponse] = useState("");
   const { busy, message, run } = useCommand();
   return <section className="coordination-reply-form">
-    <strong>생산관리자 회신</strong>
+    <strong>생산 관리자 회신</strong>
     <label>협의 결과<select value={decision} onChange={(e) => setDecision(e.target.value as typeof decision)} disabled={busy}><option value="">선택하세요</option><option value="confirmed">작업·정지 일정 확인</option><option value="changes_requested">재협의 요청</option></select></label>
     <label>협의된 일정·변경 요청 일정<input maxLength={1000} value={window} onChange={(e) => setWindow(e.target.value)} disabled={busy} placeholder="날짜·시각 또는 무정지 작업 여부"/></label>
     <label>생산 대응·회신 내용<textarea maxLength={4000} value={response} onChange={(e) => setResponse(e.target.value)} disabled={busy}/></label>

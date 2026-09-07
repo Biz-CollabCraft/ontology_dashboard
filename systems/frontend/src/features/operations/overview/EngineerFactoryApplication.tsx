@@ -172,7 +172,7 @@ export default function EngineerFactoryApplication({
         workOrders={maintenanceDirectives}
         workOrderError={maintenanceDirectiveError}
         currentUserId={user?.user_id ?? ""}
-        currentUser={{ displayName: user?.display_name ?? "사용자", title: persona === "production" ? "생산관리자" : "보전팀" }}
+        currentUser={{ displayName: user?.display_name ?? "사용자", title: persona === "production" ? "생산 관리자" : "보전팀" }}
         onRefresh={refresh}
         onLogout={signOut}
       />
@@ -186,7 +186,7 @@ export default function EngineerFactoryApplication({
       maintenanceDirectiveError={maintenanceDirectiveError}
       currentUser={{
         displayName: user?.display_name ?? "사용자",
-        title: "설비 엔지니어",
+        title: "엔지니어",
       }}
       onSelectAsset={selectAsset}
       onRefresh={refresh}
