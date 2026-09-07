@@ -204,6 +204,7 @@ export default function EngineerFactoryApplication({
         model={model}
         workOrders={maintenanceDirectives}
         workOrderError={maintenanceDirectiveError}
+        currentUserId={user?.user_id ?? ""}
         onRefresh={refresh}
         onLogout={signOut}
       />

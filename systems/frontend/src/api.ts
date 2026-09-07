@@ -1521,12 +1521,11 @@ export function completeInspectionWorkOrder(input: {
   projectId: string;
   workspaceId: string;
   workOrderId: string;
-  facts: InspectionCompletionFacts;
   idempotencyKey: string;
-}) {
+} & ({ facts: InspectionCompletionFacts } | { payload: InspectionCompletionPayload })) {
   return maintenanceCommand(
     `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/complete`,
-    buildInspectionCompletionPayload(input.facts),
+    "payload" in input ? input.payload : buildInspectionCompletionPayload(input.facts),
     input.idempotencyKey,
   );
 }

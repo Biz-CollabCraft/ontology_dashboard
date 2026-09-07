@@ -2,7 +2,8 @@ import { LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AssetDetailViewModel, OperationsAsset, OperationsBootstrapModel } from "../api/operationsContracts";
 import { loadOperationsAssetDetail } from "../api/operationsApi";
-import { acceptInspectionWorkOrder, startInspectionWorkOrder, type OpenInspectionWorkOrderReadModel } from "../../../api";
+import { type OpenInspectionWorkOrderReadModel } from "../../../api";
+import { InspectionWorkOrderEditor } from "./InspectionWorkOrderEditor";
 import { displayEquipmentSensorLabel, FAILURE_TYPE_LABELS } from "../displayLabels";
 
 type Persona = "maintenance" | "production";
@@ -63,7 +64,8 @@ function failureLabel(value: string) {
   return FAILURE_TYPE_LABELS[value] ?? (value ? value.replaceAll("_", " ") : "원인 확인 필요");
 }
 
-export function RoleFactoryStandalone({ projectId, workspaceId, persona, model, workOrders, workOrderError, onRefresh, onLogout }: {
+export function RoleFactoryStandalone({ projectId, workspaceId, persona, model, workOrders, workOrderError, currentUserId, onRefresh, onLogout }: {
+  currentUserId: string;
   projectId: string;
   workspaceId: string;
   persona: Persona;
@@ -78,8 +80,8 @@ export function RoleFactoryStandalone({ projectId, workspaceId, persona, model, 
   const [detail, setDetail] = useState<AssetDetailViewModel | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [commandBusy, setCommandBusy] = useState<string | null>(null);
-  const [commandMessage, setCommandMessage] = useState<string | null>(null);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
+  const selectedWorkOrder = workOrders.find((item) => item.work_order_id === selectedWorkOrderId) ?? workOrders.find((item) => item.assigned_to === currentUserId) ?? workOrders[0];
   const risky = [...model.assets].filter((asset) => asset.status !== "normal").sort((a, b) => severity(b) - severity(a) || (b.failureProbability ?? -1) - (a.failureProbability ?? -1));
   const urgent = risky.filter((asset) => tone(asset) === "critical");
   const impactedLines = new Set(risky.map((asset) => asset.line)).size;
@@ -109,22 +111,6 @@ export function RoleFactoryStandalone({ projectId, workspaceId, persona, model, 
     return () => { cancelled = true; };
   }, [model.context.datasetVersionId, persona, projectId, selectedAsset?.assetId, selectedAsset?.eventId, workspaceId]);
 
-  async function advanceWorkOrder(item: OpenInspectionWorkOrderReadModel) {
-    if (item.status === "in_progress") return;
-    setCommandBusy(item.work_order_id);
-    setCommandMessage(null);
-    try {
-      const input = { projectId, workspaceId, workOrderId: item.work_order_id, idempotencyKey: `${item.work_order_id}:${item.status}:${Date.now()}` };
-      if (item.status === "requested") await acceptInspectionWorkOrder(input);
-      else await startInspectionWorkOrder(input);
-      setCommandMessage(item.status === "requested" ? "요청을 접수했습니다." : "현장 점검을 시작했습니다.");
-      onRefresh();
-    } catch (reason) {
-      setCommandMessage(reason instanceof Error ? reason.message : "처리 명령을 완료하지 못했습니다.");
-    } finally {
-      setCommandBusy(null);
-    }
-  }
 
   return <main className={`engineer-lite-board role-factory-board role-factory-${persona}`}>
     <header className="engineer-factory-header">
@@ -155,13 +141,13 @@ export function RoleFactoryStandalone({ projectId, workspaceId, persona, model, 
       <section className="engineer-factory-card role-work-queue">
         <header><strong>{persona === "maintenance" ? "보전 요청 큐" : "생산 영향 우선순위"}</strong><span>{persona === "maintenance" ? "먼저 접수된 순" : "위험도 높은 순"}</span></header>
         <div>{persona === "maintenance" ? (
-          workOrderError ? <p className="role-empty-state">정비 요청 연결을 확인해 주세요.</p> : workOrders.length ? workOrders.map((item) => <article key={item.work_order_id}><b>{item.equipment_id || item.asset_id}</b><span>{item.assigned_to ? `담당 ${item.assigned_to}` : "담당자 배정 대기"}</span><small>{item.status === "in_progress" ? "점검 중" : item.status === "approved" ? "착수 준비" : "접수 대기"}</small><button type="button" disabled={commandBusy === item.work_order_id || item.status === "in_progress"} onClick={() => void advanceWorkOrder(item)}>{item.status === "requested" ? "요청 접수" : item.status === "approved" ? "현장 점검 시작" : "점검 결과 입력 필요"}</button></article>) : <p className="role-empty-state">현재 정비 요청이 없습니다.</p>
+          workOrderError ? <p className="role-empty-state">정비 요청 연결을 확인해 주세요.</p> : workOrders.length ? workOrders.map((item) => <article key={item.work_order_id}><b>{item.equipment_id || item.asset_id}</b><span>담당 {item.assigned_to_display_name || (item.assigned_to ? "담당 보전팀" : "배정 대기")}</span><small>#{item.work_order_id.slice(-8)} · {item.status === "in_progress" ? "점검 중" : item.status === "approved" ? "착수 준비" : "접수 대기"}</small><button type="button" aria-pressed={selectedWorkOrder?.work_order_id === item.work_order_id} onClick={() => setSelectedWorkOrderId(item.work_order_id)}>{item.status === "requested" ? "요청 확인" : item.status === "approved" ? "승인 작업 확인" : "작업 결과 작성"}</button></article>) : <p className="role-empty-state">현재 정비 요청이 없습니다.</p>
         ) : risky.map((asset) => <button type="button" key={asset.assetId} aria-pressed={selectedAsset?.assetId === asset.assetId} className={`role-impact-item tone-${tone(asset)}${selectedAsset?.assetId === asset.assetId ? " is-selected" : ""}`} onClick={() => { setSelectedAsset(asset); setDetailOpen(false); }}><b>{asset.displayName}</b><span>{asset.line}{asset.cell && asset.cell !== asset.line ? ` · ${asset.cell}` : ""}</span><strong>{pct(asset.failureProbability)}</strong><small>{statusLabel(asset)} · {failureLabel(asset.predictedFailureType)}</small></button>)}</div>
       </section>
 
       <section className="engineer-factory-card role-primary-work">
         <header><strong>{persona === "maintenance" ? "현장 작업 준비" : "생산 대응 검토"}</strong><span>업무 단계별 확인</span></header>
-        {persona === "maintenance" ? <div className="role-step-list">{commandMessage ? <p className="role-command-message">{commandMessage}</p> : null}
+        {persona === "maintenance" && selectedWorkOrder ? <InspectionWorkOrderEditor key={selectedWorkOrder.work_order_id} item={selectedWorkOrder} currentUserId={currentUserId} projectId={projectId} workspaceId={workspaceId} onRefresh={onRefresh} /> : persona === "maintenance" ? <div className="role-step-list">
           <article><b>1. 요청 접수</b><p>설비, 이상 근거, 요청 시각과 중복 요청 여부를 확인합니다.</p></article>
           <article><b>2. 현장 점검</b><p>안전 절차와 센서·부품 점검 결과를 기록합니다.</p></article>
           <article><b>3. 조치안 협의</b><p>방법, 필요 부품, 예상 정지 시간과 영향 품목을 생산관리자에게 전달합니다.</p></article>

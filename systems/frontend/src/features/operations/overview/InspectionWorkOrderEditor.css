@@ -1,0 +1,11 @@
+.inspection-work-editor{display:flex;flex-direction:column;gap:12px;min-height:0;max-height:max(360px,calc(100svh - 300px));overflow:auto;padding:14px;background:#f5f8fc;color:#172b46}
+.inspection-work-editor header{display:flex;flex-direction:column;gap:6px}
+.inspection-work-editor header strong,.inspection-work-editor legend{font-size:17px;font-weight:700}
+.inspection-work-editor p{margin:0;line-height:1.5}
+.inspection-work-editor fieldset{display:flex;flex-direction:column;gap:12px;border:1px solid #bfcee0;padding:14px;min-width:0}
+.inspection-work-editor label{display:flex;flex-direction:column;gap:6px;font-weight:600}
+.inspection-work-editor input,.inspection-work-editor select,.inspection-work-editor textarea{width:100%;box-sizing:border-box;font:inherit;padding:9px;border:1px solid #aabed8;border-radius:4px;background:#fff;color:#172b46}
+.inspection-work-editor textarea{min-height:80px;resize:vertical}
+.inspection-work-editor>button{padding:12px;background:#1769cf;color:white;border:0;border-radius:4px;font-weight:700}
+.inspection-work-editor>button:disabled{background:#dbe5f1;color:#526782;cursor:not-allowed}
+.inspection-work-message{padding:10px;border-left:3px solid #2878d6;background:#e8f1fc}

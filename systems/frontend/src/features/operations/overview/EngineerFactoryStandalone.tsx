@@ -1039,7 +1039,7 @@ export function EngineerFactoryStandalone({
                       {maintenanceRequestBusy
                         ? "정비 승인 요청 중"
                         : selectedMaintenanceDirective
-                          ? "정비 승인 요청됨"
+                          ? selectedMaintenanceDirective.status === "approved" ? "정비 승인됨" : selectedMaintenanceDirective.status === "in_progress" ? "보전팀 점검 중" : "정비 승인 요청됨"
                           : "정비 승인 요청"}
                     </button>
                     <button
@@ -1072,6 +1072,10 @@ export function EngineerFactoryStandalone({
                         : "보전 점검 요청 연결 필요"}
                     </button>
                   </div>
+                  {selectedMaintenanceDirective ? <p role="status">
+                    {selectedMaintenanceDirective.status === "approved" ? "승인 완료 · 보전팀 화면에서 현장 점검을 시작한 뒤 작업 결과를 작성합니다." : selectedMaintenanceDirective.status === "in_progress" ? "현장 점검 중 · 배정된 보전팀 담당자가 작업·점검 결과를 기록합니다." : "보전팀의 요청 접수·승인을 기다리고 있습니다."}
+                    {" 담당: "}{selectedMaintenanceDirective.assigned_to_display_name || "배정 대기"}
+                  </p> : null}
                   <dl>
                     <div>
                       <dt>상태</dt>
