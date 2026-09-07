@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 from app.identity import AuthError
 
 from .api_schema import (
+    InspectionCoordinationRequest,
+    InspectionCoordinationResponse,
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
     MaintenanceActionCompleteRequest,
@@ -124,6 +126,51 @@ def create_maintenance_router(
                 item["assigned_to_display_name"] = assigned_to
         return result
 
+    @router.get("/inspection-coordinations")
+    def list_inspection_coordinations(
+        project_id: str, workspace_id: str,
+        principal: Any = Depends(events_read),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(principal=principal, identity=identity, project_id=project_id, workspace_id=workspace_id)
+        return _execute(lambda: service.list_inspection_coordination(
+            organization_id=principal.organization_id, project_id=project_id, workspace_id=workspace_id))
+
+    @router.post("/inspection-work-orders/{work_order_id}/production-consultation")
+    def request_production_consultation(
+        project_id: str, workspace_id: str, work_order_id: str,
+        payload: InspectionCoordinationRequest,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=200),
+        principal: Any = Depends(technician_command),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(principal=principal, identity=identity, project_id=project_id, workspace_id=workspace_id)
+        _require_product_role(principal, project_id, "maintenance_technician")
+        return _execute(lambda: service.coordinate_inspection(
+            organization_id=principal.organization_id, project_id=project_id, workspace_id=workspace_id,
+            work_order_id=work_order_id, phase="request", payload=payload,
+            actor_id=principal.user_id, actor_display_name=principal.display_name, idempotency_key=idempotency_key))
+
+    @router.post("/inspection-work-orders/{work_order_id}/production-response")
+    def respond_production_consultation(
+        project_id: str, workspace_id: str, work_order_id: str,
+        payload: InspectionCoordinationResponse,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=200),
+        principal: Any = Depends(manager_command),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(principal=principal, identity=identity, project_id=project_id, workspace_id=workspace_id)
+        _require_product_role(principal, project_id, "process_manager")
+        return _execute(lambda: service.coordinate_inspection(
+            organization_id=principal.organization_id, project_id=project_id, workspace_id=workspace_id,
+            work_order_id=work_order_id, phase="response", payload=payload,
+            actor_id=principal.user_id, actor_display_name=principal.display_name, idempotency_key=idempotency_key))
+
     @router.post("/inspection-work-orders")
     def request_inspection_work_order(
         project_id: str,
@@ -216,6 +263,7 @@ def create_maintenance_router(
                 workspace_id=workspace_id,
                 work_order_id=work_order_id,
                 target=WorkOrderStatus.IN_PROGRESS,
+                require_production_confirmation=True,
                 actor_id=principal.user_id,
                 actor_display_name=principal.display_name,
                 idempotency_key=idempotency_key,

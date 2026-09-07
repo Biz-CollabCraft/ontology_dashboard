@@ -84,6 +84,22 @@ class RecommendationInput(StrictCommand):
     source_context: RecommendationInputSource
 
 
+class InspectionCoordinationRequest(StrictCommand):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    work_summary: str = Field(min_length=1, max_length=2000)
+    downtime_minutes: int = Field(ge=0, le=43200)
+    affected_items: str = Field(min_length=1, max_length=2000)
+    note: str = Field(default="", max_length=4000)
+
+
+class InspectionCoordinationResponse(StrictCommand):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    request_id: str = Field(min_length=1, max_length=240)
+    decision: Literal["confirmed", "changes_requested"]
+    scheduled_window: str = Field(min_length=1, max_length=1000)
+    production_response: str = Field(min_length=1, max_length=4000)
+
+
 class InspectionResultCreateRequest(StrictCommand):
     outcome: InspectionOutcome
     checklist: tuple[InspectionChecklistItem, ...] = Field(min_length=1)

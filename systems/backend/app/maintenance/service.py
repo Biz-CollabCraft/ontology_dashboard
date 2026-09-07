@@ -479,6 +479,7 @@ class MaintenanceLoopService:
         actor_display_name: str,
         idempotency_key: str,
         transitioned_at: datetime | None = None,
+        require_production_confirmation: bool = False,
     ) -> dict[str, Any]:
         work_order = self.repository.get_work_order(
             workspace_id=workspace_id,
@@ -510,6 +511,7 @@ class MaintenanceLoopService:
             actor_id=actor_id,
             actor_display_name=actor_display_name,
             transitioned_at=transition_time,
+            require_production_confirmation=require_production_confirmation,
             request_idempotency_key=idempotency_key,
             request_fingerprint=self._fingerprint(
                 f"inspection.{target.value}",
@@ -520,6 +522,25 @@ class MaintenanceLoopService:
                 },
             ),
         )
+
+    def coordinate_inspection(self, *, organization_id, project_id, workspace_id,
+                              work_order_id, phase, payload, actor_id,
+                              actor_display_name, idempotency_key):
+        order = self.repository.get_work_order(workspace_id=workspace_id, work_order_id=work_order_id)
+        if order is None:
+            raise KeyError(work_order_id)
+        self._require_scope(order, organization_id=organization_id, project_id=project_id, workspace_id=workspace_id)
+        return self.repository.record_inspection_coordination(
+            work_order=order, phase=phase, payload=payload.model_dump(mode="json"),
+            actor_id=actor_id, actor_display_name=actor_display_name,
+            request_idempotency_key=idempotency_key,
+            request_fingerprint=self._fingerprint(f"inspection.coordination.{phase}", {
+                "work_order_id": work_order_id, "payload": payload.model_dump(mode="json"), "actor_id": actor_id}),
+        )
+
+    def list_inspection_coordination(self, *, organization_id, project_id, workspace_id):
+        return self.repository.list_inspection_coordination(
+            organization_id=organization_id, project_id=project_id, workspace_id=workspace_id)
 
     def list_open_inspection_work_orders(
         self,

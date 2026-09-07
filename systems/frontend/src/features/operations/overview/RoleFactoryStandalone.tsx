@@ -5,6 +5,7 @@ import { loadOperationsAssetDetail } from "../api/operationsApi";
 import { type OpenInspectionWorkOrderReadModel } from "../../../api";
 import { InspectionWorkOrderEditor } from "./InspectionWorkOrderEditor";
 import { OperationsAccountBadge } from "./OperationsAccountBadge";
+import { ProductionCoordinationPanel } from "./ProductionCoordinationPanel";
 import { displayEquipmentSensorLabel, FAILURE_TYPE_LABELS } from "../displayLabels";
 
 type Persona = "maintenance" | "production";
@@ -159,7 +160,7 @@ export function RoleFactoryStandalone({ projectId, workspaceId, persona, model, 
 
       <aside className="engineer-factory-card role-next-action">
         <header><strong>다음 행동</strong><span>역할 책임</span></header>
-        {persona === "maintenance" ? <><b>착수 조건 확인</b><ul><li>부품과 인력</li><li>작업 허가</li><li>정지 시간 합의</li><li>결과 기록 항목</li></ul><button type="button" disabled>{workOrders.length ? "왼쪽 요청에서 처리 단계 선택" : "현재 처리할 요청 없음"}</button></> : <><b>생산 대응·정지 일정 회신</b><ul><li>부족 수량 확인</li><li>납기 영향 확인</li><li>대체 라인 비교</li><li>정지 가능 시간 회신</li></ul><button type="button" disabled={!selectedAsset} onClick={() => setDetailOpen(true)}>{selectedAsset ? "선택 설비 영향 확인" : "설비를 먼저 선택하세요"}</button></>}
+        {persona === "maintenance" ? <><b>착수 조건 확인</b><ul><li>부품과 인력</li><li>작업 허가</li><li>생산관리자 일정 확인</li><li>결과 기록 항목</li></ul><p>접수 → 생산 협의 요청 → 회신 확인 → 작업 시작 → 결과 기록</p></> : <><ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="production" /><button type="button" disabled={!selectedAsset} onClick={() => setDetailOpen(true)}>{selectedAsset ? "선택 설비 영향 확인" : "설비를 먼저 선택하세요"}</button></>}
       </aside>
     </section>
     {persona === "production" && selectedAsset && detailOpen ? <div className="role-impact-overlay" onClick={() => setDetailOpen(false)}><aside className="role-impact-drawer" onClick={(event) => event.stopPropagation()} aria-label={`${selectedAsset.displayName} 생산 영향 상세`}>

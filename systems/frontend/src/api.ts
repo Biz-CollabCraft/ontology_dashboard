@@ -698,6 +698,30 @@ export interface MaintenanceEventLineageReadModel {
   activities?: Array<Record<string, unknown>>;
 }
 
+export interface InspectionCoordinationRequest {
+  work_summary: string; downtime_minutes: number; affected_items: string; note: string;
+}
+export interface InspectionCoordinationResponse {
+  request_id: string; decision: "confirmed" | "changes_requested"; scheduled_window: string; production_response: string;
+}
+export interface InspectionCoordination {
+  work_order_id: string; asset_id: string; event_id: string; request_id: string;
+  status: "pending" | "confirmed" | "changes_requested"; work_order_status?: string;
+  request: InspectionCoordinationRequest; requested_by: string; requested_by_name: string; requested_at: string;
+  response: InspectionCoordinationResponse | null; responded_by: string | null; responded_by_name: string | null; responded_at: string | null;
+  history?: InspectionCoordination[];
+  inspection_result?: { outcome: InspectionOutcome; findings: string[]; note: string } | null;
+}
+export function listInspectionCoordinations(input: { projectId: string; workspaceId: string }) {
+  return request<{ items: InspectionCoordination[] }>(`${maintenanceBase(input.projectId, input.workspaceId)}/inspection-coordinations`);
+}
+export function requestInspectionCoordination(input: { projectId: string; workspaceId: string; workOrderId: string; payload: InspectionCoordinationRequest; idempotencyKey: string }) {
+  return maintenanceCommand(`${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/production-consultation`, input.payload as unknown as Record<string, unknown>, input.idempotencyKey);
+}
+export function respondInspectionCoordination(input: { projectId: string; workspaceId: string; workOrderId: string; payload: InspectionCoordinationResponse; idempotencyKey: string }) {
+  return maintenanceCommand(`${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/production-response`, input.payload as unknown as Record<string, unknown>, input.idempotencyKey);
+}
+
 export interface OpenInspectionWorkOrderReadModel {
   work_order_id: string;
   event_id: string;

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
 from app.infra.db.migrations import migrate
+from app.infra.db.inspection_coordination_repository import InspectionCoordinationRepositoryMixin
 from app.maintenance.maintenance_domain import (
     IdempotencyConflict,
     InvalidTransition,
@@ -61,7 +62,7 @@ class ProjectContextResolverPort(Protocol):
 ConnectionFactory = Callable[..., Any]
 
 
-class MaintenanceRepository:
+class MaintenanceRepository(InspectionCoordinationRepositoryMixin):
     """SQLite adapter; PostgreSQL uses the same conservative SQL through compat."""
 
     def __init__(
@@ -574,6 +575,7 @@ class MaintenanceRepository:
         transitioned_at: datetime,
         request_idempotency_key: str,
         request_fingerprint: str,
+        require_production_confirmation: bool = False,
     ) -> dict[str, Any]:
         if work_order.work_type is not WorkOrderType.INSPECTION:
             raise ValueError("inspection transition requires an inspection work order")
@@ -603,7 +605,13 @@ class MaintenanceRepository:
             )
             if row is None:
                 raise ValueError("inspection work order not found")
+            self._lock_coordination_order(connection, scope=scope, work_order_id=work_order.work_order_id)
+            row = self._work_order_row(connection, scope=scope, work_order_id=work_order.work_order_id)
             current = self._work_order_from_row(row)
+            if require_production_confirmation and work_order.status is WorkOrderStatus.IN_PROGRESS:
+                coordination = self._coordination_history(connection, scope=scope, work_order_id=work_order.work_order_id)
+                if not coordination or coordination[-1]["status"] != "confirmed":
+                    raise InvalidTransition("생산관리자의 작업·정지 일정 확인 후 시작할 수 있습니다.")
             if current.work_type is not WorkOrderType.INSPECTION:
                 raise ValueError("work order is not an inspection")
             transition_work_order(current.status, work_order.status)

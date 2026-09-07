@@ -1,5 +1,13 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, useEffect } from "react";
+import type { InspectionCoordination } from "../../../api";
+const coordination = vi.hoisted(() => ({ status: "confirmed" as InspectionCoordination["status"] }));
+vi.mock("./ProductionCoordinationPanel", () => ({
+  ProductionCoordinationPanel: ({ onStateChange }: { onStateChange: (value: InspectionCoordination) => void }) => {
+    useEffect(() => onStateChange({ status: coordination.status } as InspectionCoordination), [onStateChange]);
+    return null;
+  },
+}));
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InspectionWorkOrderEditor } from "./InspectionWorkOrderEditor";
@@ -29,6 +37,7 @@ async function fill() {
 beforeEach(() => {
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
   vi.resetAllMocks();
+  coordination.status = "confirmed";
   vi.mocked(acceptInspectionWorkOrder).mockResolvedValue({});
   vi.mocked(startInspectionWorkOrder).mockResolvedValue({});
   vi.mocked(completeInspectionWorkOrder).mockResolvedValue({});
@@ -104,6 +113,12 @@ describe("inspection result workflow", () => {
       findings: "정비 방법 추천에 필요한 정보", note: "",
     });
     expect(payload.outcome).toBe("data_check_required");
+  });
+  it("blocks accepted work until production has confirmed", async () => {
+    coordination.status = "pending";
+    await render(); await submit();
+    expect(startInspectionWorkOrder).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("생산 협의 확인 대기");
   });
   it("does not pretend a failed start entered the in-progress state", async () => {
     vi.mocked(startInspectionWorkOrder).mockRejectedValueOnce(new Error("conflict"));
