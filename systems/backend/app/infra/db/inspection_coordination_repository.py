@@ -102,5 +102,6 @@ class InspectionCoordinationRepositoryMixin:
                 if latest_result:
                     latest_result["findings"] = self._decoded(latest_result.pop("findings_json"))
                 items.append({**history[-1], "work_order_status": order.status.value,
+                              "work_order_created_at": order_row["created_at"],
                               "history": history, "inspection_result": latest_result})
             return {"items": sorted(items, key=lambda item: (item["status"] != "pending", item["requested_at"], item["work_order_id"]))}

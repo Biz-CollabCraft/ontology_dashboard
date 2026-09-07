@@ -6,52 +6,19 @@ import {
 import type { OperationsBootstrapModel } from "../api/operationsContracts";
 import {
   loadEngineerFilesystemOverview,
-  loadOperationsBootstrap,
 } from "../api/operationsApi";
 import {
   EngineerFactoryLoading,
   EngineerFactoryStandalone,
 } from "./EngineerFactoryStandalone";
 import { RoleFactoryStandalone } from "./RoleFactoryStandalone";
+import { loadProductionOverview } from "../api/productionOverviewApi";
 import { useAuth } from "../../auth/AuthContext";
 import { navigate } from "../../../routing";
 import "../operations.css";
 
 const REFRESH_INTERVAL_MS = 10_000;
 
-async function loadProductionOverview(
-  projectId: string,
-  workspaceId: string,
-  eventId: string | null,
-) {
-  const [production, live] = await Promise.all([
-    loadOperationsBootstrap(projectId, workspaceId, eventId),
-    loadEngineerFilesystemOverview(projectId, workspaceId),
-  ]);
-  const liveByAssetId = new Map(
-    live.assets.map((asset) => [asset.assetId, asset]),
-  );
-  return {
-    ...production,
-    assets: production.assets.map((asset) => {
-      const liveAsset = liveByAssetId.get(asset.assetId);
-      if (!liveAsset) return asset;
-      return {
-        ...asset,
-        riskHistory: liveAsset.riskHistory?.length
-          ? liveAsset.riskHistory
-          : asset.riskHistory,
-        sensorHistory: liveAsset.sensorHistory?.length
-          ? liveAsset.sensorHistory
-          : asset.sensorHistory,
-        topFactors: liveAsset.topFactors?.length
-          ? liveAsset.topFactors
-          : asset.topFactors,
-        observedAt: liveAsset.observedAt ?? asset.observedAt,
-      };
-    }),
-  };
-}
 
 function readSelection() {
   const query = new URLSearchParams(window.location.search);

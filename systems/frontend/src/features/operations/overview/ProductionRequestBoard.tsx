@@ -6,7 +6,7 @@ import { loadOperationsAssetDetail } from "../api/operationsApi";
 import type { AssetDetailViewModel, OperationsAsset, OperationsBootstrapModel } from "../api/operationsContracts";
 import { displayEquipmentSensorLabel } from "../displayLabels";
 import { OperationsAccountBadge } from "./OperationsAccountBadge";
-import { amount, matchingCostAnalysis, numeric, productionQueue, queueStatus, type ProductionQueueItem } from "./productionRequestModel";
+import { amount, matchingCostAnalysis, numeric, productionQueue, queueStatus, riskScore, equipmentStatus, sortProductionQueue, type QueueSort, type ProductionQueueItem } from "./productionRequestModel";
 import "./ProductionRequestBoard.css";
 
 type Props = {
@@ -26,6 +26,7 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
   const [revision, setRevision] = useState(0);
   const [selectedId, setSelectedId] = useState("");
   const [statusFilter, setStatusFilter] = useState<"active" | "completed" | "all">("active");
+  const [sortOrder, setSortOrder] = useState<QueueSort>("time");
   const [detailOpen, setDetailOpen] = useState(false);
   const [context, setContext] = useState<{ key: string; detail: AssetDetailViewModel | null; costs: MaintenanceCostAnalysisReadModel | null; detailError: boolean; costError: boolean; detailLoading: boolean; costLoading: boolean } | null>(null);
   useEffect(() => {
@@ -44,9 +45,14 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
     return () => { alive = false; clearInterval(timer); };
   }, [projectId, workspaceId, revision]);
   const queue = productionQueue(workOrders, consultations);
-  const visible = queue.filter(item => statusFilter === "all" || (statusFilter === "completed" ? item.status === "completed" : item.status !== "completed"));
+  const equipmentAssets = model.equipmentOverview === undefined ? model.assets : model.equipmentOverview?.assets ?? [];
+  const equipmentById = new Map(equipmentAssets.map(item => [item.assetId, item]));
+  const visible = sortProductionQueue(queue.filter(item => statusFilter === "all" || (statusFilter === "completed" ? item.status === "completed" : item.status !== "completed")), sortOrder, equipmentById);
   const selected = visible.find(item => item.id === selectedId) ?? visible[0] ?? null;
-  const asset = model.assets.find(item => item.assetId === selected?.assetId) ?? null;
+  // Pin the initial/default choice, so live ranking changes cannot change the
+  // open form or approval target while the user is reviewing a request.
+  useEffect(() => { setSelectedId(selected?.id ?? ""); }, [selected?.id]);
+  const asset = equipmentById.get(selected?.assetId ?? "") ?? null;
   const requestKey = selected ? [projectId, workspaceId, selected.id, selected.eventId, selected.coordination?.request_id ?? "", model.context.datasetVersionId].join("|") : "";
   useEffect(() => {
     let alive = true;
@@ -72,7 +78,7 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
   const detail = active?.detail ?? null;
   const cost = active?.costs ?? null;
   const c = selected?.coordination;
-  const name = detail?.asset.display_name || asset?.displayName || selected?.assetId || "정비 요청 선택";
+  const name = asset?.displayName || detail?.asset.display_name || selected?.assetId || "정비 요청 선택";
   const refresh = useCallback(() => { setRevision(n => n + 1); onRefresh(); }, [onRefresh]);
   const onSaved = (updated: InspectionCoordination) => {
     setConsultations(items => items.map(item => item.work_order_id === updated.work_order_id ? { ...item, ...updated } : item));
@@ -99,14 +105,16 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
     </section>
     <div className="prb-columns">
       <section className="prb-card prb-queue" aria-label="정비 요청 큐">
-        <header><strong>정비 요청 큐</strong><div className="prb-queue-tools"><span>시간순</span><select aria-label="정비 요청 상태" value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}><option value="active">진행 중</option><option value="completed">완료</option><option value="all">전체</option></select></div></header>
+        <header><strong>정비 요청 큐</strong><div className="prb-queue-tools"><select aria-label="정비 요청 정렬" title="정렬 방법" value={sortOrder} onChange={e => setSortOrder(e.target.value as QueueSort)}><option value="time">시간순</option><option value="risk">위험 점수순</option></select><select aria-label="정비 요청 상태" title="작업 상태" value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}><option value="active">진행 중</option><option value="completed">완료</option><option value="all">전체</option></select></div></header>
         <div className="prb-scroll">
           <p className="prb-queue-counts">{queueLoading ? "요청 현황 조회 중" : queueError || workOrderError ? "요청 현황 확인 필요" : "진행 중 " + queue.filter(item => item.status !== "completed").length + "건 · 작업 승인 대기 " + awaiting + "건"}</p>
           {queueError || workOrderError ? <p role="status">요청 연결을 확인해 주세요. 이전 표시 내용은 유지되며 승인은 잠깁니다.</p> : null}
+          <p className="prb-queue-counts" role="status">{model.equipmentOverview === null ? "장비 현황 연결 확인 필요" : "장비 현황 · 최신 관측 기준"} · {sortOrder === "risk" ? "높은 점수순 · 점수 없는 항목은 마지막" : "이른 시간순 · 시각 없는 항목은 마지막"}</p>
           {visible.map(item => <button type="button" className="prb-queue-item" key={item.id} aria-pressed={selected?.id === item.id} onClick={() => { setSelectedId(item.id); setDetailOpen(false); }}>
-            <strong>{model.assets.find(a => a.assetId === item.assetId)?.displayName ?? item.assetId}</strong>
+            <strong>{equipmentById.get(item.assetId)?.displayName ?? item.assetId}</strong>
+            <EquipmentObservation asset={equipmentById.get(item.assetId) ?? null}/>
             <span>#{item.id.slice(-8)} · {queueStatus(item)}</span><span>담당 {item.assignee}</span>
-            <small>{item.coordination ? when(item.requestedAt) : "생산 협의 요청 전"}</small>
+            <small>요청 {when(item.requestedAt)}</small>
           </button>)}
           {!visible.length ? <p>{queueLoading ? "정비 요청 조회 중" : "현재 정비 요청이 없습니다."}</p> : null}
         </div>
@@ -142,11 +150,23 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
           {info?.limitations?.map((text,i) => <p key={i}>{text}</p>)}
         </section>
         <div className="prb-detail-charts"><RiskChart asset={asset} detail={detail} name={name}/><section><h3>장비 센서별 영향 근거</h3>
-          {detail?.features?.length ? detail.features.map(feature => <div className="prb-sensor" key={feature.key}><strong>{displayEquipmentSensorLabel(selected.assetId, feature.key, feature.label)}</strong><span>{number(feature.current.value, " " + feature.unit)}</span><p>관측: {when(feature.current.observed_at)} · {feature.current.quality_status === "good" ? "관측 정상" : "품질 확인 필요"}</p><SensorTrend feature={feature}/></div>) : <p>센서 근거 조회 필요</p>}
+          <LiveEquipmentSensors asset={asset}/>
         </section></div>
       </div>
     </section></div> : null}
   </main>;
+}
+function EquipmentObservation({ asset }: { asset: OperationsAsset | null }) {
+  const score = riskScore(asset);
+  return <span className="prb-equipment-observation" data-status={asset?.status ?? "unavailable"}><b>장비 {equipmentStatus(asset)} · {score === null ? "점수 없음" : Math.round(score * 100) + "%"}</b><small>{when(asset?.observedAt)}</small></span>;
+}
+function LiveEquipmentSensors({ asset }: { asset: OperationsAsset | null }) {
+  if (!asset?.sensorHistory?.length) return <p>연결된 최신 센서 관측이 없습니다.</p>;
+  return <>{asset.sensorHistory.map(sensor => {
+    const latest = sensor.points.at(-1);
+    const feature = { label: sensor.label, history: { points: sensor.points.map(p => ({ observed_at: p.observedAt, value: p.value, quality_status: numeric(p.value) ? "good" : "unavailable" })) } } as AssetDetailViewModel["features"][number];
+    return <div className="prb-sensor" key={sensor.feature}><strong>{displayEquipmentSensorLabel(asset.assetId, sensor.feature, sensor.label)}</strong><span>{number(latest?.value, " " + (sensor.unit ?? ""))}</span><p>관측: {when(latest?.observedAt)}</p><SensorTrend feature={feature}/></div>;
+  })}</>;
 }
 function SensorTrend({ feature }: { feature: AssetDetailViewModel["features"][number] }) {
   const points = feature.history.points;
@@ -188,13 +208,15 @@ function CostComparison({ analysis, loading, error }: { analysis: MaintenanceCos
     <p className="prb-muted">매출·영업이익: 미산정 — 품목 단가·변동비·대체 생산 기준이 필요합니다. 비용 절감액을 영업이익으로 표시하지 않습니다.</p>
   </section>;
 }
-function RiskChart({ asset, detail, name }: { asset: OperationsAsset | null; detail: AssetDetailViewModel | null; name: string }) {
-  const values = detail?.risk_series.length ? detail.risk_series.map(p => p.failure_probability) : asset?.riskHistory?.map(p => p.value) ?? [];
-  const current = detail ? detail.risk.current : asset?.failureProbability;
+function RiskChart({ asset, name }: { asset: OperationsAsset | null; detail: AssetDetailViewModel | null; name: string }) {
+  // Live queue scores and charts must come from the same equipment snapshot,
+  // never from a historical request/production-planning detail response.
+  const values = asset?.riskHistory?.map(p => p.value).filter(n => numeric(n) && n >= 0 && n <= 1) ?? [];
+  const current = riskScore(asset);
   const coords = values.map((n,i) => `${values.length === 1 ? 50 : i * 100 / (values.length - 1)},${100 - Math.max(0, Math.min(1,n)) * 100}`);
   return <section className="prb-risk"><header><div><strong>위험 점수 추세 · 최근 관측</strong><span>{name}</span></div><b>{numeric(current) ? Math.round(current * 100) + "%" : "정보 없음"}</b></header>
     {values.length ? <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={name + " 위험 점수 추세"}><rect width="100" height="38" className="risk-zone"/><rect y="38" width="100" height="20" className="attention-zone"/><rect y="58" width="100" height="42" className="normal-zone"/><line x2="100" y1="38" y2="38"/><line x2="100" y1="58" y2="58"/>{values.length > 1 ? <polyline points={coords.join(" ")}/> : <circle cx="50" cy={100-values[0]*100} r="1"/>}</svg> : <p>연결된 위험 관측 이력이 없습니다.</p>}
-    <footer><span>이전 관측</span><small>{detail ? when(detail.asset.observed_at) : "현재 설비 관측 · 요청 시점과 다를 수 있음"}</small><span>현재</span></footer>
+    <footer><span>이전 관측</span><small>{when(asset?.observedAt)} · 요청 시점과 다를 수 있음</small><span>현재</span></footer>
   </section>;
 }
 function ApprovalPanel({ item, name, projectId, workspaceId, requestedLoss, cost, connected, onImpact, onSaved }: {

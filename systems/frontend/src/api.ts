@@ -712,6 +712,7 @@ export interface InspectionCoordinationResponse {
 export interface InspectionCoordination {
   work_order_id: string; asset_id: string; event_id: string; request_id: string;
   status: "pending" | "confirmed" | "changes_requested"; work_order_status?: string;
+  work_order_created_at?: string | null;
   request: InspectionCoordinationRequest; requested_by: string; requested_by_name: string; requested_at: string;
   response: InspectionCoordinationResponse | null; responded_by: string | null; responded_by_name: string | null; responded_at: string | null;
   history?: InspectionCoordination[];
@@ -738,6 +739,7 @@ export interface OpenInspectionWorkOrderReadModel {
   assigned_to?: string | null;
   assigned_to_display_name?: string | null;
   assigned_at?: string | null;
+  created_at?: string | null;
 }
 
 export interface MaintenanceCostAnalysisRequest {

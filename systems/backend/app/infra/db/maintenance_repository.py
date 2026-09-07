@@ -2226,6 +2226,7 @@ class MaintenanceRepository(InspectionCoordinationRepositoryMixin):
             status=row["status"],
             assigned_to=row["assigned_to"],
             assigned_at=row["assigned_at"],
+            created_at=row["created_at"],
             idempotency_key=row["idempotency_key"],
             authorization=WorkOrderAuthorization.model_validate(cls._decoded(row["authorization_json"])),
         )

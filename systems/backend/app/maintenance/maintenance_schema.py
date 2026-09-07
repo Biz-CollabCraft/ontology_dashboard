@@ -280,6 +280,7 @@ class WorkOrder(ScopedRecord):
     status: WorkOrderStatus = WorkOrderStatus.REQUESTED
     assigned_to: str | None = Field(default=None, min_length=1, max_length=240)
     assigned_at: datetime | None = None
+    created_at: datetime | None = None
     idempotency_key: str = Field(min_length=8, max_length=200)
     authorization: WorkOrderAuthorization
 

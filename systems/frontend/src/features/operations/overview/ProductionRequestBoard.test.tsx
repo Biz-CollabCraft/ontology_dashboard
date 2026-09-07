@@ -6,7 +6,7 @@ import { ProductionRequestBoard } from "./ProductionRequestBoard";
 import { listInspectionCoordinations, getMaintenanceEventLineage, respondInspectionCoordination, type InspectionCoordination, type MaintenanceCostAnalysisReadModel, type OpenInspectionWorkOrderReadModel } from "../../../api";
 import { loadOperationsAssetDetail } from "../api/operationsApi";
 import type { OperationsBootstrapModel, AssetDetailViewModel } from "../api/operationsContracts";
-import { amount, matchingCostAnalysis, productionQueue } from "./productionRequestModel";
+import { amount, matchingCostAnalysis, productionQueue, sortProductionQueue } from "./productionRequestModel";
 vi.mock("../../../api", () => ({ listInspectionCoordinations: vi.fn(), getMaintenanceEventLineage: vi.fn(), respondInspectionCoordination: vi.fn() }));
 vi.mock("../api/operationsApi", () => ({ loadOperationsAssetDetail: vi.fn() }));
 const first: InspectionCoordination = {
@@ -147,7 +147,9 @@ it("places the status select to the right of time order and filters active, comp
   vi.mocked(listInspectionCoordinations).mockResolvedValue({ items: [first, done] });
   await render();
   const tools = host.querySelector(".prb-queue-tools")!;
-  expect(tools.children[0].textContent).toBe("시간순");
+  expect(tools.children[0].tagName).toBe("SELECT");
+  expect((tools.children[0] as HTMLSelectElement).value).toBe("time");
+  expect(tools.children[0].textContent).toBe("시간순위험 점수순");
   const filter = tools.children[1] as HTMLSelectElement;
   expect(filter.tagName).toBe("SELECT");
   expect(filter.value).toBe("active");
@@ -175,6 +177,65 @@ it("preserves overall fleet KPIs independently of the selected request and compl
   expect(kpis.textContent).toBe(original);
   expect(host.textContent).toContain("현재 정비 요청이 없습니다");
 });
+
+it("sorts by current equipment risk, pins selection, and returns to time order", async () => {
+  await render();
+  const before = host.querySelector(".prb-queue-item[aria-pressed=true]")?.textContent;
+  const sort = host.querySelector<HTMLSelectElement>('select[aria-label="정비 요청 정렬"]')!;
+  await act(async () => { sort.value = "risk"; sort.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(host.querySelector(".prb-queue-item")?.textContent).toContain("압축기 B");
+  expect(host.querySelector(".prb-queue-item[aria-pressed=true]")?.textContent).toBe(before);
+  expect(host.querySelector(".prb-risk header b")?.textContent).toBe("10%");
+  expect(respondInspectionCoordination).not.toHaveBeenCalled();
+  await act(async () => { sort.value = "time"; sort.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(host.querySelector(".prb-queue-item")?.textContent).toContain("정상 CNC");
+});
+it("orders by original request time, not later assignment or consultation time", () => {
+  const orders = [{ work_order_id: first.work_order_id, asset_id: first.asset_id, event_id: first.event_id, status: "requested", created_at: "2026-09-06T00:00:00Z", assigned_at: null }] as OpenInspectionWorkOrderReadModel[];
+  const c = { ...first, requested_at: "2026-09-08T00:00:00Z" };
+  const queue = productionQueue(orders, [c, second]);
+  expect(sortProductionQueue(queue, "time", new Map())[0].id).toBe(first.work_order_id);
+  expect(queue.find(q => q.id === first.work_order_id)?.requestedAt).toBe(orders[0].created_at);
+  const completed = productionQueue([], [{ ...c, work_order_status: "completed", work_order_created_at: "2026-09-05T00:00:00Z" }]);
+  expect(completed[0].requestedAt).toBe("2026-09-05T00:00:00Z");
+});
+it("ranks zero ahead of unknown or invalid scores, breaks ties by time, and does not mutate inputs", () => {
+  const queue = productionQueue([], [first, second, { ...first, work_order_id: "unknown", asset_id: "UNKNOWN" }, { ...second, work_order_id: "zero", asset_id: "ZERO" }]);
+  const assets = new Map(model.assets.map(a => [a.assetId, a]));
+  assets.set("ZERO", { ...model.assets[0], assetId: "ZERO", failureProbability: 0 });
+  const original = queue.map(q => q.id);
+  expect(sortProductionQueue(queue, "risk", assets).map(q => q.assetId)).toEqual(["CMP-B", "CNC-A", "ZERO", "UNKNOWN"]);
+  assets.set("CNC-A", { ...model.assets[0], failureProbability: .2 });
+  expect(sortProductionQueue(queue, "risk", assets)[0].assetId).toBe("CNC-A");
+  assets.set("CNC-A", { ...model.assets[0], failureProbability: NaN });
+  expect(sortProductionQueue(queue, "risk", assets).findIndex(q => q.assetId === "ZERO")).toBeLessThan(sortProductionQueue(queue, "risk", assets).findIndex(q => q.assetId === "CNC-A"));
+  expect(queue.map(q => q.id)).toEqual(original);
+});
+it("uses all live equipment, not the planning subset or historical detail risk, and keeps original request cost lineage", async () => {
+  const liveAsset = { ...model.assets[1], assetId: "LIVE-ONLY", displayName: "실제 압축기", failureProbability: .87, status: "critical" as const,
+    observedAt: "2026-09-07T03:00:00Z", eventId: "FILE#latest",
+    riskHistory: [{ observedAt: "2026-09-07T03:00:00Z", value: .87 }],
+    sensorHistory: [{ feature: "pressure", label: "압력", unit: "bar", points: [{ observedAt: "2026-09-07T03:00:00Z", value: 12 }] }] };
+  vi.mocked(listInspectionCoordinations).mockResolvedValue({ items: [{ ...first, asset_id: "LIVE-ONLY" }] });
+  const liveModel = { ...model, equipmentOverview: { context: model.context, assets: [liveAsset] } };
+  await act(async () => root.render(<ProductionRequestBoard projectId="project" workspaceId="workspace" model={liveModel} workOrders={[]} workOrderError={false} currentUser={{ displayName: "생산", title: "관리자" }} onRefresh={refresh} onLogout={vi.fn()}/>));
+  expect(host.querySelector(".prb-queue-item")?.textContent).toContain("실제 압축기");
+  expect(host.querySelector(".prb-queue-item")?.textContent).toContain("긴급 · 87%");
+  expect(host.querySelector(".prb-risk header b")?.textContent).toBe("87%");
+  expect(getMaintenanceEventLineage).toHaveBeenCalledWith("project", "workspace", "event-A");
+  await click("선택 설비 영향 확인");
+  expect(host.querySelector(".prb-sensor")?.textContent).toContain("12 bar");
+  expect(host.querySelector(".prb-sensor-svg")).not.toBeNull();
+});
+it("does not substitute planning fixture data when live equipment is absent or its API fails", async () => {
+  for (const equipmentOverview of [null, { context: model.context, assets: [] }]) {
+    await act(async () => root.render(<ProductionRequestBoard projectId="project" workspaceId="workspace" model={{ ...model, equipmentOverview }} workOrders={[]} workOrderError={false} currentUser={{ displayName: "생산", title: "관리자" }} onRefresh={refresh} onLogout={vi.fn()}/>));
+    expect(host.querySelector(".prb-queue-item")?.textContent).toContain("현황 미연결");
+    expect(host.querySelector(".prb-risk header b")?.textContent).toBe("정보 없음");
+    expect(host.querySelector(".prb-risk svg")).toBeNull();
+  }
+});
+
 it("does not substitute another request's cost and handles missing money and minor units", () => {
   const item = productionQueue([], [first])[0];
   const cost = { asset_id: "CNC-A", based_on: { inspection_work_order_id: "other" }, calculated_at: "2026-09-07", currency: "KRW", currency_minor_unit: 0 } as MaintenanceCostAnalysisReadModel;

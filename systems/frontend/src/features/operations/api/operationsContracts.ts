@@ -224,6 +224,9 @@ export interface OperationsContextModel {
 }
 
 export interface OperationsBootstrapModel {
+  // Production planning and live equipment observations are separate sources.
+  // null means the live API failed; never substitute fixture risk in that case.
+  equipmentOverview?: { context: OperationsContextModel; assets: OperationsAsset[] } | null;
   context: OperationsContextModel;
   assets: OperationsAsset[];
   events: OperationsEvent[];

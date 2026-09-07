@@ -29,6 +29,16 @@ def start(loop, wid):
     return loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.IN_PROGRESS,
         actor_id="tech", actor_display_name="보전팀", idempotency_key="start-order-001", require_production_confirmation=True)
 
+def test_request_creation_timestamp_is_preserved_in_queue_and_consultation(accepted):
+    loop, wid = accepted
+    order = loop.list_open_inspection_work_orders(**SCOPE)["items"][0]
+    assert order["created_at"]
+    from datetime import datetime
+    assert datetime.fromisoformat(order["created_at"]) <= datetime.fromisoformat(order["assigned_at"])
+    request(loop, wid)
+    coordination = loop.list_inspection_coordination(**SCOPE)["items"][0]
+    assert datetime.fromisoformat(coordination["work_order_created_at"]) == datetime.fromisoformat(order["created_at"])
+
 def test_consultation_gates_start_and_survives_completion_and_reload(accepted, tmp_path):
     loop, wid = accepted
     with pytest.raises(InvalidTransition):
