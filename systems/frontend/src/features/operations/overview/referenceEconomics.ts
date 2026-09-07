@@ -8,12 +8,14 @@ export function referenceEconomics(assetId: string, stopMinutes?: number | null)
   const hourlyUnits = param("units_per_hour") * profile.affected_cnc;
   const hourlyProductionCost = hourlyUnits * param("unit_production_cost");
   const hourlyOpportunity = hourlyUnits * param("unit_contribution");
-  const validTime = typeof stopMinutes === "number" && Number.isFinite(stopMinutes) && stopMinutes >= 0;
-  return { version: basis.version, profile, hourlyUnits,
+  const usesDefault = stopMinutes == null;
+  const resolvedMinutes = usesDefault ? profile.default_stop_minutes : stopMinutes;
+  const validTime = typeof resolvedMinutes === "number" && Number.isFinite(resolvedMinutes) && resolvedMinutes >= 0;
+  return { version: basis.version, profile, hourlyUnits, usesDefault, stopMinutes: validTime ? resolvedMinutes : null,
     hourlyProductionCost: Math.round(hourlyProductionCost), hourlyOpportunity: Math.round(hourlyOpportunity),
     dailyCapacity: Math.floor(hourlyUnits * param("daily_hours")),
-    lostUnits: validTime ? Math.ceil(hourlyUnits * stopMinutes / 60) : null,
-    stopExposure: validTime ? Math.round(hourlyOpportunity * stopMinutes / 60) : null,
+    lostUnits: validTime ? Math.ceil(hourlyUnits * resolvedMinutes / 60) : null,
+    stopExposure: validTime ? Math.round(hourlyOpportunity * resolvedMinutes / 60) : null,
     labor: Math.round(param("labor_hourly") * profile.labor_minutes / 60),
     parts: profile.parts_cost,
   };

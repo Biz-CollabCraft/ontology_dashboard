@@ -7,5 +7,6 @@ it("renders the 10-minute CNC result with explicit assumption labels and sources
  expect(html).toContain("https://tsapps.nist.gov/");
 });
 it("does not convert missing stop time to zero loss", () => {
- expect(renderToStaticMarkup(<ReferenceEconomicPanel assetId="CMP-S01-L01-01"/>)).toContain("정지 시간 입력 필요");
+ const html=renderToStaticMarkup(<ReferenceEconomicPanel assetId="CMP-S01-L01-01"/>);
+ expect(html).toContain("기본값 적용");expect(html).toContain("253,800원");expect(html).toContain("60");
 });

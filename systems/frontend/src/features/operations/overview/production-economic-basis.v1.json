@@ -1,5 +1,5 @@
 {
-  "version": "production-reference-economics-v1",
+  "version": "production-reference-economics-v1.1",
   "currency": "KRW",
   "status": "illustrative_not_site_quote",
   "sources": [
@@ -76,6 +76,8 @@
   "profiles": {
     "CNC": {
       "affected_cnc": 1,
+      "default_stop_minutes": 30,
+      "default_stop_basis": "기존 TOOL_REPLACEMENT 데모 예방정지 30분. 안전정지·접근·작업·시험운전 포함 참고 정책이며 현장 표준 아님.",
       "labor_minutes": 10,
       "parts_cost": 12453,
       "part_scope": "절삭 인서트 1개 교체 시",
@@ -83,6 +85,8 @@
     },
     "CMP": {
       "affected_cnc": 4,
+      "default_stop_minutes": 60,
+      "default_stop_basis": "정지·감압 준비15분 + 소모품 작업30분 + 재가동 확인15분의 데모 가정. 제조사 표준시간 아님.",
       "labor_minutes": 30,
       "parts_cost": 100000,
       "part_scope": "필터·오일 소모품 교체 시",
@@ -91,7 +95,7 @@
   },
   "limitations": [
     "정비 시간은 생산 정지 시간과 별도",
-    "요청 정지 시간이 없으면 정지 손실을 계산하지 않음",
+    "요청 정지 시간이 미입력일 때만 설비별 기본값으로 참고 계산. 명시한 0분은 유지하며 잘못된 값은 기본값으로 덮지 않음. 승인 일정에 저장하지 않음",
     "생산원가·기회손실·매출을 합산하지 않음",
     "교체비는 조건부 예시이며 점검만 할 때 반드시 발생하는 비용이 아님",
     "압축기 생산 영향은 의존 설비 및 공기 저장량·예비기 확인 필요",

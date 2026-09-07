@@ -209,9 +209,9 @@ function ImpactMetrics({ item, detail, requestedLoss, loading }: { item: Product
   const lost = numeric(requestedLoss) ? requestedLoss : e?.lostUnits;
   const hasPlan = numeric(detail?.operation_context.production_plan?.planned_units);
   const failureLoss = detail?.operation_context.event_impact?.estimated_lost_units;
-  return (<><div className="prb-metric-grid"><Metric label="요청 정지 시간" value={number(c?.request.downtime_minutes, "분")}/>
-    <Metric label={numeric(requestedLoss) ? "요청 정지 예상 손실" : "요청 정지 손실 수량 · 참고"} value={loading ? "조회 중" : number(lost, "개")}/>
-    <Metric label={numeric(failureLoss) ? "기존 고장 예측 손실" : "요청 정지 노출액 · 가정"} value={loading ? "조회 중" : numeric(failureLoss) ? number(failureLoss, "개") : number(e?.stopExposure, "원")}/>
+  return (<><div className="prb-metric-grid"><Metric label={e?.usesDefault ? "참고 정지 시간 · 기본값" : "요청 정지 시간"} value={number(e?.stopMinutes ?? c?.request.downtime_minutes, "분")}/>
+    <Metric label={numeric(requestedLoss) ? "요청 정지 예상 손실" : e?.usesDefault ? "기본 시간 손실 수량 · 참고" : "요청 정지 손실 수량 · 참고"} value={loading ? "조회 중" : number(lost, "개")}/>
+    <Metric label={numeric(failureLoss) ? "기존 고장 예측 손실" : e?.usesDefault ? "기본 시간 노출액 · 가정" : "요청 정지 노출액 · 가정"} value={loading ? "조회 중" : numeric(failureLoss) ? number(failureLoss, "개") : number(e?.stopExposure, "원")}/>
     <Metric label={hasPlan ? "일일 생산 계획" : "일일 생산능력 · 가정"} value={loading ? "조회 중" : number(hasPlan ? detail?.operation_context.production_plan?.planned_units : e?.dailyCapacity, "개")}/>
     </div>{e && (!hasPlan || !numeric(requestedLoss)) ? <small>참고값은 설비별 단가표·16시간 운전 가정입니다. 실제 생산계획·확정 부족분이 아니며, 압축기는 동일 셀 CNC 4대 영향 가정입니다.</small> : null}</>);
 }
