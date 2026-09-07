@@ -335,10 +335,9 @@ def _filesystem_overview(project_id: str, workspace_id: str) -> dict[str, Any]:
             "predictedFailureType": "실시간 센서 이상 징후" if risk_status != "normal" else "이상 징후 없음",
             "recommendedDecision": "request_inspection" if risk_status in {"critical", "warning"} else "continue_monitoring",
             "observedAt": observed_at,
-            "eventId": event_id if risk_status != "normal" else None,
-            "maintenanceSnapshotBasis": (
-                evidence_snapshot_basis_from_artifact(event_artifact, event_id=event_id)
-                if risk_status != "normal" else None
+            "eventId": event_id,
+            "maintenanceSnapshotBasis": evidence_snapshot_basis_from_artifact(
+                event_artifact, event_id=event_id
             ),
             "topFactors": _measurement_factors(record),
             "sensorHistory": sensor_history,
