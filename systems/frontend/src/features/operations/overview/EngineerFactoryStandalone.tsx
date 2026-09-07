@@ -315,6 +315,8 @@ export function EngineerFactoryStandalone({
   const [maintenanceRequestMessage, setMaintenanceRequestMessage] = useState<
     string | null
   >(null);
+  const [maintenanceRequestFailed, setMaintenanceRequestFailed] =
+    useState(false);
   const [zoneFilter, setZoneFilter] = useState("all");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -416,6 +418,7 @@ export function EngineerFactoryStandalone({
     if (!selected?.eventId || selectedMaintenanceDirective) return;
     setMaintenanceRequestBusy(true);
     setMaintenanceRequestMessage(null);
+    setMaintenanceRequestFailed(false);
     try {
       const detail = await loadOperationsAssetDetail(
         model.context.projectId,
@@ -444,11 +447,10 @@ export function EngineerFactoryStandalone({
         "정비 승인 요청을 등록했습니다. 보전팀 승인 절차가 시작됩니다.",
       );
       onRefresh();
-    } catch (reason) {
+    } catch {
+      setMaintenanceRequestFailed(true);
       setMaintenanceRequestMessage(
-        reason instanceof Error
-          ? reason.message
-          : "정비 승인 요청을 등록하지 못했습니다.",
+        "정비 승인 요청 연결을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
       );
     } finally {
       setMaintenanceRequestBusy(false);
@@ -987,13 +989,25 @@ export function EngineerFactoryStandalone({
                     <strong>선택 설비 근거 요약</strong>
                     <span>{formatTimestamp(selected.observedAt)} 관측</span>
                   </header>
-                  <p>
-                    {selected.status === "critical"
-                      ? "즉시 현장 확인과 보전 대응이 필요합니다."
-                      : selected.status === "data_quality_hold"
-                        ? "센서 연결과 데이터 품질을 먼저 확인해야 합니다."
-                        : "현재 상태를 기준으로 관찰과 점검을 이어갑니다."}
-                  </p>
+                  <div className="engineer-detail-summary-status">
+                    <p>
+                      {selected.status === "critical"
+                        ? "즉시 현장 확인과 보전 대응이 필요합니다."
+                        : selected.status === "data_quality_hold"
+                          ? "센서 연결과 데이터 품질을 먼저 확인해야 합니다."
+                          : "현재 상태를 기준으로 관찰과 점검을 이어갑니다."}
+                    </p>
+                    <span
+                      className={`engineer-request-connection ${maintenanceRequestBusy ? "is-checking" : maintenanceDirectiveError || maintenanceRequestFailed ? "is-offline" : "is-online"}`}
+                    >
+                      <i />
+                      {maintenanceRequestBusy
+                        ? "연결 확인 중"
+                        : maintenanceDirectiveError || maintenanceRequestFailed
+                          ? "요청 연결 확인 필요"
+                          : "요청 연결 정상"}
+                    </span>
+                  </div>
                   <div className="engineer-detail-actions">
                     <button
                       type="button"
@@ -1042,7 +1056,9 @@ export function EngineerFactoryStandalone({
                     </button>
                   </div>
                   {maintenanceRequestMessage ? (
-                    <p className="engineer-maintenance-request-message">
+                    <p
+                      className={`engineer-maintenance-request-message ${maintenanceRequestFailed ? "is-error" : "is-success"}`}
+                    >
                       {maintenanceRequestMessage}
                     </p>
                   ) : null}

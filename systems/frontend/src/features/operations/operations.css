@@ -3145,6 +3145,8 @@
 /* Preserve the factory topology while filters only change visual emphasis. */
 .engineer-equipment-list .engineer-equipment-cell button.is-muted.is-selected{opacity:.24;filter:saturate(.18)}
 
+.engineer-detail-summary-status{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:9px 0}.engineer-detail-summary-status>p{min-width:0;margin:0;font-size:12px;font-weight:800}.engineer-request-connection{display:inline-flex;flex:0 0 auto;align-items:center;gap:4px;padding:3px 6px;border:1px solid currentColor;border-radius:999px;font-size:9px;font-weight:800;white-space:nowrap}.engineer-request-connection i{width:7px;height:7px;border-radius:50%;background:currentColor}.engineer-request-connection.is-online{color:var(--operations-success)}.engineer-request-connection.is-checking{color:#1769d2}.engineer-request-connection.is-offline{color:var(--operations-danger)}.engineer-maintenance-request-message.is-error{border-left-color:var(--operations-danger);background:color-mix(in srgb,var(--operations-danger) 8%,var(--operations-surface))}.engineer-maintenance-request-message.is-success{border-left-color:var(--operations-success);background:color-mix(in srgb,var(--operations-success) 8%,var(--operations-surface))}
+
 /* The directive queue owns the available height; the trend stays anchored below it. */
 .engineer-status-side-stack{height:100%;min-height:0}
 .engineer-status-side-stack .engineer-recent-events{display:flex;min-height:0;flex:1 1 auto;flex-direction:column;overflow:hidden}
