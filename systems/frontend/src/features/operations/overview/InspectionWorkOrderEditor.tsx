@@ -92,8 +92,9 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
         <option value="">판단 선택</option>
         <option value="no_action_required">추가 정비 불필요 · 후속 관측</option>
         <option value="maintenance_recommended">정비 조치 필요</option>
-        <option value="data_check_required">데이터·센서 재확인 필요</option>
+        <option value="data_check_required">추가 데이터 확인 필요</option>
       </select></label>
+      {outcome === "data_check_required" ? <p className="inspection-outcome-help">점검 결과로 추가 데이터 확인이 필요하다는 사실을 기록합니다. 점검 요청은 완료되며, 정비 승인이나 실제 정비 완료를 의미하지 않습니다. 확인이 필요한 내용은 아래 결과에 작성하세요.</p> : null}
       {equipmentChecks.map(([id, name]) => <label key={id}>{name}<select required value={checklist[id] || ""} onChange={(event) => setChecklist((previous) => ({ ...previous, [id]: event.target.value as InspectionChecklistStatus }))}>
         <option value="">점검 결과 선택</option><option value="pass">이상 없음</option><option value="fail">이상 확인</option><option value="not_checked">미점검</option>
       </select></label>)}
