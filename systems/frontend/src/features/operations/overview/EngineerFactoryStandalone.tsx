@@ -301,6 +301,7 @@ export function EngineerFactoryStandalone({
   selectedAssetId,
   maintenanceDirectives = [],
   maintenanceDirectiveError = false,
+  currentUser,
   onSelectAsset,
   onRefresh,
   onLogout,
@@ -309,6 +310,7 @@ export function EngineerFactoryStandalone({
   selectedAssetId: string | null;
   maintenanceDirectives?: OpenInspectionWorkOrderReadModel[];
   maintenanceDirectiveError?: boolean;
+  currentUser?: { displayName: string; title: string };
   onSelectAsset: (assetId: string, eventId: string | null) => void;
   onRefresh: () => void;
   onLogout?: () => void | Promise<void>;
@@ -482,6 +484,12 @@ export function EngineerFactoryStandalone({
           >
             ↻ 새로고침
           </button>
+          {onLogout ? (
+            <span className="engineer-current-user">
+              <b>{currentUser?.displayName ?? "사용자"}</b>
+              <small>{currentUser?.title ?? "설비 엔지니어"}</small>
+            </span>
+          ) : null}
           {onLogout ? (
             <button
               type="button"
@@ -737,7 +745,7 @@ export function EngineerFactoryStandalone({
                     <small>{directive.asset_id}</small>
                     <p>
                       {directive.assigned_to
-                        ? `담당 ${directive.assigned_to}`
+                        ? `담당 ${directive.assigned_to_display_name ?? directive.assigned_to}`
                         : "담당자 배정 대기"}
                     </p>
                   </button>
@@ -800,7 +808,7 @@ export function EngineerFactoryStandalone({
                     <small>{directive.asset_id}</small>
                     <p>
                       {directive.assigned_to
-                        ? `담당 ${directive.assigned_to}`
+                        ? `담당 ${directive.assigned_to_display_name ?? directive.assigned_to}`
                         : "담당자 배정 대기"}
                     </p>
                   </button>
@@ -1205,7 +1213,7 @@ export function EngineerFactoryStandalone({
                         <small>{directive.asset_id}</small>
                         <p>
                           {directive.assigned_to
-                            ? `담당 ${directive.assigned_to}`
+                            ? `담당 ${directive.assigned_to_display_name ?? directive.assigned_to}`
                             : "담당자 배정 대기"}
                         </p>
                       </button>

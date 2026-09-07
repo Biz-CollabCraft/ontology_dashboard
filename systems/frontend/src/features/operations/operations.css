@@ -3242,3 +3242,6 @@
 .engineer-status-side-stack .engineer-recent-events>div{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain}
 .engineer-status-side-stack .engineer-approval-events{order:1}
 .engineer-status-side-stack .engineer-approval-events+.engineer-recent-events{order:2}
+.engineer-current-user{display:flex;min-width:86px;flex-direction:column;align-items:flex-end;justify-content:center;padding-left:10px;border-left:1px solid var(--operations-border-strong);line-height:1.15}
+.engineer-current-user b{font-size:11px;color:var(--operations-text)}
+.engineer-current-user small{margin-top:2px;color:var(--ef-muted);font-size:9px;font-weight:700}

@@ -105,13 +105,24 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        return _execute(
+        result = _execute(
             lambda: service.list_open_inspection_work_orders(
                 organization_id=principal.organization_id,
                 project_id=project_id,
                 workspace_id=workspace_id,
             )
         )
+        for item in result.get("items", []):
+            assigned_to = item.get("assigned_to")
+            if not assigned_to:
+                item["assigned_to_display_name"] = None
+                continue
+            try:
+                user = identity.repository.get_user(assigned_to)
+                item["assigned_to_display_name"] = user.get("display_name") or assigned_to
+            except (KeyError, ValueError):
+                item["assigned_to_display_name"] = assigned_to
+        return result
 
     @router.post("/inspection-work-orders")
     def request_inspection_work_order(
