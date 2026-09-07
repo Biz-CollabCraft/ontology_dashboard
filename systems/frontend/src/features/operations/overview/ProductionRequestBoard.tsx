@@ -82,20 +82,26 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
   const rate = info?.capacity_model?.asset_units_per_hour;
   const requestedLoss = c && numeric(rate) && rate >= 0 ? Math.ceil(rate * c.request.downtime_minutes / 60) : null;
   const awaiting = queue.filter(item => item.coordination?.status === "pending" && item.status === "approved").length;
+  // Overall KPIs are independent of the selected request and queue filter.
+  const impactedAssets = model.assets.filter(asset => asset.status !== "normal");
+  const impactedLines = new Set(impactedAssets.map(asset => asset.line).filter(Boolean)).size;
+  const downtime = numeric(model.metrics?.estimatedDowntimeMinutes) ? Math.round(model.metrics.estimatedDowntimeMinutes) : null;
+  const downtimeLabel = downtime === null ? "정보 없음" : downtime >= 60 ? Math.floor(downtime / 60) + "시간 " + (downtime % 60) + "분" : downtime + "분";
   return <main className="engineer-lite-board production-request-board">
     <header className="engineer-factory-header">
       <div><strong>생산 대응 현황</strong><span>{model.context.workspaceName} · 정비 요청의 생산 영향과 작업 일정 협의</span></div>
       <div className="engineer-factory-live"><b>{queueLoading ? "연결 확인 중" : queueError || workOrderError ? "요청 연결 확인 필요" : "요청 연결 정상"}</b><button type="button" onClick={refresh}>↻ 새로고침</button><OperationsAccountBadge {...currentUser}/><button type="button" onClick={() => void onLogout()}><LogOut size={14}/> 로그아웃</button></div>
     </header>
-    <section className="prb-kpis" aria-label="정비 요청 현황">
-      <Metric label="작업 승인 대기" value={queueLoading ? "조회 중" : number(awaiting, "건")}/>
-      <Metric label="진행 중 정비 요청" value={number(queue.filter(item => item.status !== "completed").length, "건")}/>
-      <Metric label="협의 요청 정지 시간 합계" value={number(queue.filter(item => item.status !== "completed").reduce((sum,item) => sum + (item.coordination?.request.downtime_minutes ?? 0), 0), "분")}/>
+    <section className="prb-kpis" aria-label="전체 생산 영향 현황">
+      <OverallKpi label="생산 영향 검토 설비" value={number(impactedAssets.length, "대")} description="주의 이상 설비를 생산계획과 대조합니다."/>
+      <OverallKpi label="영향 가능 라인" value={number(impactedLines, "개")} description="현재 위험 설비가 포함된 라인입니다."/>
+      <OverallKpi label="예상 정지 영향" value={downtimeLabel} description="전체 현황 기준 · 부족분·납기 산정의 입력값입니다."/>
     </section>
     <div className="prb-columns">
       <section className="prb-card prb-queue" aria-label="정비 요청 큐">
         <header><strong>정비 요청 큐</strong><div className="prb-queue-tools"><span>시간순</span><select aria-label="정비 요청 상태" value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}><option value="active">진행 중</option><option value="completed">완료</option><option value="all">전체</option></select></div></header>
         <div className="prb-scroll">
+          <p className="prb-queue-counts">{queueLoading ? "요청 현황 조회 중" : queueError || workOrderError ? "요청 현황 확인 필요" : "진행 중 " + queue.filter(item => item.status !== "completed").length + "건 · 작업 승인 대기 " + awaiting + "건"}</p>
           {queueError || workOrderError ? <p role="status">요청 연결을 확인해 주세요. 이전 표시 내용은 유지되며 승인은 잠깁니다.</p> : null}
           {visible.map(item => <button type="button" className="prb-queue-item" key={item.id} aria-pressed={selected?.id === item.id} onClick={() => { setSelectedId(item.id); setDetailOpen(false); }}>
             <strong>{model.assets.find(a => a.assetId === item.assetId)?.displayName ?? item.assetId}</strong>
@@ -154,6 +160,9 @@ function SensorTrend({ feature }: { feature: AssetDetailViewModel["features"][nu
     return command + (i * 100 / Math.max(1,points.length - 1)) + "," + (92 - (p.value - min) / range * 84);
   }).join(" ");
   return <><svg className="prb-sensor-svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={feature.label + " 센서 추이"}><path d={path}/></svg><small>{when(points[0]?.observed_at)} ~ {when(points.at(-1)?.observed_at)}</small></>;
+}
+function OverallKpi({ label, value, description }: { label: string; value: string; description: string }) {
+  return <article className="prb-metric prb-overall-kpi"><div className="prb-kpi-heading"><b>{label}</b><span>{description}</span></div><strong>{value}</strong></article>;
 }
 function Metric({ label, value }: { label: string; value: string }) { return <article className="prb-metric"><span>{label}</span><strong>{value}</strong></article>; }
 function ImpactSummary({ name, item, detail, requestedLoss, loading }: { name: string; item: ProductionQueueItem; detail: AssetDetailViewModel | null; requestedLoss: number | null; loading: boolean }) {

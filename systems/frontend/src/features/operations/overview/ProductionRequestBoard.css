@@ -1,5 +1,9 @@
 .production-request-board{height:100dvh;min-height:0;box-sizing:border-box;overflow:hidden;gap:12px}
 .prb-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;flex:none}
+.prb-overall-kpi{container-type:inline-size;text-align:left!important}
+.prb-kpi-heading{display:flex;align-items:center;gap:6px}.prb-kpi-heading b{font-size:13px;flex:none}.prb-kpi-heading span{border-left:1px solid var(--ef-border);padding-left:6px;font-size:11px;color:var(--ef-muted)}
+.prb-queue-counts{margin:0 0 8px;color:var(--ef-muted)}
+@container(max-width:400px){.prb-kpi-heading{align-items:flex-start;flex-direction:column;gap:3px}.prb-kpi-heading span{border-left:0;padding-left:0}}
 .prb-metric{min-width:0;padding:12px;border:1px solid var(--ef-border);border-radius:5px;background:var(--operations-panel);display:flex;flex-direction:column;gap:8px;text-align:center}
 .prb-metric>span{font-size:13px;font-weight:800}.prb-metric>strong{font-size:21px;overflow-wrap:anywhere}
 .prb-columns{display:grid;grid-template-columns:minmax(220px,.85fr) minmax(380px,1.75fr) minmax(290px,1fr);gap:12px;flex:1;min-height:0}

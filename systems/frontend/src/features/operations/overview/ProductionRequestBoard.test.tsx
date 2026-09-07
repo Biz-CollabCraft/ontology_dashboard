@@ -19,7 +19,9 @@ const second = { ...first, work_order_id: "inspection-22222222", asset_id: "CMP-
 const model = { context: { workspaceName: "생산", datasetVersionId: "dataset" }, assets: [
   { assetId: "CNC-A", displayName: "정상 CNC", status: "normal", failureProbability: .1, riskHistory: [{ value: .1 }] },
   { assetId: "CMP-B", displayName: "압축기 B", status: "normal", failureProbability: .2, riskHistory: [{ value: .2 }] },
-] } as unknown as OperationsBootstrapModel;
+  { assetId: "unrequested-risk-A", displayName: "위험 설비 A", status: "critical", line: "S01", failureProbability: .9 },
+  { assetId: "unrequested-risk-B", displayName: "위험 설비 B", status: "attention", line: "S01", failureProbability: .5 },
+] , metrics: { estimatedDowntimeMinutes: 105 } } as unknown as OperationsBootstrapModel;
 function detail(assetId = "CNC-A", units = 111): AssetDetailViewModel {
   return { asset: { asset_id: assetId, observed_at: "2026-09-07T01:00:00Z" }, risk: { current: .1 }, risk_series: [], features: [],
     operation_context: { production_plan: { planned_units: units, plan_date: "2026-09-07" }, capacity_model: { asset_units_per_hour: 60 }, event_impact: { estimated_lost_units: 40, product_variant: "A" } }
@@ -155,6 +157,23 @@ it("places the status select to the right of time order and filters active, comp
   expect(host.querySelector(".prb-queue-item")?.textContent).toContain("압축기 B");
   await act(async () => { filter.value = "all"; filter.dispatchEvent(new Event("change", { bubbles: true })); });
   expect(host.querySelectorAll(".prb-queue-item")).toHaveLength(2);
+});
+it("preserves overall fleet KPIs independently of the selected request and completed filter", async () => {
+  await render();
+  const kpis = host.querySelector('[aria-label="전체 생산 영향 현황"]')!;
+  expect(kpis.textContent).toContain("생산 영향 검토 설비");
+  expect(kpis.textContent).toContain("2대");
+  expect(kpis.textContent).toContain("1개");
+  expect(kpis.textContent).toContain("1시간 45분");
+  const original = kpis.textContent;
+  await chooseB();
+  expect(kpis.textContent).toBe(original);
+  await act(async () => {
+    const filter = host.querySelector<HTMLSelectElement>('select[aria-label="정비 요청 상태"]')!;
+    filter.value = "completed"; filter.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(kpis.textContent).toBe(original);
+  expect(host.textContent).toContain("현재 정비 요청이 없습니다");
 });
 it("does not substitute another request's cost and handles missing money and minor units", () => {
   const item = productionQueue([], [first])[0];
