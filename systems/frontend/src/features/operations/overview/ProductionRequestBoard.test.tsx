@@ -115,7 +115,10 @@ it("retains saved approvals and completed findings when completed history is inc
     inspection_result: { outcome: "no_action_required", findings: ["정상 확인"], note: "점검 종료" } }] });
   await render();
   expect(host.textContent).toContain("현재 정비 요청이 없습니다");
-  await act(async () => host.querySelector<HTMLInputElement>('[type="checkbox"]')!.click());
+  await act(async () => {
+    const filter = host.querySelector<HTMLSelectElement>('select[aria-label="정비 요청 상태"]')!;
+    filter.value = "completed"; filter.dispatchEvent(new Event("change", { bubbles: true }));
+  });
   expect(host.textContent).toContain("작업 승인 완료");
   expect(host.textContent).toContain("정상 확인");
   expect(host.querySelector<HTMLButtonElement>(".prb-approve")!.disabled).toBe(true);
@@ -136,6 +139,22 @@ it("renders saved same-request cost components and avoided cost without inventin
   expect(host.querySelector(".prb-cost table")?.textContent).toContain("10,000");
   expect(host.querySelector(".prb-action-summary")?.textContent).toContain("20,000");
   expect(host.textContent).toContain("비용 절감액을 영업이익으로 표시하지 않습니다");
+});
+it("places the status select to the right of time order and filters active, completed and all", async () => {
+  const done = { ...second, work_order_status: "completed" };
+  vi.mocked(listInspectionCoordinations).mockResolvedValue({ items: [first, done] });
+  await render();
+  const tools = host.querySelector(".prb-queue-tools")!;
+  expect(tools.children[0].textContent).toBe("시간순");
+  const filter = tools.children[1] as HTMLSelectElement;
+  expect(filter.tagName).toBe("SELECT");
+  expect(filter.value).toBe("active");
+  expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(host.querySelectorAll(".prb-queue-item")).toHaveLength(1);
+  await act(async () => { filter.value = "completed"; filter.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(host.querySelector(".prb-queue-item")?.textContent).toContain("압축기 B");
+  await act(async () => { filter.value = "all"; filter.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(host.querySelectorAll(".prb-queue-item")).toHaveLength(2);
 });
 it("does not substitute another request's cost and handles missing money and minor units", () => {
   const item = productionQueue([], [first])[0];

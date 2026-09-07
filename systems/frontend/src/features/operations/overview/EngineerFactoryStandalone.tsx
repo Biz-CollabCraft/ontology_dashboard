@@ -7,6 +7,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 import { OperationsAccountBadge } from "./OperationsAccountBadge";
+import { EngineerRequestProgress } from "./EngineerRequestProgress";
 import type { OpenInspectionWorkOrderReadModel } from "../../../api";
 import { requestInspectionWorkOrder } from "../../../api";
 import {
@@ -1037,41 +1038,14 @@ export function EngineerFactoryStandalone({
                       {maintenanceRequestBusy
                         ? "정비 승인 요청 중"
                         : selectedMaintenanceDirective
-                          ? selectedMaintenanceDirective.status === "approved" ? "정비 승인됨" : selectedMaintenanceDirective.status === "in_progress" ? "보전팀 점검 중" : "정비 승인 요청됨"
+                          ? selectedMaintenanceDirective.status === "approved" ? "보전팀 접수됨" : selectedMaintenanceDirective.status === "in_progress" ? "보전팀 점검 중" : "정비 승인 요청됨"
                           : "정비 승인 요청"}
                     </button>
-                    <button
-                      type="button"
-                      disabled={
-                        !maintenanceDirectives.some(
-                          (item) => item.asset_id === selected.assetId,
-                        )
-                      }
-                      title={
-                        !maintenanceDirectives.some(
-                          (item) => item.asset_id === selected.assetId,
-                        )
-                          ? "엔지니어 요청 생성 권한 계약 연결이 필요합니다."
-                          : undefined
-                      }
-                      onClick={() =>
-                        document
-                          .querySelector(".engineer-detail-requests")
-                          ?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "nearest",
-                          })
-                      }
-                    >
-                      {maintenanceDirectives.some(
-                        (item) => item.asset_id === selected.assetId,
-                      )
-                        ? "진행 중 요청 확인"
-                        : "보전 점검 요청 연결 필요"}
-                    </button>
+                    <EngineerRequestProgress projectId={model.context.projectId} workspaceId={model.context.workspaceId} order={selectedMaintenanceDirective}
+                      busy={maintenanceRequestBusy} connectionError={maintenanceDirectiveError || maintenanceRequestFailed} />
                   </div>
                   {selectedMaintenanceDirective ? <p role="status" className="engineer-detail-work-status">
-                    <span>{selectedMaintenanceDirective.status === "approved" ? "승인 완료 · 보전팀 화면에서 현장 점검을 시작한 뒤 작업 결과를 작성합니다." : selectedMaintenanceDirective.status === "in_progress" ? "현장 점검 중 · 배정된 보전팀 담당자가 작업·점검 결과를 기록합니다." : "보전팀의 요청 접수·승인을 기다리고 있습니다."}</span>
+                    <span>{selectedMaintenanceDirective.status === "approved" ? "보전팀 접수 완료 · 생산 협의와 착수 조건을 확인한 뒤 작업을 시작합니다." : selectedMaintenanceDirective.status === "in_progress" ? "현장 점검 중 · 배정된 보전팀 담당자가 작업·점검 결과를 기록합니다." : "보전팀의 요청 접수를 기다리고 있습니다."}</span>
                     <span className="engineer-detail-assignee">담당: {selectedMaintenanceDirective.assigned_to_display_name || "배정 대기"}</span>
                   </p> : null}
                   <dl>

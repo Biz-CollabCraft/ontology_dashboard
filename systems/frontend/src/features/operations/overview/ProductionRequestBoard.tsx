@@ -25,7 +25,7 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
   const [queueLoading, setQueueLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   const [selectedId, setSelectedId] = useState("");
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"active" | "completed" | "all">("active");
   const [detailOpen, setDetailOpen] = useState(false);
   const [context, setContext] = useState<{ key: string; detail: AssetDetailViewModel | null; costs: MaintenanceCostAnalysisReadModel | null; detailError: boolean; costError: boolean; detailLoading: boolean; costLoading: boolean } | null>(null);
   useEffect(() => {
@@ -44,7 +44,7 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
     return () => { alive = false; clearInterval(timer); };
   }, [projectId, workspaceId, revision]);
   const queue = productionQueue(workOrders, consultations);
-  const visible = queue.filter(item => showCompleted || item.status !== "completed");
+  const visible = queue.filter(item => statusFilter === "all" || (statusFilter === "completed" ? item.status === "completed" : item.status !== "completed"));
   const selected = visible.find(item => item.id === selectedId) ?? visible[0] ?? null;
   const asset = model.assets.find(item => item.assetId === selected?.assetId) ?? null;
   const requestKey = selected ? [projectId, workspaceId, selected.id, selected.eventId, selected.coordination?.request_id ?? "", model.context.datasetVersionId].join("|") : "";
@@ -94,8 +94,7 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
     </section>
     <div className="prb-columns">
       <section className="prb-card prb-queue" aria-label="정비 요청 큐">
-        <header><strong>정비 요청 큐</strong><span>협의 요청 시각 순</span></header>
-        <label className="prb-completed"><input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)}/> 완료 내역 포함</label>
+        <header><strong>정비 요청 큐</strong><div className="prb-queue-tools"><span>시간순</span><select aria-label="정비 요청 상태" value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}><option value="active">진행 중</option><option value="completed">완료</option><option value="all">전체</option></select></div></header>
         <div className="prb-scroll">
           {queueError || workOrderError ? <p role="status">요청 연결을 확인해 주세요. 이전 표시 내용은 유지되며 승인은 잠깁니다.</p> : null}
           {visible.map(item => <button type="button" className="prb-queue-item" key={item.id} aria-pressed={selected?.id === item.id} onClick={() => { setSelectedId(item.id); setDetailOpen(false); }}>
