@@ -10,6 +10,7 @@ import { useAuth } from "./AuthContext";
 import { AuthShell } from "./AuthShell";
 import { useI18n } from "../../ui/i18n/I18nProvider";
 import { Info } from "lucide-react";
+import { AccountInfoPopover } from "./AccountInfoPopover";
 
 const DEMO_ACCOUNTS = [
   {
@@ -244,7 +245,7 @@ export function LoginPage() {
                   >
                     <Info size={13} />
                   </button>
-                  <div className="demo-account-popover">
+                  {openInfo === account.email ? <AccountInfoPopover onClose={() => setOpenInfo(null)}>
                     <strong>
                       {english ? account.label.en : account.label.ko}
                     </strong>
@@ -254,7 +255,7 @@ export function LoginPage() {
                         : account.description.ko}
                     </p>
                     <small>{account.email}</small>
-                  </div>
+                  </AccountInfoPopover> : null}
                 </div>
               </div>
             ))}

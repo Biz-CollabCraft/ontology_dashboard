@@ -115,45 +115,7 @@ DEMO_ACCOUNTS: tuple[dict[str, Any], ...] = (
         # carry an inspection from field verification through maintenance.
         "roles": ["process_engineer", "maintenance_technician"],
     },
-    {
-        "email": "quality@ontology.local",
-        "password": "Quality!2026",
-        "display_name": "품질 감사 담당",
-        "roles": ["quality_auditor"],
-    },
-    {
-        "email": "datascientist@ontology.local",
-        "password": "DataScience!2026",
-        "display_name": "데이터 사이언티스트",
-        "roles": ["ml_validator"],
-    },
-    {
-        "email": "fde@ontology.local",
-        "password": "FDE!2026",
-        "display_name": "Forward Deployed Engineer",
-        "roles": ["fde"],
-    },
-    {
-        "email": PUBLIC_COMPARISON_EMAIL,
-        "password": PUBLIC_COMPARISON_PASSWORD,
-        "display_name": "공개 비교 Viewer",
-        "roles": ["process_manager"],
-        "fixture_scopes": (
-            (PUBLIC_COMPARISON_WORKSPACE_ID, PUBLIC_COMPARISON_PROJECT_ID),
-        ),
-        "permission_overrides": {
-            permission: permission
-            in {
-                "app.access",
-                "events.read",
-                "ontology.registry.read",
-                "ontology.objects.read",
-                "dashboards.read",
-                "datasets.read",
-            }
-            for permission in ROLE_PERMISSIONS["process_manager"]
-        },
-    },
+
 )
 
 
