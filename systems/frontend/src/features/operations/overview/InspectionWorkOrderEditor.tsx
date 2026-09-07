@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { acceptInspectionWorkOrder, startInspectionWorkOrder, completeInspectionWorkOrder, type OpenInspectionWorkOrderReadModel, type InspectionCompletionPayload, type InspectionOutcome, type InspectionChecklistStatus } from "../../../api";
 import "./InspectionWorkOrderEditor.css";
 
+// Retained for future maintenance-method recommendation input; hidden in the current UI.
+const SHOW_RECOMMENDATION_INFO_REQUEST = false;
+
 const checks = [
   ["equipment-condition", "설비 외관·이상 징후"],
   ["sensor-verification", "센서 값·현장 상태 대조"],
@@ -92,9 +95,9 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
         <option value="">판단 선택</option>
         <option value="no_action_required">추가 정비 불필요 · 후속 관측</option>
         <option value="maintenance_recommended">정비 조치 필요</option>
-        <option value="data_check_required">추가 데이터 확인 필요</option>
+        {SHOW_RECOMMENDATION_INFO_REQUEST ? <option value="data_check_required">정비 방법 추천을 위한 정보 필요</option> : null}
       </select></label>
-      {outcome === "data_check_required" ? <p className="inspection-outcome-help">점검 결과로 추가 데이터 확인이 필요하다는 사실을 기록합니다. 점검 요청은 완료되며, 정비 승인이나 실제 정비 완료를 의미하지 않습니다. 확인이 필요한 내용은 아래 결과에 작성하세요.</p> : null}
+      {SHOW_RECOMMENDATION_INFO_REQUEST && outcome === "data_check_required" ? <p className="inspection-outcome-help">정비 방법 추천에 필요한 정보를 작성합니다.</p> : null}
       {equipmentChecks.map(([id, name]) => <label key={id}>{name}<select required value={checklist[id] || ""} onChange={(event) => setChecklist((previous) => ({ ...previous, [id]: event.target.value as InspectionChecklistStatus }))}>
         <option value="">점검 결과 선택</option><option value="pass">이상 없음</option><option value="fail">이상 확인</option><option value="not_checked">미점검</option>
       </select></label>)}

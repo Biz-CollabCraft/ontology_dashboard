@@ -83,26 +83,27 @@ describe("inspection result workflow", () => {
     await fill(); await submit();
     expect(completeInspectionWorkOrder).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ checklist: expect.arrayContaining([expect.objectContaining({ item_id: "tool-wear", status: "pass" }), expect.objectContaining({ item_id: "cooling-path", status: "pass" }), expect.objectContaining({ item_id: "cost-basis-in-house", status: "pass" })]) }) }));
   });
-  it("records additional-data findings as a completed inspection, not an unfinished checklist", async () => {
+  it("hides the deferred recommendation-information option and help from the current UI", async () => {
     await render({ ...order, status: "in_progress" });
-    await fill();
-    await act(async () => {
-      const selects = host.querySelectorAll("select");
-      selects[0].value = "data_check_required";
-      selects[0].dispatchEvent(new Event("change", { bubbles: true }));
-      selects[1].value = "not_checked";
-      selects[1].dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    expect(host.textContent).toContain("추가 데이터 확인 필요");
-    expect(host.textContent).not.toContain("데이터·센서 재확인 필요");
-    expect(host.textContent).toContain("정비 승인이나 실제 정비 완료를 의미하지 않습니다");
+    const values = Array.from(host.querySelector("select")!.options).map((option) => option.value);
+    expect(values).toEqual(["", "no_action_required", "maintenance_recommended"]);
+    expect(host.querySelector(".inspection-outcome-help")).toBeNull();
+    expect(host.textContent).not.toContain("추가 데이터 확인 필요");
+    expect(host.textContent).not.toContain("정비 방법 추천을 위한 정보 필요");
     await submit();
-    expect(completeInspectionWorkOrder).toHaveBeenCalledWith(expect.objectContaining({
-      payload: expect.objectContaining({ outcome: "data_check_required", checklist: expect.arrayContaining([expect.objectContaining({ status: "not_checked" })]) })
-    }));
-    expect(host.textContent).toContain("결과 저장 완료");
-    expect(startInspectionWorkOrder).not.toHaveBeenCalled();
-    expect(acceptInspectionWorkOrder).not.toHaveBeenCalled();
+    expect(completeInspectionWorkOrder).not.toHaveBeenCalled();
+  });
+  it("retains the recommendation-information outcome in the API payload contract", async () => {
+    const api = await vi.importActual<typeof import("../../../api")>("../../../api");
+    const payload = api.buildInspectionCompletionPayload({
+      outcome: "data_check_required",
+      toolWearStatus: "not_checked", toolWearMin: null,
+      coolingPathStatus: "not_checked", coolantTemperatureC: null,
+      inHouseStatus: "", sparePartAvailableStatus: "",
+      vendorDispatchRequiredStatus: "", componentReplacementRequiredStatus: "",
+      findings: "정비 방법 추천에 필요한 정보", note: "",
+    });
+    expect(payload.outcome).toBe("data_check_required");
   });
   it("does not pretend a failed start entered the in-progress state", async () => {
     vi.mocked(startInspectionWorkOrder).mockRejectedValueOnce(new Error("conflict"));
