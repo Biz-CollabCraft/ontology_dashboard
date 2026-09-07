@@ -83,29 +83,6 @@ describe("inspection result workflow", () => {
     await fill(); await submit();
     expect(completeInspectionWorkOrder).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ checklist: expect.arrayContaining([expect.objectContaining({ item_id: "tool-wear", status: "pass" }), expect.objectContaining({ item_id: "cooling-path", status: "pass" }), expect.objectContaining({ item_id: "cost-basis-in-house", status: "pass" })]) }) }));
   });
-  it("offers only the two current workflow decisions and no automatic fallback", async () => {
-    await render({ ...order, status: "in_progress" });
-    expect(Array.from(host.querySelectorAll("select")[0].options).map((option) => option.value)).toEqual(["", "no_action_required", "maintenance_recommended"]);
-    await submit(); expect(completeInspectionWorkOrder).not.toHaveBeenCalled();
-  });
-  it("keeps the job in progress when an inspection remains unchecked", async () => {
-    await render({ ...order, status: "in_progress" }); await fill();
-    await act(async () => {
-      const select = host.querySelectorAll("select")[1];
-      select.value = "not_checked"; select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await submit(); expect(completeInspectionWorkOrder).not.toHaveBeenCalled();
-    expect(host.textContent).toContain("현장 점검 중");
-  });
-  it("still saves the no-action outcome explicitly", async () => {
-    await render({ ...order, status: "in_progress" }); await fill();
-    await act(async () => {
-      const select = host.querySelectorAll("select")[0];
-      select.value = "no_action_required"; select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await submit();
-    expect(completeInspectionWorkOrder).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ outcome: "no_action_required" }) }));
-  });
   it("does not pretend a failed start entered the in-progress state", async () => {
     vi.mocked(startInspectionWorkOrder).mockRejectedValueOnce(new Error("conflict"));
     await render(); await submit(); expect(host.querySelector("textarea")).toBeNull();

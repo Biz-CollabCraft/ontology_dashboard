@@ -35,9 +35,7 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
   const mine = Boolean(currentUserId && item.assigned_to === currentUserId);
   const canAct = Boolean(currentUserId && (status === "requested" || mine));
   const canComplete = canAct && status === "in_progress";
-  const hasDecision = outcome === "no_action_required" || outcome === "maintenance_recommended";
-  const allChecked = equipmentChecks.every(([id]) => checklist[id] === "pass" || checklist[id] === "fail");
-  const valid = Boolean(hasDecision && findings.trim() && allChecked && Object.values(measurements).every((value) => !value || Number.isFinite(Number(value))));
+  const valid = Boolean(outcome && findings.trim() && equipmentChecks.every(([id]) => checklist[id]) && Object.values(measurements).every((value) => !value || Number.isFinite(Number(value))));
   const label = status === "completed" ? "결과 저장 완료" : status === "in_progress" ? "현장 점검 중" : status === "approved" ? "승인됨 · 작업 시작 대기" : "요청 접수 대기";
 
   async function submit(event: FormEvent) {
@@ -46,8 +44,8 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
     locked.current = true;
     setBusy(true);
     setMessage("");
-    const payload: InspectionCompletionPayload | null = hasDecision ? {
-      outcome: outcome as InspectionOutcome,
+    const payload: InspectionCompletionPayload = {
+      outcome: outcome || "data_check_required",
       checklist: [
         ...equipmentChecks.map(([id, name]) => ({ item_id: id, status: checklist[id] || "not_checked" as InspectionChecklistStatus, note: name })),
         ...costFields.filter(([id]) => costBasis[id]).map(([id, name]) => ({ item_id: id, status: costBasis[id] as InspectionChecklistStatus, note: name })),
@@ -55,7 +53,7 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
       measurements: measurementFields.filter(([id]) => measurements[id]?.trim()).map(([id, , unit]) => ({ name: id, value: Number(measurements[id]), unit })),
       findings: findings.split("\n").map((line) => line.trim()).filter(Boolean),
       note: note.trim(),
-    } : null;
+    };
     const fingerprint = JSON.stringify([item.work_order_id, status, status === "in_progress" ? payload : null]);
     if (attempt.current?.fingerprint !== fingerprint) attempt.current = { fingerprint, key: Array.from(crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(16).padStart(8, "0")).join("") };
     const input = { projectId, workspaceId, workOrderId: item.work_order_id, idempotencyKey: attempt.current.key };
@@ -68,7 +66,6 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
         setStatus("in_progress");
         setMessage("현장 점검을 시작했습니다. 실제 확인한 결과를 아래에 작성하세요.");
       } else {
-        if (!payload) return;
         await completeInspectionWorkOrder({ ...input, payload });
         setStatus("completed");
         setMessage("작업·점검 결과를 저장했습니다. 완료된 요청은 진행 목록에서 제외됩니다.");
@@ -95,6 +92,7 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
         <option value="">판단 선택</option>
         <option value="no_action_required">추가 정비 불필요 · 후속 관측</option>
         <option value="maintenance_recommended">정비 조치 필요</option>
+        <option value="data_check_required">데이터·센서 재확인 필요</option>
       </select></label>
       {equipmentChecks.map(([id, name]) => <label key={id}>{name}<select required value={checklist[id] || ""} onChange={(event) => setChecklist((previous) => ({ ...previous, [id]: event.target.value as InspectionChecklistStatus }))}>
         <option value="">점검 결과 선택</option><option value="pass">이상 없음</option><option value="fail">이상 확인</option><option value="not_checked">미점검</option>
@@ -103,7 +101,6 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
       {costFields.map(([id, name]) => <label key={id}>{name}<select value={costBasis[id] || ""} onChange={(event) => setCostBasis((previous) => ({ ...previous, [id]: event.target.value }))}><option value="">미확인 · 산정에서 제외</option><option value="pass">예</option><option value="fail">아니요</option></select></label>)}
       <label>실제 확인 내용·작업 결과<textarea required value={findings} onChange={(event) => setFindings(event.target.value)} placeholder="확인한 현상, 수행한 작업과 결과를 작성하세요." /></label>
       <label>추가 메모<textarea maxLength={4000} value={note} onChange={(event) => setNote(event.target.value)} /></label>
-      <p>판단이 어렵거나 미점검 항목이 있으면 저장하지 말고 점검을 계속하세요. 결과 저장 전까지 이 요청은 점검 중으로 유지됩니다.</p>
       <p>점검 결과 기록이며, 실제 정비 완료나 효과 확인을 자동 처리하지 않습니다.</p>
     </fieldset> : null}
     {status !== "completed" ? <button type="submit" disabled={busy || !canAct || (status === "in_progress" && !valid)}>
