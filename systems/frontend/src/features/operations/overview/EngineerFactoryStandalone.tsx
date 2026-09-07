@@ -44,6 +44,12 @@ function formatMinutes(value: number | null | undefined) {
   return hours ? `${hours}시간 ${minutes}분` : `${minutes}분`;
 }
 
+function compactJobId(value: string) {
+  const hash = value.split("-").filter(Boolean).at(-1) ?? value;
+  const compact = hash.replace(/[^A-Za-z0-9]/g, "").slice(-8);
+  return compact ? `#${compact}` : "#-";
+}
+
 function tone(status: OperationsRiskStatus) {
   if (status === "critical") return "critical";
   if (status === "warning" || status === "attention") return "attention";
@@ -721,7 +727,9 @@ export function EngineerFactoryStandalone({
                           ? "점검 중"
                           : "승인됨"}
                       </b>
-                      <small>{directive.work_order_id}</small>
+                      <small title={directive.work_order_id}>
+                        {compactJobId(directive.work_order_id)}
+                      </small>
                     </span>
                     <strong>
                       {directive.equipment_id || directive.asset_id}
@@ -782,7 +790,9 @@ export function EngineerFactoryStandalone({
                             ? "승인됨"
                             : "요청됨"}
                       </b>
-                      <small>{directive.work_order_id}</small>
+                      <small title={directive.work_order_id}>
+                        {compactJobId(directive.work_order_id)}
+                      </small>
                     </span>
                     <strong>
                       {directive.equipment_id || directive.asset_id}
@@ -1185,7 +1195,9 @@ export function EngineerFactoryStandalone({
                                 ? "승인됨"
                                 : "요청됨"}
                           </b>
-                          <small>{directive.work_order_id}</small>
+                          <small title={directive.work_order_id}>
+                            {compactJobId(directive.work_order_id)}
+                          </small>
                         </span>
                         <strong>
                           {directive.equipment_id || directive.asset_id}
