@@ -1,4 +1,6 @@
 import { LogOut } from "lucide-react";
+import type { ComponentProps } from "react";
+import { ProductionRequestBoard } from "./ProductionRequestBoard";
 import { useEffect, useState } from "react";
 import type { AssetDetailViewModel, OperationsAsset, OperationsBootstrapModel } from "../api/operationsContracts";
 import { loadOperationsAssetDetail } from "../api/operationsApi";
@@ -66,7 +68,11 @@ function failureLabel(value: string) {
   return FAILURE_TYPE_LABELS[value] ?? (value ? value.replaceAll("_", " ") : "원인 확인 필요");
 }
 
-export function RoleFactoryStandalone({ projectId, workspaceId, persona, model, workOrders, workOrderError, currentUserId, currentUser, onRefresh, onLogout }: {
+export function RoleFactoryStandalone(props: ComponentProps<typeof RoleFactoryStandaloneLegacy>) {
+  return props.persona === "production" ? <ProductionRequestBoard {...props}/> : <RoleFactoryStandaloneLegacy {...props}/>;
+}
+
+function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, workOrders, workOrderError, currentUserId, currentUser, onRefresh, onLogout }: {
   currentUserId: string;
   currentUser: { displayName: string; title: string };
   projectId: string;

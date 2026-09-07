@@ -613,6 +613,11 @@ export interface MaintenanceDurationBand {
 }
 
 export interface MaintenanceCostOptionReadModel {
+  parts_cost?: MaintenanceCostBand | null;
+  labor_cost?: MaintenanceCostBand | null;
+  external_service_cost?: MaintenanceCostBand | null;
+  production_loss?: MaintenanceCostBand | null;
+  expected_failure_loss?: MaintenanceCostBand | null;
   option_id: string;
   action_candidate_id: string;
   action_code: MaintenanceActionCode;
