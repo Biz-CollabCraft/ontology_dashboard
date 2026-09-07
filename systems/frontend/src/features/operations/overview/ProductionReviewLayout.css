@@ -1,3 +1,4 @@
+.prb-economic-reference{flex:1 1 45%;min-height:0;padding:3px}.prb-economic-reference dl{display:grid;grid-template-columns:1fr auto;gap:6px}.prb-economic-reference dd{margin:0;font-weight:700}.prb-economic-reference table td,.prb-economic-reference table th{padding:6px;text-align:left;border:1px solid #c5d2e2}
 .production-request-board .prb-queue-tools{gap:3px;min-width:0}
 .production-request-board .prb-queue-tools select{box-sizing:border-box;width:62px!important;min-width:0!important;min-height:26px;padding:3px 2px;font-size:11px}
 .production-request-board .prb-queue-tools select:first-child{width:85px!important}

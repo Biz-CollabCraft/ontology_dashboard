@@ -59,7 +59,7 @@ it("shows the request list with risk above sensor trends and approval review at 
   expect(host.querySelector(".prb-queue-item")?.textContent).toContain("정상 CNC");
   expect(host.textContent).not.toContain("생산 영향 우선순위");
   expect(host.querySelector(".prb-monitoring-stack")?.firstElementChild?.className).toBe("prb-risk");
-  expect(host.querySelector(".prb-monitoring-stack")?.lastElementChild?.className).toBe("prb-monitoring-sensors");
+  expect(host.querySelector(".prb-monitoring-stack")?.lastElementChild?.className).toBe("prb-scroll prb-economic-reference");
   expect(host.querySelector(".prb-queue>header strong")?.textContent).toBe("정비 요청 목록");
   expect(host.querySelector(".prb-actions>header strong")?.textContent).toBe("작업 승인 검토");
   expect(host.querySelector(".prb-action-buttons")?.children[0].textContent).toBe("선택 설비 영향 확인");
@@ -241,8 +241,8 @@ it("uses all live equipment, not the planning subset or historical detail risk, 
   expect(host.querySelector(".prb-queue-item")?.textContent).toContain("실제 압축기");
   expect(host.querySelector(".prb-queue-item")?.textContent).toContain("긴급 · 87%");
   expect(host.querySelector(".prb-risk header b")?.textContent).toBe("87%");
-  expect(host.querySelectorAll(".prb-sensor-row")).toHaveLength(2);
-  expect(host.querySelector(".prb-monitoring-sensors .prb-sensor")?.textContent).toContain("12 bar");
+  expect(host.querySelectorAll(".prb-sensor-row")).toHaveLength(0);
+  expect(host.querySelector(".prb-monitoring-sensors")).toBeNull();
   expect(getMaintenanceEventLineage).toHaveBeenCalledWith("project", "workspace", "event-A");
   await click("선택 설비 영향 확인");
   expect(host.querySelector(".prb-sensor")?.textContent).toContain("12 bar");

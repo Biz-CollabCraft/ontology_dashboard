@@ -1,4 +1,6 @@
 import { LogOut } from "lucide-react";
+import { referenceEconomics } from "./referenceEconomics";
+import { ReferenceEconomicPanel } from "./ReferenceEconomicPanel";
 import { orderEngineerSensors } from "./engineerSensorOrder";
 import "./ProductionReviewLayout.css";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -130,7 +132,7 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
         {selected ? <>
           <div className="prb-monitoring-stack">
             <RiskChart asset={asset} detail={detail} name={name}/>
-            <section className="prb-monitoring-sensors" aria-label="선택 장비 센서 추이"><h3>센서별 추이</h3><LiveEquipmentSensors asset={asset} twoRows/></section>
+            <div className="prb-scroll prb-economic-reference"><ReferenceEconomicPanel assetId={selected.assetId} minutes={c?.request.downtime_minutes}/></div>
           </div>
         </> : <p className="prb-empty">정비 요청을 선택하면 해당 장비의 손익과 생산 영향을 표시합니다.</p>}
       </section>
@@ -202,7 +204,15 @@ function ImpactSummary({ name, item, detail, requestedLoss, loading, showMetrics
 }
 function ImpactMetrics({ item, detail, requestedLoss, loading }: { item: ProductionQueueItem | null; detail: AssetDetailViewModel | null; requestedLoss: number | null; loading: boolean }) {
   const c = item?.coordination;
-  return (<div className="prb-metric-grid"><Metric label="요청 정지 시간" value={number(c?.request.downtime_minutes, "분")}/><Metric label="요청 정지 예상 손실" value={loading ? "조회 중" : number(requestedLoss, "개")}/><Metric label="기존 고장 예측 손실" value={loading ? "조회 중" : number(detail?.operation_context.event_impact?.estimated_lost_units, "개")}/><Metric label="일일 생산 계획" value={loading ? "조회 중" : number(detail?.operation_context.production_plan?.planned_units, "개")}/></div>);
+  const e = item ? referenceEconomics(item.assetId, c?.request.downtime_minutes) : null;
+  const lost = numeric(requestedLoss) ? requestedLoss : e?.lostUnits;
+  const hasPlan = numeric(detail?.operation_context.production_plan?.planned_units);
+  const failureLoss = detail?.operation_context.event_impact?.estimated_lost_units;
+  return (<><div className="prb-metric-grid"><Metric label="요청 정지 시간" value={number(c?.request.downtime_minutes, "분")}/>
+    <Metric label={numeric(requestedLoss) ? "요청 정지 예상 손실" : "요청 정지 손실 수량 · 참고"} value={loading ? "조회 중" : number(lost, "개")}/>
+    <Metric label={numeric(failureLoss) ? "기존 고장 예측 손실" : "요청 정지 노출액 · 가정"} value={loading ? "조회 중" : numeric(failureLoss) ? number(failureLoss, "개") : number(e?.stopExposure, "원")}/>
+    <Metric label={hasPlan ? "일일 생산 계획" : "일일 생산능력 · 가정"} value={loading ? "조회 중" : number(hasPlan ? detail?.operation_context.production_plan?.planned_units : e?.dailyCapacity, "개")}/>
+    </div>{e && (!hasPlan || !numeric(requestedLoss)) ? <small>참고값은 설비별 단가표·16시간 운전 가정입니다. 실제 생산계획·확정 부족분이 아니며, 압축기는 동일 셀 CNC 4대 영향 가정입니다.</small> : null}</>);
 }
 function CostComparison({ analysis, loading, error }: { analysis: MaintenanceCostAnalysisReadModel | null; loading: boolean; error: boolean }) {
   return <section className="prb-cost"><h3>손익·비용 대조</h3>
@@ -258,6 +268,7 @@ function ApprovalPanel({ item, name, projectId, workspaceId, requestedLoss, cost
   }
   return <><div className="prb-scroll prb-action-summary"><h3>{name}</h3><p>#{item.id.slice(-8)} · {queueStatus(item)}</p><p>담당: {item.assignee}</p>
     <dl><dt>협의 작업</dt><dd>{c?.request.work_summary ?? "보전팀 협의 요청 대기"}</dd><dt>정지 시간 / 영향 품목</dt><dd>{number(c?.request.downtime_minutes, "분")} / {c?.request.affected_items ?? "미작성"}</dd><dt>요청 정지 예상 손실</dt><dd>{number(requestedLoss, "개")} (생산능력 가정)</dd><dt>시나리오별 총비용 범위</dt><dd>{costSummary} (각 시나리오 기준값 비교)</dd><dt>손익 근거</dt><dd>{cost ? "동일 요청의 비용 비교 " + when(cost.calculated_at) : "비용 미산정 · 확정 손익 판단 불가"}</dd></dl>
+    {!cost ? <ReferenceEconomicPanel assetId={item.assetId} minutes={c?.request.downtime_minutes}/> : null}
     {c?.response ? <section className="prb-saved"><b>{c.status === "confirmed" ? "작업 승인 완료" : "재협의 요청"}</b><p>{c.responded_by_name} · {when(c.responded_at)}</p><p>{c.response.scheduled_window}</p><p>{c.response.production_response}</p></section> : null}
     {c?.inspection_result ? <section className="prb-saved"><b>점검 결과: {outcome[c.inspection_result.outcome]}</b>{c.inspection_result.findings.map((text,i) => <p key={i}>{text}</p>)}<p>{c.inspection_result.note}</p></section> : null}
     {c?.history?.length ? <details><summary>협의·승인 이력 {c.history.length}건</summary>{c.history.map((h,i) => <p key={i}>{when(h.responded_at || h.requested_at)} · {h.responded_by_name || h.requested_by_name} · {h.response?.scheduled_window || h.request.work_summary} · {h.response?.production_response || h.request.note}</p>)}</details> : null}
