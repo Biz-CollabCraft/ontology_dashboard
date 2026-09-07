@@ -37,6 +37,7 @@ from app.operations.domain_context_adapters import (
     ManufacturingFixtureReviewContextAdapter,
 )
 from app.operations.operational_context_contract import OperationalRequestIdentity
+from app.operations.operational_planning_context import planning_context
 from app.operations.operational_context_ports import (
     FixtureMaintenanceReadinessContextReadPort,
     FixtureProductionDecisionContextReadPort,
@@ -97,6 +98,7 @@ class ManufacturingPredictiveMaintenanceService:
         domain_review_context_adapter: DomainReviewContextAdapter | None = None,
         maintenance_lineage_query: MaintenanceLineageQueryPort | None = None,
         company_context_query: CompanyContextQueryPort | None = None,
+        operational_context_repository: Any | None = None,
         runtime_asset_detail_service: AssetDetailViewModelService | None = None,
         workspace_id: str = "manufacturing-demo",
     ) -> None:
@@ -129,6 +131,7 @@ class ManufacturingPredictiveMaintenanceService:
         self.agent_review_context_registry = agent_review_context_registry
         self.maintenance_lineage_query = maintenance_lineage_query
         self.company_context_query = company_context_query
+        self.operational_context_repository = operational_context_repository
         self.runtime_asset_detail_service = runtime_asset_detail_service
         self.workspace_id = workspace_id
         self.domain_review_context_adapter = (
@@ -347,6 +350,12 @@ class ManufacturingPredictiveMaintenanceService:
                 fixture=fixture,
                 artifact=artifact,
             ),
+            evidence_context=self.evidence_context_for_snapshot(
+                asset_id=asset_id,
+                artifact=artifact,
+                project_id=project_id,
+                event_id=fixture.get("event_id"),
+            ),
             data_status={
                 "source": "canonical",
                 "last_updated_at": artifact["observed_at"],
@@ -355,6 +364,108 @@ class ManufacturingPredictiveMaintenanceService:
             history_window=history_window,
             event_id=fixture.get("event_id"),
         )
+
+    def evidence_context_for_snapshot(
+        self,
+        *,
+        asset_id: str,
+        artifact: dict[str, Any],
+        project_id: str,
+        event_id: str | None,
+        role: str = "process_manager",
+        max_candidates: int = 8,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
+        context_repository: Any | None = None,
+    ) -> dict[str, Any]:
+        observed_at = _timestamp_instant(str(artifact["observed_at"]))
+        identity = OperationalRequestIdentity(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            evidence_snapshot_id=str(artifact.get("artifact_id") or event_id or asset_id),
+            decision_as_of=observed_at,
+        )
+        contexts = (context_repository or self.operational_context_repository).contexts(
+            identity=identity, retrieved_at=observed_at,
+        )
+        relations = resolve_operational_relations(identity=identity, contexts=contexts)
+        candidates = project_evidence_candidates(
+            identity=identity,
+            contexts=contexts,
+            relation_resolution=relations,
+        )
+        selected = select_evidence_candidates(
+            candidates,
+            strategy=EvidenceSelectionStrategy.DETERMINISTIC,
+            role=role,
+            max_candidates=max_candidates,
+        )
+        selected_basis = [candidate.model_dump(mode="json") for candidate in selected.selected]
+        rejected_basis = [candidate.model_dump(mode="json") for candidate in selected.rejected]
+        selected_relation_paths = [
+            {
+                "candidate_id": candidate.candidate_id,
+                "source_ref": candidate.source_ref,
+                "relation_path": list(candidate.relation_path),
+            }
+            for candidate in selected.selected
+            if candidate.relation_path
+        ]
+        source_ref_count = sum(1 for candidate in selected.selected if candidate.source_ref)
+        source_observed_ats = [
+            envelope.source_updated_at
+            for envelope in contexts.values()
+            if envelope.source_updated_at is not None
+        ]
+        max_source_lag_seconds = (
+            max(
+                abs((observed_at - source_observed_at).total_seconds())
+                for source_observed_at in source_observed_ats
+            )
+            if source_observed_ats
+            else None
+        )
+        freshness_states = {envelope.freshness.state.value for envelope in contexts.values()}
+        if "stale" in freshness_states:
+            temporal_status = "stale"
+        elif "unknown" in freshness_states or len(source_observed_ats) != len(contexts):
+            temporal_status = "unknown"
+        else:
+            temporal_status = "aligned"
+        return {
+            "relation_schema_version": "operational-relation-schema-v1",
+            "relation_resolution_version": relations.schema_version,
+            "selection_policy_version": selected.policy_version,
+            "decision_as_of": observed_at.isoformat(),
+            "relation_retrieved_at": observed_at.isoformat(),
+            "source_observed_at_min": (
+                min(source_observed_ats).isoformat()
+                if source_observed_ats
+                else None
+            ),
+            "source_observed_at_max": (
+                max(source_observed_ats).isoformat()
+                if source_observed_ats
+                else None
+            ),
+            "max_source_lag_seconds": max_source_lag_seconds,
+            "temporal_status": temporal_status,
+            "selected_basis": selected_basis,
+            "selected_relation_paths": selected_relation_paths,
+            "rejected_basis": rejected_basis,
+            "limitations": [
+                candidate.value_summary
+                for candidate in selected.selected
+                if candidate.candidate_type == "limitation"
+            ],
+            "source_ref_coverage": (
+                source_ref_count / len(selected.selected)
+                if selected.selected
+                else None
+            ),
+        }
 
     def agent_review_packet(
         self,
@@ -888,6 +999,28 @@ class ManufacturingPredictiveMaintenanceService:
             event_id=str(candidate["event_id"]),
             history_window=history_window,
         )
+        identity = OperationalRequestIdentity(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=str(candidate["asset_id"]),
+            evidence_snapshot_id=str(candidate["event_id"]),
+            decision_as_of=_timestamp_instant(view_model["snapshot_basis"]["observed_at"]),
+        )
+        repository = self.operational_context_repository.capture(identity)
+        view_model["operation_context"] = planning_context(repository, identity)
+        view_model["evidence_context"] = self.evidence_context_for_snapshot(
+            asset_id=identity.asset_id,
+            artifact={
+                "artifact_id": identity.evidence_snapshot_id,
+                "observed_at": identity.decision_as_of.isoformat(),
+            },
+            project_id=project_id,
+            event_id=identity.evidence_snapshot_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+            context_repository=repository,
+        )
         return compose_agent_review_packet(
             project_id=project_id,
             view_model=view_model,
@@ -946,25 +1079,9 @@ class ManufacturingPredictiveMaintenanceService:
         identity: OperationalRequestIdentity,
         retrieved_at: datetime,
     ) -> dict[str, Any]:
-        fixture_root = self.root / "data" / "fixtures" / "operation_context"
-
-        def load_context(name: str) -> dict[str, Any]:
-            return json.loads((fixture_root / name).read_text(encoding="utf-8"))
-
-        return {
-            "production": FixtureProductionDecisionContextReadPort(
-                context=load_context("operational-decision-context-v1.json"),
-                source_ref="fixture:production",
-            ).lookup(identity=identity, retrieved_at=retrieved_at),
-            "maintenance_readiness": FixtureMaintenanceReadinessContextReadPort(
-                context=load_context("maintenance-readiness-context-v1.json"),
-                source_ref="fixture:maintenance",
-            ).lookup(identity=identity, retrieved_at=retrieved_at),
-            "quality_delivery": FixtureQualityDeliveryContextReadPort(
-                context=load_context("quality-delivery-context-v1.json"),
-                source_ref="fixture:quality",
-            ).lookup(identity=identity, retrieved_at=retrieved_at),
-        }
+        if self.operational_context_repository is None:
+            raise RuntimeError("operational context repository is not configured")
+        return self.operational_context_repository.contexts(identity=identity, retrieved_at=retrieved_at)
 
     def _fixture_for_asset(
         self,

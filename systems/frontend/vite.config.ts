@@ -10,17 +10,17 @@ const appBase = configuredBase
   : githubPagesBase;
 
 const apiProxy = {
-  "/api": { target: "http://127.0.0.1:8000" },
-  "/health": { target: "http://127.0.0.1:8000" },
-  "/docs": { target: "http://127.0.0.1:8000" },
-  "/redoc": { target: "http://127.0.0.1:8000" },
-  "/openapi.json": { target: "http://127.0.0.1:8000" },
+  "/api": { target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000" },
+  "/health": { target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000" },
+  "/docs": { target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000" },
+  "/redoc": { target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000" },
+  "/openapi.json": { target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000" },
 };
 
 function interactiveTeamShareRoute(): Plugin {
   const rewrite = (
     request: { url?: string },
-    _response: unknown,
+    response: { writeHead: (code: number, headers: Record<string,string>) => void; end: () => void },
     next: () => void,
   ) => {
     const url = request.url ?? "";
@@ -44,6 +44,7 @@ function interactiveTeamShareRoute(): Plugin {
 
 export default defineConfig({
   base: appBase,
+  build: { rollupOptions: { input: { app: "index.html", factory: "factory-status-original/index.html" } } },
   plugins: [interactiveTeamShareRoute(), react()],
   // ManufacturingApp is route-lazy, so Vite's initial source scan does not
   // always discover its heavy UI dependencies before the first browser load.
@@ -75,5 +76,5 @@ export default defineConfig({
     allowedHosts: ["kosa165.iptime.org"],
     proxy: apiProxy,
   },
-  test: { environment: "jsdom", include: ["src/**/*.test.ts", "src/**/*.test.tsx"] },
+  test: { environment: "jsdom", include: ["src/**/*.test.ts", "src/**/*.test.tsx", "src/standalone/**/*.test.js"] },
 });

@@ -163,6 +163,81 @@ def test_latest_detail_view_anchors_history_and_snapshot_to_selected_event() -> 
     )
 
 
+def test_composer_preserves_evidence_context_relation_selection_boundary() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={
+            "asset_id": "CMP-S03-L03-01",
+            "asset_type": "compressor",
+            "observed_at": "2026-08-01T00:00:00+09:00",
+        },
+        result_artifact=ARTIFACT,
+        evidence_context={
+            "relation_schema_version": "operational-relation-schema-v1",
+            "relation_resolution_version": "operational-relation-resolution-v1.0",
+            "selection_policy_version": "operational-evidence-selection-v0.1",
+            "decision_as_of": "2026-08-01T00:00:00+09:00",
+            "relation_retrieved_at": "2026-08-01T00:00:00+09:00",
+            "source_observed_at_min": "2026-07-31T23:59:00+09:00",
+            "source_observed_at_max": "2026-08-01T00:00:00+09:00",
+            "max_source_lag_seconds": 60.0,
+            "temporal_status": "aligned",
+            "selected_basis": [
+                {
+                    "candidate_id": "relationship:order_contains_wip:PO-1->WIP-1",
+                    "candidate_type": "relationship",
+                    "source_ref": "fixture:production#/wip/0",
+                    "source_version": "production-context-v1",
+                    "domain": "production",
+                    "relation_path": ["order_contains_wip"],
+                    "fact_type": "order_contains_wip",
+                    "value_summary": "production_order:PO-1 order_contains_wip wip:WIP-1",
+                    "required_for_boundary": False,
+                    "freshness_state": "fresh",
+                    "as_of": "2026-08-01T00:00:00+09:00",
+                    "limitation_state": None,
+                }
+            ],
+            "selected_relation_paths": [
+                {
+                    "candidate_id": "relationship:order_contains_wip:PO-1->WIP-1",
+                    "source_ref": "fixture:production#/wip/0",
+                    "relation_path": ["order_contains_wip"],
+                }
+            ],
+            "rejected_basis": [
+                {
+                    "candidate_id": "fact:fixture:production#/alternative_resources/0",
+                    "candidate_type": "fact",
+                    "source_ref": "fixture:production#/alternative_resources/0",
+                    "source_version": "production-context-v1",
+                    "domain": "production",
+                    "relation_path": ["operation_has_alternative_resource"],
+                    "fact_type": "alternative_resources",
+                    "value_summary": "alternative_resources: resource_id=CNC-03",
+                    "required_for_boundary": False,
+                    "freshness_state": "fresh",
+                    "as_of": "2026-08-01T00:00:00+09:00",
+                    "limitation_state": None,
+                    "rejected_reason": "outside_selection_budget",
+                }
+            ],
+            "limitations": [],
+            "source_ref_coverage": 1.0,
+        },
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["evidence_context"]["relation_schema_version"] == "operational-relation-schema-v1"
+    assert payload["evidence_context"]["selection_policy_version"] == "operational-evidence-selection-v0.1"
+    assert payload["evidence_context"]["decision_as_of"] == "2026-08-01T00:00:00+09:00"
+    assert payload["evidence_context"]["max_source_lag_seconds"] == 60.0
+    assert payload["evidence_context"]["temporal_status"] == "aligned"
+    assert payload["evidence_context"]["selected_basis"][0]["candidate_type"] == "relationship"
+    assert payload["evidence_context"]["selected_basis"][0]["as_of"] == "2026-08-01T00:00:00+09:00"
+    assert payload["evidence_context"]["selected_relation_paths"][0]["relation_path"] == ["order_contains_wip"]
+    assert payload["evidence_context"]["rejected_basis"][0]["rejected_reason"] == "outside_selection_budget"
+
+
 def test_service_rejects_mismatched_result_artifact_asset() -> None:
     artifact = json.loads(json.dumps(ARTIFACT))
     artifact["asset_id"] = "CMP-OTHER"
@@ -938,3 +1013,16 @@ def test_composer_preserves_empty_recommendation_as_gap_without_synthesizing_act
     assert "evidence_payload.recommended_actions" in gap_fields
     assert "recommended_actions" not in payload
     assert "available_actions" not in payload
+
+
+def test_read_adapter_distinguishes_prediction_payload_from_broken_artifact(monkeypatch):
+    from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
+    from app.diagnosis.evidence import validate_product_result_artifact
+
+    adapter = PostgreSQLAssetDetailReadAdapter(None, validate_artifact=validate_product_result_artifact)
+    payload = {"contract_version": "1.0", "source_prediction_id": "canonical-1"}
+    monkeypatch.setattr(adapter, "_latest_row", lambda **kwargs: {"prediction_result_payload": payload})
+    assert adapter.latest_result_artifact() is None
+    payload["artifact_type"] = "product_result"
+    with pytest.raises(ValueError, match="schema validation failed"):
+        adapter.latest_result_artifact()

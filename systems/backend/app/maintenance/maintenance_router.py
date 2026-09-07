@@ -121,7 +121,7 @@ def create_maintenance_router(
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(manager_command),
+        principal: Any = Depends(engineer_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -132,7 +132,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "process_manager")
+        _require_product_role(principal, project_id, "process_engineer")
         return _execute(
             lambda: service.request_inspection(
                 organization_id=principal.organization_id,
@@ -153,7 +153,7 @@ def create_maintenance_router(
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(engineer_command),
+        principal: Any = Depends(technician_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -164,7 +164,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "process_engineer")
+        _require_product_role(principal, project_id, "maintenance_technician")
         return _execute(
             lambda: service.transition_inspection(
                 organization_id=principal.organization_id,
@@ -186,7 +186,7 @@ def create_maintenance_router(
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(engineer_command),
+        principal: Any = Depends(technician_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -197,7 +197,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "process_engineer")
+        _require_product_role(principal, project_id, "maintenance_technician")
         return _execute(
             lambda: service.transition_inspection(
                 organization_id=principal.organization_id,
@@ -220,7 +220,7 @@ def create_maintenance_router(
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(engineer_command),
+        principal: Any = Depends(technician_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -231,7 +231,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "process_engineer")
+        _require_product_role(principal, project_id, "maintenance_technician")
         return _execute(
             lambda: service.complete_inspection(
                 organization_id=principal.organization_id,
@@ -254,7 +254,7 @@ def create_maintenance_router(
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(manager_command),
+        principal: Any = Depends(technician_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -265,7 +265,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "process_manager")
+        _require_product_role(principal, project_id, "maintenance_technician")
         return _execute(
             lambda: service.create_manual_recommendation(
                 organization_id=principal.organization_id,
@@ -312,7 +312,7 @@ def create_maintenance_router(
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(manager_command),
+        principal: Any = Depends(technician_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -323,7 +323,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "process_manager")
+        _require_product_role(principal, project_id, "maintenance_technician")
         return _execute(
             lambda: service.calculate_maintenance_cost(
                 organization_id=principal.organization_id,
@@ -393,7 +393,7 @@ def create_maintenance_router(
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(manager_command),
+        principal: Any = Depends(technician_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -404,7 +404,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "process_manager")
+        _require_product_role(principal, project_id, "maintenance_technician")
         return _execute(
             lambda: service.decide_manual_recommendation(
                 organization_id=principal.organization_id,
@@ -427,7 +427,7 @@ def create_maintenance_router(
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(manager_command),
+        principal: Any = Depends(technician_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -438,7 +438,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "process_manager")
+        _require_product_role(principal, project_id, "maintenance_technician")
         return _execute(
             lambda: service.approve_maintenance_work_order(
                 organization_id=principal.organization_id,
@@ -529,7 +529,7 @@ def create_maintenance_router(
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
-        principal: Any = Depends(technician_command),
+        principal: Any = Depends(engineer_command),
         _: None = Depends(require_csrf),
         identity: Any = Depends(get_identity_service),
         service: MaintenanceLoopService = Depends(get_maintenance_service),
@@ -540,7 +540,7 @@ def create_maintenance_router(
             project_id=project_id,
             workspace_id=workspace_id,
         )
-        _require_product_role(principal, project_id, "maintenance_technician")
+        _require_product_role(principal, project_id, "process_engineer")
         return _execute(
             lambda: service.request_maintenance_replay(
                 organization_id=principal.organization_id,

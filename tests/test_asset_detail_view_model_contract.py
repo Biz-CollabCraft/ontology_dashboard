@@ -148,7 +148,7 @@ def test_schema_keeps_feature_history_provenance_at_envelope_only() -> None:
     properties = schema()["properties"]
 
     assert set(properties["evidence"]["properties"]["source_kind"]["enum"]) == SOURCE_KIND_VALUES
-    assert set(properties["risk_series"]["items"]["properties"]["source_kind"]["enum"]) == SOURCE_KIND_VALUES
+    assert set(properties["risk_series"]["items"]["properties"]["source_kind"]["enum"]) == SOURCE_KIND_VALUES | {"live_result", "derived_replay_prediction"}
     assert set(properties["data_status"]["properties"]["source"]["enum"]) == {"canonical", "fallback"}
 
     feature_properties = properties["features"]["items"]["properties"]

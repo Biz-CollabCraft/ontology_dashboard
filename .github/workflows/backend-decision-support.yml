@@ -1,0 +1,54 @@
+name: backend-decision-support
+on:
+  pull_request:
+    paths: ['systems/backend/**', 'contracts/**', 'data/fixtures/**', 'scripts/**', 'tests/**', '.github/workflows/backend-decision-support.yml']
+  push:
+    branches: [main]
+    paths: ['systems/backend/**', 'contracts/**', 'data/fixtures/**', 'scripts/**', 'tests/**', '.github/workflows/backend-decision-support.yml']
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: runner
+          POSTGRES_PASSWORD: test-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U runner"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      APP_ENV: test
+      TEST_POSTGRES_USER: runner
+      TEST_POSTGRES_PASSWORD: test-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: python -m pip install -e './systems/backend[dev,postgres]'
+      - run: pg_isready -h 127.0.0.1 -U runner
+      - run: >-
+          python -m pytest -q
+          tests/test_operational_context_read.py
+          tests/test_operational_context_deployment.py
+          tests/test_operational_context_evolution.py
+          tests/test_operational_context_repository.py
+          tests/test_operational_context_import_cli.py
+          tests/test_operations_presentation_readiness.py
+          tests/test_materialization_lease_fencing.py
+          tests/test_operational_decision_api.py
+          tests/test_operational_decision_postgresql.py
+          tests/test_predictive_maintenance_postgresql.py
+          tests/test_asset_detail_view_model_composer.py
+          tests/test_asset_detail_view_model_contract.py
+          tests/test_verify_contract_vectors.py
+          tests/test_agent_review_packet_golden.py
+          tests/test_agent_review_summary_contract.py
+          tests/test_operations.py
+          tests/test_operational_evidence_selection.py
+          tests/eval

@@ -33,7 +33,7 @@ ASSET_ID = "CNC-S04-L02-03"
 PARAMS = {
     "project_id": "manufacturing-demo-project",
     "workspace_id": "manufacturing-demo",
-    "evidence_snapshot_id": "ARTIFACT-GS-004",
+    "evidence_snapshot_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
     "decision_as_of": "2026-08-01T00:00:00+09:00",
     "role": "process_manager",
 }
@@ -160,6 +160,19 @@ def test_materialize_requires_csrf_and_permission(api_client) -> None:
     login(client, "engineer@ontology.local", "Engineer!2026")
     denied = client.post(url, params=PARAMS, headers=csrf(client))
     assert denied.status_code == 403
+
+
+@pytest.mark.parametrize('changed', [
+    {'evidence_snapshot_id': 'NONEXISTENT-SNAPSHOT'},
+    {'risk_status': 'invented-risk'},
+    {'decision_as_of': '2026-07-31T00:00:00+09:00'},
+])
+def test_brief_rejects_untrusted_evidence_before_any_write(api_client, changed):
+    client, service = api_client
+    login(client, 'manager@ontology.local', 'Manager!2026')
+    response = client.post(f'/api/objects/{ASSET_ID}/decision-support-brief', params={**PARAMS, **changed}, headers=csrf(client))
+    assert response.status_code == 409, response.text
+    assert service.workflow_runs(project_id=PARAMS['project_id'], asset_id=ASSET_ID, status=None, limit=10) == []
 
 
 def test_audit_runs_are_admin_only_and_read_only(api_client) -> None:

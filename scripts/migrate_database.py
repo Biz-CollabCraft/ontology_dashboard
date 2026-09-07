@@ -21,7 +21,7 @@ def main() -> None:
         return
 
     applied = migrate(args.database)
-    print({"database": args.database, "applied": applied, "count": len(applied)})
+    print({"dialect": "postgresql" if args.database.startswith("postgresql") else "sqlite", "applied": applied, "count": len(applied)})
 
 
 if __name__ == "__main__":
