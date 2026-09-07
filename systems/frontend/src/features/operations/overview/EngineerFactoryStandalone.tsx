@@ -7,6 +7,8 @@ import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 import type { OpenInspectionWorkOrderReadModel } from "../../../api";
+import { requestInspectionWorkOrder } from "../../../api";
+import { loadOperationsAssetDetail } from "../api/operationsApi";
 import {
   displayAssetName,
   displayAssetShortName,
@@ -309,6 +311,10 @@ export function EngineerFactoryStandalone({
   const [sensorDetailOpen, setSensorDetailOpen] = useState(false);
   const [expandedSensor, setExpandedSensor] = useState<string | null>(null);
   const [directiveAssetId, setDirectiveAssetId] = useState<string | null>(null);
+  const [maintenanceRequestBusy, setMaintenanceRequestBusy] = useState(false);
+  const [maintenanceRequestMessage, setMaintenanceRequestMessage] = useState<
+    string | null
+  >(null);
   const [zoneFilter, setZoneFilter] = useState("all");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -402,9 +408,52 @@ export function EngineerFactoryStandalone({
     selected?.topFactors
       .filter((factor) => typeof factor.value === "number")
       .slice(0, 4) ?? [];
-  const selectedAcknowledged = selected
-    ? acknowledgedAlerts.has(alertKey(selected))
-    : false;
+  const selectedMaintenanceDirective = selected
+    ? maintenanceDirectives.find((item) => item.asset_id === selected.assetId)
+    : null;
+
+  async function requestMaintenanceApproval() {
+    if (!selected?.eventId || selectedMaintenanceDirective) return;
+    setMaintenanceRequestBusy(true);
+    setMaintenanceRequestMessage(null);
+    try {
+      const detail = await loadOperationsAssetDetail(
+        model.context.projectId,
+        model.context.workspaceId,
+        selected.assetId,
+        selected.eventId,
+        model.context.datasetVersionId,
+        "24h",
+      );
+      await requestInspectionWorkOrder({
+        projectId: model.context.projectId,
+        workspaceId: model.context.workspaceId,
+        eventId: selected.eventId,
+        snapshotBasis: detail.snapshot_basis,
+        idempotencyKey: [
+          "engineer-maintenance-approval",
+          selected.eventId,
+          detail.snapshot_basis.artifact_id,
+        ]
+          .join(":")
+          .replace(/[^A-Za-z0-9_.:-]/g, "_")
+          .slice(0, 200),
+      });
+      setDirectiveAssetId(selected.assetId);
+      setMaintenanceRequestMessage(
+        "정비 승인 요청을 등록했습니다. 보전팀 승인 절차가 시작됩니다.",
+      );
+      onRefresh();
+    } catch (reason) {
+      setMaintenanceRequestMessage(
+        reason instanceof Error
+          ? reason.message
+          : "정비 승인 요청을 등록하지 못했습니다.",
+      );
+    } finally {
+      setMaintenanceRequestBusy(false);
+    }
+  }
 
   return (
     <main className="engineer-lite-board">
@@ -948,18 +997,19 @@ export function EngineerFactoryStandalone({
                   <div className="engineer-detail-actions">
                     <button
                       type="button"
-                      className={selectedAcknowledged ? "is-complete" : ""}
-                      onClick={() =>
-                        setAcknowledgedAlerts((current) => {
-                          const next = new Set(current);
-                          const key = alertKey(selected);
-                          if (next.has(key)) next.delete(key);
-                          else next.add(key);
-                          return next;
-                        })
+                      className="is-primary"
+                      disabled={
+                        maintenanceRequestBusy ||
+                        Boolean(selectedMaintenanceDirective) ||
+                        !selected.eventId
                       }
+                      onClick={() => void requestMaintenanceApproval()}
                     >
-                      {selectedAcknowledged ? "알림 확인됨" : "알림 확인"}
+                      {maintenanceRequestBusy
+                        ? "정비 승인 요청 중"
+                        : selectedMaintenanceDirective
+                          ? "정비 승인 요청됨"
+                          : "정비 승인 요청"}
                     </button>
                     <button
                       type="button"
@@ -991,6 +1041,11 @@ export function EngineerFactoryStandalone({
                         : "보전 점검 요청 연결 필요"}
                     </button>
                   </div>
+                  {maintenanceRequestMessage ? (
+                    <p className="engineer-maintenance-request-message">
+                      {maintenanceRequestMessage}
+                    </p>
+                  ) : null}
                   <dl>
                     <div>
                       <dt>상태</dt>
