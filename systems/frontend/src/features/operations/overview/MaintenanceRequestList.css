@@ -1,3 +1,4 @@
+.maintenance-approval-list{overflow:hidden}.maintenance-approval-list>div{flex:1;overflow-y:auto;overscroll-behavior:contain}.maintenance-request-item .maintenance-approval-detail{grid-column:1/-1;overflow-wrap:anywhere}.maintenance-approval-list>header{flex-wrap:wrap;gap:8px}
 .role-work-queue .maintenance-request-item{display:grid;width:100%;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;align-items:center;padding:12px;border:1px solid var(--operations-border-strong);border-left:5px solid var(--operations-accent);background:var(--operations-surface);color:var(--ef-text);text-align:left;cursor:pointer}
 .role-work-queue .maintenance-request-item:hover,.role-work-queue .maintenance-request-item[aria-pressed="true"]{background:#edf5ff;border-color:#4f8fd6}
 .role-work-queue .maintenance-request-item:focus-visible{outline:2px solid #2166d5;outline-offset:-2px}

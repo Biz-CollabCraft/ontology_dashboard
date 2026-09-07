@@ -1,4 +1,5 @@
 import { LogOut } from "lucide-react";
+import { MaintenanceApprovalList } from "./MaintenanceApprovalList";
 import "./MaintenanceRequestList.css";
 import type { ComponentProps } from "react";
 import { ProductionRequestBoard } from "./ProductionRequestBoard";
@@ -175,10 +176,10 @@ function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, w
         </div> : selectedAsset ? <div className="role-production-center-stack"><section className="role-production-risk-preview"><header><div><strong>위험 점수 추세 · 최근 관측</strong><span>{selectedAsset.displayName} · {selectedAsset.assetId}</span></div><b className={`tone-${tone(selectedAsset)}`}>{pct(selectedAsset.failureProbability)}</b></header><svg viewBox="0 0 100 100" preserveAspectRatio="none"><rect y="0" width="100" height="38" className="risk-zone"/><rect y="38" width="100" height="20" className="attention-zone"/><rect y="58" width="100" height="42" className="normal-zone"/><line x1="0" x2="100" y1="38" y2="38"/><line x1="0" x2="100" y1="58" y2="58"/><polyline points={seriesPoints(selectedAsset, detail)}/></svg><footer><span>이전 관측</span><b>현재 상태 {statusLabel(selectedAsset)}</b><span>현재</span></footer></section><section className="role-production-result-summary"><header><strong>{selectedAsset.displayName} 현황 요약</strong><span>{detailLoading ? "상세 정보 확인 중" : "현재 관측 기준"}</span></header><p><b>{statusLabel(selectedAsset)}</b> 상태의 설비를 생산 계획과 대조합니다.</p><dl><div><dt>예상 고장 영향</dt><dd>{failureLabel(selectedAsset.predictedFailureType)}</dd></div><div><dt>예상 생산 손실</dt><dd>{detail?.operation_context.event_impact?.estimated_lost_units != null ? `${detail.operation_context.event_impact.estimated_lost_units.toLocaleString("ko-KR")}개` : "정보 없음"}</dd></div><div><dt>예상 정지 시간</dt><dd>{minutes(selectedAsset.estimatedDowntimeMinutes)}</dd></div></dl>{detailError ? <small>상세 영향 연결을 확인해 주세요.</small> : null}</section></div> : <p className="role-empty-state">왼쪽 우선순위에서 설비를 선택하면 위험 점수 추세가 표시됩니다.</p>}
       </section>
 
-      <aside className="engineer-factory-card role-next-action">
+      {persona === "maintenance" ? <MaintenanceApprovalList projectId={projectId} workspaceId={workspaceId} workOrders={workOrders} workOrderError={workOrderError} selectedId={selectedWorkOrder?.work_order_id} onSelect={setSelectedWorkOrderId}/> : <aside className="engineer-factory-card role-next-action">
         <header><strong>다음 행동</strong><span>역할 책임</span></header>
-        {persona === "maintenance" ? <><b>착수 조건 확인</b><ul><li>부품과 인력</li><li>작업 허가</li><li>생산관리자 일정 확인</li><li>결과 기록 항목</li></ul><p>접수 → 생산 협의 요청 → 회신 확인 → 작업 시작 → 결과 기록</p></> : <><ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="production" /><button type="button" disabled={!selectedAsset} onClick={() => setDetailOpen(true)}>{selectedAsset ? "선택 설비 영향 확인" : "설비를 먼저 선택하세요"}</button></>}
-      </aside>
+        <ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="production" /><button type="button" disabled={!selectedAsset} onClick={() => setDetailOpen(true)}>{selectedAsset ? "선택 설비 영향 확인" : "설비를 먼저 선택하세요"}</button>
+      </aside>}
     </section>
     {persona === "production" && selectedAsset && detailOpen ? <div className="role-impact-overlay" onClick={() => setDetailOpen(false)}><aside className="role-impact-drawer" onClick={(event) => event.stopPropagation()} aria-label={`${selectedAsset.displayName} 생산 영향 상세`}>
       <header><div><strong>{selectedAsset.displayName}</strong><span>{selectedAsset.assetId} · 생산 영향 검토</span></div><button type="button" onClick={() => setDetailOpen(false)} aria-label="생산 영향 상세 닫기">×</button></header>
