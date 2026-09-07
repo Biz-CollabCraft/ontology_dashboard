@@ -205,6 +205,7 @@ export default function EngineerFactoryApplication({
         workOrders={maintenanceDirectives}
         workOrderError={maintenanceDirectiveError}
         currentUserId={user?.user_id ?? ""}
+        currentUser={{ displayName: user?.display_name ?? "사용자", title: persona === "production" ? "생산관리자" : "보전팀" }}
         onRefresh={refresh}
         onLogout={signOut}
       />

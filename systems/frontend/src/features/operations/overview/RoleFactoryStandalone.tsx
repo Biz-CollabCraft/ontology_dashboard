@@ -4,6 +4,7 @@ import type { AssetDetailViewModel, OperationsAsset, OperationsBootstrapModel } 
 import { loadOperationsAssetDetail } from "../api/operationsApi";
 import { type OpenInspectionWorkOrderReadModel } from "../../../api";
 import { InspectionWorkOrderEditor } from "./InspectionWorkOrderEditor";
+import { OperationsAccountBadge } from "./OperationsAccountBadge";
 import { displayEquipmentSensorLabel, FAILURE_TYPE_LABELS } from "../displayLabels";
 
 type Persona = "maintenance" | "production";
@@ -64,8 +65,9 @@ function failureLabel(value: string) {
   return FAILURE_TYPE_LABELS[value] ?? (value ? value.replaceAll("_", " ") : "원인 확인 필요");
 }
 
-export function RoleFactoryStandalone({ projectId, workspaceId, persona, model, workOrders, workOrderError, currentUserId, onRefresh, onLogout }: {
+export function RoleFactoryStandalone({ projectId, workspaceId, persona, model, workOrders, workOrderError, currentUserId, currentUser, onRefresh, onLogout }: {
   currentUserId: string;
+  currentUser: { displayName: string; title: string };
   projectId: string;
   workspaceId: string;
   persona: Persona;
@@ -115,7 +117,7 @@ export function RoleFactoryStandalone({ projectId, workspaceId, persona, model, 
   return <main className={`engineer-lite-board role-factory-board role-factory-${persona}`}>
     <header className="engineer-factory-header">
       <div><strong>{title}</strong><span>{model.context.workspaceName} · {subtitle}</span></div>
-      <div className="engineer-factory-live"><i /><b>실시간 연결</b><span>{model.assets.length}대 기준</span><button type="button" onClick={onRefresh}>↻ 새로고침</button><button type="button" onClick={() => void onLogout()}><LogOut size={14} /> 로그아웃</button></div>
+      <div className="engineer-factory-live"><i /><b>실시간 연결</b><span>{model.assets.length}대 기준</span><button type="button" onClick={onRefresh}>↻ 새로고침</button><OperationsAccountBadge {...currentUser} /><button type="button" onClick={() => void onLogout()}><LogOut size={14} /> 로그아웃</button></div>
     </header>
 
     <section className="engineer-factory-kpis">

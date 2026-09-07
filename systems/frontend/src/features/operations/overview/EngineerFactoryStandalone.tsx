@@ -6,6 +6,7 @@ import type {
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
+import { OperationsAccountBadge } from "./OperationsAccountBadge";
 import type { OpenInspectionWorkOrderReadModel } from "../../../api";
 import { requestInspectionWorkOrder } from "../../../api";
 import {
@@ -485,10 +486,7 @@ export function EngineerFactoryStandalone({
             ↻ 새로고침
           </button>
           {onLogout ? (
-            <span className="engineer-current-user">
-              <b>{currentUser?.displayName ?? "사용자"}</b>
-              <small>{currentUser?.title ?? "설비 엔지니어"}</small>
-            </span>
+            <OperationsAccountBadge displayName={currentUser?.displayName ?? "사용자"} title={currentUser?.title ?? "설비 엔지니어"} />
           ) : null}
           {onLogout ? (
             <button
