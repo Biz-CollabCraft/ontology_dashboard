@@ -351,6 +351,12 @@ export function EngineerFactoryStandalone({
     [...model.assets].sort(
       (a, b) => (b.failureProbability ?? -1) - (a.failureProbability ?? -1),
     )[0] ?? null;
+  const riskEquipment = [...model.assets]
+    .filter((asset) => asset.status !== "normal")
+    .sort(
+      (a, b) =>
+        (b.failureProbability ?? -1) - (a.failureProbability ?? -1),
+    );
   const riskSelected =
     (maintenanceDirectives.some((item) => item.asset_id === directiveAssetId)
       ? model.assets.find((asset) => asset.assetId === directiveAssetId)
@@ -1078,8 +1084,8 @@ export function EngineerFactoryStandalone({
               <section className="engineer-detail-requests">
                 <header>
                   <div>
-                    <strong>정비 요청 목록</strong>
-                    <span>먼저 접수된 순서</span>
+                    <strong>정비 승인 목록</strong>
+                    <span>승인 상태 확인</span>
                   </div>
                   <span
                     className={`engineer-directive-connection ${maintenanceDirectiveError ? "is-offline" : "is-online"}`}
@@ -1132,8 +1138,52 @@ export function EngineerFactoryStandalone({
                   ) : (
                     <p className="engineer-directive-empty">
                       {maintenanceDirectiveError
-                        ? "정비 요청 목록을 불러오지 못했습니다"
-                        : "현재 정비 요청이 없습니다"}
+                        ? "정비 승인 목록을 불러오지 못했습니다"
+                        : "현재 승인 대기 정비가 없습니다"}
+                    </p>
+                  )}
+                </div>
+              </section>
+              <section className="engineer-detail-requests engineer-detail-risk-list">
+                <header>
+                  <div>
+                    <strong>위험 장비 목록</strong>
+                    <span>위험 점수 높은 순</span>
+                  </div>
+                  <span>{riskEquipment.length}대</span>
+                </header>
+                <div>
+                  {riskEquipment.length ? (
+                    riskEquipment.map((asset, index) => (
+                      <button
+                        type="button"
+                        key={asset.assetId}
+                        className={
+                          asset.assetId === selected.assetId
+                            ? "is-selected"
+                            : ""
+                        }
+                        onClick={() => {
+                          setDirectiveAssetId(null);
+                          setExpandedSensor(null);
+                          onSelectAsset(asset.assetId, asset.eventId);
+                        }}
+                      >
+                        <span>
+                          <b>{index + 1}위</b>
+                          <strong
+                            className={`engineer-risk-score tone-${tone(asset.status)}`}
+                          >
+                            {formatProbability(asset.failureProbability)}
+                          </strong>
+                        </span>
+                        <strong>{displayAssetName(asset)}</strong>
+                        <small>{asset.assetId}</small>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="engineer-directive-empty">
+                      현재 위험 장비가 없습니다
                     </p>
                   )}
                 </div>
