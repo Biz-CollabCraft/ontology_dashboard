@@ -560,6 +560,12 @@ class _RuntimeThenDemoEvidenceProjection:
         projection = self.runtime.event_evidence_projection(**scope)
         if projection is not None:
             return projection
+        event_id = str(scope.get("event_id") or "")
+        if event_id.startswith("FILE#"):
+            from app.diagnosis.runtime_router import filesystem_event_evidence_projection
+            projection = filesystem_event_evidence_projection(event_id)
+            if projection is not None:
+                return projection
         if app_environment() not in {"development", "demo", "test"}:
             return None
         if (
@@ -567,10 +573,26 @@ class _RuntimeThenDemoEvidenceProjection:
             or scope.get("workspace_id") != MANUFACTURING_WORKSPACE
         ):
             return None
-        event_id = str(scope.get("event_id") or "")
         try:
             if self.demo.project_id_for_event(event_id) != scope.get("project_id"):
                 return None
+            return self.demo.event_evidence_projection(event_id)
+        except KeyError:
+            return None
+
+
+class _FilesystemThenDemoEvidenceProjection:
+    def __init__(self, demo: ManufacturingPredictiveMaintenanceService) -> None:
+        self.demo = demo
+
+    def event_evidence_projection(self, **scope: Any) -> dict[str, Any] | None:
+        event_id = str(scope.get("event_id") or "")
+        if event_id.startswith("FILE#") and scope.get("project_id") == "manufacturing-demo-project" and scope.get("workspace_id") == MANUFACTURING_WORKSPACE:
+            from app.diagnosis.runtime_router import filesystem_event_evidence_projection
+            projection = filesystem_event_evidence_projection(event_id)
+            if projection is not None:
+                return projection
+        try:
             return self.demo.event_evidence_projection(event_id)
         except KeyError:
             return None
@@ -604,7 +626,7 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
         # Do not initialize the PostgreSQL-only live runtime merely to list or
         # advance inspection work orders. The manufacturing service already
         # exposes the same evidence projection boundary for this scope.
-        event_evidence_query = get_service()
+        event_evidence_query = _FilesystemThenDemoEvidenceProjection(get_service())
         replay_session_query = None
     return MaintenanceLoopService(
         repository,

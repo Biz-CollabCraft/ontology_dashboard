@@ -8,7 +8,6 @@ import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 import type { OpenInspectionWorkOrderReadModel } from "../../../api";
 import { requestInspectionWorkOrder } from "../../../api";
-import { loadOperationsAssetDetail } from "../api/operationsApi";
 import {
   displayAssetName,
   displayAssetShortName,
@@ -312,10 +311,9 @@ export function EngineerFactoryStandalone({
   const [expandedSensor, setExpandedSensor] = useState<string | null>(null);
   const [directiveAssetId, setDirectiveAssetId] = useState<string | null>(null);
   const [maintenanceRequestBusy, setMaintenanceRequestBusy] = useState(false);
-  const [maintenanceRequestMessage, setMaintenanceRequestMessage] = useState<
-    string | null
-  >(null);
   const [maintenanceRequestFailed, setMaintenanceRequestFailed] =
+    useState(false);
+  const [maintenanceRequestSucceeded, setMaintenanceRequestSucceeded] =
     useState(false);
   const [zoneFilter, setZoneFilter] = useState("all");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
@@ -362,8 +360,7 @@ export function EngineerFactoryStandalone({
   const riskEquipment = [...model.assets]
     .filter((asset) => asset.status !== "normal")
     .sort(
-      (a, b) =>
-        (b.failureProbability ?? -1) - (a.failureProbability ?? -1),
+      (a, b) => (b.failureProbability ?? -1) - (a.failureProbability ?? -1),
     );
   const riskSelected =
     (maintenanceDirectives.some((item) => item.asset_id === directiveAssetId)
@@ -417,41 +414,31 @@ export function EngineerFactoryStandalone({
   async function requestMaintenanceApproval() {
     if (!selected?.eventId || selectedMaintenanceDirective) return;
     setMaintenanceRequestBusy(true);
-    setMaintenanceRequestMessage(null);
     setMaintenanceRequestFailed(false);
+    setMaintenanceRequestSucceeded(false);
     try {
-      const detail = await loadOperationsAssetDetail(
-        model.context.projectId,
-        model.context.workspaceId,
-        selected.assetId,
-        selected.eventId,
-        model.context.datasetVersionId,
-        "24h",
-      );
+      if (!selected.maintenanceSnapshotBasis) {
+        throw new Error("maintenance snapshot basis unavailable");
+      }
       await requestInspectionWorkOrder({
         projectId: model.context.projectId,
         workspaceId: model.context.workspaceId,
         eventId: selected.eventId,
-        snapshotBasis: detail.snapshot_basis,
+        snapshotBasis: selected.maintenanceSnapshotBasis,
         idempotencyKey: [
           "engineer-maintenance-approval",
           selected.eventId,
-          detail.snapshot_basis.artifact_id,
+          selected.maintenanceSnapshotBasis.artifact_id,
         ]
           .join(":")
           .replace(/[^A-Za-z0-9_.:-]/g, "_")
           .slice(0, 200),
       });
       setDirectiveAssetId(selected.assetId);
-      setMaintenanceRequestMessage(
-        "정비 승인 요청을 등록했습니다. 보전팀 승인 절차가 시작됩니다.",
-      );
+      setMaintenanceRequestSucceeded(true);
       onRefresh();
     } catch {
       setMaintenanceRequestFailed(true);
-      setMaintenanceRequestMessage(
-        "정비 승인 요청 연결을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
-      );
     } finally {
       setMaintenanceRequestBusy(false);
     }
@@ -1003,9 +990,13 @@ export function EngineerFactoryStandalone({
                       <i />
                       {maintenanceRequestBusy
                         ? "연결 확인 중"
-                        : maintenanceDirectiveError || maintenanceRequestFailed
-                          ? "요청 연결 확인 필요"
-                          : "요청 연결 정상"}
+                        : selectedMaintenanceDirective ||
+                            maintenanceRequestSucceeded
+                          ? "요청 등록 완료"
+                          : maintenanceDirectiveError ||
+                              maintenanceRequestFailed
+                            ? "요청 연결 확인 필요"
+                            : "요청 연결 정상"}
                     </span>
                   </div>
                   <div className="engineer-detail-actions">
@@ -1055,13 +1046,6 @@ export function EngineerFactoryStandalone({
                         : "보전 점검 요청 연결 필요"}
                     </button>
                   </div>
-                  {maintenanceRequestMessage ? (
-                    <p
-                      className={`engineer-maintenance-request-message ${maintenanceRequestFailed ? "is-error" : "is-success"}`}
-                    >
-                      {maintenanceRequestMessage}
-                    </p>
-                  ) : null}
                   <dl>
                     <div>
                       <dt>상태</dt>

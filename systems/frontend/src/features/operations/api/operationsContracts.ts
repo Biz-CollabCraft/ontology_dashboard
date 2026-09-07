@@ -81,7 +81,8 @@ export type OperationsDecision =
 
 export type OperationsSourceMode =
   "canonical-runtime" | "gold-fixture-fallback";
-export type OperationsSensorWindowId = "1h" | "3h" | "6h" | "12h" | "24h" | "7d" | "30d";
+export type OperationsSensorWindowId =
+  "1h" | "3h" | "6h" | "12h" | "24h" | "7d" | "30d";
 export type OperationsSensorWindowCoverage =
   "complete" | "partial" | "empty" | "unknown";
 
@@ -149,6 +150,7 @@ export interface OperationsAsset {
   recommendedDecision: OperationsDecision;
   observedAt: string | null;
   eventId: string | null;
+  maintenanceSnapshotBasis?: EvidenceSnapshotBasisWire | null;
   topFactors: OperationsFactor[];
   sensorHistory?: Array<{
     feature: string;
@@ -1022,7 +1024,6 @@ export interface OperationsEventDetailModel {
   };
   warnings: string[];
 }
-
 
 export interface AssetDetailEvidenceContextBasisWire {
   candidate_id: string;

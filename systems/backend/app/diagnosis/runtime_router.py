@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import hmac
+import hashlib
 import json
 import os
 from collections import defaultdict
@@ -28,6 +29,10 @@ from app.diagnosis.runtime_schema import (
     DatasetVersionSelectionRequest,
     ReplayControlRequest,
     ReplayStartRequest,
+)
+from app.diagnosis.evidence_projection import (
+    evidence_snapshot_basis_from_artifact,
+    product_result_artifact_to_event_evidence_projection,
 )
 from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
 from app.diagnosis.ports import ALLOWED_DERIVED_MEASURES
@@ -170,6 +175,113 @@ def _latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]], list[
     raise HTTPException(status_code=503, detail="완성된 gen_data 관측 틱을 찾지 못했습니다.")
 
 
+def _filesystem_event_artifact(
+    *, run_id: str, observed_at: str, record: dict[str, Any], event_id: str
+) -> dict[str, Any]:
+    asset_id = str(record["asset_id"])
+    asset_type = str(record.get("asset_type") or "equipment")
+    score = _risk_from_file_record(record)
+    status_grade = _risk_status(score)
+    action_id = "review_shutdown" if status_grade == "critical" else "request_inspection"
+    factors = _measurement_factors(record)
+    source_body = json.dumps(
+        {"event_id": event_id, "record": record},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    source_sha256 = hashlib.sha256(source_body).hexdigest()
+    artifact_id = f"FILE-ART-{source_sha256[:24]}"
+    sensors = {
+        factor["feature"]: {
+            "display_name": factor["label"],
+            "current": factor["value"],
+            "window_mean": factor["value"],
+            "unit": factor.get("unit") or "",
+            "z_score": None,
+            "basis": {"source": "gen_data filesystem observation"},
+        }
+        for factor in factors
+    }
+    top_factors = [
+        {
+            "evidence_field_id": f"measurements.{factor['feature']}",
+            "feature": factor["feature"],
+            "display_name": factor["label"],
+            "value": factor["value"],
+            "unit": factor.get("unit") or "",
+            "normal_range": "실시간 기준 범위",
+            "direction": factor["direction"],
+            "contribution": factor["contribution"],
+            "source_type": "observed",
+        }
+        for factor in factors
+    ]
+    return {
+        "artifact_id": artifact_id,
+        "artifact_type": "prediction_result",
+        "schema_version": "result-artifact-v1.0",
+        "event_id": event_id,
+        "asset_id": asset_id,
+        "asset_type": asset_type,
+        "observed_at": observed_at,
+        "generated_at": observed_at,
+        "failure_probability": score,
+        "threshold": 0.55,
+        "status_grade": status_grade,
+        "confidence": None,
+        "confidence_label": "unavailable",
+        "predicted_failure_type": str(record.get("branch_kind") or "live_sensor_anomaly"),
+        "recommended_action": {"action": action_id},
+        "top_factors": top_factors,
+        "source_sha256": source_sha256,
+        "policy_version": "filesystem-risk-policy-v1",
+        "model_mode": "filesystem_live",
+        "evidence_payload": {
+            "sensor_evidence": {"sensors": sensors},
+            "recommended_actions": [{"action_id": action_id, "label": "정비 승인 검토"}],
+            "source_fields": [factor["evidence_field_id"] for factor in top_factors],
+        },
+        "provenance": {
+            "dataset_version": run_id,
+            "model_version": str(record.get("generator_version") or "filesystem-risk-v1"),
+            "prediction_id": str(record.get("observation_id") or event_id),
+            "source_type": "filesystem_live_observation",
+            "evidence_payload_reference": f"gen_data://runs/{run_id}/source/sensor_records.jsonl#{record.get('observation_id', asset_id)}",
+            "source_sha256": source_sha256,
+            "canonical_source_mutated": False,
+        },
+        "lineage": {
+            "policy_version": "filesystem-risk-policy-v1",
+            "model_mode": "filesystem_live",
+            "sensor_source": "gen_data filesystem observation",
+            "source_sha256": source_sha256,
+        },
+    }
+
+
+def filesystem_event_evidence_projection(event_id: str) -> dict[str, Any] | None:
+    if not event_id.startswith("FILE#"):
+        return None
+    stream, latest_observed_at, records, complete_ticks = _latest_complete_file_tick()
+    run_id = stream.parents[1].name
+    ticks = complete_ticks or [(latest_observed_at, {str(item["asset_id"]): item for item in records})]
+    for observed_at, tick_records in reversed(ticks):
+        for record in tick_records.values():
+            candidate = f"FILE#{run_id}#{record.get('observation_id', record.get('asset_id'))}"
+            if candidate != event_id:
+                continue
+            artifact = _filesystem_event_artifact(
+                run_id=run_id, observed_at=observed_at, record=record, event_id=event_id
+            )
+            projection = product_result_artifact_to_event_evidence_projection(artifact)
+            projection["event_id"] = event_id
+            projection["evidence_id"] = f"EVD-{artifact['artifact_id']}"
+            projection["artifact_reference"]["event_id"] = event_id
+            return projection
+    return None
+
+
 def _filesystem_overview(project_id: str, workspace_id: str) -> dict[str, Any]:
     stream, observed_at, records, complete_ticks = _latest_complete_file_tick()
     run_id = stream.parents[1].name
@@ -187,6 +299,9 @@ def _filesystem_overview(project_id: str, workspace_id: str) -> dict[str, Any]:
         display_type = "CNC 가공기" if asset_type == "cnc" else "공기압축기"
         display_name = f"{cell} · {display_type} {asset_id.rsplit('-', 1)[-1]}"
         event_id = f"FILE#{run_id}#{record.get('observation_id', asset_id)}"
+        event_artifact = _filesystem_event_artifact(
+            run_id=run_id, observed_at=observed_at, record=record, event_id=event_id
+        )
         factor_definitions = {item["feature"]: item for item in _measurement_factors(record)}
         sensor_history = []
         for feature, factor in factor_definitions.items():
@@ -221,6 +336,10 @@ def _filesystem_overview(project_id: str, workspace_id: str) -> dict[str, Any]:
             "recommendedDecision": "request_inspection" if risk_status in {"critical", "warning"} else "continue_monitoring",
             "observedAt": observed_at,
             "eventId": event_id if risk_status != "normal" else None,
+            "maintenanceSnapshotBasis": (
+                evidence_snapshot_basis_from_artifact(event_artifact, event_id=event_id)
+                if risk_status != "normal" else None
+            ),
             "topFactors": _measurement_factors(record),
             "sensorHistory": sensor_history,
             "riskHistory": [{"observedAt": tick_at, "value": _risk_from_file_record(tick_records[asset_id])} for tick_at, tick_records in complete_ticks if asset_id in tick_records],
