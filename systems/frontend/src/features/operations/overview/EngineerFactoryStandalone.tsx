@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 import { OperationsAccountBadge } from "./OperationsAccountBadge";
 import { EngineerRequestProgress } from "./EngineerRequestProgress";
+import { orderEngineerSensors } from "./engineerSensorOrder";
 import type { OpenInspectionWorkOrderReadModel } from "../../../api";
 import { requestInspectionWorkOrder } from "../../../api";
 import {
@@ -1056,7 +1057,7 @@ export function EngineerFactoryStandalone({
               </section>
               <section className="engineer-drawer-sensors">
                 {selected.sensorHistory?.length ? (
-                  selected.sensorHistory.map((sensor) => {
+                  orderEngineerSensors(selected.assetId, selected.sensorHistory).map((sensor) => {
                     const latest = sensor.points.at(-1)?.value;
                     return (
                       <article
