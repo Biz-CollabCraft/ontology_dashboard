@@ -277,5 +277,6 @@ function ApprovalPanel({ item, name, projectId, workspaceId, requestedLoss, cost
   </div><div className="prb-action-buttons"><button type="button" onClick={onImpact}>선택 설비 영향 확인</button>
     <button type="button" className="prb-approve" disabled={!canApprove || busy || !schedule.trim() || !response.trim()} onClick={() => void submit("confirmed")}>{busy ? "저장 중…" : c?.status === "confirmed" ? "작업 승인 완료" : "작업 승인"}</button>
     {canApprove ? <button type="button" disabled={busy || !schedule.trim() || !response.trim()} onClick={() => void submit("changes_requested")}>재협의 요청</button> : null}
+    {canApprove && (!schedule.trim() || !response.trim()) ? <small role="status">위 검토 영역의 작업·정지 일정과 생산 대응·승인 근거를 입력하면 작업 승인 및 재협의 요청을 전송할 수 있습니다.</small> : null}
     <small>작업 승인은 생산 일정 확인입니다. 보전팀의 착수 조건 확인을 대체하지 않습니다.</small></div></>;
 }
