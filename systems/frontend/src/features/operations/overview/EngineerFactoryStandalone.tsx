@@ -328,22 +328,6 @@ export function EngineerFactoryStandalone({
   const [zoneFilter, setZoneFilter] = useState("all");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [unacknowledgedOnly, setUnacknowledgedOnly] = useState(false);
-  const [acknowledgedAlerts, setAcknowledgedAlerts] = useState<Set<string>>(
-    () => {
-      try {
-        return new Set(
-          JSON.parse(
-            window.localStorage.getItem(
-              "engineer.monitoring.acknowledged.v1",
-            ) ?? "[]",
-          ) as string[],
-        );
-      } catch {
-        return new Set();
-      }
-    },
-  );
 
   useEffect(() => {
     if (!sensorDetailOpen) return;
@@ -353,12 +337,6 @@ export function EngineerFactoryStandalone({
       document.body.style.overflow = previousOverflow;
     };
   }, [sensorDetailOpen]);
-  useEffect(() => {
-    window.localStorage.setItem(
-      "engineer.monitoring.acknowledged.v1",
-      JSON.stringify([...acknowledgedAlerts]),
-    );
-  }, [acknowledgedAlerts]);
   const selected =
     model.assets.find((asset) => asset.assetId === selectedAssetId) ??
     model.assets[0] ??
@@ -377,8 +355,6 @@ export function EngineerFactoryStandalone({
       ? model.assets.find((asset) => asset.assetId === directiveAssetId)
       : null) ?? highestRisk;
   const groups = new Map<string, OperationsAsset[]>();
-  const alertKey = (asset: OperationsAsset) =>
-    `${asset.assetId}:${asset.eventId ?? asset.observedAt ?? "current"}`;
   const matchesMonitoringCondition = (asset: OperationsAsset) => {
     const isCompressor =
       asset.assetType.toLowerCase().includes("compress") ||
@@ -387,10 +363,7 @@ export function EngineerFactoryStandalone({
       (zoneFilter === "all" || asset.line === zoneFilter) &&
       (equipmentFilter === "all" ||
         (equipmentFilter === "compressor" ? isCompressor : !isCompressor)) &&
-      (statusFilter === "all" || tone(asset.status) === statusFilter) &&
-      (!unacknowledgedOnly ||
-        (tone(asset.status) !== "normal" &&
-          !acknowledgedAlerts.has(alertKey(asset))))
+      (statusFilter === "all" || tone(asset.status) === statusFilter)
     );
   };
   const highlightedAssetCount = model.assets.filter(
@@ -580,21 +553,12 @@ export function EngineerFactoryStandalone({
             <option value="hold">확인 필요</option>
           </select>
         </label>
-        <label className="engineer-unread-filter">
-          <input
-            type="checkbox"
-            checked={unacknowledgedOnly}
-            onChange={(event) => setUnacknowledgedOnly(event.target.checked)}
-          />
-          <span>미확인 알림만</span>
-        </label>
         <button
           type="button"
           onClick={() => {
             setZoneFilter("all");
             setEquipmentFilter("all");
             setStatusFilter("all");
-            setUnacknowledgedOnly(false);
           }}
         >
           초기화
