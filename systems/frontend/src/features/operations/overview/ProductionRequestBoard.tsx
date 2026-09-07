@@ -1,4 +1,6 @@
-import { LogOut } from "lucide-react";
+import { LogOut, Printer } from "lucide-react";
+import { printProductionReport } from "./printProductionReport";
+import "./ProductionReportPrint.css";
 import { referenceEconomics } from "./referenceEconomics";
 import { ReferenceEconomicPanel } from "./ReferenceEconomicPanel";
 import { orderEngineerSensors } from "./engineerSensorOrder";
@@ -132,7 +134,6 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
         {selected ? <>
           <div className="prb-monitoring-stack">
             <RiskChart asset={asset} detail={detail} name={name}/>
-            <div className="prb-scroll prb-economic-reference"><ReferenceEconomicPanel assetId={selected.assetId} minutes={c?.request.downtime_minutes}/></div>
           </div>
         </> : <p className="prb-empty">정비 요청을 선택하면 해당 장비의 손익과 생산 영향을 표시합니다.</p>}
       </section>
@@ -144,7 +145,7 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
       </aside>
     </div>
     {selected && detailOpen ? <div className="prb-overlay" onClick={() => setDetailOpen(false)}><section role="dialog" aria-modal="true" aria-label={name + " 생산 영향 상세"} className="prb-dialog" tabIndex={-1} onKeyDown={e => { if (e.key === "Escape") setDetailOpen(false); }} onClick={e => e.stopPropagation()}>
-      <header><div><strong>{name} · 개별 영향 확인</strong><span>{selected.assetId} · #{selected.id.slice(-8)}</span></div><button type="button" autoFocus aria-label="생산 영향 상세 닫기" onClick={() => setDetailOpen(false)}>×</button></header>
+      <header><div><strong>{name} · 개별 영향 확인</strong><span>{selected.assetId} · #{selected.id.slice(-8)}</span></div><div className="prb-dialog-controls"><button type="button" className="prb-print-button" onClick={event => { const dialog = event.currentTarget.closest<HTMLElement>(".prb-dialog"); if (dialog) printProductionReport(dialog); }}><Printer size={16}/> 프린트</button><button type="button" autoFocus aria-label="생산 영향 상세 닫기" onClick={() => setDetailOpen(false)}>×</button></div></header>
       <div className="prb-scroll">
         <ImpactSummary name={name} item={selected} detail={detail} requestedLoss={requestedLoss} loading={!active || active.detailLoading}/>
         <CostComparison analysis={cost} loading={!active || active.costLoading} error={active?.costError ?? false}/>
@@ -155,7 +156,7 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
           <p>출처: {info?.source_type ?? "미확인"} · {info?.capacity_model?.basis ?? "생산능력 근거 미연결"}</p>
           {info?.limitations?.map((text,i) => <p key={i}>{text}</p>)}
         </section>
-        <div className="prb-detail-charts"><RiskChart asset={asset} detail={detail} name={name}/><section><h3>장비 센서별 영향 근거</h3>
+        <div className="prb-detail-charts"><div className="prb-detail-risk-column"><RiskChart asset={asset} detail={detail} name={name}/><ReferenceEconomicPanel assetId={selected.assetId} minutes={c?.request.downtime_minutes}/></div><section><h3>장비 센서별 영향 근거</h3>
           <LiveEquipmentSensors asset={asset}/>
         </section></div>
       </div>
@@ -268,7 +269,6 @@ function ApprovalPanel({ item, name, projectId, workspaceId, requestedLoss, cost
   }
   return <><div className="prb-scroll prb-action-summary"><h3>{name}</h3><p>#{item.id.slice(-8)} · {queueStatus(item)}</p><p>담당: {item.assignee}</p>
     <dl><dt>협의 작업</dt><dd>{c?.request.work_summary ?? "보전팀 협의 요청 대기"}</dd><dt>정지 시간 / 영향 품목</dt><dd>{number(c?.request.downtime_minutes, "분")} / {c?.request.affected_items ?? "미작성"}</dd><dt>요청 정지 예상 손실</dt><dd>{number(requestedLoss, "개")} (생산능력 가정)</dd><dt>시나리오별 총비용 범위</dt><dd>{costSummary} (각 시나리오 기준값 비교)</dd><dt>손익 근거</dt><dd>{cost ? "동일 요청의 비용 비교 " + when(cost.calculated_at) : "비용 미산정 · 확정 손익 판단 불가"}</dd></dl>
-    {!cost ? <ReferenceEconomicPanel assetId={item.assetId} minutes={c?.request.downtime_minutes}/> : null}
     {c?.response ? <section className="prb-saved"><b>{c.status === "confirmed" ? "작업 승인 완료" : "재협의 요청"}</b><p>{c.responded_by_name} · {when(c.responded_at)}</p><p>{c.response.scheduled_window}</p><p>{c.response.production_response}</p></section> : null}
     {c?.inspection_result ? <section className="prb-saved"><b>점검 결과: {outcome[c.inspection_result.outcome]}</b>{c.inspection_result.findings.map((text,i) => <p key={i}>{text}</p>)}<p>{c.inspection_result.note}</p></section> : null}
     {c?.history?.length ? <details><summary>협의·승인 이력 {c.history.length}건</summary>{c.history.map((h,i) => <p key={i}>{when(h.responded_at || h.requested_at)} · {h.responded_by_name || h.requested_by_name} · {h.response?.scheduled_window || h.request.work_summary} · {h.response?.production_response || h.request.note}</p>)}</details> : null}

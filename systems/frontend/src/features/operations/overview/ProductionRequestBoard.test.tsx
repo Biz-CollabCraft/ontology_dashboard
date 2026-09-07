@@ -59,7 +59,8 @@ it("shows the request list with risk above sensor trends and approval review at 
   expect(host.querySelector(".prb-queue-item")?.textContent).toContain("정상 CNC");
   expect(host.textContent).not.toContain("생산 영향 우선순위");
   expect(host.querySelector(".prb-monitoring-stack")?.firstElementChild?.className).toBe("prb-risk");
-  expect(host.querySelector(".prb-monitoring-stack")?.lastElementChild?.className).toBe("prb-scroll prb-economic-reference");
+  expect(host.querySelector(".prb-monitoring-stack")?.children).toHaveLength(1);
+  expect(host.querySelector('[aria-label="가정 기반 비용 참고"]')).toBeNull();
   expect(host.querySelector(".prb-queue>header strong")?.textContent).toBe("정비 요청 목록");
   expect(host.querySelector(".prb-actions>header strong")?.textContent).toBe("작업 승인 검토");
   expect(host.querySelector(".prb-action-buttons")?.children[0].textContent).toBe("선택 설비 영향 확인");
