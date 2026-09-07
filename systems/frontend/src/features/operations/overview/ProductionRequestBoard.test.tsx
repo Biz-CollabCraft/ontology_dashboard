@@ -54,11 +54,14 @@ async function fill(label: string, value: string) {
   });
 }
 async function chooseB() { await act(async () => Array.from(host.querySelectorAll<HTMLButtonElement>(".prb-queue-item")).find(b => b.textContent?.includes("압축기 B"))!.click()); }
-it("shows normal-equipment requests in a FIFO queue and pins risk after the cost comparison", async () => {
+it("shows the request list with risk above sensor trends and approval review at right", async () => {
   await render();
   expect(host.querySelector(".prb-queue-item")?.textContent).toContain("정상 CNC");
   expect(host.textContent).not.toContain("생산 영향 우선순위");
-  expect(host.querySelector(".prb-review")?.lastElementChild?.className).toBe("prb-risk");
+  expect(host.querySelector(".prb-monitoring-stack")?.firstElementChild?.className).toBe("prb-risk");
+  expect(host.querySelector(".prb-monitoring-stack")?.lastElementChild?.className).toBe("prb-monitoring-sensors");
+  expect(host.querySelector(".prb-queue>header strong")?.textContent).toBe("정비 요청 목록");
+  expect(host.querySelector(".prb-actions>header strong")?.textContent).toBe("작업 승인 검토");
   expect(host.querySelector(".prb-action-buttons")?.children[0].textContent).toBe("선택 설비 영향 확인");
   expect(host.querySelector(".prb-action-buttons")?.children[1].textContent).toBe("작업 승인");
   expect(host.textContent).toContain("30개");
@@ -137,7 +140,9 @@ it("renders saved same-request cost components and avoided cost without inventin
   } as unknown as MaintenanceCostAnalysisReadModel;
   vi.mocked(getMaintenanceEventLineage).mockResolvedValue({ ...lineage, cost_analyses: [analysis] });
   await render();
-  expect(host.querySelector(".prb-cost table")?.textContent).toContain("즉시 정비");
+  expect(host.querySelector(".prb-cost table")).toBeNull();
+  await click("선택 설비 영향 확인");
+  expect(host.querySelector('[role="dialog"] .prb-cost table')?.textContent).toContain("즉시 정비");
   expect(host.querySelector(".prb-cost table")?.textContent).toContain("10,000");
   expect(host.querySelector(".prb-action-summary")?.textContent).toContain("20,000");
   expect(host.textContent).toContain("비용 절감액을 영업이익으로 표시하지 않습니다");
@@ -236,6 +241,8 @@ it("uses all live equipment, not the planning subset or historical detail risk, 
   expect(host.querySelector(".prb-queue-item")?.textContent).toContain("실제 압축기");
   expect(host.querySelector(".prb-queue-item")?.textContent).toContain("긴급 · 87%");
   expect(host.querySelector(".prb-risk header b")?.textContent).toBe("87%");
+  expect(host.querySelectorAll(".prb-sensor-row")).toHaveLength(2);
+  expect(host.querySelector(".prb-monitoring-sensors .prb-sensor")?.textContent).toContain("12 bar");
   expect(getMaintenanceEventLineage).toHaveBeenCalledWith("project", "workspace", "event-A");
   await click("선택 설비 영향 확인");
   expect(host.querySelector(".prb-sensor")?.textContent).toContain("12 bar");

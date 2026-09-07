@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listInspectionCoordinations, requestInspectionCoordination, respondInspectionCoordination, type InspectionCoordination } from "../../../api";
 import "./ProductionCoordinationPanel.css";
+import "./ProductionReviewLayout.css";
 
 const labels = { pending: "생산관리자 확인 대기", confirmed: "생산관리자 확인 완료", changes_requested: "재협의 필요" };
 export function ProductionCoordinationPanel({ projectId, workspaceId, mode, workOrderId, canRequest = false, onStateChange, onConnectionChange }: {

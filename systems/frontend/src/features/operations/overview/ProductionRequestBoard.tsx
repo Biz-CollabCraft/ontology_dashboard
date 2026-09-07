@@ -1,4 +1,6 @@
 import { LogOut } from "lucide-react";
+import { orderEngineerSensors } from "./engineerSensorOrder";
+import "./ProductionReviewLayout.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getMaintenanceEventLineage, listInspectionCoordinations, respondInspectionCoordination,
   type InspectionCoordination, type MaintenanceCostAnalysisReadModel, type OpenInspectionWorkOrderReadModel } from "../../../api";
@@ -108,8 +110,8 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
       <ImpactMetrics item={selected} detail={detail} requestedLoss={requestedLoss} loading={Boolean(selected && (!active || active.detailLoading))}/>
     </section>
     <div className="prb-columns">
-      <section className="prb-card prb-queue" aria-label="정비 요청 큐">
-        <header><strong>정비 요청 큐</strong><div className="prb-queue-tools"><select aria-label="정비 요청 정렬" title="정렬 방법" value={sortOrder} onChange={e => setSortOrder(e.target.value as QueueSort)}><option value="time">시간순</option><option value="risk">위험 점수순</option></select><select aria-label="정비 요청 상태" title="작업 상태" value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}><option value="active">진행 중</option><option value="completed">완료</option><option value="all">전체</option></select></div></header>
+      <section className="prb-card prb-queue" aria-label="정비 요청 목록">
+        <header><strong>정비 요청 목록</strong><div className="prb-queue-tools"><select aria-label="정비 요청 정렬" title="정렬 방법" value={sortOrder} onChange={e => setSortOrder(e.target.value as QueueSort)}><option value="time">시간순</option><option value="risk">위험 점수순</option></select><select aria-label="정비 요청 상태" title="작업 상태" value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}><option value="active">진행 중</option><option value="completed">완료</option><option value="all">전체</option></select></div></header>
         <div className="prb-scroll">
           <p className="prb-queue-counts">{queueLoading ? "요청 현황 조회 중" : queueError || workOrderError ? "요청 현황 확인 필요" : "진행 중 " + queue.filter(item => item.status !== "completed").length + "건 · 작업 승인 대기 " + awaiting + "건"}</p>
           {queueError || workOrderError ? <p role="status">요청 연결을 확인해 주세요. 이전 표시 내용은 유지되며 승인은 잠깁니다.</p> : null}
@@ -126,16 +128,14 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
       <section className="prb-card prb-review" aria-label="생산 대응 검토">
         <header><strong>생산 대응 검토</strong><span>{name}</span></header>
         {selected ? <>
-          <div className="prb-scroll prb-review-top">
-            <ImpactSummary name={name} item={selected} detail={detail} requestedLoss={requestedLoss} loading={!active || active.detailLoading} showMetrics={false}/>
-            {active?.detailError ? <p role="status">생산 영향 연결 확인 필요 · 다른 장비의 수치로 대체하지 않습니다.</p> : null}
-            <CostComparison analysis={cost} loading={!active || active.costLoading} error={active?.costError ?? false}/>
+          <div className="prb-monitoring-stack">
+            <RiskChart asset={asset} detail={detail} name={name}/>
+            <section className="prb-monitoring-sensors" aria-label="선택 장비 센서 추이"><h3>센서별 추이</h3><LiveEquipmentSensors asset={asset} twoRows/></section>
           </div>
-          <RiskChart asset={asset} detail={detail} name={name}/>
         </> : <p className="prb-empty">정비 요청을 선택하면 해당 장비의 손익과 생산 영향을 표시합니다.</p>}
       </section>
-      <aside className="prb-card prb-actions" aria-label="다음 행동">
-        <header><strong>다음 행동</strong><span>생산 대응·작업 승인</span></header>
+      <aside className="prb-card prb-actions" aria-label="작업 승인 검토">
+        <header><strong>작업 승인 검토</strong><span>생산 영향·일정 확인</span></header>
         {selected ? <ApprovalPanel key={selected.id + ":" + (c?.request_id ?? "")} item={selected} name={name} projectId={projectId} workspaceId={workspaceId}
           requestedLoss={requestedLoss} cost={cost} connected={!queueLoading && !queueError && !workOrderError}
           onImpact={() => setDetailOpen(true)} onSaved={onSaved}/> : <p>왼쪽에서 정비 요청을 선택해 주세요.</p>}
@@ -164,13 +164,16 @@ function EquipmentObservation({ asset }: { asset: OperationsAsset | null }) {
   const score = riskScore(asset);
   return <span className="prb-equipment-observation" data-status={asset?.status ?? "unavailable"}><b>장비 {equipmentStatus(asset)} · {score === null ? "점수 없음" : Math.round(score * 100) + "%"}</b><small>{when(asset?.observedAt)}</small></span>;
 }
-function LiveEquipmentSensors({ asset }: { asset: OperationsAsset | null }) {
+function LiveEquipmentSensors({ asset, twoRows = false }: { asset: OperationsAsset | null; twoRows?: boolean }) {
   if (!asset?.sensorHistory?.length) return <p>연결된 최신 센서 관측이 없습니다.</p>;
-  return <>{asset.sensorHistory.map(sensor => {
+  const charts = orderEngineerSensors(asset.assetId, asset.sensorHistory).map(sensor => {
     const latest = sensor.points.at(-1);
     const feature = { label: sensor.label, history: { points: sensor.points.map(p => ({ observed_at: p.observedAt, value: p.value, quality_status: numeric(p.value) ? "good" : "unavailable" })) } } as AssetDetailViewModel["features"][number];
     return <div className="prb-sensor" key={sensor.feature}><strong>{displayEquipmentSensorLabel(asset.assetId, sensor.feature, sensor.label)}</strong><span>{number(latest?.value, " " + (sensor.unit ?? ""))}</span><p>관측: {when(latest?.observedAt)}</p><SensorTrend feature={feature}/></div>;
-  })}</>;
+  });
+  if (!twoRows) return <>{charts}</>;
+  const middle = Math.ceil(charts.length / 2);
+  return <div className="prb-sensor-rows"><div className="prb-sensor-row">{charts.slice(0, middle)}</div><div className="prb-sensor-row">{charts.slice(middle)}</div></div>;
 }
 function SensorTrend({ feature }: { feature: AssetDetailViewModel["features"][number] }) {
   const points = feature.history.points;

@@ -1,0 +1,20 @@
+.production-request-board .prb-queue-tools{gap:3px;min-width:0}
+.production-request-board .prb-queue-tools select{box-sizing:border-box;width:62px!important;min-width:0!important;min-height:26px;padding:3px 2px;font-size:11px}
+.production-request-board .prb-queue-tools select:first-child{width:85px!important}
+.production-request-board .prb-queue>header>strong{white-space:nowrap;font-size:15px}
+.prb-monitoring-stack{display:flex;flex-direction:column;flex:1;min-height:0;gap:10px;padding-top:10px}
+.prb-monitoring-stack>.prb-risk{flex:1 1 50%;margin-top:0;min-height:140px}
+.prb-monitoring-sensors{display:flex;flex-direction:column;flex:1 1 50%;min-height:0;border:1px solid var(--ef-border);border-radius:4px;padding:8px;background:var(--operations-surface)}
+.prb-monitoring-sensors>h3{flex:none;margin:0 0 6px}
+.prb-sensor-rows{display:flex;flex-direction:column;gap:8px;flex:1;min-height:0}
+.prb-sensor-row{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(180px,1fr);gap:8px;flex:1;min-height:0;overflow:auto}
+.prb-sensor-row>.prb-sensor{display:flex;flex-direction:column;min-width:0;min-height:0;gap:3px;padding:7px;border:1px solid var(--ef-border);background:var(--operations-panel)}
+.prb-sensor-row .prb-sensor>strong{font-size:12px}.prb-sensor-row .prb-sensor>span{float:none;font-size:12px}
+.prb-sensor-row .prb-sensor>p{display:none}
+.prb-sensor-row .prb-sensor-svg{flex:1;min-height:36px;height:auto;box-sizing:border-box}
+.prb-sensor-row .prb-sensor>small{font-size:9px}
+.production-coordination-content,.prb-action-summary{padding:4px 8px 8px;scrollbar-gutter:stable}
+.production-coordination label,.prb-action-summary label{min-width:0}
+.production-coordination input,.production-coordination textarea,.production-coordination select,.prb-action-summary input,.prb-action-summary textarea{max-width:100%;min-width:0;box-sizing:border-box}
+.production-coordination input:focus,.production-coordination textarea:focus,.production-coordination select:focus,.prb-action-summary input:focus,.prb-action-summary textarea:focus{outline:2px solid #2468d8;outline-offset:1px}
+@media(max-width:820px){.prb-monitoring-stack{min-height:540px}.prb-monitoring-stack>.prb-risk{flex-basis:250px}.prb-monitoring-sensors{min-height:260px}}
