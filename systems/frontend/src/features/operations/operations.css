@@ -3249,3 +3249,15 @@
 .engineer-current-user{display:flex;min-width:86px;flex-direction:column;align-items:flex-end;justify-content:center;padding-left:10px;border-left:1px solid var(--operations-border-strong);line-height:1.15}
 .engineer-current-user b{font-size:11px;color:var(--operations-text)}
 .engineer-current-user small{margin-top:2px;color:var(--ef-muted);font-size:9px;font-weight:700}
+
+/* Reserve the complete summary at the bottom; the chart absorbs height changes. */
+.engineer-sensor-overlay .engineer-detail-column{grid-template-rows:minmax(140px,1fr) max-content;align-content:stretch}
+.engineer-sensor-overlay .engineer-detail-summary{height:auto;min-height:0;max-height:none;overflow:visible;box-sizing:border-box;align-self:end}
+.engineer-detail-work-status{display:flex;flex-direction:column;gap:4px;line-height:1.45;overflow-wrap:anywhere}
+.engineer-detail-assignee{display:block}
+.engineer-detail-summary dd{overflow-wrap:anywhere}
+.engineer-detail-column .engineer-drawer-risk>header,.engineer-detail-column .engineer-drawer-risk>footer,.engineer-detail-column .engineer-drawer-trend>div{flex-shrink:0}
+@media(max-height:680px),(max-width:1220px){
+  .engineer-sensor-overlay .engineer-sensor-drawer-body{overflow:auto}
+  .engineer-sensor-overlay .engineer-detail-column{min-height:520px;overflow:visible}
+}
