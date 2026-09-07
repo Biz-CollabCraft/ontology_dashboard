@@ -410,6 +410,12 @@ export function EngineerFactoryStandalone({
   const selectedMaintenanceDirective = selected
     ? maintenanceDirectives.find((item) => item.asset_id === selected.assetId)
     : null;
+  const approvedMaintenanceDirectives = maintenanceDirectives.filter(
+    (item) => item.status === "approved" || item.status === "in_progress",
+  );
+  const requestedMaintenanceDirectives = maintenanceDirectives.filter(
+    (item) => item.status !== "approved" && item.status !== "in_progress",
+  );
 
   async function requestMaintenanceApproval() {
     if (!selected?.eventId || selectedMaintenanceDirective) return;
@@ -683,63 +689,64 @@ export function EngineerFactoryStandalone({
         </section>
 
         <div className="engineer-status-side-stack">
-          <section className="engineer-factory-card engineer-risk-trend">
+          <section className="engineer-factory-card engineer-recent-events engineer-approval-events">
             <header>
-              <div>
-                <strong>위험 점수 추세 · 최근 관측</strong>
-                <span>
-                  {riskSelected
-                    ? `${displayAssetName(riskSelected)} · ${riskSelected.assetId}`
-                    : "관측 설비 없음"}
-                </span>
-                <span>
-                  {riskSelected?.assetId === directiveAssetId
-                    ? "선택한 정비 지시 설비"
-                    : "현재 위험도가 가장 높은 설비"}
-                </span>
-              </div>
-              <b
-                className={`tone-${tone(riskSelected?.status ?? "data_quality_hold")}`}
+              <strong>정비 승인 내역</strong>
+              <span
+                className={`engineer-directive-connection ${maintenanceDirectiveError ? "is-offline" : "is-online"}`}
               >
-                {formatProbability(riskSelected?.failureProbability ?? null)}
-              </b>
+                <i />
+                {maintenanceDirectiveError
+                  ? "연결 확인 필요"
+                  : "목록 연결 정상"}
+              </span>
+              <span>{approvedMaintenanceDirectives.length}건</span>
             </header>
-            <div className="engineer-risk-chart">
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-                <rect y="0" width="100" height="38" className="risk-zone" />
-                <rect
-                  y="38"
-                  width="100"
-                  height="20"
-                  className="attention-zone"
-                />
-                <rect y="58" width="100" height="42" className="normal-zone" />
-                <line x1="0" x2="100" y1="38" y2="38" />
-                <line x1="0" x2="100" y1="58" y2="58" />
-                <polyline points={points} />
-              </svg>
-              <div>
-                <span>이전 관측</span>
-                <span>현재</span>
-              </div>
+            <div>
+              {!maintenanceDirectiveError &&
+              approvedMaintenanceDirectives.length ? (
+                approvedMaintenanceDirectives.map((directive) => (
+                  <button
+                    type="button"
+                    key={directive.work_order_id}
+                    aria-pressed={directiveAssetId === directive.asset_id}
+                    onClick={() => {
+                      setDirectiveAssetId(directive.asset_id);
+                      onSelectAsset(directive.asset_id, directive.event_id);
+                    }}
+                  >
+                    <span>
+                      <b>
+                        {directive.status === "in_progress"
+                          ? "점검 중"
+                          : "승인됨"}
+                      </b>
+                      <small>{directive.work_order_id}</small>
+                    </span>
+                    <strong>
+                      {directive.equipment_id || directive.asset_id}
+                    </strong>
+                    <small>{directive.asset_id}</small>
+                    <p>
+                      {directive.assigned_to
+                        ? `담당 ${directive.assigned_to}`
+                        : "담당자 배정 대기"}
+                    </p>
+                  </button>
+                ))
+              ) : (
+                <p className="engineer-directive-empty">
+                  {maintenanceDirectiveError
+                    ? "승인 내역을 조회할 수 없습니다"
+                    : "현재 정비 승인 내역이 없습니다"}
+                </p>
+              )}
             </div>
-            <footer>
-              <span>
-                현재 상태{" "}
-                <b>
-                  {STATUS_LABEL[riskSelected?.status ?? "data_quality_hold"]}
-                </b>
-              </span>
-              <span>
-                {values.length}개 관측 ·{" "}
-                {formatTimestamp(riskSelected?.riskHistory?.[0]?.observedAt)}
-              </span>
-            </footer>
           </section>
 
           <section className="engineer-factory-card engineer-recent-events">
             <header>
-              <strong>정비 지시 내역</strong>
+              <strong>요청 내역</strong>
               <span
                 className={`engineer-directive-connection ${maintenanceDirectiveError ? "is-offline" : "is-online"}`}
               >
@@ -749,14 +756,15 @@ export function EngineerFactoryStandalone({
                   : "목록 연결 정상"}
               </span>
               <span>
-                {maintenanceDirectives.length
-                  ? `대기 ${maintenanceDirectives.length}건 · 먼저 접수된 순`
+                {requestedMaintenanceDirectives.length
+                  ? `대기 ${requestedMaintenanceDirectives.length}건 · 먼저 접수된 순`
                   : "미완료 작업"}
               </span>
             </header>
             <div>
-              {!maintenanceDirectiveError && maintenanceDirectives.length ? (
-                maintenanceDirectives.map((directive) => (
+              {!maintenanceDirectiveError &&
+              requestedMaintenanceDirectives.length ? (
+                requestedMaintenanceDirectives.map((directive) => (
                   <button
                     type="button"
                     key={directive.work_order_id}
@@ -790,8 +798,8 @@ export function EngineerFactoryStandalone({
               ) : (
                 <p className="engineer-directive-empty">
                   {maintenanceDirectiveError
-                    ? "정비 지시를 조회할 수 없습니다"
-                    : "현재 정비 지시가 없습니다"}
+                    ? "요청 내역을 조회할 수 없습니다"
+                    : "현재 요청 내역이 없습니다"}
                 </p>
               )}
             </div>
