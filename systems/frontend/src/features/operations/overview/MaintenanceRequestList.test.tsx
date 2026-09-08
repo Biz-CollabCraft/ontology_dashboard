@@ -25,9 +25,10 @@ beforeEach(async () => {
 });
 afterEach(async () => {await act(async () => root.unmount());host.remove();});
 it("uses a full-row selection control, right-side owner and non-button status", async () => {
-  expect(host.textContent).toContain("보전 요청 목록");
+  expect(host.textContent).toContain("점검 요청 목록");
   expect(host.textContent).not.toContain("보전 요청 큐");
-  expect(host.textContent).not.toContain("새로고침");
+  expect(host.querySelector(".engineer-factory-header")?.textContent).toContain("새로고침");
+  expect(host.querySelector("[data-editor]")).toBeNull();
   const rows = host.querySelectorAll<HTMLButtonElement>(".maintenance-request-item");
   expect(rows).toHaveLength(2);
   expect(rows[1].querySelector("button")).toBeNull();
@@ -41,6 +42,8 @@ it("uses a full-row selection control, right-side owner and non-button status", 
 });
 it("places connection feedback after the workflow caption and reflects failure", async () => {
   const header = host.querySelector(".role-primary-work>header")!;
+  expect(header.textContent).toContain("업무 단계별 확인연결 정상");
+  await act(async () => host.querySelector<HTMLButtonElement>(".maintenance-request-item")!.click());
   expect(header.textContent).toContain("업무 단계별 확인연결 확인 중");
   await act(async () => host.querySelector<HTMLButtonElement>("[data-editor] button")!.click());
   expect(header.querySelector('[role="status"]')?.textContent).toBe("연결 확인 필요");

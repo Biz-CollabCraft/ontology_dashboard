@@ -172,6 +172,7 @@ export default function EngineerFactoryApplication({
         workOrders={maintenanceDirectives}
         workOrderError={maintenanceDirectiveError}
         currentUserId={user?.user_id ?? ""}
+        canGenerateBrief={user?.permissions.includes("agent.review.materialize")}
         currentUser={{ displayName: user?.display_name ?? "사용자", title: persona === "production" ? "생산 관리자" : "보전팀" }}
         onRefresh={refresh}
         onLogout={signOut}
@@ -182,6 +183,7 @@ export default function EngineerFactoryApplication({
     <EngineerFactoryStandalone
       model={model}
       selectedAssetId={selection.assetId}
+      canGenerateBrief={user?.permissions.includes("agent.review.materialize")}
       maintenanceDirectives={maintenanceDirectives}
       maintenanceDirectiveError={maintenanceDirectiveError}
       currentUser={{

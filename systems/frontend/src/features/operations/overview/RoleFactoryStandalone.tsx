@@ -1,3 +1,4 @@
+import { NaturalBriefing } from "./NaturalBriefing";
 import { LogOut } from "lucide-react";
 import { MaintenanceApprovalList } from "./MaintenanceApprovalList";
 import "./MaintenanceRequestList.css";
@@ -74,7 +75,8 @@ export function RoleFactoryStandalone(props: ComponentProps<typeof RoleFactorySt
   return props.persona === "production" ? <ProductionRequestBoard {...props}/> : <RoleFactoryStandaloneLegacy {...props}/>;
 }
 
-function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, workOrders, workOrderError, currentUserId, currentUser, onRefresh, onLogout }: {
+function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, workspaceId, persona, model, workOrders, workOrderError, currentUserId, currentUser, onRefresh, onLogout }: {
+  canGenerateBrief?: boolean;
   currentUserId: string;
   currentUser: { displayName: string; title: string };
   projectId: string;
@@ -168,7 +170,9 @@ function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, w
             : coordinationConnection?.workOrderId === selectedWorkOrder.work_order_id ? coordinationConnection.state : "loading";
           return <span role="status" className={`maintenance-connection is-${state}`}><i/>{state === "online" ? "연결 정상" : state === "offline" ? "연결 확인 필요" : "연결 확인 중"}</span>;
         })() : null}</div></header>
-        {persona === "maintenance" && selectedWorkOrder ? <InspectionWorkOrderEditor key={selectedWorkOrder.work_order_id} item={selectedWorkOrder} currentUserId={currentUserId} projectId={projectId} workspaceId={workspaceId} onRefresh={onRefresh} onConnectionChange={setCoordinationConnection} /> : persona === "maintenance" ? <div className="role-step-list">
+        {persona === "maintenance" && selectedWorkOrder ? <InspectionWorkOrderEditor briefing={<NaturalBriefing projectId={projectId} workspaceId={workspaceId}
+          assetId={selectedWorkOrder.asset_id} eventId={selectedWorkOrder.event_id} datasetVersionId={model.context.datasetVersionId}
+          role="maintenance_technician" canGenerate={canGenerateBrief} revision={JSON.stringify(selectedWorkOrder)}/>} key={selectedWorkOrder.work_order_id} item={selectedWorkOrder} currentUserId={currentUserId} projectId={projectId} workspaceId={workspaceId} onRefresh={onRefresh} onConnectionChange={setCoordinationConnection} /> : persona === "maintenance" ? <div className="role-step-list">
           <article><b>1. 요청 접수</b><p>설비, 이상 근거, 요청 시각과 중복 요청 여부를 확인합니다.</p></article>
           <article><b>2. 현장 점검</b><p>안전 절차와 센서·부품 점검 결과를 기록합니다.</p></article>
           <article><b>3. 조치안 협의</b><p>방법, 필요 부품, 예상 정지 시간과 영향 품목을 생산 관리자에게 전달합니다.</p></article>

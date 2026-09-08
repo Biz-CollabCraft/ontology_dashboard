@@ -44,7 +44,7 @@ function interactiveTeamShareRoute(): Plugin {
 
 export default defineConfig({
   base: appBase,
-  build: { rollupOptions: { input: { app: "index.html", factory: "factory-status-original/index.html" } } },
+  build: { rollupOptions: { input: { app: "index.html", briefingDemo: "demo-briefing.html", factory: "factory-status-original/index.html" } } },
   plugins: [interactiveTeamShareRoute(), react()],
   // ManufacturingApp is route-lazy, so Vite's initial source scan does not
   // always discover its heavy UI dependencies before the first browser load.

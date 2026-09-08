@@ -12,6 +12,8 @@ let user, generation=0, controller, projectId=params.get('project'), workspaceId
 const idempotency = new Map();
 const emit=()=>{window.factoryState={...state};window.dispatchEvent(new CustomEvent('factory:state',{detail:window.factoryState}));};
 const errorText=e=>e instanceof Error?e.message:String(e);
+// Refresh display time without fetching data or regenerating stored prose.
+setInterval(()=>{if(state.aiBrief)emit();},60_000);
 function login(){location.replace(`${base}login?returnTo=${encodeURIComponent(location.pathname+location.search+location.hash)}`);}
 async function request(path, options={}) {
   const headers = new Headers(options.headers);
