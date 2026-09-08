@@ -40,15 +40,6 @@ const DEMO_ACCOUNTS = [
     email: "manager@ontology.local",
     password: "Manager!2026",
   },
-  {
-    label: { ko: "경영진", en: "Executive" },
-    description: {
-      ko: "Executive Brief · 운영 리스크 · KPI · 의사결정 병목",
-      en: "Executive Brief · operational risk · KPI · decision bottlenecks",
-    },
-    email: "executive@ontology.local",
-    password: "Executive!2026",
-  },
 ] as const;
 
 const PUBLIC_DEMO_HOSTS = new Set([
@@ -144,12 +135,12 @@ export function LoginPage() {
       title={
         english
           ? "From live equipment status to operational decisions and executive reporting"
-          : "실시간 설비 현황에서 운영 판단과 경영 보고까지"
+          : "실시간 설비 현황에서 점검·정비와 생산 대응까지"
       }
       description={
         english
           ? "Connect the same equipment event and evidence across engineering investigation, operational decisions, and executive reporting."
-          : "같은 설비 이상 사건과 근거를 엔지니어의 조사, 생산 관리자의 판단, 경영진의 보고 언어로 연결합니다."
+          : "엔지니어의 이상 확인, 보전팀의 점검·정비, 생산 관리자의 작업 승인을 연결합니다."
       }
     >
       <form className="auth-form" onSubmit={submit}>
