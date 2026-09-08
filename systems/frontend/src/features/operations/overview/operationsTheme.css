@@ -7,3 +7,46 @@ html[data-theme="dark"] .engineer-factory-live button.operations-theme-toggle { 
   html[data-theme="dark"] .engineer-lite-board :where(input,textarea,select) { background:#202d40; color:#f3f7fb; border-color:#62768e; }
   html[data-theme="dark"] .engineer-monitoring-toolbar :where(strong,span,label) { color:#c6dbf5; }
 }
+/* Screen-only overrides keep printed reports on their original light palette. */
+@media screen {
+  html[data-theme="dark"] .engineer-lite-board {
+    --operations-accent:#80b5ff; --operations-success:#70dda2;
+    --operations-warning:#f4d16d; --operations-danger:#ff8795;
+    --operations-hold:#c4a1ff; --ef-text:#f3f7fb;
+  }
+  html[data-theme="dark"] .engineer-lite-board .engineer-factory-kpis article {
+    background:#182334 !important; color:#f3f7fb; border-color:#52647a;
+  }
+  html[data-theme="dark"] .engineer-lite-board .engineer-factory-kpis article :is(span,small,p) { color:#c2cede; }
+  html[data-theme="dark"] .engineer-lite-board :is(.maintenance-request-item,.prb-queue-item)[aria-pressed="true"],
+  html[data-theme="dark"] .engineer-lite-board .maintenance-request-item:hover {
+    background:#284363; color:#f3f7fb; border-color:#80b5ff; outline-color:#80b5ff;
+  }
+  html[data-theme="dark"] .engineer-lite-board :is(.natural-briefing,.inspection-work-editor,.production-coordination,.production-coordination-content>article,.role-primary-work>div) {
+    background:#202d40; color:#f3f7fb;
+  }
+  html[data-theme="dark"] .engineer-lite-board .natural-briefing :is(strong,details,.natural-briefing-status,.natural-briefing-basis) { color:#c9d9ee; }
+  html[data-theme="dark"] .engineer-lite-board .natural-briefing :is(button,pre) { background:#182334; color:#e0ecff; border-color:#62768e; }
+  html[data-theme="dark"] .engineer-lite-board :is(.inspection-work-editor,.production-coordination) :is(input,select,textarea) { background:#111e30; color:#f3f7fb; border-color:#8397b0; }
+  html[data-theme="dark"] .engineer-lite-board .maintenance-connection.is-online { color:#70dda2; }
+  html[data-theme="dark"] .engineer-lite-board .maintenance-connection.is-offline { color:#ff8795; }
+  html[data-theme="dark"] .engineer-lite-board .maintenance-connection.is-loading { color:#c2cede; }
+  html[data-theme="dark"] .engineer-lite-board .prb-equipment-observation[data-status=normal] b { color:#70dda2; }
+  html[data-theme="dark"] .engineer-lite-board .prb-equipment-observation:is([data-status=attention],[data-status=warning]) b { color:#f4d16d; }
+  html[data-theme="dark"] .engineer-lite-board .prb-equipment-observation[data-status=critical] b { color:#ff8795; }
+  html[data-theme="dark"] .engineer-lite-board .prb-equipment-observation[data-status=data_quality_hold] b { color:#c4a1ff; }
+  html[data-theme="dark"] .engineer-lite-board svg .risk-zone { fill:#492c3b; }
+  html[data-theme="dark"] .engineer-lite-board svg .attention-zone { fill:#403c29; }
+  html[data-theme="dark"] .engineer-lite-board svg .normal-zone { fill:#203f39; }
+  html[data-theme="dark"] .engineer-lite-board :is(.prb-risk,.engineer-risk-chart,.engineer-drawer-trend,.engineer-sensor-expanded) :is(polyline,path:not([fill])) { stroke:#80b5ff; }
+  html[data-theme="dark"] .engineer-lite-board .prb-sensor-svg path { stroke:#80b5ff; }
+  html[data-theme="dark"] .engineer-lite-board :is(.engineer-cell-compressor,.engineer-cell-machines) button { color:#101c2a; }
+}
+@media screen and (max-width:1100px) {
+  .engineer-lite-board .engineer-factory-header { flex-wrap:wrap; gap:12px; }
+  .engineer-lite-board .engineer-factory-live { flex-wrap:wrap; gap:8px; }
+  .engineer-lite-board .engineer-factory-live button { white-space:nowrap; flex-shrink:0; }
+  .engineer-lite-board .engineer-lite-main { grid-template-columns:minmax(0,1fr); }
+  .engineer-lite-board .engineer-equipment-scroll { overflow-x:auto; }
+  .engineer-lite-board .engineer-equipment-zone { min-width:700px; }
+}
