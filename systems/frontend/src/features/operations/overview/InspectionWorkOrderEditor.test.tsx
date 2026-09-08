@@ -46,6 +46,19 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 describe("inspection result workflow", () => {
+  it("closes no-action inspections without any maintenance execution", async () => {
+    await render({ ...order, status: "in_progress" }); await fill();
+    await act(async () => {
+      const select = host.querySelector("select")!;
+      select.value = "no_action_required";
+      select.dispatchEvent(new Event("change", {bubbles:true}));
+    });
+    await submit();
+    expect(completeInspectionWorkOrder).toHaveBeenCalledWith(expect.objectContaining({payload:expect.objectContaining({outcome:"no_action_required"})}));
+    expect(host.textContent).toContain("조치 불필요로 종결");
+    expect(host.querySelector('button[type="submit"]')).toBeNull();
+    expect(executeInspectedMaintenance).not.toHaveBeenCalled();
+  });
   it("blocks maintenance until approval and submits a separate maintenance result", async () => {
     const inspected = { ...order, inspection_result: { outcome: "maintenance_recommended", findings: ["정비 필요"], note: "점검 메모" } };
     coordination.status = "pending";

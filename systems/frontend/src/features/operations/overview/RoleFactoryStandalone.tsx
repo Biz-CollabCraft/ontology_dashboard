@@ -96,6 +96,7 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
   const [coordinationConnection, setCoordinationConnection] = useState<{ workOrderId: string; state: "loading" | "online" | "offline" } | null>(null);
   const selectedWorkOrder = workOrders.find((item) => item.work_order_id === selectedWorkOrderId);
+  const inspectionOrders = workOrders.filter((item) => !item.inspection_result);
   const risky = [...model.assets].filter((asset) => asset.status !== "normal").sort((a, b) => severity(b) - severity(a) || (b.failureProbability ?? -1) - (a.failureProbability ?? -1));
   const urgent = risky.filter((asset) => tone(asset) === "critical");
   const impactedLines = new Set(risky.map((asset) => asset.line)).size;
@@ -134,7 +135,7 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
 
     <section className="engineer-factory-kpis">
       {persona === "maintenance" ? <>
-        <article><span>접수된 정비 요청</span><strong>{workOrders.length}<small>건</small></strong><p>먼저 접수된 순서로 처리합니다.</p></article>
+        <article><span>진행 중 점검 요청</span><strong>{inspectionOrders.length}<small>건</small></strong><p>점검 완료 건은 종결하거나 정비 승인 목록으로 이동합니다.</p></article>
         <article><span>긴급 설비</span><strong>{urgent.length}<small>대</small></strong><p>현장 안전과 작업 허가를 우선 확인합니다.</p></article>
         <article><span>예상 정지 영향</span><strong>{minutes(model.metrics.estimatedDowntimeMinutes)}</strong><p>현재 위험 설비 기준 합계입니다.</p></article>
       </> : <>
@@ -155,18 +156,18 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
       <section className="engineer-factory-card role-work-queue">
         <header><strong>{persona === "maintenance" ? "점검 요청 목록" : "생산 영향 우선순위"}</strong><span>{persona === "maintenance" ? "먼저 접수된 순" : "위험도 높은 순"}</span></header>
         <div>{persona === "maintenance" ? (
-          workOrderError ? <p className="role-empty-state">정비 요청 연결을 확인해 주세요.</p> : workOrders.length ? workOrders.map((item) => <button className="maintenance-request-item" type="button" key={item.work_order_id} aria-pressed={selectedWorkOrder?.work_order_id === item.work_order_id} onClick={() => setSelectedWorkOrderId(item.work_order_id)}>
+          workOrderError ? <p className="role-empty-state">점검 요청 연결을 확인해 주세요.</p> : inspectionOrders.length ? inspectionOrders.map((item) => <button className="maintenance-request-item" type="button" key={item.work_order_id} aria-pressed={selectedWorkOrder?.work_order_id === item.work_order_id} onClick={() => setSelectedWorkOrderId(item.work_order_id)}>
             <b>{item.equipment_id || item.asset_id}</b>
             <span className="maintenance-request-owner">담당 {item.assigned_to_display_name || (item.assigned_to ? "담당 보전팀" : "배정 대기")}</span>
             <small>#{item.work_order_id.slice(-8)}</small>
-            <span className={`maintenance-request-state state-${item.status}`}>{item.status === "in_progress" ? "점검 중" : item.status === "approved" ? "착수 준비" : "접수 대기"}</span>
-          </button>) : <p className="role-empty-state">현재 정비 요청이 없습니다.</p>
+            <span className={`maintenance-request-state state-${item.status}`}>{item.status === "in_progress" ? "점검 진행 중" : item.status === "approved" ? "접수 완료 · 점검 시작 대기" : "점검 접수 대기"}</span>
+          </button>) : <p className="role-empty-state">현재 점검 요청이 없습니다.</p>
         ) : risky.map((asset) => <button type="button" key={asset.assetId} aria-pressed={selectedAsset?.assetId === asset.assetId} className={`role-impact-item tone-${tone(asset)}${selectedAsset?.assetId === asset.assetId ? " is-selected" : ""}`} onClick={() => { setSelectedAsset(asset); setDetailOpen(false); }}><b>{asset.displayName}</b><span>{asset.line}{asset.cell && asset.cell !== asset.line ? ` · ${asset.cell}` : ""}</span><strong>{pct(asset.failureProbability)}</strong><small>{statusLabel(asset)} · {failureLabel(asset.predictedFailureType)}</small></button>)}</div>
       </section>
 
       <section className="engineer-factory-card role-primary-work">
         <header><strong>{persona === "maintenance" ? "점검 및 정비 처리" : "생산 대응 검토"}</strong><div className="maintenance-work-status"><span>업무 단계별 확인</span>{persona === "maintenance" ? (() => {
-          const state = workOrderError ? "offline" : !selectedWorkOrder || selectedWorkOrder.status === "requested" ? "online"
+          const state = workOrderError ? "offline" : !selectedWorkOrder?.inspection_result ? "online"
             : coordinationConnection?.workOrderId === selectedWorkOrder.work_order_id ? coordinationConnection.state : "loading";
           return <span role="status" className={`maintenance-connection is-${state}`}><i/>{state === "online" ? "연결 정상" : state === "offline" ? "연결 확인 필요" : "연결 확인 중"}</span>;
         })() : null}</div></header>
@@ -175,8 +176,8 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
           role="maintenance_technician" canGenerate={canGenerateBrief} revision={JSON.stringify(selectedWorkOrder)}/>} key={selectedWorkOrder.work_order_id} item={selectedWorkOrder} currentUserId={currentUserId} projectId={projectId} workspaceId={workspaceId} onRefresh={onRefresh} onConnectionChange={setCoordinationConnection} /> : persona === "maintenance" ? <div className="role-step-list">
           <article><b>1. 요청 접수</b><p>설비, 이상 근거, 요청 시각과 중복 요청 여부를 확인합니다.</p></article>
           <article><b>2. 현장 점검</b><p>안전 절차와 센서·부품 점검 결과를 기록합니다.</p></article>
-          <article><b>3. 조치안 협의</b><p>방법, 필요 부품, 예상 정지 시간과 영향 품목을 생산 관리자에게 전달합니다.</p></article>
-          <article><b>4. 작업 및 회신</b><p>착수 조건 확인 후 작업 결과와 후속 관측 기준을 회신합니다.</p></article>
+          <article><b>3. 점검 결과에 따른 처리</b><p>조치 불필요이면 점검을 종결합니다. 정비가 필요하면 정지 시간을 포함하여 생산 관리자에게 정비 승인을 요청합니다.</p></article>
+          <article><b>4. 승인된 정비 수행</b><p>생산 관리자가 승인한 일정과 착수 조건을 확인한 뒤 정비를 수행하고 결과를 기록하여 완료합니다.</p></article>
         </div> : selectedAsset ? <div className="role-production-center-stack"><section className="role-production-risk-preview"><header><div><strong>위험 점수 추세 · 최근 관측</strong><span>{selectedAsset.displayName} · {selectedAsset.assetId}</span></div><b className={`tone-${tone(selectedAsset)}`}>{pct(selectedAsset.failureProbability)}</b></header><svg viewBox="0 0 100 100" preserveAspectRatio="none"><rect y="0" width="100" height="38" className="risk-zone"/><rect y="38" width="100" height="20" className="attention-zone"/><rect y="58" width="100" height="42" className="normal-zone"/><line x1="0" x2="100" y1="38" y2="38"/><line x1="0" x2="100" y1="58" y2="58"/><polyline points={seriesPoints(selectedAsset, detail)}/></svg><footer><span>이전 관측</span><b>현재 상태 {statusLabel(selectedAsset)}</b><span>현재</span></footer></section><section className="role-production-result-summary"><header><strong>{selectedAsset.displayName} 현황 요약</strong><span>{detailLoading ? "상세 정보 확인 중" : "현재 관측 기준"}</span></header><p><b>{statusLabel(selectedAsset)}</b> 상태의 설비를 생산 계획과 대조합니다.</p><dl><div><dt>예상 고장 영향</dt><dd>{failureLabel(selectedAsset.predictedFailureType)}</dd></div><div><dt>예상 생산 손실</dt><dd>{detail?.operation_context.event_impact?.estimated_lost_units != null ? `${detail.operation_context.event_impact.estimated_lost_units.toLocaleString("ko-KR")}개` : "정보 없음"}</dd></div><div><dt>예상 정지 시간</dt><dd>{minutes(selectedAsset.estimatedDowntimeMinutes)}</dd></div></dl>{detailError ? <small>상세 영향 연결을 확인해 주세요.</small> : null}</section></div> : <p className="role-empty-state">왼쪽 우선순위에서 설비를 선택하면 위험 점수 추세가 표시됩니다.</p>}
       </section>
 
