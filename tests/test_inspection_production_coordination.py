@@ -8,6 +8,34 @@ from test_maintenance_loop_router import client_for, BASE
 SCOPE = dict(organization_id="org-1", project_id="project-1", workspace_id="workspace-1")
 REQUEST = dict(work_summary="베어링 점검", downtime_minutes=30, affected_items="품목 A", note="교대 시간 협의")
 
+def test_inspection_and_approval_request_are_atomic_and_retryable(tmp_path, monkeypatch):
+    loop = service(tmp_path)
+    wid = loop.request_inspection(**SCOPE, payload=inspection_request(), actor_id="engineer", actor_display_name="엔지니어", idempotency_key="atomic-create-001")["work_order_id"]
+    loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.APPROVED, actor_id="tech", actor_display_name="보전팀", idempotency_key="atomic-accept-001")
+    loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.IN_PROGRESS, actor_id="tech", actor_display_name="보전팀", idempotency_key="atomic-start-001")
+    payload = inspection_result().model_copy(update={"approval_request":InspectionCoordinationRequest(**REQUEST)})
+    original=loop.repository._record_activity
+    def fail_approval(*args, **kwargs):
+        if kwargs.get("activity_type")=="inspection.coordination.pending":
+            raise RuntimeError("test write failure")
+        return original(*args, **kwargs)
+    monkeypatch.setattr(loop.repository,"_record_activity",fail_approval)
+    kwargs=dict(**SCOPE,work_order_id=wid,payload=payload,actor_id="tech",actor_display_name="보전팀",idempotency_key="atomic-result-001")
+    with pytest.raises(RuntimeError): loop.complete_inspection(**kwargs)
+    item=loop.list_open_inspection_work_orders(**SCOPE)["items"][0]
+    assert item["status"]=="in_progress" and item["inspection_result"] is None
+    assert loop.list_inspection_coordination(**SCOPE)["items"]==[]
+    monkeypatch.setattr(loop.repository,"_record_activity",original)
+    first=loop.complete_inspection(**kwargs)
+    second=loop.complete_inspection(**kwargs)
+    assert first["approval_request_id"]==second["approval_request_id"]
+    rows=loop.list_inspection_coordination(**SCOPE)["items"]
+    assert len(rows)==1 and rows[0]["status"]=="pending"
+    assert rows[0]["request"]["downtime_minutes"]==30
+    with pytest.raises(InvalidTransition): start(loop,wid)
+    reply(loop,wid,first["approval_request_id"])
+    start(loop,wid)
+
 @pytest.fixture
 def accepted(tmp_path):
     loop = service(tmp_path)

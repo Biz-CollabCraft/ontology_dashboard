@@ -593,10 +593,9 @@ class MaintenanceLoopService:
         completed_at = recorded_at or datetime.now(timezone.utc)
         completed = work_order.model_copy(
             update={
-                "status": transition_work_order(
-                    work_order.status,
-                    WorkOrderStatus.COMPLETED,
-                )
+                # Repository validates the persisted transition after checking
+                # idempotency, so a lost response can be safely retried.
+                "status": WorkOrderStatus.COMPLETED
             }
         )
         inspection_result = InspectionResult(
@@ -626,6 +625,7 @@ class MaintenanceLoopService:
         return self.repository.complete_inspection(
             work_order=completed,
             inspection_result=inspection_result,
+            approval_request=payload.approval_request.model_dump(mode="json") if payload.approval_request else None,
             actor_display_name=actor_display_name,
             request_idempotency_key=idempotency_key,
             request_fingerprint=self._fingerprint(

@@ -721,6 +721,7 @@ class MaintenanceRepository(InspectionCoordinationRepositoryMixin):
         actor_display_name: str,
         request_idempotency_key: str,
         request_fingerprint: str,
+        approval_request: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if work_order.work_type is not WorkOrderType.INSPECTION:
             raise ValueError("inspection completion requires an inspection work order")
@@ -876,6 +877,22 @@ class MaintenanceRepository(InspectionCoordinationRepositoryMixin):
                 "maintenance_event_id": None,
                 "replayed": False,
             }
+            if approval_request is not None:
+                if inspection_result.outcome.value != "maintenance_recommended":
+                    raise InvalidTransition("조치 불필요 점검은 승인 요청을 생성할 수 없습니다.")
+                # One transaction: a failure here also rolls back the inspection result.
+                coordination = dict(work_order_id=current.work_order_id, asset_id=current.asset_id,
+                    event_id=current.event_id, request_id=str(uuid.uuid4()), status="pending",
+                    request=approval_request, requested_by=inspection_result.recorded_by,
+                    requested_by_name=actor_display_name, requested_at=now,
+                    response=None, responded_by=None, responded_by_name=None, responded_at=None)
+                self._record_activity(connection, scope=scope, event_id=current.event_id,
+                    equipment_id=current.equipment_id, work_order_id=current.work_order_id,
+                    aggregate_type="inspection_coordination", aggregate_id=current.work_order_id,
+                    activity_type="inspection.coordination.pending", actor_user_id=inspection_result.recorded_by,
+                    actor_display_name=actor_display_name, before_status=None, after_status="pending",
+                    payload=coordination, created_at=now)
+                result["approval_request_id"] = coordination["request_id"]
             self._finish_idempotency(
                 connection,
                 scope=scope,

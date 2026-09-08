@@ -112,6 +112,13 @@ class InspectionResultCreateRequest(StrictCommand):
     measurements: tuple[InspectionMeasurement, ...] = ()
     findings: tuple[str, ...] = Field(min_length=1)
     note: str = Field(default="", max_length=4000)
+    approval_request: InspectionCoordinationRequest | None = None
+
+    @model_validator(mode="after")
+    def approval_requires_maintenance(self):
+        if self.approval_request is not None and self.outcome.value != "maintenance_recommended":
+            raise ValueError("approval request requires maintenance_recommended")
+        return self
 
 
 class OperationsManualRecommendationCreateRequest(StrictCommand):
