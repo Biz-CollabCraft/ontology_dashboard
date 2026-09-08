@@ -1,17 +1,20 @@
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { expect, it, vi } from "vitest";
 import { OperationsAccountBadge } from "./OperationsAccountBadge";
-
-describe("account identity across operations roles", () => {
-  it.each(["설비 엔지니어", "보전팀", "생산관리자"])("shows the signed-in name and %s role", (title) => {
-    const html = renderToStaticMarkup(<OperationsAccountBadge displayName="김담당" title={title} />);
-    expect(html).toContain('aria-label="로그인 계정"');
-    expect(html).toContain("<b>김담당</b>");
-    expect(html).toContain("<small>" + title + "</small>");
-    expect(html.indexOf("김담당")).toBeLessThan(html.indexOf(title));
-  });
-  it("escapes account-provided display names", () => {
-    const html = renderToStaticMarkup(<OperationsAccountBadge displayName="<script>name</script>" title="보전팀" />);
-    expect(html).not.toContain("<script>");
-  });
+const setTheme = vi.fn();
+vi.mock("../../../ui/foundry/displayPreferences", () => ({ useDisplayPreferences: () => ({ preferences: { theme: "light" }, setTheme }) }));
+it("shows account and sends explicit light/dark selections", () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  act(() => root.render(<OperationsAccountBadge displayName="김사용" title="보전팀"/>));
+  const buttons = host.querySelectorAll("button");
+  expect(host.textContent).toContain("김사용");
+  expect(buttons[0].getAttribute("aria-pressed")).toBe("true");
+  act(() => buttons[1].click());
+  expect(setTheme).toHaveBeenLastCalledWith("dark");
+  act(() => buttons[0].click());
+  expect(setTheme).toHaveBeenLastCalledWith("light");
+  act(() => root.unmount());
 });

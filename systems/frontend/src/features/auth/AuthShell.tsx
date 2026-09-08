@@ -1,7 +1,6 @@
 import { navigate } from "../../routing";
 import { useEffect, useState } from "react";
 import { Activity, ArrowLeft, ArrowRight, BarChart3, ClipboardCheck, FileText, Gauge, LockKeyhole, MapPinned, ShieldCheck, Wrench } from "lucide-react";
-import { DisplayMenu } from "../../ui/foundry/DisplayMenu";
 import { useI18n } from "../../ui/i18n/I18nProvider";
 import { CollabCraftLogo } from "../../ui/foundry/CollabCraftLogo";
 
@@ -87,7 +86,7 @@ export function AuthShell({
     <main className="auth-page">
       <header className="auth-platform-bar">
         <button className="auth-brand" onClick={() => navigate("/login")}><span className="brand-mark collabcraft-brand-mark"><CollabCraftLogo /></span><span><strong>CollabCraft</strong><small>Reliability Operations</small></span></button>
-        <div><DisplayMenu className="auth-display-menu" /><span><Activity size={13} /> {english ? "Monitoring live" : "실시간 모니터링"}</span><span><ShieldCheck size={13} /> {english ? "Decision traceable" : "판단 근거 추적"}</span><span>Asia/Seoul</span></div>
+        <div><span><Activity size={13} /> {english ? "Monitoring live" : "실시간 모니터링"}</span><span><ShieldCheck size={13} /> {english ? "Decision traceable" : "판단 근거 추적"}</span><span>Asia/Seoul</span></div>
       </header>
       <div className="auth-control-plane">
         <aside className="auth-resource-context">

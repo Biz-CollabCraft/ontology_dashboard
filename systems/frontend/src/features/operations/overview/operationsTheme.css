@@ -1,0 +1,10 @@
+.engineer-factory-live .operations-theme-switch { display:inline-flex; flex-wrap:nowrap; gap:4px; align-items:center; }
+.engineer-factory-live .operations-theme-switch button { min-height:36px; padding:6px 10px; white-space:nowrap; }
+.engineer-factory-live .operations-theme-switch button[aria-pressed="true"] { background:#185abd; color:#fff; border-color:#185abd; font-weight:700; }
+.operations-theme-switch button:focus-visible { outline:3px solid #619cff; outline-offset:2px; }
+@media screen {
+  html[data-theme="dark"] .engineer-lite-board { color-scheme:dark; --operations-bg:#111927; --operations-panel:#182334; --operations-surface:#202d40; --operations-text:#f3f7fb; --operations-muted:#b4c1d0; --operations-border-strong:#52647a; --ef-border:#52647a; --ef-muted:#b4c1d0; }
+  html[data-theme="dark"] .engineer-lite-board :where(.engineer-factory-card,.engineer-factory-kpis article,.engineer-risk-chart,.engineer-monitoring-toolbar,.engineer-monitoring-toolbar label) { background:var(--operations-panel); color:var(--operations-text); }
+  html[data-theme="dark"] .engineer-lite-board :where(input,textarea,select) { background:#202d40; color:#f3f7fb; border-color:#62768e; }
+  html[data-theme="dark"] .engineer-monitoring-toolbar :where(strong,span,label) { color:#c6dbf5; }
+}
