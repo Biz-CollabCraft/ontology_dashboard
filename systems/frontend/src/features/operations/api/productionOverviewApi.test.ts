@@ -24,3 +24,14 @@ it("marks live connection failure instead of substituting fixture equipment", as
   expect(result.equipmentOverview).toBeNull();
   expect(result.metrics).toBe(production.metrics);
 });
+it("uses live fleet instead of fallback fixtures when planning APIs are unavailable", async () => {
+  vi.mocked(loadOperationsBootstrap).mockResolvedValue({...production,context:{...production.context,sourceMode:"gold-fixture-fallback"}});
+  const result = await loadProductionOverview("project","workspace",null);
+  expect(result.assets).toBe(live.assets);
+  expect(result.context.datasetVersionId).toBe("live");
+  expect(result.context.warnings).toContain("생산계획 연결 확인 필요 · 설비 현황은 최신 관측 기준입니다.");
+});
+it("keeps live fleet available when production bootstrap throws", async () => {
+  vi.mocked(loadOperationsBootstrap).mockRejectedValue(new Error("unavailable"));
+  expect((await loadProductionOverview("project","workspace",null)).assets).toBe(live.assets);
+});

@@ -129,6 +129,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
             <small>요청 {when(item.requestedAt)}</small>
           </button>)}
           {!visible.length ? <p>{queueLoading ? "정비 요청 조회 중" : "현재 정비 요청이 없습니다."}</p> : null}
+          {!queueLoading && !queueError && !visible.length && statusFilter === "active" ? <p className="prb-queue-counts">보전팀에서 정비 승인 요청을 보내면 이 목록에 표시됩니다. 완료 내역 {queue.filter(item => item.status === "completed").length}건은 ‘완료’ 또는 ‘전체’에서 확인하세요.</p> : null}
         </div>
       </section>
       <section className="prb-card prb-review" aria-label="생산 대응 검토">
