@@ -93,7 +93,7 @@ function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, w
   const [detailError, setDetailError] = useState<string | null>(null);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
   const [coordinationConnection, setCoordinationConnection] = useState<{ workOrderId: string; state: "loading" | "online" | "offline" } | null>(null);
-  const selectedWorkOrder = workOrders.find((item) => item.work_order_id === selectedWorkOrderId) ?? workOrders.find((item) => item.assigned_to === currentUserId) ?? workOrders[0];
+  const selectedWorkOrder = workOrders.find((item) => item.work_order_id === selectedWorkOrderId);
   const risky = [...model.assets].filter((asset) => asset.status !== "normal").sort((a, b) => severity(b) - severity(a) || (b.failureProbability ?? -1) - (a.failureProbability ?? -1));
   const urgent = risky.filter((asset) => tone(asset) === "critical");
   const impactedLines = new Set(risky.map((asset) => asset.line)).size;
@@ -127,7 +127,7 @@ function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, w
   return <main className={`engineer-lite-board role-factory-board role-factory-${persona}`}>
     <header className="engineer-factory-header">
       <div><strong>{title}</strong><span>{model.context.workspaceName} · {subtitle}</span></div>
-      <div className="engineer-factory-live"><span>{model.assets.length}대 기준</span><button type="button" onClick={onRefresh}>↻ 새로고침</button><OperationsAccountBadge {...currentUser} /><button type="button" onClick={() => void onLogout()}><LogOut size={14} /> 로그아웃</button></div>
+      <div className="engineer-factory-live"><span>{model.assets.length}대 기준</span><button type="button" onClick={() => { setSelectedWorkOrderId(null); setCoordinationConnection(null); onRefresh(); }}>↻ 새로고침</button><OperationsAccountBadge {...currentUser} /><button type="button" onClick={() => void onLogout()}><LogOut size={14} /> 로그아웃</button></div>
     </header>
 
     <section className="engineer-factory-kpis">
