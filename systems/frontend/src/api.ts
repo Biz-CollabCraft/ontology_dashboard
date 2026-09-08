@@ -728,7 +728,11 @@ export function respondInspectionCoordination(input: { projectId: string; worksp
   return maintenanceCommand(`${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/production-response`, input.payload as unknown as Record<string, unknown>, input.idempotencyKey);
 }
 
+export function executeInspectedMaintenance(input: { projectId: string; workspaceId: string; workOrderId: string; idempotencyKey: string; payload: { action: "start" | "complete"; note: string } }) {
+  return maintenanceCommand(maintenanceBase(input.projectId, input.workspaceId) + "/inspection-work-orders/" + encodeURIComponent(input.workOrderId) + "/maintenance-execution", input.payload, input.idempotencyKey);
+}
 export interface OpenInspectionWorkOrderReadModel {
+  inspection_result?: { outcome: string; findings: string[]; note: string } | null;
   work_order_id: string;
   event_id: string;
   asset_id: string;

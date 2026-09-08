@@ -1001,16 +1001,16 @@ export function EngineerFactoryStandalone({
                       onClick={() => void requestMaintenanceApproval()}
                     >
                       {maintenanceRequestBusy
-                        ? "정비 승인 요청 중"
+                        ? "점검 요청 중"
                         : selectedMaintenanceDirective
-                          ? selectedMaintenanceDirective.status === "approved" ? "보전팀 접수됨" : selectedMaintenanceDirective.status === "in_progress" ? "보전팀 점검 중" : "정비 승인 요청됨"
-                          : "정비 승인 요청"}
+                          ? selectedMaintenanceDirective.status === "approved" ? "보전팀 접수됨" : selectedMaintenanceDirective.status === "in_progress" ? "보전팀 점검 중" : "점검 요청됨"
+                          : "점검 요청"}
                     </button>
                     <EngineerRequestProgress projectId={model.context.projectId} workspaceId={model.context.workspaceId} order={selectedMaintenanceDirective}
                       busy={maintenanceRequestBusy} connectionError={maintenanceDirectiveError || maintenanceRequestFailed} />
                   </div>
                   {selectedMaintenanceDirective ? <p role="status" className="engineer-detail-work-status">
-                    <span>{selectedMaintenanceDirective.status === "approved" ? "보전팀 접수 완료 · 생산 협의와 착수 조건을 확인한 뒤 작업을 시작합니다." : selectedMaintenanceDirective.status === "in_progress" ? "현장 점검 중 · 배정된 보전팀 담당자가 작업·점검 결과를 기록합니다." : "보전팀의 요청 접수를 기다리고 있습니다."}</span>
+                    <span>{selectedMaintenanceDirective.status === "approved" ? "보전팀 처리 대기 · 점검 후 정비가 필요한 경우 생산 관리자에게 승인을 요청합니다." : selectedMaintenanceDirective.status === "in_progress" ? "보전팀 처리 중 · 담당자가 점검 또는 승인된 정비의 결과를 기록합니다." : "보전팀의 점검 요청 접수를 기다리고 있습니다."}</span>
                     <span className="engineer-detail-assignee">담당: {selectedMaintenanceDirective.assigned_to_display_name || "배정 대기"}</span>
                   </p> : null}
                   <dl>

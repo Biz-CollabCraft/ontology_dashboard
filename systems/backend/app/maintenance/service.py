@@ -560,7 +560,7 @@ class MaintenanceLoopService:
                 workspace_id=workspace_id,
             )
         return {
-            "items": [item.model_dump(mode="json") for item in work_orders]
+            "items": [{**item.model_dump(mode="json"), "inspection_result": self.repository.inspection_progress(item)} for item in work_orders]
         }
 
     def complete_inspection(

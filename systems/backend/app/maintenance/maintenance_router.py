@@ -11,6 +11,7 @@ from app.identity import AuthError
 
 from .api_schema import (
     InspectionCoordinationRequest,
+    InspectionExecutionRequest,
     InspectionCoordinationResponse,
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
@@ -171,6 +172,23 @@ def create_maintenance_router(
             work_order_id=work_order_id, phase="response", payload=payload,
             actor_id=principal.user_id, actor_display_name=principal.display_name, idempotency_key=idempotency_key))
 
+    @router.post("/inspection-work-orders/{work_order_id}/maintenance-execution")
+    def execute_inspected_maintenance(
+        project_id: str, workspace_id: str, work_order_id: str,
+        payload: InspectionExecutionRequest,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=200),
+        principal: Any = Depends(technician_command),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(principal=principal, identity=identity, project_id=project_id, workspace_id=workspace_id)
+        _require_product_role(principal, project_id, "maintenance_technician")
+        return _execute(lambda: service.coordinate_inspection(
+            organization_id=principal.organization_id, project_id=project_id, workspace_id=workspace_id,
+            work_order_id=work_order_id, phase="execution", payload=payload,
+            actor_id=principal.user_id, actor_display_name=principal.display_name, idempotency_key=idempotency_key))
+
     @router.post("/inspection-work-orders")
     def request_inspection_work_order(
         project_id: str,
@@ -263,7 +281,7 @@ def create_maintenance_router(
                 workspace_id=workspace_id,
                 work_order_id=work_order_id,
                 target=WorkOrderStatus.IN_PROGRESS,
-                require_production_confirmation=True,
+                require_production_confirmation=False,
                 actor_id=principal.user_id,
                 actor_display_name=principal.display_name,
                 idempotency_key=idempotency_key,

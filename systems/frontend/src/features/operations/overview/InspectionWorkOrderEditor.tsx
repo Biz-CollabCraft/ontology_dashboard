@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { acceptInspectionWorkOrder, startInspectionWorkOrder, completeInspectionWorkOrder, type OpenInspectionWorkOrderReadModel, type InspectionCompletionPayload, type InspectionOutcome, type InspectionChecklistStatus } from "../../../api";
+import { executeInspectedMaintenance, acceptInspectionWorkOrder, startInspectionWorkOrder, completeInspectionWorkOrder, type OpenInspectionWorkOrderReadModel, type InspectionCompletionPayload, type InspectionOutcome, type InspectionChecklistStatus } from "../../../api";
 import "./InspectionWorkOrderEditor.css";
 import { ProductionCoordinationPanel } from "./ProductionCoordinationPanel";
 import type { InspectionCoordination } from "../../../api";
@@ -41,14 +41,15 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
   useEffect(() => { setStatus(item.status); }, [item.status]);
   const mine = Boolean(currentUserId && item.assigned_to === currentUserId);
   const canAct = Boolean(currentUserId && (status === "requested" || mine));
-  const canComplete = canAct && status === "in_progress";
-  const awaitingProduction = status === "approved" && coordination?.status !== "confirmed";
+  const inspected = Boolean(item.inspection_result);
+  const canComplete = canAct && status === "in_progress" && !inspected;
+  const awaitingProduction = inspected && status === "approved" && coordination?.status !== "confirmed";
   const valid = Boolean(outcome && findings.trim() && equipmentChecks.every(([id]) => checklist[id]) && Object.values(measurements).every((value) => !value || Number.isFinite(Number(value))));
-  const label = status === "completed" ? "결과 저장 완료" : status === "in_progress" ? "현장 점검 중" : status === "approved" ? (awaitingProduction ? "접수됨 · 생산 협의 대기" : "생산 협의 확인 · 작업 시작 대기") : "요청 접수 대기";
+  const label = status === "completed" ? "결과 저장 완료" : status === "in_progress" ? (inspected ? "정비 진행 중" : "점검 진행 중") : status === "approved" ? (!inspected ? "접수 완료 · 점검 시작 대기" : awaitingProduction ? "점검 완료 · 정비 승인 대기" : "정비 승인 완료 · 착수 대기") : "요청 접수 대기";
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (locked.current || !canAct || awaitingProduction || status === "completed" || (status === "in_progress" && !valid)) return;
+    if (locked.current || !canAct || awaitingProduction || status === "completed" || (status === "in_progress" && (inspected ? !note.trim() : !valid))) return;
     locked.current = true;
     setBusy(true);
     setMessage("");
@@ -66,7 +67,11 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
     if (attempt.current?.fingerprint !== fingerprint) attempt.current = { fingerprint, key: Array.from(crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(16).padStart(8, "0")).join("") };
     const input = { projectId, workspaceId, workOrderId: item.work_order_id, idempotencyKey: attempt.current.key };
     try {
-      if (status === "requested") {
+      if (inspected) {
+        await executeInspectedMaintenance({ ...input, payload: { action: status === "approved" ? "start" : "complete", note: note.trim() } });
+        setStatus(status === "approved" ? "in_progress" : "completed");
+        setMessage(status === "approved" ? "정비를 시작했습니다." : "정비 수행 결과를 저장하고 완료했습니다.");
+      } else if (status === "requested") {
         await acceptInspectionWorkOrder(input);
         setMessage("요청을 접수했습니다. 목록 갱신 후 담당자와 작업 시작 상태를 확인하세요.");
       } else if (status === "approved") {
@@ -75,8 +80,9 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
         setMessage("현장 점검을 시작했습니다. 실제 확인한 결과를 아래에 작성하세요.");
       } else {
         await completeInspectionWorkOrder({ ...input, payload });
-        setStatus("completed");
-        setMessage("작업·점검 결과를 저장했습니다. 완료된 요청은 진행 목록에서 제외됩니다.");
+        setNote("");
+        setStatus(outcome === "maintenance_recommended" ? "approved" : "completed");
+        setMessage("점검 결과를 저장했습니다. 정비가 필요한 경우 정비 승인 요청을 작성하세요.");
       }
       onRefresh();
     } catch {
@@ -89,14 +95,16 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
   }
 
   return <form className="inspection-work-editor" onSubmit={(event) => void submit(event)} aria-label="작업 결과 작성">
-    {status !== "requested" ? <ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="maintenance" workOrderId={item.work_order_id} canRequest={mine && status === "approved"} onStateChange={setCoordination} onConnectionChange={onConnectionChange} /> : null}
+    {inspected ? <ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="maintenance" workOrderId={item.work_order_id} canRequest={mine && inspected && status === "approved"} onStateChange={setCoordination} onConnectionChange={onConnectionChange} /> : null}
     <header><strong>{item.equipment_id || item.asset_id}</strong><span>#{item.work_order_id.slice(-8)} · {label}</span></header>
     <p>담당 {item.assigned_to_display_name || (item.assigned_to ? "담당 보전팀" : "배정 대기")}</p>
     {message ? <p role="status" className="inspection-work-message">{message}</p> : null}
     {!canAct && status !== "completed" ? <p>이 작업은 배정된 보전팀 담당자만 시작하고 결과를 기록할 수 있습니다.</p> : null}
-    {status === "approved" ? <p>{awaitingProduction ? "요청을 접수했습니다. 생산 관리자의 작업·정지 일정 확인 후 현장 점검을 시작할 수 있습니다." : "생산 협의가 확인됐습니다. 현장 착수 조건을 확인하고 ‘현장 점검 시작’을 누르면 결과 작성이 열립니다."}</p> : null}
+    {status === "approved" && inspected ? <p>{awaitingProduction ? "요청을 접수했습니다. 생산 관리자의 작업·정지 일정 확인 후 정비를 시작할 수 있습니다." : "생산 협의가 확인됐습니다. 현장 착수 조건을 확인하고 ‘정비 시작’을 누르면 결과 작성이 열립니다."}</p> : null}
+    {inspected ? <section aria-label="점검 결과"><strong>점검 완료 · 정비 필요</strong><p>{item.inspection_result?.findings.join(" / ")}</p></section> : null}
+    {inspected && status === "in_progress" ? <label>정비 수행 결과<textarea required value={note} onChange={e => setNote(e.target.value)} placeholder="실제 수행한 정비와 결과를 작성하세요." /></label> : null}
     {canComplete ? <fieldset disabled={busy}>
-      <legend>작업·점검 결과</legend>
+      <legend>점검 결과</legend>
       <label>점검 판단<select required value={outcome} onChange={(event) => setOutcome(event.target.value as InspectionOutcome)}>
         <option value="">판단 선택</option>
         <option value="no_action_required">추가 정비 불필요 · 후속 관측</option>
@@ -109,12 +117,12 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
       </select></label>)}
       {measurementFields.map(([id, name, unit]) => <label key={id}>{name} ({unit}, 선택 입력)<input type="number" step="any" value={measurements[id] || ""} onChange={(event) => setMeasurements((previous) => ({ ...previous, [id]: event.target.value }))} /></label>)}
       {costFields.map(([id, name]) => <label key={id}>{name}<select value={costBasis[id] || ""} onChange={(event) => setCostBasis((previous) => ({ ...previous, [id]: event.target.value }))}><option value="">미확인 · 산정에서 제외</option><option value="pass">예</option><option value="fail">아니요</option></select></label>)}
-      <label>실제 확인 내용·작업 결과<textarea required value={findings} onChange={(event) => setFindings(event.target.value)} placeholder="확인한 현상, 수행한 작업과 결과를 작성하세요." /></label>
+      <label>점검 확인 내용<textarea required value={findings} onChange={(event) => setFindings(event.target.value)} placeholder="점검에서 확인한 현상과 판단 근거를 작성하세요." /></label>
       <label>추가 메모<textarea maxLength={4000} value={note} onChange={(event) => setNote(event.target.value)} /></label>
       <p>점검 결과 기록이며, 실제 정비 완료나 효과 확인을 자동 처리하지 않습니다.</p>
     </fieldset> : null}
-    {status !== "completed" ? <button type="submit" disabled={busy || !canAct || awaitingProduction || (status === "in_progress" && !valid)}>
-      {busy ? "처리 중…" : status === "requested" ? "요청 접수" : awaitingProduction ? "생산 협의 확인 대기" : status === "approved" ? "현장 점검 시작" : "작업·점검 결과 저장"}
+    {status !== "completed" ? <button type="submit" disabled={busy || !canAct || awaitingProduction || (status === "in_progress" && (inspected ? !note.trim() : !valid))}>
+      {busy ? "처리 중…" : status === "requested" ? "요청 접수" : awaitingProduction ? "생산 협의 확인 대기" : status === "approved" ? (inspected ? "정비 시작" : "점검 시작") : inspected ? "정비 완료" : "점검 결과 저장"}
     </button> : null}
   </form>;
 }

@@ -151,7 +151,7 @@ function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, w
 
     <section className="role-factory-grid">
       <section className="engineer-factory-card role-work-queue">
-        <header><strong>{persona === "maintenance" ? "보전 요청 목록" : "생산 영향 우선순위"}</strong><span>{persona === "maintenance" ? "먼저 접수된 순" : "위험도 높은 순"}</span></header>
+        <header><strong>{persona === "maintenance" ? "점검 요청 목록" : "생산 영향 우선순위"}</strong><span>{persona === "maintenance" ? "먼저 접수된 순" : "위험도 높은 순"}</span></header>
         <div>{persona === "maintenance" ? (
           workOrderError ? <p className="role-empty-state">정비 요청 연결을 확인해 주세요.</p> : workOrders.length ? workOrders.map((item) => <button className="maintenance-request-item" type="button" key={item.work_order_id} aria-pressed={selectedWorkOrder?.work_order_id === item.work_order_id} onClick={() => setSelectedWorkOrderId(item.work_order_id)}>
             <b>{item.equipment_id || item.asset_id}</b>
@@ -163,7 +163,7 @@ function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, w
       </section>
 
       <section className="engineer-factory-card role-primary-work">
-        <header><strong>{persona === "maintenance" ? "현장 작업 준비" : "생산 대응 검토"}</strong><div className="maintenance-work-status"><span>업무 단계별 확인</span>{persona === "maintenance" ? (() => {
+        <header><strong>{persona === "maintenance" ? "점검 및 정비 처리" : "생산 대응 검토"}</strong><div className="maintenance-work-status"><span>업무 단계별 확인</span>{persona === "maintenance" ? (() => {
           const state = workOrderError ? "offline" : !selectedWorkOrder || selectedWorkOrder.status === "requested" ? "online"
             : coordinationConnection?.workOrderId === selectedWorkOrder.work_order_id ? coordinationConnection.state : "loading";
           return <span role="status" className={`maintenance-connection is-${state}`}><i/>{state === "online" ? "연결 정상" : state === "offline" ? "연결 확인 필요" : "연결 확인 중"}</span>;

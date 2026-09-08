@@ -84,6 +84,12 @@ class RecommendationInput(StrictCommand):
     source_context: RecommendationInputSource
 
 
+class InspectionExecutionRequest(StrictCommand):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    action: Literal["start", "complete"]
+    note: str = Field(default="", max_length=4000)
+
+
 class InspectionCoordinationRequest(StrictCommand):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     work_summary: str = Field(min_length=1, max_length=2000)

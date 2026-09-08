@@ -16,7 +16,7 @@ export function productionQueue(orders: OpenInspectionWorkOrderReadModel[], cons
       status: c.work_order_status ?? original?.status ?? "approved", requestedAt: c.work_order_created_at ?? original?.requestedAt ?? c.requested_at,
       assignee: original?.assignee ?? c.requested_by_name, coordination: c });
   }
-  return [...items.values()].sort((a,b) =>
+  return [...items.values()].filter(item => item.coordination !== null).sort((a,b) =>
     Number(a.status === "completed") - Number(b.status === "completed") ||
     (a.requestedAt ?? "9999").localeCompare(b.requestedAt ?? "9999") || a.id.localeCompare(b.id));
 }
@@ -44,7 +44,7 @@ export function equipmentStatus(asset: OperationsAsset | null | undefined): stri
   return { normal: "정상", attention: "주의", warning: "경고", critical: "긴급", data_quality_hold: "확인 필요" }[asset.status] ?? "확인 필요";
 }
 export function queueStatus(item: ProductionQueueItem) {
-  if (item.status === "completed") return "점검 완료";
+  if (item.status === "completed") return "정비 완료";
   if (item.status === "in_progress") return "작업 중";
   if (item.coordination?.status === "confirmed") return "작업 승인 완료";
   if (item.coordination?.status === "changes_requested") return "재협의 대기";

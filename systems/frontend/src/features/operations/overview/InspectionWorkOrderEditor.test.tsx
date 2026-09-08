@@ -11,8 +11,8 @@ vi.mock("./ProductionCoordinationPanel", () => ({
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InspectionWorkOrderEditor } from "./InspectionWorkOrderEditor";
-import { acceptInspectionWorkOrder, startInspectionWorkOrder, completeInspectionWorkOrder, type OpenInspectionWorkOrderReadModel } from "../../../api";
-vi.mock("../../../api", () => ({ acceptInspectionWorkOrder: vi.fn(), startInspectionWorkOrder: vi.fn(), completeInspectionWorkOrder: vi.fn() }));
+import { acceptInspectionWorkOrder, startInspectionWorkOrder, completeInspectionWorkOrder, executeInspectedMaintenance, type OpenInspectionWorkOrderReadModel } from "../../../api";
+vi.mock("../../../api", () => ({ acceptInspectionWorkOrder: vi.fn(), startInspectionWorkOrder: vi.fn(), completeInspectionWorkOrder: vi.fn(), executeInspectedMaintenance: vi.fn() }));
 const order: OpenInspectionWorkOrderReadModel = { work_order_id: "INSPECTION-12345678", event_id: "FILE#observation", asset_id: "CMP-S01-L01-01", equipment_id: "압축기 1", asset_type: "COMPRESSOR", work_type: "inspection", status: "approved", assigned_to: "technician", assigned_to_display_name: "보전 담당자" };
 let host: HTMLDivElement;
 let root: Root;
@@ -41,10 +41,33 @@ beforeEach(() => {
   vi.mocked(acceptInspectionWorkOrder).mockResolvedValue({});
   vi.mocked(startInspectionWorkOrder).mockResolvedValue({});
   vi.mocked(completeInspectionWorkOrder).mockResolvedValue({});
+  vi.mocked(executeInspectedMaintenance).mockResolvedValue({});
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 describe("inspection result workflow", () => {
+  it("blocks maintenance until approval and submits a separate maintenance result", async () => {
+    const inspected = { ...order, inspection_result: { outcome: "maintenance_recommended", findings: ["정비 필요"], note: "점검 메모" } };
+    coordination.status = "pending";
+    await render(inspected); await submit();
+    expect(executeInspectedMaintenance).not.toHaveBeenCalled();
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+    coordination.status = "confirmed";
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await render(inspected); await submit();
+    expect(executeInspectedMaintenance).toHaveBeenCalledWith(expect.objectContaining({payload: {action: "start", note: ""}}));
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+    await act(async () => {
+      const field = host.querySelector("textarea")!;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, "필터 교체 및 누설 검사 완료");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
+    await submit();
+    expect(executeInspectedMaintenance).toHaveBeenLastCalledWith(expect.objectContaining({payload: {action: "complete", note: "필터 교체 및 누설 검사 완료"}}));
+    expect(completeInspectionWorkOrder).not.toHaveBeenCalled();
+  });
   it("accepts a new request through the scoped API", async () => {
     await render({ ...order, status: "requested", assigned_to: null }); await submit();
     expect(acceptInspectionWorkOrder).toHaveBeenCalledWith(expect.objectContaining({ projectId: "project", workspaceId: "workspace", workOrderId: order.work_order_id }));
@@ -114,11 +137,11 @@ describe("inspection result workflow", () => {
     });
     expect(payload.outcome).toBe("data_check_required");
   });
-  it("blocks accepted work until production has confirmed", async () => {
+  it("starts inspection without production approval", async () => {
     coordination.status = "pending";
     await render(); await submit();
-    expect(startInspectionWorkOrder).not.toHaveBeenCalled();
-    expect(host.textContent).toContain("생산 협의 확인 대기");
+    expect(startInspectionWorkOrder).toHaveBeenCalledOnce();
+    expect(host.querySelector("textarea")).not.toBeNull();
   });
   it("does not pretend a failed start entered the in-progress state", async () => {
     vi.mocked(startInspectionWorkOrder).mockRejectedValueOnce(new Error("conflict"));

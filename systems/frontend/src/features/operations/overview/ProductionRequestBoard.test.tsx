@@ -61,7 +61,7 @@ it("shows the request list with risk above sensor trends and approval review at 
   expect(host.querySelector(".prb-monitoring-stack")?.firstElementChild?.className).toBe("prb-risk");
   expect(host.querySelector(".prb-monitoring-stack")?.children).toHaveLength(1);
   expect(host.querySelector('[aria-label="가정 기반 비용 참고"]')).toBeNull();
-  expect(host.querySelector(".prb-queue>header strong")?.textContent).toBe("정비 요청 목록");
+  expect(host.querySelector(".prb-queue>header strong")?.textContent).toBe("정비 승인 요청 목록");
   expect(host.querySelector(".prb-actions>header strong")?.textContent).toBe("작업 승인 검토");
   expect(host.querySelector(".prb-action-buttons")?.children[0].textContent).toBe("선택 설비 영향 확인");
   expect(host.querySelector(".prb-action-buttons")?.children[1].textContent).toBe("작업 승인");
@@ -111,7 +111,7 @@ it("prevents duplicate approval while saving and keeps change requests separate"
 it("cannot approve a request without a production consultation or when connection fails", async () => {
   vi.mocked(listInspectionCoordinations).mockRejectedValue(new Error("private error"));
   await render([{ work_order_id: first.work_order_id, asset_id: first.asset_id, event_id: first.event_id, status: "approved", work_type: "inspection", equipment_id: first.asset_id, asset_type: "cnc" }]);
-  expect(host.querySelector<HTMLButtonElement>(".prb-approve")!.disabled).toBe(true);
+  expect(host.querySelector<HTMLButtonElement>(".prb-approve")).toBeNull();
   expect(host.textContent).toContain("연결");
   expect(host.textContent).not.toContain("private error");
 });

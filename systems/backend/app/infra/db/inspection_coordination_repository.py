@@ -5,6 +5,54 @@ from app.maintenance.maintenance_domain import InvalidTransition
 from app.maintenance.maintenance_schema import WorkOrderStatus, WorkOrderType
 
 class InspectionCoordinationRepositoryMixin:
+
+    def _inspection_summary(self, connection, *, scope, work_order_id):
+        row = connection.execute(
+            """SELECT outcome,findings_json,note FROM closed_loop_inspection_results
+               WHERE organization_id=? AND project_id=? AND workspace_id=? AND work_order_id=?
+               ORDER BY recorded_at DESC LIMIT 1""",
+            (scope.organization_id, scope.project_id, scope.workspace_id, work_order_id),
+        ).fetchone()
+        return None if row is None else dict(outcome=row["outcome"], findings=self._decoded(row["findings_json"]), note=row["note"])
+
+    def inspection_progress(self, work_order):
+        with self._connect() as connection:
+            scope = self._scope(connection, work_order)
+            return self._inspection_summary(connection, scope=scope, work_order_id=work_order.work_order_id)
+
+    def _record_execution(self, connection, *, scope, current, payload, actor_id, actor_display_name, now):
+        if current.assigned_to != actor_id:
+            raise PermissionError("배정된 보전팀만 정비를 수행할 수 있습니다.")
+        summary = self._inspection_summary(connection, scope=scope, work_order_id=current.work_order_id)
+        history = self._coordination_history(connection, scope=scope, work_order_id=current.work_order_id)
+        if not summary or summary["outcome"] != "maintenance_recommended" or not history or history[-1]["status"] != "confirmed":
+            raise InvalidTransition("점검 결과와 생산 관리자 승인이 필요합니다.")
+        action = payload["action"]
+        expected = WorkOrderStatus.APPROVED if action == "start" else WorkOrderStatus.IN_PROGRESS
+        target = WorkOrderStatus.IN_PROGRESS if action == "start" else WorkOrderStatus.COMPLETED
+        if current.status is not expected:
+            raise InvalidTransition("정비 진행 상태가 변경되었습니다.")
+        if action == "complete":
+            started = connection.execute(
+                """SELECT activity_id FROM closed_loop_activities WHERE organization_id=? AND project_id=?
+                   AND workspace_id=? AND work_order_id=? AND activity_type='maintenance.execution.start'""",
+                (scope.organization_id, scope.project_id, scope.workspace_id, current.work_order_id),
+            ).fetchone()
+            if not started or not payload.get("note", "").strip():
+                raise InvalidTransition("정비 시작 기록과 수행 결과가 필요합니다.")
+        connection.execute(
+            """UPDATE closed_loop_work_orders SET status=?,updated_at=? WHERE organization_id=?
+               AND project_id=? AND workspace_id=? AND work_order_id=?""",
+            (target.value, now, scope.organization_id, scope.project_id, scope.workspace_id, current.work_order_id),
+        )
+        result = dict(work_order_id=current.work_order_id, work_order_status=target.value, action=action,
+                      note=payload.get("note", ""), approval_request_id=history[-1]["request_id"])
+        self._record_activity(connection, scope=scope, event_id=current.event_id, equipment_id=current.equipment_id,
+            work_order_id=current.work_order_id, aggregate_type="maintenance_execution", aggregate_id=current.work_order_id,
+            activity_type="maintenance.execution." + action, actor_user_id=actor_id, actor_display_name=actor_display_name,
+            before_status=current.status.value, after_status=target.value, payload=result, created_at=now)
+        return result
+
     def _coordination_history(self, connection, *, scope, work_order_id):
         rows = connection.execute(
             """SELECT payload_json FROM closed_loop_activities
@@ -40,6 +88,14 @@ class InspectionCoordinationRepositoryMixin:
             if row is None:
                 raise KeyError(work_order.work_order_id)
             current = self._work_order_from_row(row)
+            if phase == "execution":
+                result = self._record_execution(connection, scope=scope, current=current, payload=payload,
+                    actor_id=actor_id, actor_display_name=actor_display_name, now=self._now())
+                self._finish_idempotency(connection, scope=scope, idempotency_key=request_idempotency_key, response=result, now=self._now())
+                return result
+            summary = self._inspection_summary(connection, scope=scope, work_order_id=current.work_order_id)
+            if not summary or summary["outcome"] != "maintenance_recommended":
+                raise InvalidTransition("정비가 필요하다는 점검 결과를 먼저 저장해야 합니다.")
             if current.work_type is not WorkOrderType.INSPECTION or current.status is not WorkOrderStatus.APPROVED:
                 raise InvalidTransition("production consultation requires an accepted, not-started inspection")
             history = self._coordination_history(connection, scope=scope, work_order_id=current.work_order_id)

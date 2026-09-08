@@ -40,14 +40,14 @@ export function ProductionCoordinationPanel({ projectId, workspaceId, mode, work
     : items.find((item) => item.work_order_id === selectedId) ?? items[0];
   const reload = useCallback(() => { onStateChange?.(null); setRevision((value) => value + 1); }, [onStateChange]);
   return <section className="production-coordination" aria-label="생산 협의 현황">
-    <header><strong>생산 협의·작업 일정</strong>{!onConnectionChange ? <span role="status">{loading ? "연결 확인 중" : error ? "연결 확인 필요" : "연결 정상"}</span> : null}{mode === "production" ? <button type="button" onClick={reload}>새로고침</button> : null}</header>
+    <header><strong>정비 승인·작업 일정</strong>{!onConnectionChange ? <span role="status">{loading ? "연결 확인 중" : error ? "연결 확인 필요" : "연결 정상"}</span> : null}{mode === "production" ? <button type="button" onClick={reload}>새로고침</button> : null}</header>
     {error ? <p role="status">협의 현황을 불러오지 못했습니다. 저장된 이력은 유지됩니다.</p> : null}
     <div className="production-coordination-content">
       {mode === "production" ? <div className="production-coordination-list">
         {items.map((item) => <button type="button" key={item.work_order_id} aria-pressed={selected?.work_order_id === item.work_order_id} onClick={() => setSelectedId(item.work_order_id)}>
           <b>{item.asset_id}</b><span>{labels[item.status]} · {item.work_order_status === "completed" ? "점검 완료" : item.work_order_status === "in_progress" ? "작업 중" : "착수 전"}</span>
         </button>)}
-        {!loading && !error && !items.length ? <p>현재 생산 협의 요청이 없습니다.</p> : null}
+        {!loading && !error && !items.length ? <p>현재 정비 승인 요청이 없습니다.</p> : null}
       </div> : null}
       {selected ? <article>
         <strong>{selected.asset_id} · {labels[selected.status]}</strong>
@@ -97,7 +97,7 @@ function CoordinationRequestForm({ projectId, workspaceId, workOrderId, onSaved,
     <label>예상 정지 시간(분)<input type="number" min={0} max={43200} step={1} value={downtime} onChange={(e) => setDowntime(e.target.value)} disabled={busy}/></label>
     <label>영향 품목·생산 영향<textarea maxLength={2000} value={affected} onChange={(e) => setAffected(e.target.value)} placeholder="영향이 없으면 '없음'을 명시하세요." disabled={busy}/></label>
     <label>협의 메모<textarea maxLength={4000} value={note} onChange={(e) => setNote(e.target.value)} disabled={busy}/></label>
-    <button type="button" disabled={busy || !valid} onClick={() => void run(payload, (idempotencyKey) => requestInspectionCoordination({ projectId, workspaceId, workOrderId, payload, idempotencyKey }), onSaved)}>{busy ? "저장 중…" : "생산 협의 요청"}</button>
+    <button type="button" disabled={busy || !valid} onClick={() => void run(payload, (idempotencyKey) => requestInspectionCoordination({ projectId, workspaceId, workOrderId, payload, idempotencyKey }), onSaved)}>{busy ? "저장 중…" : "정비 승인 요청"}</button>
     <p role="status">{message}</p>
   </details>;
 }

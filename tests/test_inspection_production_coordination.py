@@ -1,5 +1,5 @@
 import pytest
-from app.maintenance.api_schema import InspectionCoordinationRequest, InspectionCoordinationResponse
+from app.maintenance.api_schema import InspectionCoordinationRequest, InspectionCoordinationResponse, InspectionExecutionRequest
 from app.maintenance.maintenance_domain import InvalidTransition, IdempotencyConflict
 from app.maintenance.maintenance_schema import WorkOrderStatus
 from test_maintenance_loop_application import service, inspection_request, inspection_result
@@ -14,6 +14,8 @@ def accepted(tmp_path):
     result = loop.request_inspection(**SCOPE, payload=inspection_request(), actor_id="engineer", actor_display_name="엔지니어", idempotency_key="create-order-001")
     wid = result["work_order_id"]
     loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.APPROVED, actor_id="tech", actor_display_name="보전팀", idempotency_key="accept-order-001")
+    loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.IN_PROGRESS, actor_id="tech", actor_display_name="보전팀", idempotency_key="inspect-start-001")
+    loop.complete_inspection(**SCOPE, work_order_id=wid, payload=inspection_result(), actor_id="tech", actor_display_name="보전팀", idempotency_key="inspect-result-001")
     return loop, wid
 
 def request(loop, wid, key="coord-request-001", **overrides):
@@ -26,8 +28,8 @@ def reply(loop, wid, rid, decision="confirmed", key="coord-response-001"):
         actor_id="manager", actor_display_name="생산관리자", idempotency_key=key)
 
 def start(loop, wid):
-    return loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.IN_PROGRESS,
-        actor_id="tech", actor_display_name="보전팀", idempotency_key="start-order-001", require_production_confirmation=True)
+    return loop.coordinate_inspection(**SCOPE, work_order_id=wid, phase="execution", payload=InspectionExecutionRequest(action="start"),
+        actor_id="tech", actor_display_name="보전팀", idempotency_key="start-order-001")
 
 def test_request_creation_timestamp_is_preserved_in_queue_and_consultation(accepted):
     loop, wid = accepted
@@ -48,7 +50,7 @@ def test_consultation_gates_start_and_survives_completion_and_reload(accepted, t
         start(loop, wid)
     reply(loop, wid, req["request_id"])
     start(loop, wid)
-    loop.complete_inspection(**SCOPE, work_order_id=wid, payload=inspection_result(), actor_id="tech", actor_display_name="보전팀", idempotency_key="complete-order-001")
+    loop.coordinate_inspection(**SCOPE, work_order_id=wid, phase="execution", payload=InspectionExecutionRequest(action="complete", note="정비 완료"), actor_id="tech", actor_display_name="보전팀", idempotency_key="complete-order-001")
     # A new repository/service instance reads the committed state, not browser memory.
     state = service(tmp_path).list_inspection_coordination(**SCOPE)["items"][0]
     assert state["status"] == "confirmed"
@@ -99,11 +101,11 @@ def test_coordination_route_roles(role, phase, expected):
     response = client.post(f"{BASE}/inspection-work-orders/WO-1/{phase}", json=payload, headers={"Idempotency-Key": "role-test-001"})
     assert response.status_code == expected
 
-def test_start_route_requires_production_confirmation():
+def test_inspection_start_does_not_require_production_confirmation():
     client, stub = client_for("maintenance_technician")
     response = client.post(f"{BASE}/inspection-work-orders/WO-1/start", headers={"Idempotency-Key": "start-test-001"})
     assert response.status_code == 200
-    assert stub.calls[0][1]["require_production_confirmation"] is True
+    assert stub.calls[0][1]["require_production_confirmation"] is False
 
 def test_whitespace_and_negative_downtime_rejected():
     from pydantic import ValidationError
@@ -111,3 +113,27 @@ def test_whitespace_and_negative_downtime_rejected():
         InspectionCoordinationRequest(**{**REQUEST, "work_summary": "  "})
     with pytest.raises(ValidationError):
         InspectionCoordinationRequest(**{**REQUEST, "downtime_minutes": -1})
+
+def test_inspection_can_start_without_approval_and_no_action_closes(tmp_path):
+    loop = service(tmp_path)
+    result = loop.request_inspection(**SCOPE, payload=inspection_request(), actor_id="engineer", actor_display_name="엔지니어", idempotency_key="new-create-001")
+    wid = result["work_order_id"]
+    loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.APPROVED, actor_id="tech", actor_display_name="보전팀", idempotency_key="new-accept-001")
+    with pytest.raises(InvalidTransition):
+        request(loop, wid)
+    loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.IN_PROGRESS, actor_id="tech", actor_display_name="보전팀", idempotency_key="new-start-001")
+    loop.complete_inspection(**SCOPE, work_order_id=wid, payload=inspection_result("no_action_required"), actor_id="tech", actor_display_name="보전팀", idempotency_key="new-result-001")
+    assert loop.list_open_inspection_work_orders(**SCOPE)["items"] == []
+
+def test_inspection_result_retained_and_execution_cannot_bypass_approval(accepted):
+    loop, wid = accepted
+    assert loop.list_open_inspection_work_orders(**SCOPE)["items"][0]["inspection_result"]["outcome"] == "maintenance_recommended"
+    with pytest.raises(InvalidTransition):
+        loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.IN_PROGRESS, actor_id="tech", actor_display_name="보전팀", idempotency_key="bypass-start-001")
+    req = request(loop, wid)
+    reply(loop, wid, req["request_id"])
+    with pytest.raises(PermissionError):
+        loop.coordinate_inspection(**SCOPE, work_order_id=wid, phase="execution", payload=InspectionExecutionRequest(action="start"), actor_id="other", actor_display_name="다른 사용자", idempotency_key="other-start-001")
+    start(loop, wid)
+    with pytest.raises(InvalidTransition):
+        loop.coordinate_inspection(**SCOPE, work_order_id=wid, phase="execution", payload=InspectionExecutionRequest(action="complete"), actor_id="tech", actor_display_name="보전팀", idempotency_key="empty-result-001")
