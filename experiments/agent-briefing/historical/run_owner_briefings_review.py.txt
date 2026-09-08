@@ -1,0 +1,54 @@
+import sys,json,os,copy,hashlib,tempfile,time
+from pathlib import Path
+ROOT=Path('/Users/hb/.devspace/worktrees/ontology-dashboard-727ac25b')
+sys.path[:0]=[str(ROOT),str(ROOT/'systems/backend')]
+from app.dependencies import build_manufacturing_service
+from app.operations.context_providers import _history_record
+from app.operations.agent_review_summary import compose_deterministic_agent_review_summary,validate_agent_review_summary_contract
+from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider,build_tool_selected_agent_review_summary_prompt_payload,AGENT_REVIEW_SUMMARY_PROMPT_VERSION
+from scripts.run_pr167_extended_comparison import EvalProvider
+from jsonschema import Draft202012Validator
+OUT=Path('/private/tmp/owner-briefings-20260907');OUT.mkdir(exist_ok=True)
+def save(name,value): (OUT/name).write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n')
+if sys.argv[1]=='prepare':
+ with tempfile.TemporaryDirectory() as tmp:
+  service=build_manufacturing_service(Path(tmp)/'fixture.db',root=ROOT)
+  base=service.agent_review_packet('CNC-S04-L04-01','manufacturing-demo-project')
+ schema=json.loads((ROOT/'contracts/schemas/agent-review-packet.schema.json').read_text())
+ cases=[]
+ for i,label in enumerate(['점검 결과 등록','작업요청 등록 · 승인 기록 없음','작업요청 승인 기록 있음']):
+  p=copy.deepcopy(base);h=p['maintenance_history_summary']
+  for key in ['work_orders','inspection_results','maintenance_actions','maintenance_events','activities']: h[key]=[]
+  common={'asset_id':p['asset_id'],'event_id':p['snapshot_basis']['event_id']}
+  ir={**common,'inspection_result_id':'IR-REVIEW-001','work_order_id':'WO-INSPECT-001','outcome':'maintenance_recommended','recorded_at':'2026-07-31T23:40:00+09:00','findings':['커플링 정렬 점검에서 편심 확인'],'checklist':[{'item_id':'alignment','status':'fail','note':'커플링 편심 확인'}]}
+  h['inspection_results']=[_history_record(ir,source_prefix='closed-loop://inspection-result')]
+  h['open_work_order_exists']=None
+  if i:
+   wo={**common,'work_order_id':'WO-REVIEW-001','status':'requested' if i==1 else 'approved','created_at':'2026-07-31T23:45:00+09:00','note':'커플링 정렬 보정 작업요청'}
+   if i==2: wo.update(approved_at='2026-07-31T23:55:00+09:00',updated_at='2026-07-31T23:55:00+09:00')
+   h['work_orders']=[_history_record(wo,source_prefix='closed-loop://work-order')];h['open_work_order_exists']=True
+  h['source_refs']=list(dict.fromkeys(h['source_refs']+[r['source_ref'] for k in ['inspection_results','work_orders'] for r in h[k]]))
+  Draft202012Validator(schema).validate(p)
+  prompt=build_tool_selected_agent_review_summary_prompt_payload(packet=p,baseline_summary=compose_deterministic_agent_review_summary(p))
+  cases.append({'case_id':i+1,'label':label,'packet':p,'prompt_payload':prompt})
+ save('inputs.json',cases)
+ save('registration.json',{'model':'gpt-4o-mini-2024-07-18','planned_generations':3,'prompt_version':AGENT_REVIEW_SUMMARY_PROMPT_VERSION,'scope':'local fixture service packet with constructed workflow records; no team DB; human review pending','inputs_sha256':hashlib.sha256((OUT/'inputs.json').read_bytes()).hexdigest()})
+ print('Prepared and schema-validated 3 packets.');sys.exit()
+from dotenv import dotenv_values
+for k,v in dotenv_values('/Users/hb/Documents/final/ontology-dashboard/.env').items():
+ if k in ('LLM_API_KEY','OPENAI_API_KEY','LLM_BASE_URL') and v: os.environ[k]=v
+idx=int(sys.argv[1]);case=json.loads((OUT/'inputs.json').read_text())[idx-1]
+reg=json.loads((OUT/'registration.json').read_text());assert reg['inputs_sha256']==hashlib.sha256((OUT/'inputs.json').read_bytes()).hexdigest()
+assert not (OUT/f'result-{idx}.json').exists()
+class Capture(EvalProvider):
+ def generate_json_with_metadata(self,*a,**kw):
+  r=super().generate_json_with_metadata(*a,**kw);self.raw=r;return r
+provider=Capture(reg['model']);start=time.monotonic()
+try:
+ summary,meta=AgentReviewSummaryProvider(provider).generate_with_metadata(case['packet'])
+ errors=validate_agent_review_summary_contract(summary,packet=case['packet'])
+ result={'case_id':idx,'label':case['label'],'summary':summary,'accepted':not errors,'validation_errors':errors,'metadata':meta}
+except Exception as e: result={'case_id':idx,'accepted':False,'error_type':type(e).__name__}
+result.update(raw=getattr(provider,'raw',None),transport=provider.http_events,duration_seconds=round(time.monotonic()-start,3))
+save(f'result-{idx}.json',result)
+print(json.dumps({k:result.get(k) for k in ('case_id','accepted','validation_errors','error_type','duration_seconds')}))
