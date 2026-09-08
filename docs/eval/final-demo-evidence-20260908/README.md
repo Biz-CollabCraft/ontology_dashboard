@@ -14,3 +14,5 @@
 | `prediction-to-screen-chain-results.json` | `923c98dff9f4dbbb5aec7245325536a100b419a164d8068bd7426dc74586f9cb` |
 | `team-db-read-only-inventory.json` | `97f5b537f41bd1b5af61ee6e494510fc837fca530f5b675a937c31b59e56c854` |
 | `usefulness-aggregate.json` | `b82f299f554ad18389b48a1dccc91f28c0d2eb856382ee49327d007a4914467e` |
+
+승인 후 실제 호출 결과: [최신 프롬프트 실제 LLM 확인](../../ui/final-demo-live-llm-verification.md).

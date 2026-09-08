@@ -46,7 +46,9 @@
 
 **Partially Verified:** 실제 팀 DB 연결과 저장 출처는 읽기 전용으로 확인했다. 합성 문맥·미래 관측·저장 AI 요약 부재를 확인했으며 모델 실행이나 브리핑의 live 통합을 입증하지 않는다.
 
-**Not Proven:** 최신 프롬프트의 새 live LLM 생성, 운영 모델 artifact 재실행, live 전체 경로, 배포, 다중 사용자 부하, 현장 사용자 효용과 운영 KPI.
+**추가 확인:** 최신 프롬프트의 실제 LLM 호출 2개는 각 1회 재생성 후 최종 통과했다. [호출 점검](final-demo-live-llm-verification.md).
+
+**Not Proven:** 운영 모델 artifact 재실행, live 전체 경로, 배포, 다중 사용자 부하, 현장 사용자 효용과 운영 KPI.
 
 **Architecture Pass (검토 범위):** raw producer/hidden truth를 UI에 전달하지 않고 Result/Evidence와 ViewModel을 소비한다. AI 편집은 설명 문장에 한정한다. 점검·승인·정비 실행의 권한과 소유권을 변경하지 않는다.
 
