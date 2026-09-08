@@ -1,0 +1,283 @@
+{
+  "case_id": "GS-007",
+  "input_payload_sha256": "c0dcb5cee6f2069381841adb76dfd55d2ada6248ada6b83744ca0cba0f6c1d45",
+  "scenario_kind": "data_quality_hold",
+  "evidence": [
+    {
+      "id": "GS-007:identity",
+      "pointer": "/cases/6/prompt_payload/summary_context/asset_id",
+      "value_sha256": "a4f56bd3b019a795988b9f2da1e3ee12469bcbc2d99147e028833ee039270568",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-007:risk",
+      "pointer": "/cases/6/prompt_payload/summary_context/risk_summary",
+      "value_sha256": "92b8fd43cc5bd71f65485cfea68b0d659a9630b77bde982b89918631c6c177ef",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-007:gaps",
+      "pointer": "/cases/6/prompt_payload/summary_context/evidence_gaps",
+      "value_sha256": "f97e9bf1608c393bd18ca0e94121eac5e7eba5606bbcad42a98a444ec006d2b3",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-007:quality",
+      "pointer": "/cases/6/prompt_payload/summary_context/confidence_label",
+      "value_sha256": "71d37c63e16e09e620bb513f4d541c0a2a6cd4a47841b996bb326dd6b41eab03",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-007:history",
+      "pointer": "/cases/6/prompt_payload/summary_context/maintenance_history",
+      "value_sha256": "6baabcce5fee60816fa184f1660bce1e588e7ad2e7a38fad17772ef9b9dcda31",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-007:draft_history",
+      "pointer": "/cases/6/prompt_payload/summary_context/review_draft/history_summary",
+      "value_sha256": "3ff791bf22ae450c86ba8de306fa26d20c3985ec6d29eb370115e2c0478895ad",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-007:production",
+      "pointer": "/cases/6/prompt_payload/summary_context/operation_context",
+      "value_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-007:time",
+      "pointer": "/cases/6/prompt_payload/summary_context/generated_at",
+      "value_sha256": "5a662a44e013d6af07c3da03540f1b5998c6cd094e32b0f2a1cc6e20e890b24f",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-007:policy_priority",
+      "pointer": "/cases/6/packet/review_priority",
+      "value_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "visibility": "packet_only",
+      "interpretation": "원본 정책 우선순위: 기존 모델 입력에는 없음. answer_only에서 이 레이블이나 설비 중요도 미언급으로 감점 금지."
+    }
+  ],
+  "allowed_relations": [],
+  "criteria": [
+    {
+      "id": "GS-007.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "대상 설비·위험 등급/확률을 정확히 보존한다. hold이면 위험 판단 불가를 유지한다.",
+      "support": [
+        "GS-007:identity",
+        "GS-007:risk",
+        "GS-007:quality"
+      ]
+    },
+    {
+      "id": "GS-007.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "이력 요약과 구조화 값의 불일치를 임의의 집계로 해소하지 않는다. 사용할 수 없는 범위는 한정한다.",
+      "support": [
+        "GS-007:history",
+        "GS-007:draft_history",
+        "GS-007:gaps"
+      ]
+    },
+    {
+      "id": "GS-007.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "eligibility_reason": "수량·담당자·확정 입고일 및 최신 조회 증거가 입력에 없음. 미언급 감점 금지, 날조는 별도 치명 오류.",
+      "requirement": "최신 실재고 수량·담당자 이름·확정 입고일을 정확히 답한다.",
+      "support": [
+        "GS-007:gaps"
+      ]
+    },
+    {
+      "id": "GS-007.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "제공된 요인→해당 점검 후보의 연결과 요인 방향을 보존한다. hold에서는 부품·요인을 새로 만들지 않는다.",
+      "support": [
+        "GS-007:quality",
+        "GS-007:gaps"
+      ]
+    },
+    {
+      "id": "GS-007.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "근거가 없는 점검 위치·부품·절차 연결을 만들지 않는다.",
+      "support": [
+        "GS-007:gaps"
+      ]
+    },
+    {
+      "id": "GS-007.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "온도·토크·이력 시각의 데이터 보강을 우선한다. 정비/생산 우선순위를 만들어 내지 않는다.",
+      "support": [
+        "GS-007:risk",
+        "GS-007:production",
+        "GS-007:quality"
+      ]
+    },
+    {
+      "id": "GS-007.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "eligibility_reason": "원본에는 있으나 모델 입력에 없음. 숨겨진 정답으로 감점하지 않는다.",
+      "requirement": "설비 중요도와 원본 정책 우선순위를 반영한 설명을 한다.",
+      "support": [
+        "GS-007:policy_priority"
+      ]
+    },
+    {
+      "id": "GS-007.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "보류 시 원본의 우선순위·위험도 미확인을 유지하고 임의의 정책 등급을 채우지 않는다.",
+      "support": [
+        "GS-007:policy_priority",
+        "GS-007:risk"
+      ]
+    },
+    {
+      "id": "GS-007.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "데이터 보강을 우선하고 위험·정비 대상·생산 손실 판단을 보류한다.",
+      "support": [
+        "GS-007:quality",
+        "GS-007:gaps",
+        "GS-007:history",
+        "GS-007:production"
+      ]
+    },
+    {
+      "id": "GS-007.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "역할별 판단 목적을 구분하고 핵심 조회 결과와 의미를 1~2문장 중심으로 전달한다. 내부 필드명·불필요한 면책 반복·이미 있는 정보의 재조회 요구를 줄인다.",
+      "support": [
+        "GS-007:identity",
+        "GS-007:risk",
+        "GS-007:production"
+      ]
+    },
+    {
+      "id": "GS-007.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "생산 영향 미확인을 0으로 표현하지 않는다.",
+      "support": [
+        "GS-007:production",
+        "GS-007:quality"
+      ]
+    }
+  ],
+  "priority_expectation": {
+    "visible_input_judgment": "온도·토크·이력 시각의 데이터 보강을 우선한다. 정비/생산 우선순위를 만들어 내지 않는다.",
+    "upstream_policy": null,
+    "policy_visible_to_model": false,
+    "exact_cross_asset_rank_required": false
+  },
+  "allowed_conclusions": [
+    "온도·토크·이력 시각의 데이터 보강을 우선한다. 정비/생산 우선순위를 만들어 내지 않는다.",
+    "관련 절차·부품은 후보와 준비 조건으로 설명한다. 제공된 수량/담당자가 없으면 없는 정보라고 한정한다.",
+    "조건부 대안과 보류를 허용한다. 참고 문장과 다른 어순·동의어를 감점하지 않는다."
+  ],
+  "forbidden_conclusions": [
+    "고장 원인 확정·자동 승인·완료 날조",
+    "다른 부품/설비 근거의 잘못된 연결",
+    "미확인→0 또는 없음",
+    "데모 가용값→실재고 수량",
+    "등록 조달 기간→확정 입고일",
+    "부품 대기 기간만으로 점검 연기",
+    "참고 유사 사례→최근 30일 전체 집계"
+  ],
+  "input_conflicts": [
+    "I03: hold 이력 요약 잔존"
+  ],
+  "resource_facts": [],
+  "reference_display_label": "시나리오 자료 기준 · 실제 재고/발주 조회 아님",
+  "reference_briefing": {
+    "title": "판단 보류 — 온도·토크 데이터 보강",
+    "summary": "4구역 5셀 CNC 가공기 1은 데이터 품질 문제로 위험 등급과 예측 위험도를 판단할 수 없습니다. 주변 공기 온도·토크 관측값과 이력 시각을 보강한 뒤 다시 검토해야 합니다.",
+    "role_summaries": [
+      {
+        "role": "process_engineer",
+        "quote": "주변 공기 온도·토크 관측값과 과거 관측 시각의 유효성을 먼저 확인하세요. 현재는 모델 근거와 점검 대상이 제공되지 않아 고장 부위나 원인을 특정할 수 없습니다."
+      },
+      {
+        "role": "maintenance_technician",
+        "quote": "점검 대상과 부품 정보가 제공되지 않아 교체 준비 여부를 판단할 수 없습니다. 먼저 온도·토크 관측값과 이력 시각을 보강해야 하며, 현재 작업요청·승인 상태도 미확인입니다."
+      },
+      {
+        "role": "process_manager",
+        "quote": "생산 영향과 손실량을 추정할 근거가 없어, 영향이 없거나 손실이 0개라고 판단할 수 없습니다. 데이터를 보강하고 작업요청 상태를 확인한 뒤 점검 승인과 생산 일정 변경 여부를 검토하세요."
+      }
+    ]
+  },
+  "reference_status": "illustrative_not_unique_answer_human_review_pending"
+}

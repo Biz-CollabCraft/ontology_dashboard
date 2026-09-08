@@ -1,0 +1,444 @@
+{
+  "case_id": "GS-004",
+  "input_payload_sha256": "e8922286b36b4e1a4c4e1e57c076b656cfe8581b68f4a7db85541b76692a1a6f",
+  "scenario_kind": "temporal_conflict",
+  "evidence": [
+    {
+      "id": "GS-004:identity",
+      "pointer": "/cases/3/prompt_payload/summary_context/asset_id",
+      "value_sha256": "8224342a4e9287e16caa114ddde7f3890d1ffb6ed9d0cc442960596a81736dee",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:risk",
+      "pointer": "/cases/3/prompt_payload/summary_context/risk_summary",
+      "value_sha256": "bb64ec023a1982521f29732a55e7d63a07add1b5868ba01f48da9c702a7fe808",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:gaps",
+      "pointer": "/cases/3/prompt_payload/summary_context/evidence_gaps",
+      "value_sha256": "f75fef2880c6a2d724b4fb8d5e0808872339f6297bb138a517775ca22301b566",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:quality",
+      "pointer": "/cases/3/prompt_payload/summary_context/confidence_label",
+      "value_sha256": "8ac24611cfe47c129e37108bc6adc6843c4fe8fb9c37c27fac8a1835ba660307",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:history",
+      "pointer": "/cases/3/prompt_payload/summary_context/maintenance_history",
+      "value_sha256": "d48a54bcf1d78f6810f6baacc18cb3517e220075030b2cf8d349a3a2aaf780ec",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:draft_history",
+      "pointer": "/cases/3/prompt_payload/summary_context/review_draft/history_summary",
+      "value_sha256": "b884715b653ea30468238b1480145bb666438291ad0692d4e45ded3f5c58833e",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:production",
+      "pointer": "/cases/3/prompt_payload/summary_context/operation_context",
+      "value_sha256": "b5e3b443b098dd8770081d900c02913b4b21b1abece191dc50ab4ebf785267cf",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:time",
+      "pointer": "/cases/3/prompt_payload/summary_context/generated_at",
+      "value_sha256": "5a662a44e013d6af07c3da03540f1b5998c6cd094e32b0f2a1cc6e20e890b24f",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:policy_priority",
+      "pointer": "/cases/3/packet/review_priority",
+      "value_sha256": "f8997c3f06438710f85bcee7069cebed018a22e6fae6051af17e0275fc3b6269",
+      "visibility": "packet_only",
+      "interpretation": "원본 정책 우선순위: 기존 모델 입력에는 없음. answer_only에서 이 레이블이나 설비 중요도 미언급으로 감점 금지."
+    },
+    {
+      "id": "GS-004:factor_mechanical_power_w",
+      "pointer": "/cases/3/prompt_payload/summary_context/model_factors/0",
+      "value_sha256": "49c293b5c5c7def764092de9d84a20287763eb1e1c43eb8a346b9e1d31502d32",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:factor_overstrain_index",
+      "pointer": "/cases/3/prompt_payload/summary_context/model_factors/1",
+      "value_sha256": "ead3cef3e4d9dadab221c440ba1b81191157b303718c39d79f9568af57fe17cb",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:factor_torque_nm",
+      "pointer": "/cases/3/prompt_payload/summary_context/model_factors/2",
+      "value_sha256": "5c8ca6485de4394203b90d7223b1fae6bcfc1e0b49ccec937f9378037f12bf42",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:target_drive_power",
+      "pointer": "/cases/3/prompt_payload/summary_context/inspection_targets/0",
+      "value_sha256": "13fc02c9886e9c31d70561638bcd5d95bd4fc29403bc9e319047d8eac2ddfdd5",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:sop_drive_power",
+      "pointer": "/cases/3/prompt_payload/summary_context/sop_guidance/0",
+      "value_sha256": "4e3c913e1bec152081730a902576077fad612cd888d1a7d36242b9c31a57eed9",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-004:part_SP-CNC-DRIVE-COUPLING-KIT",
+      "pointer": "/cases/3/prompt_payload/summary_context/spare_part_context/traversals/0/spare_parts/0",
+      "value_sha256": "6c56e8648f97469869907f713bb049779beb67b1a5313233ca5c87ee12b3e60c",
+      "visibility": "model_visible",
+      "interpretation": "설비 단위 시나리오 가용값; 수량·실재고·확정 납기 아님"
+    },
+    {
+      "id": "GS-004:similar_drive_power_0",
+      "pointer": "/cases/3/prompt_payload/summary_context/similar_event_context/traversals/0/similar_events/0",
+      "value_sha256": "217c89d074ea04ca6b5fdfe42967fc6266798e58faf1d592997a85b38f74d618",
+      "visibility": "model_visible",
+      "interpretation": "데모 참고 사례; 같은 설비의 30일 집계 또는 이번 조치 효과 보장 아님"
+    }
+  ],
+  "allowed_relations": [
+    {
+      "from": "GS-004:factor_mechanical_power_w",
+      "relation": "supports_inspection_candidate",
+      "to": "GS-004:target_drive_power",
+      "not_implied": "고장 원인 확정 또는 교체 필요 확정"
+    },
+    {
+      "from": "GS-004:factor_overstrain_index",
+      "relation": "supports_inspection_candidate",
+      "to": "GS-004:target_drive_power",
+      "not_implied": "고장 원인 확정 또는 교체 필요 확정"
+    },
+    {
+      "from": "GS-004:factor_torque_nm",
+      "relation": "supports_inspection_candidate",
+      "to": "GS-004:target_drive_power",
+      "not_implied": "고장 원인 확정 또는 교체 필요 확정"
+    },
+    {
+      "from": "GS-004:target_drive_power",
+      "relation": "has_linked_procedure_reference",
+      "to": "GS-004:sop_drive_power",
+      "not_implied": "절차 전문·기준 충족·작업 승인 확인"
+    },
+    {
+      "from": "GS-004:target_drive_power",
+      "relation": "has_conditional_replacement_candidate",
+      "to": "GS-004:part_SP-CNC-DRIVE-COUPLING-KIT",
+      "not_implied": "현재 고장 부품/실재고 수량/교체 승인"
+    },
+    {
+      "from": "GS-004:target_drive_power",
+      "relation": "has_related_example",
+      "to": "GS-004:similar_drive_power_0",
+      "not_implied": "동일 설비·동일 사건·인과/조치 효과 보장"
+    }
+  ],
+  "criteria": [
+    {
+      "id": "GS-004.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "대상 설비·위험 등급/확률을 정확히 보존한다. hold이면 위험 판단 불가를 유지한다.",
+      "support": [
+        "GS-004:identity",
+        "GS-004:risk",
+        "GS-004:quality"
+      ]
+    },
+    {
+      "id": "GS-004.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "이력 요약과 구조화 값의 불일치를 임의의 집계로 해소하지 않는다. 사용할 수 없는 범위는 한정한다.",
+      "support": [
+        "GS-004:history",
+        "GS-004:draft_history",
+        "GS-004:gaps"
+      ]
+    },
+    {
+      "id": "GS-004.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "eligibility_reason": "수량·담당자·확정 입고일 및 최신 조회 증거가 입력에 없음. 미언급 감점 금지, 날조는 별도 치명 오류.",
+      "requirement": "최신 실재고 수량·담당자 이름·확정 입고일을 정확히 답한다.",
+      "support": [
+        "GS-004:part_SP-CNC-DRIVE-COUPLING-KIT"
+      ]
+    },
+    {
+      "id": "GS-004.E4",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "판단과 관련된 부품의 등록 가용 상태·조달 기간을 활용한다. 가용 여부를 수량으로 바꾸거나 계획 조달 기간을 확정 납기로 바꾸지 않는다.",
+      "support": [
+        "GS-004:part_SP-CNC-DRIVE-COUPLING-KIT"
+      ]
+    },
+    {
+      "id": "GS-004.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "제공된 요인→해당 점검 후보의 연결과 요인 방향을 보존한다. hold에서는 부품·요인을 새로 만들지 않는다.",
+      "support": [
+        "GS-004:factor_mechanical_power_w",
+        "GS-004:factor_overstrain_index",
+        "GS-004:factor_torque_nm",
+        "GS-004:target_drive_power"
+      ]
+    },
+    {
+      "id": "GS-004.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "점검 후보에 실제 연결된 절차·부품·참고 사례만 연결한다. 다른 부품의 조달 기간이나 사례 결과를 전용하지 않는다.",
+      "support": [
+        "GS-004:sop_drive_power",
+        "GS-004:part_SP-CNC-DRIVE-COUPLING-KIT",
+        "GS-004:similar_drive_power_0"
+      ]
+    },
+    {
+      "id": "GS-004.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "동력 전달부 점검의 우선 검토 필요성과 교체 자원 제약을 함께 설명한다. 조달 2일을 점검 연기 근거로 삼지 않는다.",
+      "support": [
+        "GS-004:risk",
+        "GS-004:production",
+        "GS-004:quality",
+        "GS-004:factor_mechanical_power_w",
+        "GS-004:factor_overstrain_index",
+        "GS-004:factor_torque_nm"
+      ]
+    },
+    {
+      "id": "GS-004.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "eligibility_reason": "원본에는 있으나 모델 입력에 없음. 숨겨진 정답으로 감점하지 않는다.",
+      "requirement": "설비 중요도와 원본 정책 우선순위를 반영한 설명을 한다.",
+      "support": [
+        "GS-004:policy_priority"
+      ]
+    },
+    {
+      "id": "GS-004.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "원본 우선순위·설비 중요도·예측 기간 등 필요한 판단 근거가 소비자 입력으로 전달되는지 확인한다.",
+      "support": [
+        "GS-004:policy_priority",
+        "GS-004:risk"
+      ]
+    },
+    {
+      "id": "GS-004.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "근거가 있는 점검 검토와 조건부 교체 일정만 제안한다. 데이터/승인/자원 미확인의 범위와 실제 필요한 다음 판단을 구분한다.",
+      "support": [
+        "GS-004:quality",
+        "GS-004:gaps",
+        "GS-004:history",
+        "GS-004:production",
+        "GS-004:part_SP-CNC-DRIVE-COUPLING-KIT"
+      ]
+    },
+    {
+      "id": "GS-004.T1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "00:05 요청을 00:00 상태에 소급하지 않고 requested를 승인으로 승격하지 않는다.",
+      "support": [
+        "GS-004:time",
+        "GS-004:history"
+      ]
+    },
+    {
+      "id": "GS-004.T2",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "eligibility_reason": "기준 이후 기록과 미확인 플래그가 함께 있어 당시 상태 확정 불가. 충돌 감지는 T1에서 채점.",
+      "requirement": "기준 시각의 실제 요청/승인 상태를 확정한다.",
+      "support": [
+        "GS-004:time",
+        "GS-004:history"
+      ]
+    },
+    {
+      "id": "GS-004.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "역할별 판단 목적을 구분하고 핵심 조회 결과와 의미를 1~2문장 중심으로 전달한다. 내부 필드명·불필요한 면책 반복·이미 있는 정보의 재조회 요구를 줄인다.",
+      "support": [
+        "GS-004:identity",
+        "GS-004:risk",
+        "GS-004:production",
+        "GS-004:part_SP-CNC-DRIVE-COUPLING-KIT"
+      ]
+    },
+    {
+      "id": "GS-004.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "계획 생산 영향과 실제 손실을 구분하고 가정 시간·손실 추정치를 유지한다.",
+      "support": [
+        "GS-004:production",
+        "GS-004:quality"
+      ]
+    }
+  ],
+  "priority_expectation": {
+    "visible_input_judgment": "동력 전달부 점검의 우선 검토 필요성과 교체 자원 제약을 함께 설명한다. 조달 2일을 점검 연기 근거로 삼지 않는다.",
+    "upstream_policy": {
+      "level": "immediate",
+      "reasons": [
+        "risk.status_grade=critical",
+        "asset.criticality=high",
+        "operation_context.production_impact=high"
+      ],
+      "source_fields": [
+        "risk.status_grade",
+        "asset.criticality",
+        "operation_context.production_impact"
+      ]
+    },
+    "policy_visible_to_model": false,
+    "exact_cross_asset_rank_required": false
+  },
+  "allowed_conclusions": [
+    "동력 전달부 점검의 우선 검토 필요성과 교체 자원 제약을 함께 설명한다. 조달 2일을 점검 연기 근거로 삼지 않는다.",
+    "관련 절차·부품은 후보와 준비 조건으로 설명한다. 제공된 수량/담당자가 없으면 없는 정보라고 한정한다.",
+    "조건부 대안과 보류를 허용한다. 참고 문장과 다른 어순·동의어를 감점하지 않는다."
+  ],
+  "forbidden_conclusions": [
+    "고장 원인 확정·자동 승인·완료 날조",
+    "다른 부품/설비 근거의 잘못된 연결",
+    "미확인→0 또는 없음",
+    "데모 가용값→실재고 수량",
+    "등록 조달 기간→확정 입고일",
+    "부품 대기 기간만으로 점검 연기",
+    "참고 유사 사례→최근 30일 전체 집계"
+  ],
+  "input_conflicts": [
+    "I01: 30일 전체 집계와 참고 사례 혼재",
+    "I02: 기준 시각 이후 requested 기록"
+  ],
+  "resource_facts": [
+    {
+      "part": "주축 구동 커플링 키트",
+      "availability": "unavailable_from_fixture",
+      "lead_time_days": 2,
+      "replacement_window_minutes": 180,
+      "stock_quantity": null,
+      "contact": null
+    }
+  ],
+  "reference_display_label": "시나리오 자료 기준 · 실제 재고/발주 조회 아님",
+  "reference_briefing": {
+    "title": "위험 — 동력 전달부 점검과 기록 시점 확인",
+    "summary": "4구역 2셀 CNC 가공기 3은 위험 등급이며 예측 위험도는 90.8%로, 기계 동력·과부하·토크가 위험도를 높이는 방향으로 반영됐습니다. 동력 전달부 점검을 우선 검토하되, 함께 제공된 작업요청은 기준 시각 이후 기록이므로 당시 상태와 구분해야 합니다.",
+    "role_summaries": [
+      {
+        "role": "process_engineer",
+        "quote": "주축 모터·커플링·동력 전달 하우징의 관측 근거를 기계 동력·과부하·토크와 대조해 점검 범위를 정하세요. 위험도 변화 이력이 없어 악화 추세를 확정할 수 없으며, 높은 예측값만으로 고장 원인을 단정할 수는 없습니다."
+      },
+      {
+        "role": "maintenance_technician",
+        "quote": "커플링 키트는 시나리오상 가용 불가이며, 등록 조달 기간은 2일이고 교체 작업 계획값은 3시간입니다. 작업요청은 브리핑 기준 이후인 00:05 기록이므로 당시 승인 상태로 해석할 수 없으며, 부품 대기만을 이유로 점검을 미루는 판단은 근거가 부족합니다."
+      },
+      {
+        "role": "process_manager",
+        "quote": "데모 계획상 생산 영향은 높은 수준이며, 정지 240분 가정의 손실 추정치는 51개로 실제 손실량은 아닙니다. 점검 승인과 생산 순서 조정을 우선 검토하되, 기준 시각 이후의 요청 기록을 이미 승인된 작업으로 취급하지 마세요."
+      }
+    ]
+  },
+  "reference_status": "illustrative_not_unique_answer_human_review_pending"
+}

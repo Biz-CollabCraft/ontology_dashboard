@@ -1,0 +1,66 @@
+import sys,json,os,copy,hashlib,tempfile,time
+from pathlib import Path
+ROOT=Path('/Users/hb/.devspace/worktrees/ontology-dashboard-727ac25b')
+sys.path[:0]=[str(ROOT),str(ROOT/'systems/backend')]
+from app.dependencies import build_manufacturing_service
+from app.operations.context_providers import _history_record
+from app.operations.agent_review_summary import compose_deterministic_agent_review_summary,validate_agent_review_summary_contract
+from app.operations.agent_review_summary_provider import AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT, AgentReviewSummaryProvider,build_tool_selected_agent_review_summary_prompt_payload,AGENT_REVIEW_SUMMARY_PROMPT_VERSION
+from scripts.run_pr167_extended_comparison import EvalProvider
+from jsonschema import Draft202012Validator
+import app.operations.agent_review_summary_provider as provider_module
+BASE_SYSTEM_PROMPT=AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
+KOREAN_ADDITION="\n한국어 브리핑 작성 지침:\n- 현장 담당자가 읽고 판단할 수 있는 자연스러운 한국어로 제목, 공통 요약, 역할별 본문을 작성하세요.\n- JSON 키와 role 값은 지정된 형식을 유지하되, 본문에 내부 필드명, 코드값, 파일 경로, URL을 노출하지 마세요. 기록 ID는 본문에 나열하지 말고 제공된 근거 참조에 두세요. 승인 시각처럼 판단에 필요한 시각은 '7월 31일 23:55'처럼 읽기 쉽게 표현하세요.\n- 상태값은 의미를 보존해 번역하세요: maintenance_recommended는 '정비 권고', requested는 '작업요청 등록', approved는 '승인', warning은 '경고', production_impact medium은 '생산 영향 중간'입니다. 상태를 번역하면서 승인·착수·완료 여부를 바꾸지 마세요.\n- '데모 가정', '합성 데이터', '시나리오상', 'fixture', 'supplied record', 'decision basis' 같은 데이터·구현 설명을 본문에 반복하지 마세요. 데이터 출처와 성격은 별도 근거·메타데이터에 남깁니다.\n- 판단에 필요한 조건과 불확실성은 유지하세요. 예를 들어 정지 시간에 따른 손실은 '120분 정지 가정 시 예상 손실 25개'처럼 표현하세요. 기록이 없으면 '제공된 기록에서 승인 여부는 확인되지 않습니다'처럼 말하고 실제 행위가 없었다고 단정하지 마세요.\n- 번역 지침은 사실 추가나 삭제를 허용하지 않습니다. 동일한 근거와 상태, 수치, 역할별 다음 판단을 자연스러운 한국어로 전달하세요.\n"
+SHARED_ADDITION='\n최종 작성 순서 — 모든 모델 공통:\n1. 먼저 decision_facts의 점검 결과와 작업요청 기록을 읽고 현재 단계를 정하세요. 기록된 사실, SOP 권고, 아직 필요한 결정을 구별하세요. 이 준비 과정은 출력하지 마세요.\n2. 빈 baseline_editable_fields는 형식 안내일 뿐입니다. review_draft 문장을 복사하지 말고 실제 기록으로 새 문장을 작성하세요.\n3. 각 역할의 quote를 아래 네 항목을 연결한 3~4문장으로 작성하세요. 단, 근거가 없으면 추측하거나 분량을 채우지 말고 무엇이 미확인인지 설명하세요.\n   - 설비 엔지니어: 관측 위치와 수치 → 적용 조건이 확인된 SOP 기준 비교 → 실제 점검 소견과 관련 이력 → 남은 구체적 점검 지점.\n   - 보전 담당자: 기록된 점검 소견과 정비 권고 → 현재 작업요청 상태와 필요한 기록 시각 → 아직 확인되지 않은 준비 조건 → 현재 단계에서 필요한 다음 결정.\n   - 생산관리자: 보전 설명과 동일한 요청·승인 상태 → 제공된 정지 시간 가정과 예상 손실 수량 및 생산 영향 → 일정 판단에 필요한 미확인 조건 → 생산 순서 또는 정지 시간 배정에 관한 다음 결정.\n4. 상태별 다음 판단을 혼동하지 마세요. 요청 기록 미제공이면 작업요청 검토, 요청 등록·승인 기록 미제공이면 승인 및 일정 검토, 승인 기록이 있으면 인력·부품·작업 가능 시간 등 준비와 실행 일정 검토입니다. 어느 경우도 새 승인이나 실행이 이루어졌다고 쓰지 마세요.\n5. 독자가 이해할 한국어만 본문에 쓰세요. 상태 코드에 한글을 괄호로 덧붙이는 대신 코드 자체를 한글로 바꾸세요. 예: maintenance_recommended → 정비 권고. 영문 상태·필드명·파일 경로·기록 ID·데모 설명은 본문에 옮기지 마세요. 설비명, SOP, 물리 단위는 필요한 경우 유지할 수 있습니다.\n6. 제출 전 조용히 점검하세요: 보전 본문에 실제 발견 사항과 결과가 있는가? 승인된 요청을 미승인으로 바꾸지 않았는가? 승인 시각을 보존했는가? 생산관리 본문에 입력의 정지 시간과 예상 손실 수량을 함께 썼는가? 두 역할에 다음 결정이 있는가? 내부 코드명이 남았는가?\n7. 위 점검에서 빠진 내용을 같은 근거로 보완한 뒤 JSON만 반환하세요. 사실이 없는 항목은 채우지 마세요. 입력 예시의 수치를 정답으로 복사하지 마세요.\n'
+AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT=BASE_SYSTEM_PROMPT+'\n'+KOREAN_ADDITION+'\n'+SHARED_ADDITION
+provider_module.AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT=AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
+OUT=Path('/private/tmp/owner-briefings-expanded-20260907');OUT.mkdir(exist_ok=True)
+def save(name,value): (OUT/name).write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n')
+if sys.argv[1]=='prepare':
+ assert not (OUT/'registration.json').exists()
+ old_cases=json.loads(Path('/private/tmp/owner-briefings-state-20260907/inputs.json').read_text())
+ packets=[copy.deepcopy(c['packet']) for c in old_cases]
+ labels=[c['label'] for c in old_cases]
+ expected=[{'inspection':'maintenance_recommended','work_order':'not_supplied'}, {'inspection':'maintenance_recommended','work_order':'requested'}, {'inspection':'maintenance_recommended','work_order':'approved','approval_time':'23:55'}]
+ q=json.loads((ROOT/'tests/fixtures/agent_review_packets/GS-003.json').read_text());packets.append(q);labels.append('다른 설비의 원본 관측');expected.append({'asset_id':q['asset_id'],'risk':q['risk_summary']})
+ q=copy.deepcopy(packets[2]);q['maintenance_history_summary']['work_orders'][0]['owner_record_provenance'].update(approved_at='2026-08-01T00:05:00+09:00',updated_at='2026-08-01T00:05:00+09:00');packets.append(q);labels.append('기준 이후 승인 기록');expected.append({'work_order':'approval after basis only','forbidden':'approval as of basis'})
+ q=copy.deepcopy(packets[2]);q['maintenance_history_summary']['work_orders'][0]['owner_record_provenance'].update(asset_id='CNC-OTHER',event_id='EVT-OTHER');packets.append(q);labels.append('다른 설비·이벤트의 승인 기록');expected.append({'work_order':'not evidence for this asset/event','forbidden':'current asset approved'})
+ q=copy.deepcopy(packets[2]);
+ for t in q['ontology_context'].get('traversals',[]): t['spare_parts']=[]
+ packets.append(q);labels.append('부품 가용·조달 근거 미제공');expected.append({'work_order':'approved','resource':'unknown','forbidden':'inventory quantity or procurement duration'})
+ q=json.loads((ROOT/'tests/fixtures/agent_review_packets/GS-007.json').read_text());packets.append(q);labels.append('데이터 품질 보류');expected.append({'risk':'not confirmed','production_impact':'not confirmed'})
+ cases=[]
+ schema=json.loads((ROOT/'contracts/schemas/agent-review-packet.schema.json').read_text())
+ for i,p in enumerate(packets,1):
+  history=p.get('maintenance_history_summary') or {}
+  refs=[r['source_ref'] for key in ('inspection_results','work_orders') for r in history.get(key,[]) if r.get('source_ref')]
+  p['source_refs']=list(dict.fromkeys([*p['source_refs'],*refs]))
+  Draft202012Validator(schema).validate(p)
+  prompt=build_tool_selected_agent_review_summary_prompt_payload(packet=p,baseline_summary=compose_deterministic_agent_review_summary(p))
+  cases.append({'case_id':i,'label':labels[i-1],'packet':p,'prompt_payload':prompt,'expected_facts':expected[i-1]})
+ save('system-prompts.json',{'before':BASE_SYSTEM_PROMPT,'addition':KOREAN_ADDITION+'\n'+SHARED_ADDITION,'after':AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT})
+ save('inputs.json',cases)
+ save('registration.json',{'models':['gpt-4o-mini-2024-07-18','gpt-5-mini-2025-08-07','gpt-5.6-luna'],'reasoning_effort':'low for GPT-5 models; not applicable for 4o mini','planned_cases':24,'max_generations':48,'experiment_version':'delivery-cleanup-expanded-v1','system_sha256':hashlib.sha256(AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT.encode()).hexdigest(),'max_repairs_per_case':1,'prompt_version':AGENT_REVIEW_SUMMARY_PROMPT_VERSION,'scope':'local fixture service packet with constructed workflow records; no team DB; human review pending','inputs_sha256':hashlib.sha256((OUT/'inputs.json').read_bytes()).hexdigest()})
+ print('Prepared and schema-validated 8 packets; 24 planned model/case runs.');sys.exit()
+from dotenv import dotenv_values
+for k,v in dotenv_values('/Users/hb/Documents/final/ontology-dashboard/.env').items():
+ if k in ('LLM_API_KEY','OPENAI_API_KEY','LLM_BASE_URL') and v: os.environ[k]=v
+model=sys.argv[1];idx=int(sys.argv[2]);case=json.loads((OUT/'inputs.json').read_text())[idx-1]
+reg=json.loads((OUT/'registration.json').read_text());assert reg['inputs_sha256']==hashlib.sha256((OUT/'inputs.json').read_bytes()).hexdigest()
+assert model in reg['models']
+assert reg['system_sha256']==hashlib.sha256(AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT.encode()).hexdigest()
+assert case['prompt_payload']==build_tool_selected_agent_review_summary_prompt_payload(packet=case['packet'],baseline_summary=compose_deterministic_agent_review_summary(case['packet']))
+assert not (OUT/f'{model}-{idx}.json').exists()
+class Capture(EvalProvider):
+ def generate_json_with_metadata(self,*a,**kw):
+  assert hashlib.sha256(a[0].encode()).hexdigest()==reg['system_sha256']
+  r=super().generate_json_with_metadata(*a,**kw);self.raw=r;self.attempts=getattr(self,'attempts',[])+[r];return r
+provider=Capture(model);start=time.monotonic()
+try:
+ summary,meta=AgentReviewSummaryProvider(provider).generate_with_metadata(case['packet'])
+ errors=validate_agent_review_summary_contract(summary,packet=case['packet'])
+ result={'case_id':idx,'label':case['label'],'summary':summary,'accepted':not errors,'validation_errors':errors,'metadata':meta}
+except Exception as e: result={'case_id':idx,'accepted':False,'error_type':type(e).__name__,'review_attempts':getattr(e,'review_attempts',[])}
+result.update(model=model,raw=getattr(provider,'raw',None),attempts=getattr(provider,'attempts',[]),transport=provider.http_events,duration_seconds=round(time.monotonic()-start,3))
+save(f'{model}-{idx}.json',result)
+print(json.dumps({k:result.get(k) for k in ('case_id','accepted','validation_errors','error_type','duration_seconds')}))

@@ -1,0 +1,3184 @@
+{
+  "gold_answer_set_id": "agent-review-summary-natural-briefing-v3",
+  "schema_version": "briefing-semantic-reference-v1",
+  "status": "authored_reference_v3.0",
+  "human_domain_review": "not_measured",
+  "author": "Codex; source-grounded editorial reference, not independent human gold",
+  "purpose": "사실 보존과 역할별 자연어 품질을 분리해 검토하는 참고 브리핑 및 의미 기준",
+  "provenance": {
+    "source_artifact": "frozen-inputs-v2.json",
+    "source_file_sha256": "64542521b01b1b6628b6a54b1ae1e4510f6c5b9ac39f4ca47e149518a5ac4228",
+    "previous_gold_id": "agent-review-summary-three-role-proxy-v2",
+    "previous_gold_canonical_sha256": "5c8c5471bcc92cdc18605a899b0b6984a8186709da894e358dd13483a643c950",
+    "candidate_outputs_seen_before_authoring": true,
+    "evaluation_split": "development_seen_cases",
+    "blind_holdout": false,
+    "old_results_recomputed": false
+  },
+  "evaluation_protocol": {
+    "exact_match": false,
+    "legacy_keyword_scorer_compatible": false,
+    "reference_policy": "참고 문장은 유일 정답이 아니다. 동의어, 어순, 수치의 동등 단위와 자연스러운 압축을 허용하며 필수 의미를 판단한다.",
+    "unit": "공통 요약과 각 역할 문장을 각각 검토한다. 역할별 필수 의미는 해당 역할 문장에 있어야 한다. 숫자를 모든 역할에 반복시키지 않는다.",
+    "numeric_policy": "위험도는 원본 확률을 퍼센트 소수 첫째 자리 반올림 또는 그보다 정확히 표현한다. 정지 시간은 분/시간 환산 허용. 손실은 계획 추정량임을 같은 문맥에 명시한다.",
+    "hard_gates": [
+      "원문에 없는 사실·수치·원인 확정, 요인 방향 반전이 없어야 한다.",
+      "미확인(null)을 없음(false)이나 0으로 바꾸지 않는다.",
+      "데모 가용성·이력·생산 추정을 실제 재고·실제 성과·실제 손실로 단정하지 않는다.",
+      "작업요청과 승인·실행·완료를 구분하고 기준 시각 뒤 기록을 당시 상태로 소급하지 않는다.",
+      "판단 보류 사례에서는 위험도·등급·생산 손실·고장 부위를 임의로 채우지 않는다."
+    ],
+    "semantic_coverage": "각 required_meanings를 met/partial/missing/contradicted로 기록한다. not_applicable은 사유가 있어야 한다. 키워드 개수나 단일 유사도 점수로 대체하지 않는다.",
+    "quality_rubric": {
+      "readability": {
+        "0": "내부 필드명·영문 구현 용어가 설명 없이 노출되어 이해를 방해한다.",
+        "1": "이해 가능하나 나열·어색한 표현이 남는다.",
+        "2": "현장 사용자가 쉽게 읽을 수 있는 한국어이며 필요한 전문용어만 쓴다."
+      },
+      "role_relevance": {
+        "0": "역할과 무관하거나 세 역할의 내용이 사실상 같다.",
+        "1": "역할 목적은 있으나 핵심 판단이 흐리다.",
+        "2": "엔지니어는 근거·점검 범위, 정비는 준비·작업 상태, 관리자는 조건부 영향·일정 판단에 집중한다."
+      },
+      "decision_clarity": {
+        "0": "막연한 확인 요청뿐이거나 근거 없는 실행 지시다.",
+        "1": "확인 대상은 있으나 확인 이유·다음 판단과 연결이 약하다.",
+        "2": "어떤 근거를 왜 확인하고 무엇을 판단할지 구체적이다."
+      },
+      "concision": {
+        "0": "반복·면책·표 값 나열 때문에 핵심을 찾기 어렵다.",
+        "1": "조금 길거나 같은 정보가 반복된다.",
+        "2": "문장별 1~2문장을 지향하며 핵심과 필요한 한계를 간결하게 연결한다."
+      }
+    },
+    "reporting": "계약 통과율, 사실 위반 건수, 의미 충족, 자연어 4축을 분리 보고한다. 치명적 사실 위반은 자연어 점수로 상쇄하지 않는다. 통합 순위·합격선은 이번 보완에서 정하지 않는다.",
+    "review_method": "후보 이름과 비용을 숨기고 순서를 섞어 원문으로 검토한다. 판단 사유와 원문 인용을 남기며 불일치는 별도 조정한다. LLM 검토와 사람 검토를 구분한다.",
+    "limits": "8개 기존 사례를 보고 보완한 개발셋이다. 독립 홀드아웃·사람의 유용성·현장 성과를 측정한 것이 아니다. 새 모델 실행 전에 이 버전과 입력 해시를 등록해야 한다."
+  },
+  "cases": [
+    {
+      "case_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "prompt_payload_canonical_sha256": "6cbc7fcb3e66498ff7458d798134b3167f6643dbb99c37847e00bee2005476a8",
+      "evidence_bindings": {
+        "asset_label": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/asset_label",
+          "value": "1구역 · 1셀 · CNC 가공기 1"
+        },
+        "generated_at": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/generated_at",
+          "value": "2026-08-01T00:00:00+09:00"
+        },
+        "confidence_label": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/confidence_label",
+          "value": "partial"
+        },
+        "risk_summary": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/risk_summary",
+          "value": {
+            "status_grade": "normal",
+            "failure_probability": 0.116074
+          }
+        },
+        "model_factors": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/model_factors",
+          "value": [
+            {
+              "feature": "mechanical_power_w",
+              "display_name": "기계 동력",
+              "direction": "risk_down",
+              "source_ref": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#factor.1.mechanical_power_w"
+            },
+            {
+              "feature": "torque_nm",
+              "display_name": "토크",
+              "direction": "risk_down",
+              "source_ref": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#factor.2.torque_nm"
+            },
+            {
+              "feature": "temperature_difference_k",
+              "display_name": "공정·공기 온도 차이",
+              "direction": "risk_down",
+              "source_ref": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#factor.3.temperature_difference_k"
+            }
+          ]
+        },
+        "inspection_targets": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/inspection_targets",
+          "value": [
+            {
+              "component_id": "drive_power",
+              "component_label": "동력 전달 계통",
+              "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+              "basis_refs": [
+                "factor.1.mechanical_power_w",
+                "factor.2.torque_nm",
+                "sensor_evidence.sensors.torque_nm"
+              ],
+              "source_ref": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+            },
+            {
+              "component_id": "thermal_path",
+              "component_label": "열 방산 계통",
+              "location_label": "스핀들 냉각 라인 및 가공부 열 배출 경로",
+              "basis_refs": [
+                "factor.3.temperature_difference_k"
+              ],
+              "source_ref": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00#component_hypotheses[1]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path"
+            }
+          ]
+        },
+        "sop_guidance": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/sop_guidance",
+          "value": []
+        },
+        "operation_context": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/operation_context",
+          "value": {
+            "production_impact": "none",
+            "estimated_downtime_minutes": 45,
+            "estimated_lost_units": 0,
+            "limitations": [
+              "This context is not a MES, ERP, APS, or customer-order record.",
+              "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+              "AI4I provides Product Type L/M/H but no real SKU or product name.",
+              "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+              "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
+            ]
+          }
+        },
+        "maintenance_history": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/maintenance_history",
+          "value": {
+            "provider": "closed_loop_maintenance_history_adapter",
+            "recent_equipment_history": [
+              {
+                "description": "최근 정비 이력",
+                "occurred_at": "2026-07-20T00:00:00+09:00",
+                "source_ref": "equipment-history://1"
+              }
+            ],
+            "open_work_order_exists": null,
+            "similar_events_30d": null,
+            "similar_events": [
+              {
+                "observed_at": "2026-07-22T14:10:00+09:00"
+              },
+              {
+                "observed_at": "2026-07-24T10:35:00+09:00"
+              }
+            ],
+            "work_orders": [],
+            "inspection_results": [],
+            "maintenance_actions": [],
+            "maintenance_events": [],
+            "activities": []
+          }
+        },
+        "evidence_gaps": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/evidence_gaps",
+          "value": [
+            {
+              "field": "risk_series",
+              "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "maintenance_context.similar_events_30d",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            },
+            {
+              "field": "maintenance_context.open_work_order_exists",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            }
+          ]
+        },
+        "spare_part_context": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/spare_part_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.1.mechanical_power_w",
+                  "factor.2.torque_nm"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "mechanical_power_w",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              },
+              {
+                "component_id": "thermal_path",
+                "component_label": "열 방산 계통",
+                "factor_refs": [
+                  "factor.3.temperature_difference_k"
+                ],
+                "location_label": "스핀들 냉각 라인 및 가공부 열 배출 경로",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-COOLING-FAN-UNIT",
+                    "part_label": "냉각 팬 유닛",
+                    "replacement_scope": "냉각 팬 및 방열 계통 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": 90,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-COOLING-FAN-UNIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-THERMAL-2026-07-24",
+                    "asset_label": "1구역 · 4셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-24T10:35:00+09:00",
+                    "matched_factor_keys": [
+                      "temperature_difference_k"
+                    ],
+                    "action_taken": "냉각 라인 막힘과 방열 팬 동작 상태를 점검",
+                    "outcome": "공정·공기 온도 차이가 다음 관측 구간에서 정상 범위로 완화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-THERMAL-2026-07-24"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-COOLING-FAN-UNIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-THERMAL-2026-07-24"
+                ]
+              }
+            ]
+          }
+        },
+        "similar_event_context": {
+          "source_pointer": "/cases/0/prompt_payload/summary_context/similar_event_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.1.mechanical_power_w",
+                  "factor.2.torque_nm"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "mechanical_power_w",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              },
+              {
+                "component_id": "thermal_path",
+                "component_label": "열 방산 계통",
+                "factor_refs": [
+                  "factor.3.temperature_difference_k"
+                ],
+                "location_label": "스핀들 냉각 라인 및 가공부 열 배출 경로",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-COOLING-FAN-UNIT",
+                    "part_label": "냉각 팬 유닛",
+                    "replacement_scope": "냉각 팬 및 방열 계통 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": 90,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-COOLING-FAN-UNIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-THERMAL-2026-07-24",
+                    "asset_label": "1구역 · 4셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-24T10:35:00+09:00",
+                    "matched_factor_keys": [
+                      "temperature_difference_k"
+                    ],
+                    "action_taken": "냉각 라인 막힘과 방열 팬 동작 상태를 점검",
+                    "outcome": "공정·공기 온도 차이가 다음 관측 구간에서 정상 범위로 완화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-THERMAL-2026-07-24"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-COOLING-FAN-UNIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-THERMAL-2026-07-24"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required_meanings": {
+        "summary": [
+          "대상 설비를 정확히 식별한다.",
+          "등급 normal 및 예측 위험도 11.6%; 점검 판단에 연결되는 근거 또는 핵심 한계."
+        ],
+        "process_engineer": [
+          "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다."
+        ],
+        "maintenance_technician": [
+          "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다."
+        ],
+        "process_manager": [
+          "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다."
+        ]
+      },
+      "reference_briefing": {
+        "title": "정상 범위 — 추세 확인 후 점검 판단",
+        "summary": "1구역 1셀 CNC 가공기 1은 정상 등급이며 예측 위험도는 11.6%입니다. 위험도 변화 이력이 없어 추세는 판단하기 어려우므로, 동력 전달부와 냉각 계통의 관측 근거를 대조해 점검 필요성을 검토하세요.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "기계 동력·토크·공정과 주변 공기의 온도 차이는 이번 모델 판단에서 위험도를 낮추는 방향으로 반영됐습니다. 주축 모터·커플링과 스핀들 냉각 라인의 관측값을 대조하되, 점검 후보라는 이유만으로 고장 부위로 단정하지 마세요."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "참고 부품은 주축 구동 커플링 키트와 냉각 팬 유닛이지만, 준비 가능 여부는 데모 가정이므로 실제 재고 확인이 필요합니다. 진행 중인 작업요청과 승인 여부도 확인한 뒤 점검 준비를 검토하세요."
+          },
+          {
+            "role": "process_manager",
+            "quote": "데모 계획상 생산 영향은 없음으로 분류되며, 정지 45분 가정의 추정 손실은 0개입니다. 실제 손실이 없다는 뜻은 아니므로, 점검 필요성과 작업요청·승인 상태를 확인한 뒤 생산 순서 조정 여부를 검토하세요."
+          }
+        ]
+      },
+      "reference_support": {
+        "title": [
+          "risk_summary",
+          "confidence_label",
+          "evidence_gaps",
+          "inspection_targets"
+        ],
+        "summary": [
+          "asset_label",
+          "risk_summary",
+          "confidence_label",
+          "model_factors",
+          "inspection_targets",
+          "evidence_gaps",
+          "maintenance_history",
+          "generated_at"
+        ],
+        "process_engineer": [
+          "model_factors",
+          "inspection_targets",
+          "sop_guidance",
+          "evidence_gaps",
+          "similar_event_context"
+        ],
+        "maintenance_technician": [
+          "inspection_targets",
+          "sop_guidance",
+          "spare_part_context",
+          "maintenance_history",
+          "generated_at",
+          "evidence_gaps"
+        ],
+        "process_manager": [
+          "operation_context",
+          "maintenance_history",
+          "confidence_label",
+          "generated_at",
+          "evidence_gaps"
+        ]
+      },
+      "adjudication_notes": [
+        "과거 문장 요약과 구조화된 이력에 차이가 있으면 임의로 정합성을 만들지 않는다. 최근 30일 건수 미확인은 유사 사례가 전혀 없다는 뜻이 아니다."
+      ],
+      "human_review": {
+        "status": "not_measured",
+        "reviewer": null,
+        "notes": null
+      }
+    },
+    {
+      "case_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "prompt_payload_canonical_sha256": "c6050924d114f7d593d94d0142e93b0ab8faba46926501b1464dcba8c5600350",
+      "evidence_bindings": {
+        "asset_label": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/asset_label",
+          "value": "4구역 · 4셀 · CNC 가공기 1"
+        },
+        "generated_at": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/generated_at",
+          "value": "2026-08-01T00:00:00+09:00"
+        },
+        "confidence_label": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/confidence_label",
+          "value": "grounded"
+        },
+        "risk_summary": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/risk_summary",
+          "value": {
+            "status_grade": "warning",
+            "failure_probability": 0.824583
+          }
+        },
+        "model_factors": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/model_factors",
+          "value": [
+            {
+              "feature": "tool_wear_min",
+              "display_name": "공구 마모",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#factor.1.tool_wear_min"
+            },
+            {
+              "feature": "overstrain_index",
+              "display_name": "과부하 지표",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#factor.2.overstrain_index"
+            },
+            {
+              "feature": "torque_nm",
+              "display_name": "토크",
+              "direction": "risk_down",
+              "source_ref": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#factor.3.torque_nm"
+            }
+          ]
+        },
+        "inspection_targets": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/inspection_targets",
+          "value": [
+            {
+              "component_id": "tooling",
+              "component_label": "공구/마모 계통",
+              "location_label": "공구 매거진 및 스핀들 공구 체결부",
+              "basis_refs": [
+                "factor.1.tool_wear_min",
+                "sensor_evidence.sensors.tool_wear_min"
+              ],
+              "source_ref": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling"
+            },
+            {
+              "component_id": "drive_power",
+              "component_label": "동력 전달 계통",
+              "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+              "basis_refs": [
+                "factor.2.overstrain_index",
+                "factor.3.torque_nm",
+                "sensor_evidence.sensors.torque_nm"
+              ],
+              "source_ref": "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#component_hypotheses[1]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+            }
+          ]
+        },
+        "sop_guidance": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/sop_guidance",
+          "value": [
+            {
+              "component_id": "tooling",
+              "component_label": "공구/마모 계통",
+              "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling"
+            }
+          ]
+        },
+        "operation_context": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/operation_context",
+          "value": {
+            "production_impact": "medium",
+            "estimated_downtime_minutes": 120,
+            "estimated_lost_units": 25,
+            "limitations": [
+              "This context is not a MES, ERP, APS, or customer-order record.",
+              "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+              "AI4I provides Product Type L/M/H but no real SKU or product name.",
+              "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+              "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
+            ]
+          }
+        },
+        "maintenance_history": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/maintenance_history",
+          "value": {
+            "provider": "asset_detail_view_model_closed_loop_projection",
+            "recent_equipment_history": [
+              {
+                "description": "최근 정비 이력",
+                "occurred_at": "2026-06-28T00:00:00+09:00",
+                "source_ref": "equipment-history://1"
+              }
+            ],
+            "open_work_order_exists": null,
+            "similar_events_30d": null,
+            "similar_events": [
+              {
+                "observed_at": "2026-07-18T09:20:00+09:00"
+              },
+              {
+                "observed_at": "2026-07-22T14:10:00+09:00"
+              }
+            ],
+            "work_orders": [],
+            "inspection_results": [],
+            "maintenance_actions": [],
+            "maintenance_events": [],
+            "activities": []
+          }
+        },
+        "evidence_gaps": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/evidence_gaps",
+          "value": [
+            {
+              "field": "risk_series",
+              "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "maintenance_context.similar_events_30d",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            },
+            {
+              "field": "maintenance_context.open_work_order_exists",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            }
+          ]
+        },
+        "spare_part_context": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/spare_part_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "tooling",
+                "component_label": "공구/마모 계통",
+                "factor_refs": [
+                  "factor.1.tool_wear_min"
+                ],
+                "location_label": "공구 매거진 및 스핀들 공구 체결부",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                "sop_ids": [
+                  "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+                ],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
+                    "part_label": "카바이드 절삭 인서트 1개",
+                    "replacement_scope": "마모된 카바이드 절삭 인서트 1개 교체 및 체결 상태 확인",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": null,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-TOOLING-2026-07-18",
+                    "asset_label": "4구역 · 4셀 · CNC 가공기 2",
+                    "observed_at": "2026-07-18T09:20:00+09:00",
+                    "matched_factor_keys": [
+                      "tool_wear_min"
+                    ],
+                    "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
+                    "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                  "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                ]
+              },
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.2.overstrain_index",
+                  "factor.3.torque_nm"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "overstrain_index",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        },
+        "similar_event_context": {
+          "source_pointer": "/cases/1/prompt_payload/summary_context/similar_event_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "tooling",
+                "component_label": "공구/마모 계통",
+                "factor_refs": [
+                  "factor.1.tool_wear_min"
+                ],
+                "location_label": "공구 매거진 및 스핀들 공구 체결부",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                "sop_ids": [
+                  "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+                ],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
+                    "part_label": "카바이드 절삭 인서트 1개",
+                    "replacement_scope": "마모된 카바이드 절삭 인서트 1개 교체 및 체결 상태 확인",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": null,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-TOOLING-2026-07-18",
+                    "asset_label": "4구역 · 4셀 · CNC 가공기 2",
+                    "observed_at": "2026-07-18T09:20:00+09:00",
+                    "matched_factor_keys": [
+                      "tool_wear_min"
+                    ],
+                    "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
+                    "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                  "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                ]
+              },
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.2.overstrain_index",
+                  "factor.3.torque_nm"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "overstrain_index",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required_meanings": {
+        "summary": [
+          "대상 설비를 정확히 식별한다.",
+          "등급 warning 및 예측 위험도 82.5%; 점검 판단에 연결되는 근거 또는 핵심 한계."
+        ],
+        "process_engineer": [
+          "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다."
+        ],
+        "maintenance_technician": [
+          "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다."
+        ],
+        "process_manager": [
+          "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다."
+        ]
+      },
+      "reference_briefing": {
+        "title": "경고 — 공구 마모와 과부하 근거 확인",
+        "summary": "4구역 4셀 CNC 가공기 1은 경고 등급이며 예측 위험도는 82.5%입니다. 공구 마모와 과부하 지표가 위험도를 높이는 방향으로 반영돼, 공구 체결부와 동력 전달부의 점검 근거를 우선 대조할 필요가 있습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "공구 매거진·스핀들 공구 체결부를 공구 마모 근거와 연결해 보고, 주축 모터·커플링은 과부하 근거와 함께 점검 범위를 검토하세요. 위험도 변화 이력은 없어 최근 악화 추세나 고장 원인까지 확정할 수는 없습니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "공구 계통에 연결된 점검 절차를 확인하고, 절삭 인서트와 커플링 키트의 실제 재고를 확인하세요. 부품 가용성은 데모 가정이며 진행 중인 작업요청·승인 여부도 미확인이므로, 교체가 결정된 것으로 보아서는 안 됩니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "데모 계획에서는 생산 영향이 중간 수준이며, 정지 120분을 가정한 손실 추정치는 25개입니다. 실제 손실과 구분해 점검 승인 여부와 생산 순서 조정을 검토하되, 먼저 현재 작업요청 상태를 확인하세요."
+          }
+        ]
+      },
+      "reference_support": {
+        "title": [
+          "risk_summary",
+          "confidence_label",
+          "evidence_gaps",
+          "inspection_targets"
+        ],
+        "summary": [
+          "asset_label",
+          "risk_summary",
+          "confidence_label",
+          "model_factors",
+          "inspection_targets",
+          "evidence_gaps",
+          "maintenance_history",
+          "generated_at"
+        ],
+        "process_engineer": [
+          "model_factors",
+          "inspection_targets",
+          "sop_guidance",
+          "evidence_gaps",
+          "similar_event_context"
+        ],
+        "maintenance_technician": [
+          "inspection_targets",
+          "sop_guidance",
+          "spare_part_context",
+          "maintenance_history",
+          "generated_at",
+          "evidence_gaps"
+        ],
+        "process_manager": [
+          "operation_context",
+          "maintenance_history",
+          "confidence_label",
+          "generated_at",
+          "evidence_gaps"
+        ]
+      },
+      "adjudication_notes": [
+        "과거 문장 요약과 구조화된 이력에 차이가 있으면 임의로 정합성을 만들지 않는다. 최근 30일 건수 미확인은 유사 사례가 전혀 없다는 뜻이 아니다."
+      ],
+      "human_review": {
+        "status": "not_measured",
+        "reviewer": null,
+        "notes": null
+      }
+    },
+    {
+      "case_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "prompt_payload_canonical_sha256": "7c2adab09a1255eb4c4d769b64c280b946ae75fae8ae647f67f4f8d3cef76923",
+      "evidence_bindings": {
+        "asset_label": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/asset_label",
+          "value": "1구역 · 4셀 · CNC 가공기 3"
+        },
+        "generated_at": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/generated_at",
+          "value": "2026-08-01T00:00:00+09:00"
+        },
+        "confidence_label": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/confidence_label",
+          "value": "grounded"
+        },
+        "risk_summary": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/risk_summary",
+          "value": {
+            "status_grade": "warning",
+            "failure_probability": 0.602318
+          }
+        },
+        "model_factors": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/model_factors",
+          "value": [
+            {
+              "feature": "temperature_difference_k",
+              "display_name": "공정·공기 온도 차이",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#factor.1.temperature_difference_k"
+            },
+            {
+              "feature": "torque_nm",
+              "display_name": "토크",
+              "direction": "risk_down",
+              "source_ref": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#factor.2.torque_nm"
+            },
+            {
+              "feature": "mechanical_power_w",
+              "display_name": "기계 동력",
+              "direction": "risk_down",
+              "source_ref": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#factor.3.mechanical_power_w"
+            }
+          ]
+        },
+        "inspection_targets": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/inspection_targets",
+          "value": [
+            {
+              "component_id": "thermal_path",
+              "component_label": "열 방산 계통",
+              "location_label": "스핀들 냉각 라인 및 가공부 열 배출 경로",
+              "basis_refs": [
+                "factor.1.temperature_difference_k"
+              ],
+              "source_ref": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path"
+            },
+            {
+              "component_id": "drive_power",
+              "component_label": "동력 전달 계통",
+              "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+              "basis_refs": [
+                "factor.2.torque_nm",
+                "sensor_evidence.sensors.torque_nm",
+                "factor.3.mechanical_power_w"
+              ],
+              "source_ref": "RESULT#CNC-S01-L04-03#2026-08-01T00:00:00+09:00#component_hypotheses[1]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+            }
+          ]
+        },
+        "sop_guidance": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/sop_guidance",
+          "value": [
+            {
+              "component_id": "thermal_path",
+              "component_label": "열 방산 계통",
+              "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path"
+            }
+          ]
+        },
+        "operation_context": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/operation_context",
+          "value": {
+            "production_impact": "medium",
+            "estimated_downtime_minutes": 150,
+            "estimated_lost_units": 32,
+            "limitations": [
+              "This context is not a MES, ERP, APS, or customer-order record.",
+              "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+              "AI4I provides Product Type L/M/H but no real SKU or product name.",
+              "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+              "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
+            ]
+          }
+        },
+        "maintenance_history": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/maintenance_history",
+          "value": {
+            "provider": "closed_loop_maintenance_history_adapter",
+            "recent_equipment_history": [
+              {
+                "description": "최근 정비 이력",
+                "occurred_at": "2026-07-10T00:00:00+09:00",
+                "source_ref": "equipment-history://1"
+              }
+            ],
+            "open_work_order_exists": null,
+            "similar_events_30d": null,
+            "similar_events": [
+              {
+                "observed_at": "2026-07-24T10:35:00+09:00"
+              },
+              {
+                "observed_at": "2026-07-22T14:10:00+09:00"
+              }
+            ],
+            "work_orders": [],
+            "inspection_results": [],
+            "maintenance_actions": [],
+            "maintenance_events": [],
+            "activities": []
+          }
+        },
+        "evidence_gaps": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/evidence_gaps",
+          "value": [
+            {
+              "field": "risk_series",
+              "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "maintenance_context.similar_events_30d",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            },
+            {
+              "field": "maintenance_context.open_work_order_exists",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            }
+          ]
+        },
+        "spare_part_context": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/spare_part_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "thermal_path",
+                "component_label": "열 방산 계통",
+                "factor_refs": [
+                  "factor.1.temperature_difference_k"
+                ],
+                "location_label": "스핀들 냉각 라인 및 가공부 열 배출 경로",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path",
+                "sop_ids": [
+                  "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+                ],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-COOLING-FAN-UNIT",
+                    "part_label": "냉각 팬 유닛",
+                    "replacement_scope": "냉각 팬 및 방열 계통 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": 90,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-COOLING-FAN-UNIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-THERMAL-2026-07-24",
+                    "asset_label": "1구역 · 4셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-24T10:35:00+09:00",
+                    "matched_factor_keys": [
+                      "temperature_difference_k"
+                    ],
+                    "action_taken": "냉각 라인 막힘과 방열 팬 동작 상태를 점검",
+                    "outcome": "공정·공기 온도 차이가 다음 관측 구간에서 정상 범위로 완화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-THERMAL-2026-07-24"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path",
+                  "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-COOLING-FAN-UNIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-THERMAL-2026-07-24"
+                ]
+              },
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.2.torque_nm",
+                  "factor.3.mechanical_power_w"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "mechanical_power_w",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        },
+        "similar_event_context": {
+          "source_pointer": "/cases/2/prompt_payload/summary_context/similar_event_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "thermal_path",
+                "component_label": "열 방산 계통",
+                "factor_refs": [
+                  "factor.1.temperature_difference_k"
+                ],
+                "location_label": "스핀들 냉각 라인 및 가공부 열 배출 경로",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path",
+                "sop_ids": [
+                  "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+                ],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-COOLING-FAN-UNIT",
+                    "part_label": "냉각 팬 유닛",
+                    "replacement_scope": "냉각 팬 및 방열 계통 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": 90,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-COOLING-FAN-UNIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-THERMAL-2026-07-24",
+                    "asset_label": "1구역 · 4셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-24T10:35:00+09:00",
+                    "matched_factor_keys": [
+                      "temperature_difference_k"
+                    ],
+                    "action_taken": "냉각 라인 막힘과 방열 팬 동작 상태를 점검",
+                    "outcome": "공정·공기 온도 차이가 다음 관측 구간에서 정상 범위로 완화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-THERMAL-2026-07-24"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#thermal_path",
+                  "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-COOLING-FAN-UNIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-THERMAL-2026-07-24"
+                ]
+              },
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.2.torque_nm",
+                  "factor.3.mechanical_power_w"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "mechanical_power_w",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required_meanings": {
+        "summary": [
+          "대상 설비를 정확히 식별한다.",
+          "등급 warning 및 예측 위험도 60.2%; 점검 판단에 연결되는 근거 또는 핵심 한계."
+        ],
+        "process_engineer": [
+          "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다."
+        ],
+        "maintenance_technician": [
+          "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다."
+        ],
+        "process_manager": [
+          "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다."
+        ]
+      },
+      "reference_briefing": {
+        "title": "경고 — 냉각 경로의 관측 근거 확인",
+        "summary": "1구역 4셀 CNC 가공기 3은 경고 등급이며 예측 위험도는 60.2%입니다. 공정과 주변 공기의 온도 차이가 위험도를 높이는 방향으로 반영돼, 스핀들 냉각 라인과 열 배출 경로를 중심으로 점검 근거를 확인할 필요가 있습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "스핀들 냉각 라인·가공부 열 배출 경로의 관측값을 온도 차이 근거 및 연결된 점검 절차와 대조하세요. 토크와 기계 동력은 이번 모델 판단에서 위험도를 낮추는 방향이므로, 모든 지표가 악화됐다고 해석하면 안 됩니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "냉각 팬 유닛이 참고 부품으로 제시됐지만 가용성은 데모 가정이므로 실제 준비 상태를 확인해야 합니다. 냉각 계통의 점검 범위와 진행 중인 작업요청·승인 여부를 확인한 뒤 작업 준비를 검토하세요."
+          },
+          {
+            "role": "process_manager",
+            "quote": "데모 계획의 생산 영향은 중간 수준으로, 정지 150분을 가정하면 손실 추정치는 32개입니다. 실제 손실로 단정하지 말고 작업요청·승인 상태를 확인해 점검 시점과 생산 순서 조정을 검토하세요."
+          }
+        ]
+      },
+      "reference_support": {
+        "title": [
+          "risk_summary",
+          "confidence_label",
+          "evidence_gaps",
+          "inspection_targets"
+        ],
+        "summary": [
+          "asset_label",
+          "risk_summary",
+          "confidence_label",
+          "model_factors",
+          "inspection_targets",
+          "evidence_gaps",
+          "maintenance_history",
+          "generated_at"
+        ],
+        "process_engineer": [
+          "model_factors",
+          "inspection_targets",
+          "sop_guidance",
+          "evidence_gaps",
+          "similar_event_context"
+        ],
+        "maintenance_technician": [
+          "inspection_targets",
+          "sop_guidance",
+          "spare_part_context",
+          "maintenance_history",
+          "generated_at",
+          "evidence_gaps"
+        ],
+        "process_manager": [
+          "operation_context",
+          "maintenance_history",
+          "confidence_label",
+          "generated_at",
+          "evidence_gaps"
+        ]
+      },
+      "adjudication_notes": [
+        "과거 문장 요약과 구조화된 이력에 차이가 있으면 임의로 정합성을 만들지 않는다. 최근 30일 건수 미확인은 유사 사례가 전혀 없다는 뜻이 아니다."
+      ],
+      "human_review": {
+        "status": "not_measured",
+        "reviewer": null,
+        "notes": null
+      }
+    },
+    {
+      "case_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "prompt_payload_canonical_sha256": "e8922286b36b4e1a4c4e1e57c076b656cfe8581b68f4a7db85541b76692a1a6f",
+      "evidence_bindings": {
+        "asset_label": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/asset_label",
+          "value": "4구역 · 2셀 · CNC 가공기 3"
+        },
+        "generated_at": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/generated_at",
+          "value": "2026-08-01T00:00:00+09:00"
+        },
+        "confidence_label": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/confidence_label",
+          "value": "partial"
+        },
+        "risk_summary": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/risk_summary",
+          "value": {
+            "status_grade": "critical",
+            "failure_probability": 0.908411
+          }
+        },
+        "model_factors": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/model_factors",
+          "value": [
+            {
+              "feature": "mechanical_power_w",
+              "display_name": "기계 동력",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#factor.1.mechanical_power_w"
+            },
+            {
+              "feature": "overstrain_index",
+              "display_name": "과부하 지표",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#factor.2.overstrain_index"
+            },
+            {
+              "feature": "torque_nm",
+              "display_name": "토크",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#factor.3.torque_nm"
+            }
+          ]
+        },
+        "inspection_targets": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/inspection_targets",
+          "value": [
+            {
+              "component_id": "drive_power",
+              "component_label": "동력 전달 계통",
+              "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+              "basis_refs": [
+                "factor.1.mechanical_power_w",
+                "factor.2.overstrain_index",
+                "factor.3.torque_nm",
+                "sensor_evidence.sensors.torque_nm"
+              ],
+              "source_ref": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+            }
+          ]
+        },
+        "sop_guidance": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/sop_guidance",
+          "value": [
+            {
+              "component_id": "drive_power",
+              "component_label": "동력 전달 계통",
+              "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+            }
+          ]
+        },
+        "operation_context": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/operation_context",
+          "value": {
+            "production_impact": "high",
+            "estimated_downtime_minutes": 240,
+            "estimated_lost_units": 51,
+            "limitations": [
+              "This context is not a MES, ERP, APS, or customer-order record.",
+              "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+              "AI4I provides Product Type L/M/H but no real SKU or product name.",
+              "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+              "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
+            ]
+          }
+        },
+        "maintenance_history": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/maintenance_history",
+          "value": {
+            "provider": "closed_loop_maintenance_history_adapter",
+            "recent_equipment_history": [
+              {
+                "description": "최근 정비 이력",
+                "occurred_at": "2026-06-15T00:00:00+09:00",
+                "source_ref": "equipment-history://1"
+              }
+            ],
+            "open_work_order_exists": null,
+            "similar_events_30d": null,
+            "similar_events": [
+              {
+                "observed_at": "2026-07-22T14:10:00+09:00"
+              }
+            ],
+            "work_orders": [
+              {
+                "record_id": "WO-INS-GS-004-001",
+                "record_type": "work-order",
+                "status": "requested",
+                "activity_type": "",
+                "recorded_at": "2026-08-01T00:05:00+09:00",
+                "summary": "",
+                "source_ref": "closed-loop://work-order/WO-INS-GS-004-001"
+              }
+            ],
+            "inspection_results": [],
+            "maintenance_actions": [],
+            "maintenance_events": [],
+            "activities": [
+              {
+                "record_id": "ACT-GS-004-001",
+                "record_type": "activity",
+                "status": "",
+                "activity_type": "work_order.requested",
+                "recorded_at": "2026-08-01T00:05:00+09:00",
+                "summary": "",
+                "source_ref": "closed-loop://activity/ACT-GS-004-001"
+              }
+            ]
+          }
+        },
+        "evidence_gaps": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/evidence_gaps",
+          "value": [
+            {
+              "field": "risk_series",
+              "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "maintenance_context.similar_events_30d",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            },
+            {
+              "field": "maintenance_context.open_work_order_exists",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            }
+          ]
+        },
+        "spare_part_context": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/spare_part_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.1.mechanical_power_w",
+                  "factor.2.overstrain_index",
+                  "factor.3.torque_nm"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [
+                  "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+                ],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "unavailable_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "mechanical_power_w",
+                      "overstrain_index",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        },
+        "similar_event_context": {
+          "source_pointer": "/cases/3/prompt_payload/summary_context/similar_event_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.1.mechanical_power_w",
+                  "factor.2.overstrain_index",
+                  "factor.3.torque_nm"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [
+                  "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+                ],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "unavailable_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "mechanical_power_w",
+                      "overstrain_index",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required_meanings": {
+        "summary": [
+          "대상 설비를 정확히 식별한다.",
+          "등급 critical 및 예측 위험도 90.8%; 점검 판단에 연결되는 근거 또는 핵심 한계.",
+          "기준 시각 이후 작업요청 기록을 당시 상태와 구분한다."
+        ],
+        "process_engineer": [
+          "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다."
+        ],
+        "maintenance_technician": [
+          "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다.",
+          "00:05 requested 기록과 00:00 기준 시각의 차이를 설명한다. 승인·완료로 승격하지 않는다."
+        ],
+        "process_manager": [
+          "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다."
+        ]
+      },
+      "reference_briefing": {
+        "title": "위험 — 동력 전달부 점검과 기록 시점 확인",
+        "summary": "4구역 2셀 CNC 가공기 3은 위험 등급이며 예측 위험도는 90.8%로, 기계 동력·과부하·토크가 위험도를 높이는 방향으로 반영됐습니다. 동력 전달부 점검을 우선 검토하되, 함께 제공된 작업요청은 기준 시각 이후 기록이므로 당시 상태와 구분해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "주축 모터·커플링·동력 전달 하우징의 관측 근거를 기계 동력·과부하·토크와 대조해 점검 범위를 정하세요. 위험도 변화 이력이 없어 악화 추세를 확정할 수 없으며, 높은 예측값만으로 고장 원인을 단정할 수는 없습니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "제공된 점검 요청은 8월 1일 00:05 기록으로, 브리핑 기준인 00:00보다 늦으므로 당시 요청·승인 상태를 다시 확인해야 합니다. 커플링 키트의 가용성도 데모 가정이므로 실제 재고와 점검 준비 상태를 확인하세요."
+          },
+          {
+            "role": "process_manager",
+            "quote": "데모 계획상 생산 영향은 높은 수준이며, 정지 240분 가정의 손실 추정치는 51개로 실제 손실량은 아닙니다. 점검 승인과 생산 순서 조정을 우선 검토하되, 기준 시각 이후의 요청 기록을 이미 승인된 작업으로 취급하지 마세요."
+          }
+        ]
+      },
+      "reference_support": {
+        "title": [
+          "risk_summary",
+          "confidence_label",
+          "evidence_gaps",
+          "inspection_targets"
+        ],
+        "summary": [
+          "asset_label",
+          "risk_summary",
+          "confidence_label",
+          "model_factors",
+          "inspection_targets",
+          "evidence_gaps",
+          "maintenance_history",
+          "generated_at"
+        ],
+        "process_engineer": [
+          "model_factors",
+          "inspection_targets",
+          "sop_guidance",
+          "evidence_gaps",
+          "similar_event_context"
+        ],
+        "maintenance_technician": [
+          "inspection_targets",
+          "sop_guidance",
+          "spare_part_context",
+          "maintenance_history",
+          "generated_at",
+          "evidence_gaps"
+        ],
+        "process_manager": [
+          "operation_context",
+          "maintenance_history",
+          "confidence_label",
+          "generated_at",
+          "evidence_gaps"
+        ]
+      },
+      "adjudication_notes": [
+        "과거 문장 요약과 구조화된 이력에 차이가 있으면 임의로 정합성을 만들지 않는다. 최근 30일 건수 미확인은 유사 사례가 전혀 없다는 뜻이 아니다.",
+        "시간 불일치 스트레스 사례로 보존. 이 사례를 정상적인 동시점 입력으로 보고 점수화하지 않는다."
+      ],
+      "human_review": {
+        "status": "not_measured",
+        "reviewer": null,
+        "notes": null
+      }
+    },
+    {
+      "case_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "prompt_payload_canonical_sha256": "40a055fddb8f81a24c70bb620d8bb9fd1282c580d29caa23fedcf3f4721d104b",
+      "evidence_bindings": {
+        "asset_label": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/asset_label",
+          "value": "3구역 · 1셀 · CNC 가공기 3"
+        },
+        "generated_at": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/generated_at",
+          "value": "2026-08-01T00:00:00+09:00"
+        },
+        "confidence_label": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/confidence_label",
+          "value": "grounded"
+        },
+        "risk_summary": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/risk_summary",
+          "value": {
+            "status_grade": "warning",
+            "failure_probability": 0.771832
+          }
+        },
+        "model_factors": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/model_factors",
+          "value": [
+            {
+              "feature": "tool_wear_min",
+              "display_name": "공구 마모",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#factor.1.tool_wear_min"
+            },
+            {
+              "feature": "overstrain_index",
+              "display_name": "과부하 지표",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#factor.2.overstrain_index"
+            },
+            {
+              "feature": "mechanical_power_w",
+              "display_name": "기계 동력",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#factor.3.mechanical_power_w"
+            }
+          ]
+        },
+        "inspection_targets": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/inspection_targets",
+          "value": [
+            {
+              "component_id": "tooling",
+              "component_label": "공구/마모 계통",
+              "location_label": "공구 매거진 및 스핀들 공구 체결부",
+              "basis_refs": [
+                "factor.1.tool_wear_min",
+                "sensor_evidence.sensors.tool_wear_min"
+              ],
+              "source_ref": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling"
+            },
+            {
+              "component_id": "drive_power",
+              "component_label": "동력 전달 계통",
+              "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+              "basis_refs": [
+                "factor.2.overstrain_index",
+                "factor.3.mechanical_power_w"
+              ],
+              "source_ref": "RESULT#CNC-S03-L01-03#2026-08-01T00:00:00+09:00#component_hypotheses[1]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+            }
+          ]
+        },
+        "sop_guidance": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/sop_guidance",
+          "value": [
+            {
+              "component_id": "tooling",
+              "component_label": "공구/마모 계통",
+              "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling"
+            }
+          ]
+        },
+        "operation_context": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/operation_context",
+          "value": {
+            "production_impact": "low",
+            "estimated_downtime_minutes": 100,
+            "estimated_lost_units": 18,
+            "limitations": [
+              "This context is not a MES, ERP, APS, or customer-order record.",
+              "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+              "AI4I provides Product Type L/M/H but no real SKU or product name.",
+              "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+              "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
+            ]
+          }
+        },
+        "maintenance_history": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/maintenance_history",
+          "value": {
+            "provider": "closed_loop_maintenance_history_adapter",
+            "recent_equipment_history": [
+              {
+                "description": "최근 정비 이력",
+                "occurred_at": "2026-07-01T00:00:00+09:00",
+                "source_ref": "equipment-history://1"
+              }
+            ],
+            "open_work_order_exists": null,
+            "similar_events_30d": null,
+            "similar_events": [
+              {
+                "observed_at": "2026-07-18T09:20:00+09:00"
+              },
+              {
+                "observed_at": "2026-07-22T14:10:00+09:00"
+              }
+            ],
+            "work_orders": [],
+            "inspection_results": [],
+            "maintenance_actions": [],
+            "maintenance_events": [],
+            "activities": []
+          }
+        },
+        "evidence_gaps": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/evidence_gaps",
+          "value": [
+            {
+              "field": "risk_series",
+              "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "maintenance_context.similar_events_30d",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            },
+            {
+              "field": "maintenance_context.open_work_order_exists",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            }
+          ]
+        },
+        "spare_part_context": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/spare_part_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "tooling",
+                "component_label": "공구/마모 계통",
+                "factor_refs": [
+                  "factor.1.tool_wear_min"
+                ],
+                "location_label": "공구 매거진 및 스핀들 공구 체결부",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                "sop_ids": [
+                  "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+                ],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
+                    "part_label": "카바이드 절삭 인서트 1개",
+                    "replacement_scope": "마모된 카바이드 절삭 인서트 1개 교체 및 체결 상태 확인",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": null,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-TOOLING-2026-07-18",
+                    "asset_label": "4구역 · 4셀 · CNC 가공기 2",
+                    "observed_at": "2026-07-18T09:20:00+09:00",
+                    "matched_factor_keys": [
+                      "tool_wear_min"
+                    ],
+                    "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
+                    "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                  "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                ]
+              },
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.2.overstrain_index",
+                  "factor.3.mechanical_power_w"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "mechanical_power_w",
+                      "overstrain_index"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        },
+        "similar_event_context": {
+          "source_pointer": "/cases/4/prompt_payload/summary_context/similar_event_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "tooling",
+                "component_label": "공구/마모 계통",
+                "factor_refs": [
+                  "factor.1.tool_wear_min"
+                ],
+                "location_label": "공구 매거진 및 스핀들 공구 체결부",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                "sop_ids": [
+                  "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+                ],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
+                    "part_label": "카바이드 절삭 인서트 1개",
+                    "replacement_scope": "마모된 카바이드 절삭 인서트 1개 교체 및 체결 상태 확인",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": null,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-TOOLING-2026-07-18",
+                    "asset_label": "4구역 · 4셀 · CNC 가공기 2",
+                    "observed_at": "2026-07-18T09:20:00+09:00",
+                    "matched_factor_keys": [
+                      "tool_wear_min"
+                    ],
+                    "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
+                    "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                  "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                ]
+              },
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.2.overstrain_index",
+                  "factor.3.mechanical_power_w"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "mechanical_power_w",
+                      "overstrain_index"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required_meanings": {
+        "summary": [
+          "대상 설비를 정확히 식별한다.",
+          "등급 warning 및 예측 위험도 77.2%; 점검 판단에 연결되는 근거 또는 핵심 한계."
+        ],
+        "process_engineer": [
+          "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다."
+        ],
+        "maintenance_technician": [
+          "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다."
+        ],
+        "process_manager": [
+          "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다."
+        ]
+      },
+      "reference_briefing": {
+        "title": "경고 — 공구와 동력 전달부 점검 검토",
+        "summary": "3구역 1셀 CNC 가공기 3은 경고 등급이며 예측 위험도는 77.2%입니다. 공구 마모·과부하·기계 동력이 위험도를 높이는 방향으로 반영돼, 공구 계통과 동력 전달부의 점검 근거를 함께 확인할 필요가 있습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "공구 매거진·스핀들 공구 체결부의 마모 근거와 주축 모터·커플링의 과부하·기계 동력 근거를 대조하세요. 데모 유사 사례는 참고할 수 있지만, 최근 30일의 유사 이벤트 전체 건수는 확인되지 않았습니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "절삭 인서트와 커플링 키트는 참고 후보이며, 실제 재고나 교체 필요성이 확정된 상태는 아닙니다. 연결된 공구 계통 점검 절차와 작업요청·승인 여부를 확인해 준비 범위를 정하세요."
+          },
+          {
+            "role": "process_manager",
+            "quote": "예측 위험도와 별도로 데모 계획의 생산 영향은 낮은 수준이며, 정지 100분 가정의 손실 추정치는 18개입니다. 실제 손실이나 작업 승인으로 해석하지 말고, 현재 작업요청 상태를 확인해 점검 시점과 생산 순서 조정을 검토하세요."
+          }
+        ]
+      },
+      "reference_support": {
+        "title": [
+          "risk_summary",
+          "confidence_label",
+          "evidence_gaps",
+          "inspection_targets"
+        ],
+        "summary": [
+          "asset_label",
+          "risk_summary",
+          "confidence_label",
+          "model_factors",
+          "inspection_targets",
+          "evidence_gaps",
+          "maintenance_history",
+          "generated_at"
+        ],
+        "process_engineer": [
+          "model_factors",
+          "inspection_targets",
+          "sop_guidance",
+          "evidence_gaps",
+          "similar_event_context"
+        ],
+        "maintenance_technician": [
+          "inspection_targets",
+          "sop_guidance",
+          "spare_part_context",
+          "maintenance_history",
+          "generated_at",
+          "evidence_gaps"
+        ],
+        "process_manager": [
+          "operation_context",
+          "maintenance_history",
+          "confidence_label",
+          "generated_at",
+          "evidence_gaps"
+        ]
+      },
+      "adjudication_notes": [
+        "과거 문장 요약과 구조화된 이력에 차이가 있으면 임의로 정합성을 만들지 않는다. 최근 30일 건수 미확인은 유사 사례가 전혀 없다는 뜻이 아니다."
+      ],
+      "human_review": {
+        "status": "not_measured",
+        "reviewer": null,
+        "notes": null
+      }
+    },
+    {
+      "case_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "prompt_payload_canonical_sha256": "4f059ef8d6b31d4608d1092c1f63d9137e142e929946805164ef7d641e0aebf4",
+      "evidence_bindings": {
+        "asset_label": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/asset_label",
+          "value": "2구역 · 2셀 · CNC 가공기 2"
+        },
+        "generated_at": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/generated_at",
+          "value": "2026-08-01T00:00:00+09:00"
+        },
+        "confidence_label": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/confidence_label",
+          "value": "partial"
+        },
+        "risk_summary": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/risk_summary",
+          "value": {
+            "status_grade": "attention",
+            "failure_probability": 0.294766
+          }
+        },
+        "model_factors": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/model_factors",
+          "value": [
+            {
+              "feature": "tool_wear_min",
+              "display_name": "공구 마모",
+              "direction": "risk_down",
+              "source_ref": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#factor.1.tool_wear_min"
+            },
+            {
+              "feature": "torque_nm",
+              "display_name": "토크",
+              "direction": "risk_down",
+              "source_ref": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#factor.2.torque_nm"
+            },
+            {
+              "feature": "mechanical_power_w",
+              "display_name": "기계 동력",
+              "direction": "risk_down",
+              "source_ref": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#factor.3.mechanical_power_w"
+            }
+          ]
+        },
+        "inspection_targets": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/inspection_targets",
+          "value": [
+            {
+              "component_id": "tooling",
+              "component_label": "공구/마모 계통",
+              "location_label": "공구 매거진 및 스핀들 공구 체결부",
+              "basis_refs": [
+                "factor.1.tool_wear_min",
+                "sensor_evidence.sensors.tool_wear_min"
+              ],
+              "source_ref": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling"
+            },
+            {
+              "component_id": "drive_power",
+              "component_label": "동력 전달 계통",
+              "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+              "basis_refs": [
+                "factor.2.torque_nm",
+                "sensor_evidence.sensors.torque_nm",
+                "factor.3.mechanical_power_w"
+              ],
+              "source_ref": "RESULT#CNC-S02-L02-02#2026-08-01T00:00:00+09:00#component_hypotheses[1]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+            }
+          ]
+        },
+        "sop_guidance": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/sop_guidance",
+          "value": []
+        },
+        "operation_context": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/operation_context",
+          "value": {
+            "production_impact": "low",
+            "estimated_downtime_minutes": 60,
+            "estimated_lost_units": 13,
+            "limitations": [
+              "This context is not a MES, ERP, APS, or customer-order record.",
+              "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+              "AI4I provides Product Type L/M/H but no real SKU or product name.",
+              "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+              "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
+            ]
+          }
+        },
+        "maintenance_history": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/maintenance_history",
+          "value": {
+            "provider": "closed_loop_maintenance_history_adapter",
+            "recent_equipment_history": [
+              {
+                "description": "최근 정비 이력",
+                "occurred_at": "2026-07-22T00:00:00+09:00",
+                "source_ref": "equipment-history://1"
+              }
+            ],
+            "open_work_order_exists": null,
+            "similar_events_30d": null,
+            "similar_events": [
+              {
+                "observed_at": "2026-07-18T09:20:00+09:00"
+              },
+              {
+                "observed_at": "2026-07-22T14:10:00+09:00"
+              }
+            ],
+            "work_orders": [],
+            "inspection_results": [],
+            "maintenance_actions": [],
+            "maintenance_events": [],
+            "activities": []
+          }
+        },
+        "evidence_gaps": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/evidence_gaps",
+          "value": [
+            {
+              "field": "risk_series",
+              "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "maintenance_context.similar_events_30d",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            },
+            {
+              "field": "maintenance_context.open_work_order_exists",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            }
+          ]
+        },
+        "spare_part_context": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/spare_part_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "tooling",
+                "component_label": "공구/마모 계통",
+                "factor_refs": [
+                  "factor.1.tool_wear_min"
+                ],
+                "location_label": "공구 매거진 및 스핀들 공구 체결부",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
+                    "part_label": "카바이드 절삭 인서트 1개",
+                    "replacement_scope": "마모된 카바이드 절삭 인서트 1개 교체 및 체결 상태 확인",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": null,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-TOOLING-2026-07-18",
+                    "asset_label": "4구역 · 4셀 · CNC 가공기 2",
+                    "observed_at": "2026-07-18T09:20:00+09:00",
+                    "matched_factor_keys": [
+                      "tool_wear_min"
+                    ],
+                    "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
+                    "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                ]
+              },
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.2.torque_nm",
+                  "factor.3.mechanical_power_w"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "mechanical_power_w",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        },
+        "similar_event_context": {
+          "source_pointer": "/cases/5/prompt_payload/summary_context/similar_event_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "tooling",
+                "component_label": "공구/마모 계통",
+                "factor_refs": [
+                  "factor.1.tool_wear_min"
+                ],
+                "location_label": "공구 매거진 및 스핀들 공구 체결부",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
+                    "part_label": "카바이드 절삭 인서트 1개",
+                    "replacement_scope": "마모된 카바이드 절삭 인서트 1개 교체 및 체결 상태 확인",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": null,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-TOOLING-2026-07-18",
+                    "asset_label": "4구역 · 4셀 · CNC 가공기 2",
+                    "observed_at": "2026-07-18T09:20:00+09:00",
+                    "matched_factor_keys": [
+                      "tool_wear_min"
+                    ],
+                    "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
+                    "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                ]
+              },
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.2.torque_nm",
+                  "factor.3.mechanical_power_w"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "mechanical_power_w",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required_meanings": {
+        "summary": [
+          "대상 설비를 정확히 식별한다.",
+          "등급 attention 및 예측 위험도 29.5%; 점검 판단에 연결되는 근거 또는 핵심 한계."
+        ],
+        "process_engineer": [
+          "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다."
+        ],
+        "maintenance_technician": [
+          "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다."
+        ],
+        "process_manager": [
+          "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다."
+        ]
+      },
+      "reference_briefing": {
+        "title": "주의 — 추세와 현장 근거를 보완",
+        "summary": "2구역 2셀 CNC 가공기 2는 주의 등급이며 예측 위험도는 29.5%입니다. 위험도 변화 이력이 없어 악화 여부는 판단하기 어려우므로, 공구 계통과 동력 전달부의 관측 근거를 대조해 점검 필요성을 검토하세요.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "공구 마모·토크·기계 동력은 이번 모델 판단에서 위험도를 낮추는 방향으로 반영됐습니다. 공구 매거진과 주축 모터·커플링을 점검 후보로 검토하되, 연결된 점검 절차가 없어 적용할 절차부터 확인해야 합니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "절삭 인서트와 커플링 키트의 가용성은 데모 가정이므로 실제 재고를 확인하세요. 적용할 점검 절차와 진행 중인 작업요청·승인 여부를 확인한 뒤 준비 범위를 정하는 것이 좋습니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "데모 계획의 생산 영향은 낮은 수준이며, 정지 60분을 가정한 손실 추정치는 13개입니다. 실제 손실량은 아니므로 점검 필요성과 작업요청 상태를 확인한 뒤 생산 순서 조정 여부를 검토하세요."
+          }
+        ]
+      },
+      "reference_support": {
+        "title": [
+          "risk_summary",
+          "confidence_label",
+          "evidence_gaps",
+          "inspection_targets"
+        ],
+        "summary": [
+          "asset_label",
+          "risk_summary",
+          "confidence_label",
+          "model_factors",
+          "inspection_targets",
+          "evidence_gaps",
+          "maintenance_history",
+          "generated_at"
+        ],
+        "process_engineer": [
+          "model_factors",
+          "inspection_targets",
+          "sop_guidance",
+          "evidence_gaps",
+          "similar_event_context"
+        ],
+        "maintenance_technician": [
+          "inspection_targets",
+          "sop_guidance",
+          "spare_part_context",
+          "maintenance_history",
+          "generated_at",
+          "evidence_gaps"
+        ],
+        "process_manager": [
+          "operation_context",
+          "maintenance_history",
+          "confidence_label",
+          "generated_at",
+          "evidence_gaps"
+        ]
+      },
+      "adjudication_notes": [
+        "과거 문장 요약과 구조화된 이력에 차이가 있으면 임의로 정합성을 만들지 않는다. 최근 30일 건수 미확인은 유사 사례가 전혀 없다는 뜻이 아니다."
+      ],
+      "human_review": {
+        "status": "not_measured",
+        "reviewer": null,
+        "notes": null
+      }
+    },
+    {
+      "case_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "prompt_payload_canonical_sha256": "c0dcb5cee6f2069381841adb76dfd55d2ada6248ada6b83744ca0cba0f6c1d45",
+      "evidence_bindings": {
+        "asset_label": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/asset_label",
+          "value": "4구역 · 5셀 · CNC 가공기 1"
+        },
+        "generated_at": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/generated_at",
+          "value": "2026-08-01T00:00:00+09:00"
+        },
+        "confidence_label": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/confidence_label",
+          "value": "data_quality_hold"
+        },
+        "risk_summary": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/risk_summary",
+          "value": {
+            "status_grade": null,
+            "failure_probability": null
+          }
+        },
+        "model_factors": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/model_factors",
+          "value": []
+        },
+        "inspection_targets": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/inspection_targets",
+          "value": []
+        },
+        "sop_guidance": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/sop_guidance",
+          "value": []
+        },
+        "operation_context": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/operation_context",
+          "value": {}
+        },
+        "maintenance_history": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/maintenance_history",
+          "value": {
+            "provider": null,
+            "recent_equipment_history": [],
+            "open_work_order_exists": null,
+            "similar_events_30d": null,
+            "similar_events": [],
+            "work_orders": [],
+            "inspection_results": [],
+            "maintenance_actions": [],
+            "maintenance_events": [],
+            "activities": []
+          }
+        },
+        "evidence_gaps": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/evidence_gaps",
+          "value": [
+            {
+              "field": "top_factors",
+              "reason": "insufficient_context (required_source=observation_history, display_policy=show_limitation)",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "history[2].air_temperature_k",
+              "reason": "insufficient_context (required_source=valid_runtime_observation, display_policy=show_limitation)",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "history[2].torque_nm",
+              "reason": "insufficient_context (required_source=valid_runtime_observation, display_policy=show_limitation)",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "observation.air_temperature_k",
+              "reason": "insufficient_context (required_source=valid_runtime_observation, display_policy=show_limitation)",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "observation.torque_nm",
+              "reason": "insufficient_context (required_source=valid_runtime_observation, display_policy=show_limitation)",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "history.timestamp",
+              "reason": "insufficient_context (required_source=valid_runtime_observation, display_policy=show_limitation)",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "risk_series",
+              "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "maintenance_context.similar_events_30d",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            },
+            {
+              "field": "maintenance_context.open_work_order_exists",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            },
+            {
+              "field": "operation_context.load_level",
+              "reason": "operation_context_missing_or_unresolved",
+              "owner_domain": "operations"
+            },
+            {
+              "field": "operation_context.runtime_hours_7d",
+              "reason": "operation_context_missing_or_unresolved",
+              "owner_domain": "operations"
+            },
+            {
+              "field": "review_priority",
+              "reason": "review_priority_inputs_missing_or_unresolved",
+              "owner_domain": "report"
+            }
+          ]
+        },
+        "spare_part_context": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/spare_part_context",
+          "value": {}
+        },
+        "similar_event_context": {
+          "source_pointer": "/cases/6/prompt_payload/summary_context/similar_event_context",
+          "value": {}
+        }
+      },
+      "required_meanings": {
+        "summary": [
+          "대상 설비를 정확히 식별한다.",
+          "데이터 품질에 따른 판단 보류와 구체적인 보강 대상."
+        ],
+        "process_engineer": [
+          "관측값·시각 보강을 우선하고 모델 근거·점검 대상이 없음을 유지한다."
+        ],
+        "maintenance_technician": [
+          "점검 대상·부품 후보를 만들지 않고 데이터 보강 및 작업 상태 확인을 우선한다."
+        ],
+        "process_manager": [
+          "생산 영향·손실량은 미확인으로 유지하고 데이터 보강 후 승인·일정 판단을 제안한다."
+        ]
+      },
+      "reference_briefing": {
+        "title": "판단 보류 — 온도·토크 데이터 보강",
+        "summary": "4구역 5셀 CNC 가공기 1은 데이터 품질 문제로 위험 등급과 예측 위험도를 판단할 수 없습니다. 주변 공기 온도·토크 관측값과 이력 시각을 보강한 뒤 다시 검토해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "주변 공기 온도·토크 관측값과 과거 관측 시각의 유효성을 먼저 확인하세요. 현재는 모델 근거와 점검 대상이 제공되지 않아 고장 부위나 원인을 특정할 수 없습니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "점검 대상과 부품 후보가 제공되지 않았으므로 교체 준비를 확정할 근거가 부족합니다. 데이터 보강에 필요한 확인 사항과 현재 작업요청·승인 상태부터 확인하세요."
+          },
+          {
+            "role": "process_manager",
+            "quote": "생산 영향과 손실량을 추정할 근거가 없어, 영향이 없거나 손실이 0개라고 판단할 수 없습니다. 데이터를 보강하고 작업요청 상태를 확인한 뒤 점검 승인과 생산 일정 변경 여부를 검토하세요."
+          }
+        ]
+      },
+      "reference_support": {
+        "title": [
+          "risk_summary",
+          "confidence_label",
+          "evidence_gaps",
+          "inspection_targets"
+        ],
+        "summary": [
+          "asset_label",
+          "risk_summary",
+          "confidence_label",
+          "model_factors",
+          "inspection_targets",
+          "evidence_gaps",
+          "maintenance_history",
+          "generated_at"
+        ],
+        "process_engineer": [
+          "model_factors",
+          "inspection_targets",
+          "sop_guidance",
+          "evidence_gaps",
+          "similar_event_context"
+        ],
+        "maintenance_technician": [
+          "inspection_targets",
+          "sop_guidance",
+          "spare_part_context",
+          "maintenance_history",
+          "generated_at",
+          "evidence_gaps"
+        ],
+        "process_manager": [
+          "operation_context",
+          "maintenance_history",
+          "confidence_label",
+          "generated_at",
+          "evidence_gaps"
+        ]
+      },
+      "adjudication_notes": [
+        "과거 문장 요약과 구조화된 이력에 차이가 있으면 임의로 정합성을 만들지 않는다. 최근 30일 건수 미확인은 유사 사례가 전혀 없다는 뜻이 아니다."
+      ],
+      "human_review": {
+        "status": "not_measured",
+        "reviewer": null,
+        "notes": null
+      }
+    },
+    {
+      "case_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "prompt_payload_canonical_sha256": "c4c3092330df56b401b61d3b92da5d0bef25fb4501b4d3237302c9d24bf5d8a3",
+      "evidence_bindings": {
+        "asset_label": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/asset_label",
+          "value": "4구역 · 4셀 · CNC 가공기 2"
+        },
+        "generated_at": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/generated_at",
+          "value": "2026-08-01T00:00:00+09:00"
+        },
+        "confidence_label": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/confidence_label",
+          "value": "grounded"
+        },
+        "risk_summary": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/risk_summary",
+          "value": {
+            "status_grade": "warning",
+            "failure_probability": 0.824583
+          }
+        },
+        "model_factors": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/model_factors",
+          "value": [
+            {
+              "feature": "tool_wear_min",
+              "display_name": "공구 마모",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#factor.1.tool_wear_min"
+            },
+            {
+              "feature": "overstrain_index",
+              "display_name": "과부하 지표",
+              "direction": "risk_up",
+              "source_ref": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#factor.2.overstrain_index"
+            },
+            {
+              "feature": "torque_nm",
+              "display_name": "토크",
+              "direction": "risk_down",
+              "source_ref": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#factor.3.torque_nm"
+            }
+          ]
+        },
+        "inspection_targets": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/inspection_targets",
+          "value": [
+            {
+              "component_id": "tooling",
+              "component_label": "공구/마모 계통",
+              "location_label": "공구 매거진 및 스핀들 공구 체결부",
+              "basis_refs": [
+                "factor.1.tool_wear_min",
+                "sensor_evidence.sensors.tool_wear_min"
+              ],
+              "source_ref": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling"
+            },
+            {
+              "component_id": "drive_power",
+              "component_label": "동력 전달 계통",
+              "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+              "basis_refs": [
+                "factor.2.overstrain_index",
+                "factor.3.torque_nm",
+                "sensor_evidence.sensors.torque_nm"
+              ],
+              "source_ref": "RESULT#CNC-S04-L04-02#2026-08-01T00:00:00+09:00#component_hypotheses[1]",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+            }
+          ]
+        },
+        "sop_guidance": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/sop_guidance",
+          "value": [
+            {
+              "component_id": "tooling",
+              "component_label": "공구/마모 계통",
+              "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+              "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling"
+            }
+          ]
+        },
+        "operation_context": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/operation_context",
+          "value": {
+            "production_impact": "medium",
+            "estimated_downtime_minutes": 120,
+            "estimated_lost_units": 25,
+            "limitations": [
+              "This context is not a MES, ERP, APS, or customer-order record.",
+              "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+              "AI4I provides Product Type L/M/H but no real SKU or product name.",
+              "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+              "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
+            ]
+          }
+        },
+        "maintenance_history": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/maintenance_history",
+          "value": {
+            "provider": "closed_loop_maintenance_history_adapter",
+            "recent_equipment_history": [
+              {
+                "description": "최근 정비 이력",
+                "occurred_at": "2026-06-28T00:00:00+09:00",
+                "source_ref": "equipment-history://1"
+              }
+            ],
+            "open_work_order_exists": null,
+            "similar_events_30d": null,
+            "similar_events": [
+              {
+                "observed_at": "2026-07-18T09:20:00+09:00"
+              },
+              {
+                "observed_at": "2026-07-22T14:10:00+09:00"
+              }
+            ],
+            "work_orders": [],
+            "inspection_results": [],
+            "maintenance_actions": [],
+            "maintenance_events": [],
+            "activities": []
+          }
+        },
+        "evidence_gaps": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/evidence_gaps",
+          "value": [
+            {
+              "field": "risk_series",
+              "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet",
+              "owner_domain": "diagnosis"
+            },
+            {
+              "field": "maintenance_context.similar_events_30d",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            },
+            {
+              "field": "maintenance_context.open_work_order_exists",
+              "reason": "maintenance_context_missing_or_unresolved",
+              "owner_domain": "maintenance"
+            }
+          ]
+        },
+        "spare_part_context": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/spare_part_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "tooling",
+                "component_label": "공구/마모 계통",
+                "factor_refs": [
+                  "factor.1.tool_wear_min"
+                ],
+                "location_label": "공구 매거진 및 스핀들 공구 체결부",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                "sop_ids": [
+                  "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+                ],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
+                    "part_label": "카바이드 절삭 인서트 1개",
+                    "replacement_scope": "마모된 카바이드 절삭 인서트 1개 교체 및 체결 상태 확인",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": null,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-TOOLING-2026-07-18",
+                    "asset_label": "4구역 · 4셀 · CNC 가공기 2",
+                    "observed_at": "2026-07-18T09:20:00+09:00",
+                    "matched_factor_keys": [
+                      "tool_wear_min"
+                    ],
+                    "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
+                    "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                  "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                ]
+              },
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.2.overstrain_index",
+                  "factor.3.torque_nm"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "overstrain_index",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        },
+        "similar_event_context": {
+          "source_pointer": "/cases/7/prompt_payload/summary_context/similar_event_context",
+          "value": {
+            "traversals": [
+              {
+                "component_id": "tooling",
+                "component_label": "공구/마모 계통",
+                "factor_refs": [
+                  "factor.1.tool_wear_min"
+                ],
+                "location_label": "공구 매거진 및 스핀들 공구 체결부",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                "sop_ids": [
+                  "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+                ],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
+                    "part_label": "카바이드 절삭 인서트 1개",
+                    "replacement_scope": "마모된 카바이드 절삭 인서트 1개 교체 및 체결 상태 확인",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 1,
+                    "replacement_window_minutes": null,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-TOOLING-2026-07-18",
+                    "asset_label": "4구역 · 4셀 · CNC 가공기 2",
+                    "observed_at": "2026-07-18T09:20:00+09:00",
+                    "matched_factor_keys": [
+                      "tool_wear_min"
+                    ],
+                    "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
+                    "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
+                    "post_action_observation_window_hours": 24,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+                  "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+                ]
+              },
+              {
+                "component_id": "drive_power",
+                "component_label": "동력 전달 계통",
+                "factor_refs": [
+                  "factor.2.overstrain_index",
+                  "factor.3.torque_nm"
+                ],
+                "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+                "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                "sop_ids": [],
+                "spare_parts": [
+                  {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "available_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+                  }
+                ],
+                "similar_events": [
+                  {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                      "overstrain_index",
+                      "torque_nm"
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                  }
+                ],
+                "source_refs": [
+                  "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+                  "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+                  "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required_meanings": {
+        "summary": [
+          "대상 설비를 정확히 식별한다.",
+          "등급 warning 및 예측 위험도 82.5%; 점검 판단에 연결되는 근거 또는 핵심 한계."
+        ],
+        "process_engineer": [
+          "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다."
+        ],
+        "maintenance_technician": [
+          "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다."
+        ],
+        "process_manager": [
+          "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다."
+        ]
+      },
+      "reference_briefing": {
+        "title": "경고 — 공구 점검 근거와 준비 상태 확인",
+        "summary": "4구역 4셀 CNC 가공기 2는 경고 등급이며 예측 위험도는 82.5%입니다. 공구 마모와 과부하 지표가 위험도를 높이는 방향으로 반영돼, 공구 체결부와 동력 전달부의 점검 근거를 대조할 필요가 있습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "공구 매거진·스핀들 공구 체결부는 마모 근거와, 주축 모터·커플링은 과부하 근거와 연결해 점검 범위를 검토하세요. 참고한 유사 사례는 데모 이력이므로 동일한 조치가 이번에도 효과가 있다고 단정할 수 없습니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "절삭 인서트와 커플링 키트는 데모 계획의 참고 후보이므로 실제 가용성과 점검 절차를 확인해야 합니다. 진행 중인 작업요청과 승인 여부가 미확인인 만큼, 교체 작업이 이미 결정된 것으로 해석하지 마세요."
+          },
+          {
+            "role": "process_manager",
+            "quote": "데모 계획에서는 생산 영향이 중간 수준이며, 정지 120분 가정의 손실 추정치는 25개입니다. 이 수치를 실제 손실과 구분하고 현재 작업요청·승인 상태를 확인해 점검 시점과 생산 순서 조정을 검토하세요."
+          }
+        ]
+      },
+      "reference_support": {
+        "title": [
+          "risk_summary",
+          "confidence_label",
+          "evidence_gaps",
+          "inspection_targets"
+        ],
+        "summary": [
+          "asset_label",
+          "risk_summary",
+          "confidence_label",
+          "model_factors",
+          "inspection_targets",
+          "evidence_gaps",
+          "maintenance_history",
+          "generated_at"
+        ],
+        "process_engineer": [
+          "model_factors",
+          "inspection_targets",
+          "sop_guidance",
+          "evidence_gaps",
+          "similar_event_context"
+        ],
+        "maintenance_technician": [
+          "inspection_targets",
+          "sop_guidance",
+          "spare_part_context",
+          "maintenance_history",
+          "generated_at",
+          "evidence_gaps"
+        ],
+        "process_manager": [
+          "operation_context",
+          "maintenance_history",
+          "confidence_label",
+          "generated_at",
+          "evidence_gaps"
+        ]
+      },
+      "adjudication_notes": [
+        "과거 문장 요약과 구조화된 이력에 차이가 있으면 임의로 정합성을 만들지 않는다. 최근 30일 건수 미확인은 유사 사례가 전혀 없다는 뜻이 아니다."
+      ],
+      "human_review": {
+        "status": "not_measured",
+        "reviewer": null,
+        "notes": null
+      }
+    }
+  ],
+  "calibration_examples": [
+    {
+      "case_id": "GS-002",
+      "text": "정지 2시간 가정의 예상 손실은 25개이며 실제 손실량은 아닙니다.",
+      "expected": "acceptable_paraphrase_of_production_fact",
+      "reason": "120분과 2시간은 같으며 추정이라는 한계를 유지한다. 전체 브리핑 합격 예시는 아니다."
+    },
+    {
+      "case_id": "GS-002",
+      "text": "실제 생산 손실이 25개 발생했습니다.",
+      "expected": "hard_gate_failure",
+      "reason": "계획 추정을 실제 발생으로 바꿨다."
+    },
+    {
+      "case_id": "GS-001",
+      "text": "정상 등급이므로 앞으로 고장 나지 않습니다.",
+      "expected": "hard_gate_failure",
+      "reason": "현재 등급으로 미래 안전을 보장한다."
+    },
+    {
+      "case_id": "GS-002",
+      "text": "진행 중인 작업요청이 없습니다.",
+      "expected": "hard_gate_failure",
+      "reason": "존재 여부 미확인을 없음으로 단정했다."
+    },
+    {
+      "case_id": "GS-004",
+      "text": "00:00 기준 점검 요청이 이미 승인됐습니다.",
+      "expected": "hard_gate_failure",
+      "reason": "기준 이후 requested 기록을 소급하고 승인으로 승격했다."
+    },
+    {
+      "case_id": "GS-007",
+      "text": "데이터가 없어 생산 손실은 0개입니다.",
+      "expected": "hard_gate_failure",
+      "reason": "미확인을 0으로 바꿨다."
+    },
+    {
+      "case_id": "GS-002",
+      "text": "maintenance_context.open_work_order_exists가 null입니다.",
+      "expected": "readability_issue_not_automatically_factual_error",
+      "reason": "사실 값과 별개로 내부 필드명 때문에 현장 브리핑 가독성이 낮다."
+    }
+  ]
+}
