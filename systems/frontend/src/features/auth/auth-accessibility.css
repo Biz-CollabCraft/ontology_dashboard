@@ -1,0 +1,50 @@
+/* Auth-only contrast and pointer targets; operational status colors stay unchanged. */
+.auth-page { --auth-readable-muted: #52616d; }
+:root[data-theme="dark"] .auth-page { --auth-readable-muted: #c3cedb; }
+.auth-page .auth-brand small,
+.auth-page .auth-card .eyebrow,
+.auth-page .demo-account-picker > header,
+.auth-page .auth-footer-copy,
+.auth-page .auth-card > footer,
+.auth-page .auth-card > footer > span {
+  color: var(--auth-readable-muted);
+}
+.auth-page .auth-card .auth-submit {
+  color: #ffffff;
+  background: #3656cf;
+  border-color: #3656cf;
+}
+.auth-page .auth-card .auth-submit:hover:not(:disabled) { background: #2945b0; }
+.auth-page .auth-story-controls > div { gap: 4px; }
+.auth-page .auth-story-controls > div button,
+.auth-page .auth-story-controls > div button.is-active {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transition: none;
+  cursor: pointer;
+}
+.auth-page .auth-story-controls > div button::after {
+  content: "";
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--auth-readable-muted);
+}
+.auth-page .auth-story-controls > div button.is-active::after {
+  width: 24px;
+  background: var(--fd-accent);
+}
+.auth-page .auth-story-controls button:focus-visible,
+.auth-page .auth-submit:focus-visible {
+  outline: 2px solid var(--auth-readable-muted);
+  outline-offset: 3px;
+}
