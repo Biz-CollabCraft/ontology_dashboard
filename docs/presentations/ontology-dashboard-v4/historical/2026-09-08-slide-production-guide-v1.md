@@ -1,7 +1,7 @@
 # AI 브리핑 발표 슬라이드 제작 문서 v1
 
-작성일: 2026-09-08  
-대상 브랜치: `codex/pr167-ai-briefing-optimization-plan`  
+작성일: 2026-09-08\
+대상 브랜치: `codex/pr167-ai-briefing-optimization-plan`\
 대상 발표: ontology-dashboard AI 브리핑 개인 기여 발표, 4분 기준
 
 ## 1. 제작 결론
