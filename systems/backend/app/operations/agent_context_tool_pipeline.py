@@ -85,13 +85,22 @@ class SituationQuestionRouter:
 
     def route(self, packet: dict[str, Any]) -> list[SituationQuestion]:
         if _is_data_quality_hold(packet):
-            return [
+            questions = [
                 SituationQuestion(
                     "data-quality-hold",
                     "data_quality.lookup",
                     "validated factors are unavailable; do not invent locations or SOP guidance",
                 )
             ]
+            history = packet.get("maintenance_history_summary") or {}
+            if any(history.get(kind) for kind in (
+                "work_orders", "inspection_results", "maintenance_actions", "maintenance_events", "activities"
+            )):
+                questions.append(SituationQuestion(
+                    "recorded-workflow-state", "maintenance_history.lookup",
+                    "data quality hold does not erase existing owner records",
+                ))
+            return questions
 
         questions = [
             SituationQuestion(
@@ -105,12 +114,14 @@ class SituationQuestionRouter:
                 "closed-loop history helps avoid duplicate field direction",
             ),
         ]
-        if str((packet.get("risk_summary") or {}).get("status_grade") or "") == "critical":
+        if packet.get("operation_context_summary") or str(
+            (packet.get("risk_summary") or {}).get("status_grade") or ""
+        ) == "critical":
             questions.append(
                 SituationQuestion(
                     "production-impact",
                     "operation_context.lookup",
-                    "critical reviews need production and cell impact context",
+                    "production decision summaries need available impact context at every risk grade",
                 )
             )
         if packet.get("inspection_targets"):
@@ -406,7 +417,7 @@ def execute_packet_context_tool(tool_name: str, packet: dict[str, Any]) -> dict[
 
 def _traversals_with_key(packet: dict[str, Any], key: str) -> list[dict[str, Any]]:
     return [
-        traversal
+        {**{name: traversal[name] for name in ("component_id", "component_label", "factor_refs", "sop_ids", "location_label", "location_source_ref") if name in traversal}, key: traversal[key]}
         for traversal in (packet.get("ontology_context") or {}).get("traversals") or []
         if traversal.get(key)
     ]

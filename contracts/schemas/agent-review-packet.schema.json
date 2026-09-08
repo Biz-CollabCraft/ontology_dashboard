@@ -297,6 +297,9 @@
           "inspection_method": {"type": ["string", "null"]},
           "location_source_ref": {"type": ["string", "null"]},
           "sop_id": {"type": "string"},
+          "sop_version": {"type": "string"},
+          "schema_version": {"type": "string"},
+          "procedure_title": {"type": "string"},
           "source_type": {"enum": ["demo_sop_fixture", "site_sop"]},
           "maturity": {"enum": ["fixture", "draft", "approved", "retired"]},
           "checklist_draft": {"type": "array", "items": {"type": "string"}},
@@ -714,7 +717,13 @@
         "recorded_at": {"type": "string"},
         "summary": {"type": "string"},
         "source_ref": {"type": "string"},
-        "owner_record_provenance": {"type": "object", "additionalProperties": false, "properties": {"actor_user_id": {"type": "string"}, "actor_display_name": {"type": "string"}, "actor_id": {"type": "string"}, "recorded_by": {"type": "string"}, "assigned_to": {"type": "string"}, "assigned_at": {"type": "string"}, "created_at": {"type": "string"}, "updated_at": {"type": "string"}, "completed_at": {"type": "string"}, "recorded_at": {"type": "string"}, "work_order_id": {"type": "string"}, "event_id": {"type": "string"}, "asset_id": {"type": "string"}, "equipment_id": {"type": "string"}, "maintenance_action_id": {"type": "string"}, "maintenance_event_id": {"type": "string"}, "recommendation_id": {"type": "string"}, "recommendation_decision_id": {"type": "string"}}}
+        "outcome": {"type": "string"},
+        "inspection_result_id": {"type": "string"},
+        "work_order_id": {"type": "string"},
+        "findings": {"type": "array", "items": {"type": "string"}},
+        "measurements": {"type": "array", "items": {"type": "object", "additionalProperties": false, "properties": {"name": {"type": "string"}, "value": {"type": ["number", "string", "boolean", "null"]}, "unit": {"type": "string"}}}},
+        "checklist": {"type": "array", "items": {"type": "object", "additionalProperties": false, "properties": {"item_id": {"type": "string"}, "status": {"enum": ["pass", "fail", "not_checked"]}, "note": {"type": "string"}}}},
+        "owner_record_provenance": {"type": "object", "additionalProperties": false, "properties": {"actor_user_id": {"type": "string"}, "actor_display_name": {"type": "string"}, "actor_id": {"type": "string"}, "recorded_by": {"type": "string"}, "assigned_to": {"type": "string"}, "assigned_at": {"type": "string"}, "created_at": {"type": "string"}, "updated_at": {"type": "string"}, "completed_at": {"type": "string"}, "recorded_at": {"type": "string"}, "work_order_id": {"type": "string"}, "event_id": {"type": "string"}, "asset_id": {"type": "string"}, "equipment_id": {"type": "string"}, "maintenance_action_id": {"type": "string"}, "maintenance_event_id": {"type": "string"}, "recommendation_id": {"type": "string"}, "recommendation_decision_id": {"type": "string"}, "approved_at": {"type": "string"}, "started_at": {"type": "string"}}}
       }
     },
     "domainSection": {

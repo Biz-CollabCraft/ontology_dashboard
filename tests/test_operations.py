@@ -18,8 +18,6 @@ from app.infra.context import Project3HttpContextProvider, ResilientContextProvi
 from app.operations.contracts import LayoutRequest, ReportRequest, UIBlock, UILayout
 from app.identity import (
     CSRF_COOKIE,
-    PUBLIC_COMPARISON_EMAIL,
-    PUBLIC_COMPARISON_PASSWORD,
     IdentityService,
 )
 from app.infra.llm import (
@@ -62,7 +60,7 @@ AGENT_REVIEW_PACKET_SCHEMA = json.loads(
     )
 )
 AGENT_REVIEW_SUMMARY_SCHEMA = json.loads(
-    (ROOT / "contracts" / "schemas" / "agent-review-summary.schema.json").read_text(
+    (ROOT / "contracts" / "schemas" / "agent-review-summary-v1.1.schema.json").read_text(
         encoding="utf-8"
     )
 )
@@ -422,7 +420,8 @@ def test_agent_review_summary_provider_constrains_payload_to_summary_schema(
             captured["system_prompt"] = system_prompt
             captured["payload"] = payload
             captured["kwargs"] = kwargs
-            return {**payload["baseline_editable_fields"], "title": "AI 검토 요약 후보"}
+            return {**payload["baseline_editable_fields"], "title": "AI 검토 요약 후보", "summary": "관측된 근거를 바탕으로 점검 범위를 검토합니다.",
+                    "role_summaries": [{**item, "quote": "관측된 근거를 바탕으로 점검 범위를 검토합니다."} for item in payload["baseline_editable_fields"]["role_summaries"]]}
 
     packet = service.agent_review_packet("CNC-S04-L04-01")
     provider = AgentReviewSummaryProvider(CapturingLLMProvider())
@@ -468,7 +467,7 @@ def test_agent_review_summary_provider_preserves_grounding_when_llm_omits_refs(
 
     assert summary["mode"] == "llm"
     assert summary["title"] == "LLM 문장 개선"
-    assert summary["role_summaries"][0]["quote"] == "현장 담당자용 LLM 문장"
+    assert summary["role_summaries"][0]["quote"] == "설비 엔지니어용 LLM 문장"
     assert summary["role_summaries"][0]["source_refs"]
     assert summary["source_refs"] == compose_deterministic_agent_review_summary(packet)[
         "source_refs"
@@ -878,7 +877,7 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert summary_payload["trace"]["materialization"]["status"] == "fallback"
     assert summary_payload["trace"]["materialization"]["reused"] is False
     assert list(Draft202012Validator(AGENT_REVIEW_SUMMARY_SCHEMA).iter_errors(summary)) == []
-    assert summary["schema_version"] == "agent-review-summary-v1.0"
+    assert summary["schema_version"] == "agent-review-summary-v1.1"
     assert summary["mode"] == "deterministic_fallback"
     assert summary["asset_id"] == packet["asset_id"]
     assert summary["history_summary"] == packet["review_draft"]["history_summary"]
@@ -1329,6 +1328,8 @@ def test_agent_review_summary_get_does_not_trigger_lazy_materialization(
 def test_agent_review_summary_materialization_requires_dedicated_permission(
     client: TestClient,
     service: FactorySignalService,
+    identity: IdentityService,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     provider = FakeAgentReviewSummaryProvider(
         lambda packet: {
@@ -1337,7 +1338,12 @@ def test_agent_review_summary_materialization_requires_dedicated_permission(
         }
     )
     service.agent_review_summary_provider = provider
-    login_as(client, PUBLIC_COMPARISON_EMAIL, PUBLIC_COMPARISON_PASSWORD)
+    # Keep real session authentication; remove only materialization permission.
+    resolve = identity.principal_for_token
+    def readonly_principal(*args, **kwargs):
+        principal = resolve(*args, **kwargs)
+        return principal.model_copy(update={"permissions": [p for p in principal.permissions if p != "agent.review.materialize"]})
+    monkeypatch.setattr(identity, "principal_for_token", readonly_principal)
 
     read_response = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
     write_response = client.post(
@@ -1625,7 +1631,6 @@ def test_agent_review_summary_watcher_reads_runtime_candidates(
                 **view_model["snapshot_basis"],
                 "event_id": "RESULT#LIVE-FEEDBACK-001",
                 "dataset_version": "dsv-live-001",
-                "dataset_version_id": "dsv-live-001",
                 "source_sha256": "sha-live-feedback-001",
             }
             return view_model
@@ -1709,7 +1714,7 @@ def test_agent_review_summary_workflow_reports_read_only_stage_status(
         {
             "stage": "consumer_ready",
             "status": "completed",
-            "consumer_contract": "agent-review-summary-v1.0",
+            "consumer_contract": "agent-review-summary-v1.1",
             "consumers": ["role_workflow_ui", "executive_brief_report"],
         },
     ]
@@ -1788,7 +1793,7 @@ def test_agent_review_summary_workflow_reports_terminal_failure_without_mutation
         {
             "stage": "consumer_ready",
             "status": "blocked",
-            "consumer_contract": "agent-review-summary-v1.0",
+            "consumer_contract": "agent-review-summary-v1.1",
             "consumers": ["role_workflow_ui", "executive_brief_report"],
         },
     ]
@@ -1873,6 +1878,7 @@ def test_inspection_request_decision_and_activity_reach_detail_and_agent_packet(
     assert recommendation_input["equipment"]["asset_id"] == asset_id
     assert recommendation_input["operational_decision_kind"] == "request_inspection"
 
+    login_as(client, "engineer@ontology.local", "Engineer!2026")
     work_order = client.post(
         (
             "/api/projects/manufacturing-demo-project/workspaces/"
@@ -1884,6 +1890,7 @@ def test_inspection_request_decision_and_activity_reach_detail_and_agent_packet(
             snapshot_basis=before.json()["snapshot_basis"],
         ).model_dump(mode="json"),
     )
+    login_as(client, "manager@ontology.local", "Manager!2026")
     decision = client.post(
         f"/api/events/{event_id}/decision",
         headers=csrf_headers(client),
@@ -2166,7 +2173,7 @@ def test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context(
         "summary_id"
     ]
     assert cached_after.json()["summary"]["schema_version"] == (
-        "agent-review-summary-v1.0"
+        "agent-review-summary-v1.1"
     )
 
 
@@ -2178,7 +2185,7 @@ def test_agent_review_summary_absorbs_adapter_context_into_role_quotes(
     summary = compose_deterministic_agent_review_summary(packet)
     role_quotes = {item["role"]: item["quote"] for item in summary["role_summaries"]}
 
-    assert "주축 구동 커플링 키트" in role_quotes["field_operator"]
+    assert "주축 구동 커플링 키트" in role_quotes["maintenance_technician"]
     assert "7월 22일" in role_quotes["process_manager"]
     assert "약 51건" in role_quotes["process_manager"]
     assert "기계 동력" in role_quotes["process_manager"]

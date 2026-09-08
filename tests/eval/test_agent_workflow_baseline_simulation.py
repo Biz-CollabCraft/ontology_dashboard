@@ -189,11 +189,12 @@ def test_b1_uses_raw_projection_and_b2_uses_evidence_payload() -> None:
         "title": "",
         "summary": "",
         "role_summaries": [
-            {"role": "field_operator", "quote": ""},
+            {"role": "process_engineer", "quote": ""},
+            {"role": "maintenance_technician", "quote": ""},
             {"role": "process_manager", "quote": ""},
         ],
     }
-    assert raw["output_roles"] == ["field_operator", "process_manager"]
+    assert raw["output_roles"] == ["process_engineer", "maintenance_technician", "process_manager"]
     assert baseline["summary"] not in json.dumps(raw, ensure_ascii=False)
     assert all(
         item["quote"] not in json.dumps(raw, ensure_ascii=False)

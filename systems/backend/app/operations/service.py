@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 import os
 import time
 import uuid
@@ -28,6 +29,10 @@ from app.operations.agent_review_summary_materialization import (
     summary_key_payload,
 )
 from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider
+from app.operations.agent_review_summary_generation_policy import (
+    SnapshotGuardedRepository, cached_record_is_valid, decide_generation,
+    packet_is_current, policy_fingerprint, material_change_required,
+)
 from app.operations.asset_detail_view_model import (
     AssetDetailViewModelService,
     compose_asset_detail_view_model,
@@ -127,6 +132,8 @@ class ManufacturingPredictiveMaintenanceService:
         self.layout_planner = layout_planner
         self.context_provider_factory = context_provider_factory
         self.agent_review_summary_provider = agent_review_summary_provider
+        # Scheduling baseline only; never a source for GET or cached prose.
+        self._briefing_generation_baselines = {}
         self.agent_answer_provider = agent_answer_provider
         self.agent_review_context_registry = agent_review_context_registry
         self.maintenance_lineage_query = maintenance_lineage_query
@@ -377,7 +384,11 @@ class ManufacturingPredictiveMaintenanceService:
         organization_id: str = "org-ontology-demo",
         workspace_id: str = "manufacturing-demo",
         context_repository: Any | None = None,
+        retrieved_at: datetime | None = None,
     ) -> dict[str, Any]:
+        retrieved_at = retrieved_at or datetime.now(timezone.utc)
+        if retrieved_at.tzinfo is None:
+            raise ValueError("retrieved_at must include a timezone")
         observed_at = _timestamp_instant(str(artifact["observed_at"]))
         identity = OperationalRequestIdentity(
             organization_id=organization_id,
@@ -388,7 +399,7 @@ class ManufacturingPredictiveMaintenanceService:
             decision_as_of=observed_at,
         )
         contexts = (context_repository or self.operational_context_repository).contexts(
-            identity=identity, retrieved_at=observed_at,
+            identity=identity, retrieved_at=retrieved_at,
         )
         relations = resolve_operational_relations(identity=identity, contexts=contexts)
         candidates = project_evidence_candidates(
@@ -439,7 +450,7 @@ class ManufacturingPredictiveMaintenanceService:
             "relation_resolution_version": relations.schema_version,
             "selection_policy_version": selected.policy_version,
             "decision_as_of": observed_at.isoformat(),
-            "relation_retrieved_at": observed_at.isoformat(),
+            "relation_retrieved_at": retrieved_at.isoformat(),
             "source_observed_at_min": (
                 min(source_observed_ats).isoformat()
                 if source_observed_ats
@@ -623,6 +634,10 @@ class ManufacturingPredictiveMaintenanceService:
             history_window=history_window,
             trigger=trigger,
             engine=engine,
+            packet_loader=lambda: self.agent_review_packet(
+                asset_id, project_id, dataset_version_id=dataset_version_id,
+                history_window=history_window,
+            ),
         )
 
     def _materialize_agent_review_packet(
@@ -635,7 +650,9 @@ class ManufacturingPredictiveMaintenanceService:
         history_window: str,
         trigger: str,
         engine: str,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        generation_policy: str = "always",
+        packet_loader=None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         materializer = AgentReviewSummaryMaterializer(
             self.repository,
             self.agent_review_summary_provider,
@@ -650,20 +667,58 @@ class ManufacturingPredictiveMaintenanceService:
             provider=self.agent_review_summary_provider,
         )
         materialization_key = summary_key(key_payload)
+
+        def validate_binding():
+            for current_packet in (packet, packet_loader() if packet_loader else packet):
+                # Preserve the existing generation contract; full packet schema
+                # validation is required for cache eligibility above all else.
+                if not packet_is_current(current_packet, require_schema=False):
+                    raise RuntimeError("agent_review_packet_invalid_or_expired")
+                current_key = summary_key(summary_key_payload(
+                    packet=current_packet, organization_id=organization_id,
+                    project_id=project_id, workspace_id=workspace_id,
+                    history_window=history_window, provider=self.agent_review_summary_provider,
+                ))
+                if current_key != materialization_key:
+                    raise RuntimeError("agent_review_context_changed_during_generation")
+
+        materializer.repository = SnapshotGuardedRepository(
+            self.repository, validate_binding,
+            lambda record: cached_record_is_valid(
+                record, packet=packet, key_payload=key_payload,
+                materialization_key=materialization_key,
+            ),
+        )
         with _agent_review_summary_lock(materialization_key):
-            if not force:
-                cached_summary, cached_trace = materializer.lookup(
-                    packet=packet,
-                    organization_id=organization_id,
-                    project_id=project_id,
-                    workspace_id=workspace_id,
-                    history_window=history_window,
-                )
-                cached_status = (cached_trace.get("materialization") or {}).get("status")
-                if cached_summary is not None and (
-                    cached_status != "fallback" or self.agent_review_summary_provider is None
-                ):
-                    return cached_summary, cached_trace
+            cached_summary, cached_trace = materializer.lookup(
+                packet=packet,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                history_window=history_window,
+            )
+            retry_fallback = (
+                (cached_trace.get("materialization") or {}).get("status") == "fallback"
+                and self.agent_review_summary_provider is not None
+            )
+            scope = (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window)
+            previous_packet, previous_identity = self._briefing_generation_baselines.get(scope, (None, None))
+            policy_trace = decide_generation(
+                policy=generation_policy,
+                current_fingerprint=policy_fingerprint(materialization_key),
+                previous_fingerprint=policy_fingerprint(summary_key(previous_identity)) if previous_identity is not None else None,
+                reuse_eligibility="EXACT_VALIDATED" if cached_summary is not None else "INELIGIBLE",
+                explicit_refresh=force,
+                retry_fallback=retry_fallback,
+                model_id=key_payload["model_version"],
+                input_valid=packet_is_current(packet),
+                material_change=material_change_required(
+                    packet, previous_packet, current_identity=key_payload,
+                    previous_identity=previous_identity,
+                ),
+            )
+            if policy_trace["generation_action"] == "DEFER":
+                return cached_summary, {**cached_trace, "generation_policy": policy_trace}
 
             try:
                 run = self._start_agent_review_workflow_run(
@@ -679,7 +734,15 @@ class ManufacturingPredictiveMaintenanceService:
                     history_window=history_window,
                 )
             except _AgentReviewSummaryMaterializedWhileWaiting as cached:
-                return cached.result
+                summary, trace = cached.result
+                policy_trace = {
+                    **policy_trace,
+                    "generation_decision": "REUSE",
+                    "generation_action": "DEFER",
+                    "reuse_eligibility": "EXACT_VALIDATED",
+                    "decision_reason": "concurrent_materialization_completed_for_exact_key",
+                }
+                return summary, {**trace, "generation_policy": policy_trace}
             try:
                 summary, trace = materializer.materialize(
                     packet=packet,
@@ -691,12 +754,15 @@ class ManufacturingPredictiveMaintenanceService:
                     force=force,
                     refresh_fallback=self.agent_review_summary_provider is not None,
                 )
+                if not trace.get("fallback"):
+                    self._briefing_generation_baselines[scope] = (deepcopy(packet), deepcopy(key_payload))
                 status = _workflow_run_status(trace)
                 finished = self.repository.finish_agent_review_workflow_run(
                     run["workflow_run_id"],
                     status=status,
                     trace={
                         "stage": "finished",
+                        "generation_policy": policy_trace,
                         "materialization": trace.get("materialization") or {},
                         "provider": trace.get("provider"),
                         "fallback": trace.get("fallback"),
@@ -706,6 +772,7 @@ class ManufacturingPredictiveMaintenanceService:
                 )
                 return summary, {
                     **trace,
+                    "generation_policy": policy_trace,
                     "workflow_run": _workflow_run_trace(finished),
                 }
             except Exception as exc:
@@ -714,7 +781,7 @@ class ManufacturingPredictiveMaintenanceService:
                     status="failed",
                     error_type=type(exc).__name__,
                     error_message=str(exc),
-                    trace={"stage": "failed", "error_type": type(exc).__name__},
+                    trace={"stage": "failed", "error_type": type(exc).__name__, "generation_policy": policy_trace},
                 )
                 raise RuntimeError(
                     f"agent_review_summary_workflow_failed:{finished['workflow_run_id']}"
@@ -738,10 +805,7 @@ class ManufacturingPredictiveMaintenanceService:
             dataset_version_id=dataset_version_id,
             history_window=history_window,
         )
-        summary, trace = AgentReviewSummaryMaterializer(
-            self.repository,
-            self.agent_review_summary_provider,
-        ).lookup(
+        summary, trace = self.cached_agent_review_summary_for_packet(
             packet=packet,
             organization_id=organization_id,
             project_id=project_id,
@@ -764,8 +828,21 @@ class ManufacturingPredictiveMaintenanceService:
         workspace_id: str = "manufacturing-demo",
         history_window: str = "24h",
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-        return AgentReviewSummaryMaterializer(
-            self.repository,
+        key_payload = summary_key_payload(
+            packet=packet, organization_id=organization_id, project_id=project_id,
+            workspace_id=workspace_id, history_window=history_window,
+            provider=self.agent_review_summary_provider,
+        )
+        materialization_key = summary_key(key_payload)
+        repository = SnapshotGuardedRepository(
+            self.repository, lambda: None,
+            lambda record: cached_record_is_valid(
+                record, packet=packet, key_payload=key_payload,
+                materialization_key=materialization_key,
+            ),
+        )
+        summary, trace = AgentReviewSummaryMaterializer(
+            repository,
             self.agent_review_summary_provider,
         ).lookup(
             packet=packet,
@@ -774,6 +851,10 @@ class ManufacturingPredictiveMaintenanceService:
             workspace_id=workspace_id,
             history_window=history_window,
         )
+        return summary, {
+            **trace,
+            "reuse_eligibility": "EXACT_VALIDATED" if summary is not None else "INELIGIBLE",
+        }
 
     def agent_review_workflow_runs(
         self,
@@ -812,6 +893,8 @@ class ManufacturingPredictiveMaintenanceService:
         history_window: str = "24h",
         limit: int | None = None,
         source: str = "fixture",
+        generation_policy: str = "always",
+        explicit_refresh: bool = False,
     ) -> dict[str, Any]:
         """Materialize missing Agent Review Summaries from explicit candidates."""
 
@@ -829,14 +912,11 @@ class ManufacturingPredictiveMaintenanceService:
             if not asset_id:
                 continue
             if candidate.get("source_kind") == "fixture":
-                summary, trace = self.agent_review_summary(
+                packet = self.agent_review_packet(
                     asset_id,
                     project_id,
-                    organization_id=organization_id,
-                    workspace_id=workspace_id,
                     dataset_version_id=candidate.get("dataset_version_id"),
                     history_window=history_window,
-                    trigger="polling_watcher",
                 )
             else:
                 packet = self._runtime_agent_review_packet_for_candidate(
@@ -846,15 +926,28 @@ class ManufacturingPredictiveMaintenanceService:
                     workspace_id=workspace_id,
                     history_window=history_window,
                 )
-                summary, trace = self._materialize_agent_review_packet(
-                    packet=packet,
-                    project_id=project_id,
-                    organization_id=organization_id,
-                    workspace_id=workspace_id,
-                    history_window=history_window,
-                    trigger="polling_watcher",
-                    engine="simple",
-                )
+            summary, trace = self._materialize_agent_review_packet(
+                packet=packet,
+                project_id=project_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                history_window=history_window,
+                trigger="ui_manual_regeneration" if explicit_refresh else "polling_watcher",
+                engine="simple",
+                generation_policy=generation_policy,
+                packet_loader=(
+                    (lambda: self.agent_review_packet(
+                        asset_id, project_id,
+                        dataset_version_id=candidate.get("dataset_version_id"),
+                        history_window=history_window,
+                    )) if candidate.get("source_kind") == "fixture" else
+                    (lambda: self._runtime_agent_review_packet_for_candidate(
+                        candidate, project_id=project_id,
+                        organization_id=organization_id, workspace_id=workspace_id,
+                        history_window=history_window,
+                    ))
+                ),
+            )
             materialization = trace.get("materialization") or {}
             items.append(
                 {
@@ -869,7 +962,8 @@ class ManufacturingPredictiveMaintenanceService:
                     "summary_key": materialization.get("summary_key"),
                     "status": materialization.get("status"),
                     "reused": materialization.get("reused"),
-                    "mode": summary.get("mode"),
+                    "mode": (summary or {}).get("mode"),
+                    "generation_policy": trace.get("generation_policy"),
                     "fallback_reason": materialization.get("fallback_reason"),
                     "workflow_run_id": (trace.get("workflow_run") or {}).get(
                         "workflow_run_id"
@@ -884,8 +978,10 @@ class ManufacturingPredictiveMaintenanceService:
             "project_id": project_id,
             "history_window": history_window,
             "source": source,
-            "materialized_count": len(items),
-            "created_count": sum(1 for item in items if not item.get("reused")),
+            "scanned_count": len(items),
+            "materialized_count": sum(1 for item in items if item.get("summary_id")),
+            "created_count": sum(1 for item in items if item.get("summary_id") and not item.get("reused")),
+            "pending_count": sum(1 for item in items if item.get("status") == "pending"),
             "reused_count": sum(1 for item in items if item.get("reused")),
             "items": items,
         }

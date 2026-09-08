@@ -34,6 +34,7 @@ EVAL_CASES = (
         "expected_first_tools": [
             "model_evidence.lookup",
             "maintenance_history.lookup",
+            "operation_context.lookup",
             "inspection_location.lookup",
         ],
         "requires_loss_context": True,
@@ -54,6 +55,7 @@ EVAL_CASES = (
         "expected_first_tools": [
             "model_evidence.lookup",
             "maintenance_history.lookup",
+            "operation_context.lookup",
             "inspection_location.lookup",
         ],
         "requires_loss_context": False,
@@ -87,12 +89,16 @@ def test_ai_decision_support_roles_keep_different_judgment_materials(tmp_path: P
     for case in EVAL_CASES:
         packet = service.agent_review_packet(case["asset_id"])
         summary = compose_deterministic_agent_review_summary(packet)
-        field_quote = _role_quote(summary, "field_operator")
+        field_quote = _role_quote(summary, "process_engineer")
+        maintenance_quote = _role_quote(summary, "maintenance_technician")
         manager_quote = _role_quote(summary, "process_manager")
 
         assert field_quote != manager_quote
-        assert "확인합니다" in field_quote
-        assert "기록해 정비/생산 관리자에게 전달합니다" in field_quote
+        assert "확인할 근거" in field_quote
+        assert "알람·사진·관측값을 대조" in field_quote
+        assert maintenance_quote not in {field_quote, manager_quote}
+        assert "점검 준비" in maintenance_quote
+        assert "작업지시와 승인 상태 확인" in maintenance_quote
         assert "생산 영향" not in field_quote
         assert "손실 가능성" not in field_quote
         assert "생산 영향" in manager_quote

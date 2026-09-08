@@ -7,6 +7,8 @@ import json
 from typing import Any
 
 from app.operations.agent_review_summary import (
+    AGENT_REVIEW_SUMMARY_SCHEMA_VERSION,
+    ROLE_POLICY_VERSION,
     validate_agent_review_summary_contract,
     validated_agent_review_summary,
 )
@@ -52,6 +54,8 @@ class AgentReviewSummaryMaterializer:
         )
         materialization_key = summary_key(key_payload)
         cached = self.repository.get_agent_review_summary(materialization_key)
+        if cached is not None and not _valid_cached_summary(cached, packet=packet):
+            cached = None
         should_refresh_fallback = (
             refresh_fallback
             and cached is not None
@@ -117,7 +121,7 @@ class AgentReviewSummaryMaterializer:
         )
         materialization_key = summary_key(key_payload)
         cached = self.repository.get_agent_review_summary(materialization_key)
-        if cached is not None:
+        if cached is not None and _valid_cached_summary(cached, packet=packet):
             return cached["summary"], {
                 **cached["trace"],
                 "context_sha256": key_payload["context_sha256"],
@@ -206,7 +210,8 @@ def summary_key_payload(
         "evidence_basis_sha256": evidence_basis_sha256,
         "history_window": history_window,
         "packet_schema_version": str(packet.get("schema_version") or ""),
-        "summary_schema_version": "agent-review-summary-v1.0",
+        "summary_schema_version": AGENT_REVIEW_SUMMARY_SCHEMA_VERSION,
+        "role_policy_version": ROLE_POLICY_VERSION,
         "prompt_version": AGENT_REVIEW_SUMMARY_PROMPT_VERSION,
         "model_version": _provider_model_version(provider),
         "source_sha256": source_sha256,
@@ -225,6 +230,21 @@ def _provider_model_version(provider: AgentReviewSummaryProvider | None) -> str:
     if model:
         return f"{provider.name}:{model}"
     return provider.name
+
+
+def _valid_cached_summary(record: dict[str, Any], *, packet: dict[str, Any]) -> bool:
+    """A key match alone is insufficient: validate stored prose against current evidence."""
+    summary = record.get("summary")
+    if not isinstance(summary, dict) or summary.get("schema_version") != AGENT_REVIEW_SUMMARY_SCHEMA_VERSION:
+        return False
+    if record.get("status") not in {"ready", "fallback"}:
+        return False
+    if record["status"] == "ready" and summary.get("mode") != "llm":
+        return False
+    try:
+        return not validate_agent_review_summary_contract(summary, packet=packet)
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return False
 
 
 def _stable_fallback_reason(reason: Any) -> bool:
@@ -247,7 +267,10 @@ def _summary_context_sha256(packet: dict[str, Any]) -> str:
             "review_priority": packet.get("review_priority"),
             "model_expression_context": packet.get("model_expression_context") or {},
             "operation_context_summary": packet.get("operation_context_summary") or {},
-            "evidence_context": packet.get("evidence_context") or {},
+            "evidence_context": {
+                key: value for key, value in (packet.get("evidence_context") or {}).items()
+                if key != "relation_retrieved_at"  # Read audit time is not generation evidence.
+            },
             "maintenance_history_summary": packet.get("maintenance_history_summary") or {},
             "sop_guidance": packet.get("sop_guidance") or [],
             "inspection_targets": packet.get("inspection_targets") or [],
