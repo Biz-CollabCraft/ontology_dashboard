@@ -127,7 +127,7 @@ function RoleFactoryStandaloneLegacy({ projectId, workspaceId, persona, model, w
   return <main className={`engineer-lite-board role-factory-board role-factory-${persona}`}>
     <header className="engineer-factory-header">
       <div><strong>{title}</strong><span>{model.context.workspaceName} · {subtitle}</span></div>
-      <div className="engineer-factory-live"><span>{model.assets.length}대 기준</span><OperationsAccountBadge {...currentUser} /><button type="button" onClick={() => void onLogout()}><LogOut size={14} /> 로그아웃</button></div>
+      <div className="engineer-factory-live"><span>{model.assets.length}대 기준</span><button type="button" onClick={onRefresh}>↻ 새로고침</button><OperationsAccountBadge {...currentUser} /><button type="button" onClick={() => void onLogout()}><LogOut size={14} /> 로그아웃</button></div>
     </header>
 
     <section className="engineer-factory-kpis">

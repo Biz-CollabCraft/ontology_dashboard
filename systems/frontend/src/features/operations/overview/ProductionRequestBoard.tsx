@@ -102,7 +102,7 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
   return <main className="engineer-lite-board production-request-board">
     <header className="engineer-factory-header">
       <div><strong>생산 대응 현황</strong><span>{model.context.workspaceName} · 정비 요청의 생산 영향과 작업 일정 협의</span></div>
-      <div className="engineer-factory-live"><b>{queueLoading ? "연결 확인 중" : queueError || workOrderError ? "요청 연결 확인 필요" : "요청 연결 정상"}</b><button type="button" onClick={refresh}>↻ 새로고침</button><OperationsAccountBadge {...currentUser}/><button type="button" onClick={() => void onLogout()}><LogOut size={14}/> 로그아웃</button></div>
+      <div className="engineer-factory-live"><b>{queueLoading ? "연결 확인 중" : queueError || workOrderError ? "요청 연결 확인 필요" : "요청 연결 정상"}</b><span>{model.assets.length}대 기준</span><button type="button" onClick={refresh}>↻ 새로고침</button><OperationsAccountBadge {...currentUser}/><button type="button" onClick={() => void onLogout()}><LogOut size={14}/> 로그아웃</button></div>
     </header>
     <section className="prb-kpis" aria-label="전체 생산 영향 현황">
       <OverallKpi label="생산 영향 검토 설비" value={number(impactedAssets.length, "대")} description="주의 이상 설비를 생산계획과 대조합니다."/>

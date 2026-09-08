@@ -35,9 +35,9 @@ export function MaintenanceApprovalList({ projectId, workspaceId, workOrders, wo
     <header><strong>보전 승인 목록</strong><div className="maintenance-work-status"><span>승인 시간순</span>
       <span role="status" className={`maintenance-connection is-${connection}`}><i/>{connection === "online" ? "연결 정상" : connection === "loading" ? "연결 확인 중" : "연결 확인 필요"}</span>
     </div></header>
-    <div>{connection === "loading" ? <p>승인 목록을 불러오는 중입니다.</p>
-      : connection === "offline" ? <p>승인 목록 연결을 확인해 주세요.</p>
-      : !approved.length ? <p>현재 생산 관리자가 승인한 작업이 없습니다.</p>
+    <div>{connection === "loading" ? <p className="role-empty-state">승인 목록을 불러오는 중입니다.</p>
+      : connection === "offline" ? <p className="role-empty-state">승인 목록 연결을 확인해 주세요.</p>
+      : !approved.length ? <p className="role-empty-state">현재 생산 관리자가 승인한 작업이 없습니다.</p>
       : approved.map(({order, coordination: c}) => <button type="button" className="maintenance-request-item" key={order.work_order_id}
         aria-pressed={selectedId === order.work_order_id} onClick={() => onSelect(order.work_order_id)}>
         <b>{order.equipment_id || order.asset_id}</b>
