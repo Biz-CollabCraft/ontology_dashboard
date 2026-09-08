@@ -932,8 +932,8 @@ def test_composer_projects_closed_loop_lifecycle_action_and_timeline() -> None:
         "target_type": "work_order",
         "target_id": "WO-INS-001",
         "label": "요청 수락·내게 배정",
-        "owner_role": "process_engineer",
-        "owner_label": "현장 관리자",
+        "owner_role": "maintenance_technician",
+        "owner_label": "보전팀",
         "disabled_reason": None,
         "requires_input": False,
     }

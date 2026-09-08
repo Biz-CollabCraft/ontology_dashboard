@@ -1296,7 +1296,19 @@ def test_closed_loop_feedback_promotes_post_maintenance_product_result(
         project_id="project-test",
         workspace_id="workspace-test",
     )
-    assert queue == {"items": []}
+    # A maintenance recommendation keeps its inspection request available for
+    # follow-up; a post-maintenance result does not close that request implicitly.
+    assert len(queue["items"]) == 1
+    pending_inspection = queue["items"][0]
+    assert pending_inspection["work_order_id"] == inspection_work_order_id
+    assert pending_inspection["event_id"] == source_artifact_id
+    assert pending_inspection["status"] == WorkOrderStatus.APPROVED.value
+    assert pending_inspection["assigned_to"] == "engineer-1"
+    assert pending_inspection["inspection_result"] == {
+        "outcome": "maintenance_recommended",
+        "findings": ["tool wear limit exceeded"],
+        "note": "tool replacement should be reviewed",
+    }
 
 
 def test_postgresql_copy_idempotency_rls_and_atomic_rollback(
