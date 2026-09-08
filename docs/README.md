@@ -5,6 +5,8 @@ API 계약과 팀 공유 문서를 관리한다.
 
 ## 문서 묶음
 
+- [최종 시연 AI 브리핑 통합 및 검증](./ui/final-demo-ai-briefing-integration.md)
+
 - [최종 역할 분배 및 Step별 실행 계획](./final_team_role_and_step_plan.md)
 - [Ontology Operations & Closed-loop 구현 계획](./closed-loop-implementation-plan.md)
 - [Closed-loop Domain 계약](./closed-loop-domain-contract.md)

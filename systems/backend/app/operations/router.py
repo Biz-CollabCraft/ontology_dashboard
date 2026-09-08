@@ -303,8 +303,10 @@ def _summary_text(summary: dict[str, Any] | None, audience: str | None = None) -
         target_role = (
             "process_manager"
             if audience == "operations"
-            else "field_operator"
-            if audience in {"engineering", "maintenance"}
+            else "process_engineer"
+            if audience == "engineering"
+            else "maintenance_technician"
+            if audience == "maintenance"
             else None
         )
         if target_role:
@@ -901,7 +903,7 @@ def get_asset_detail_view(
             # Canonical prediction-only rows use the normalized runtime path;
             # that path independently checks the exact selected event identity.
             pass
-    if event_id and runtime_detail is not None:
+    if event_id:
         try:
             return _runtime_asset_detail_view_model(
                 asset_id=asset_id,

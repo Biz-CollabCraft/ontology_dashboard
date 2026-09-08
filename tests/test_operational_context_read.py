@@ -107,8 +107,8 @@ def test_owner_provenance_reaches_packet_and_compact_provider(tmp_path):
     view = service.asset_detail_view_model(ASSET_ID, PARAMS['project_id'])
     view['closed_loop']['inspection_results'] = [{
         'inspection_result_id':'IR-proof', 'work_order_id':'WO-proof',
-        'event_id':PARAMS['evidence_snapshot_id'], 'recorded_by':'technician-proof',
-        'recorded_at':'2026-08-01T00:00:00+09:00', 'outcome':'data_check_required',
+        'event_id':view['snapshot_basis']['event_id'], 'asset_id':ASSET_ID, 'recorded_by':'technician-proof',
+        'recorded_at':view['snapshot_basis']['observed_at'], 'outcome':'data_check_required',
     }]
     from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
     fixture = service._fixture_for_asset(ASSET_ID, PARAMS['project_id'])
@@ -119,7 +119,10 @@ def test_owner_provenance_reaches_packet_and_compact_provider(tmp_path):
     item = history['inspection_results'][0]
     assert item['owner_record_provenance']['recorded_by'] == 'technician-proof'
     assert item['status'] == 'data_check_required'
-    assert _compact_maintenance_history(history)['inspection_results'][0] == item
+    compact = _compact_maintenance_history(history, packet=packet)['inspection_results'][0]
+    assert compact['owner_record_provenance'] == item['owner_record_provenance']
+    assert compact['status'] == item['status']
+    assert compact['record_context']['event_relation'] == 'matches_event'
     schema = json.loads((ROOT/'contracts/schemas/agent-review-packet.schema.json').read_text())
     Draft202012Validator(schema).validate(packet)
 

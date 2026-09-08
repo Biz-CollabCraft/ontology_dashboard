@@ -1,9 +1,12 @@
+import { relativeRecordTime } from "../../../standalone/briefFormat.js";
+import { NaturalBriefing } from "./NaturalBriefing";
 import type {
   OperationsAsset,
+  OperationsAgentReviewSummaryResponse,
   OperationsBootstrapModel,
   OperationsRiskStatus,
 } from "../api/operationsContracts";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 import { OperationsAccountBadge } from "./OperationsAccountBadge";
@@ -27,13 +30,7 @@ const STATUS_LABEL: Record<OperationsRiskStatus, string> = {
 
 function formatTimestamp(value: string | null | undefined) {
   if (!value) return "시각 정보 없음";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : new Intl.DateTimeFormat("ko-KR", {
-        dateStyle: "short",
-        timeStyle: "short",
-      }).format(date);
+  return relativeRecordTime(value);
 }
 
 function formatProbability(value: number | null | undefined) {
@@ -302,6 +299,11 @@ export function EngineerFactoryLoading() {
 export function EngineerFactoryStandalone({
   model,
   selectedAssetId,
+  canGenerateBrief = false,
+  briefingResponse,
+  briefingRole = "process_engineer",
+  readOnly = false,
+  recordPanel,
   maintenanceDirectives = [],
   maintenanceDirectiveError = false,
   currentUser,
@@ -311,6 +313,11 @@ export function EngineerFactoryStandalone({
 }: {
   model: OperationsBootstrapModel;
   selectedAssetId: string | null;
+  canGenerateBrief?: boolean;
+  briefingResponse?: OperationsAgentReviewSummaryResponse;
+  briefingRole?: "process_engineer" | "maintenance_technician" | "process_manager";
+  readOnly?: boolean;
+  recordPanel?: ReactNode;
   maintenanceDirectives?: OpenInspectionWorkOrderReadModel[];
   maintenanceDirectiveError?: boolean;
   currentUser?: { displayName: string; title: string };
@@ -402,7 +409,7 @@ export function EngineerFactoryStandalone({
   );
 
   async function requestMaintenanceApproval() {
-    if (!selected?.eventId || selectedMaintenanceDirective) return;
+    if (readOnly || !selected?.eventId || selectedMaintenanceDirective) return;
     setMaintenanceRequestBusy(true);
     setMaintenanceRequestFailed(false);
     setMaintenanceRequestSucceeded(false);
@@ -446,7 +453,7 @@ export function EngineerFactoryStandalone({
         </div>
         <div className="engineer-factory-live">
           <i />
-          <b>실시간 수집 중</b>
+          <b>{readOnly ? "보관된 관측 재현" : "실시간 수집 중"}</b>
           <span>
             기준 시각{" "}
             {formatTimestamp(
@@ -457,6 +464,7 @@ export function EngineerFactoryStandalone({
             type="button"
             onClick={onRefresh}
             aria-label="공장 현황 새로고침"
+            disabled={readOnly}
           >
             ↻ 새로고침
           </button>
@@ -488,7 +496,7 @@ export function EngineerFactoryStandalone({
           <p>긴급·경고 등급으로 현장 확인이 필요합니다.</p>
         </article>
         <article>
-          <span>가동 중 설비</span>
+          <span>{readOnly ? "진단값 확인 가능 설비" : "가동 중 설비"}</span>
           <strong>
             {Math.max(0, model.assets.length - held)}
             <small>/ {model.assets.length}대</small>
@@ -500,7 +508,7 @@ export function EngineerFactoryStandalone({
           <strong>
             {formatMinutes(model.metrics.estimatedDowntimeMinutes)}
           </strong>
-          <p>현재 위험 설비의 예측 비가동 시간 합계입니다.</p>
+          <p>{readOnly ? "생산 계획의 정지 가정입니다. 실제 정지 시간은 아닙니다." : "현재 위험 설비의 예측 비가동 시간 합계입니다."}</p>
         </article>
       </section>
 
@@ -666,6 +674,7 @@ export function EngineerFactoryStandalone({
           </footer>
         </section>
 
+        {recordPanel ?? (
         <div className="engineer-status-side-stack">
           <section className="engineer-factory-card engineer-recent-events engineer-approval-events">
             <header>
@@ -787,6 +796,7 @@ export function EngineerFactoryStandalone({
             </div>
           </section>
         </div>
+        )}
       </section>
 
       <section className="engineer-factory-bottom-grid">
@@ -810,6 +820,9 @@ export function EngineerFactoryStandalone({
                       : "현재 상태에 맞춰 관찰과 점검을 이어갑니다."}
                 </strong>
               </div>
+              <NaturalBriefing projectId={model.context.projectId} workspaceId={model.context.workspaceId}
+                assetId={selected.assetId} eventId={selected.eventId} datasetVersionId={model.context.datasetVersionId}
+                observedAt={selected.observedAt} role={briefingRole} providedResponse={briefingResponse} canGenerate={canGenerateBrief && !readOnly} revision={JSON.stringify([selected, maintenanceDirectives.filter(item => item.asset_id === selected.assetId)])}/>
               <ol>
                 {selected.topFactors.slice(0, 4).map((factor) => (
                   <li key={factor.id}>
@@ -847,7 +860,7 @@ export function EngineerFactoryStandalone({
                 </div>
               </dl>
               <p className="engineer-evidence-footer">
-                판단 근거는 현재 선택 설비의 서버 Result와 관측 시각을 기준으로
+                판단 근거는 현재 선택 설비의 서버 진단 결과와 관측 시각을 기준으로
                 표시합니다.
               </p>
             </>
@@ -855,9 +868,9 @@ export function EngineerFactoryStandalone({
         </section>
         <section className="engineer-factory-card engineer-live-signals">
           <header>
-            <strong>실시간 상태 신호</strong>
+            <strong>{readOnly ? "기준 시각의 관측 신호" : "실시간 상태 신호"}</strong>
             <span>
-              위험 점수를 밀어올린 신호 상위 {factors.length}건 ·{" "}
+              위험 판단에 반영된 신호 상위 {factors.length}건 ·{" "}
               {formatTimestamp(selected?.observedAt ?? null)}
             </span>
           </header>
@@ -994,7 +1007,7 @@ export function EngineerFactoryStandalone({
                       type="button"
                       className="is-primary"
                       disabled={
-                        maintenanceRequestBusy ||
+                        readOnly || maintenanceRequestBusy ||
                         Boolean(selectedMaintenanceDirective) ||
                         !selected.eventId
                       }

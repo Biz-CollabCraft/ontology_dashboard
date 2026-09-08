@@ -62,7 +62,9 @@ def test_mock_120_run_harness_aggregates_all_gold_packets(monkeypatch) -> None:
     assert aggregate["cost"]["estimated_total_cost"] > 0
     assert all(row["editable_output"] for row in rows)
     assert all(row["quality_scores"]["checks"]["coverage"] for row in rows)
-    assert all(row["gold_accuracy"]["accuracy_goldset_score"] == 1.0 for row in rows)
+    # Historical two-role gold is intentionally not relabeled as three-role gold.
+    assert all(row["gold_accuracy"]["role_scores"]["field_operator"]["score"] == 0.0 for row in rows)
+    assert all(0 < row["gold_accuracy"]["accuracy_goldset_score"] < 1.0 for row in rows)
 
 
 def test_mock_holdout_run_uses_custom_manifest_and_gold_answers() -> None:
@@ -94,7 +96,11 @@ def test_mock_holdout_run_uses_custom_manifest_and_gold_answers() -> None:
     assert rows[0]["gold_accuracy"]["answer_set_id"] == (
         "agent-review-summary-holdout-gold-answers-v1"
     )
-    assert aggregate["gold_accuracy"]["accuracy_goldset_score"] == 1.0
+    assert aggregate["gold_accuracy"]["accuracy_goldset_score"] == harness._average([
+        harness._gold_accuracy(harness.compose_deterministic_agent_review_summary(p), packet=p)["accuracy_goldset_score"]
+        for p in packets
+    ])
+    assert all(row["gold_accuracy"]["role_scores"]["field_operator"]["score"] == 0.0 for row in rows)
     assert all(
         row["gold_accuracy"]["role_scores"]["process_manager"]["score"] == 1.0
         for row in rows
@@ -296,7 +302,8 @@ def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:
     assert artifact["ready_for_live_120_run"] is True
     assert artifact["aggregate"]["contract_error_rows"] == 0
     assert artifact["aggregate"]["quality_scores"]["overall_candidate"] is not None
-    assert artifact["aggregate"]["gold_accuracy"]["accuracy_goldset_score"] == 1.0
+    assert 0 < artifact["aggregate"]["gold_accuracy"]["accuracy_goldset_score"] < 1.0
+    assert all(row["gold_accuracy"]["role_scores"]["field_operator"]["score"] == 0.0 for row in artifact["rows"])
     assert artifact["rows"][0]["editable_output"]["role_summaries"]
     assert artifact["rows"][0]["quality_scores"]["limits"]
     assert artifact["rows"][0]["gold_accuracy"]["answer_set_id"] == (

@@ -417,7 +417,7 @@ export interface OperationsEventImpact {
   impactStatus: OperationsImpactStatus;
   estimatedLostUnits: number | null;
   basis: {
-    estimatedDowntimeMinutes: number;
+    estimatedDowntimeMinutes: number | null;
     assetUnitsPerHour: number;
     formula: string;
   };
@@ -872,7 +872,7 @@ export interface OperationsAgentReviewPacket {
 }
 
 export interface OperationsAgentReviewSummary {
-  schema_version: "agent-review-summary-v1.0";
+  schema_version: "agent-review-summary-v1.0" | "agent-review-summary-v1.1";
   packet_schema_version: "agent-review-packet-v1.0";
   asset_id: string;
   generated_at: string;
@@ -880,7 +880,7 @@ export interface OperationsAgentReviewSummary {
   title: string;
   summary: string;
   role_summaries: Array<{
-    role: "field_operator" | "process_manager";
+    role: "field_operator" | "process_engineer" | "maintenance_technician" | "process_manager";
     label: string;
     quote: string;
     source_refs: string[];

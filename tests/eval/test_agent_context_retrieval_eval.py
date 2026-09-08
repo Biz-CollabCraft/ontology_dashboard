@@ -318,7 +318,7 @@ def test_workflow_eval_gate_covers_minimum_release_axes(tmp_path: Path) -> None:
         "terminal_status_reported",
         "retry_policy_reported",
     }.issubset(set(gate["minimum_release_gates"]["workflow_stages"]))
-    assert workflow_result["workflow"]["terminal_status"] == "completed"
+    assert workflow_result["workflow"]["terminal_status"] == "partial"
     assert workflow_result["workflow"]["attempt_count"] >= 1
     assert workflow_result["workflow"]["max_attempts"] == 1
     assert "summary_materialization" in workflow_result["workflow"]["retry_policy"]

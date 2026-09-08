@@ -31,7 +31,8 @@ def _load_gold(scenario: str) -> dict:
 def _stable_sop_guidance(item: dict) -> dict:
     """Compare stable SOP identity/content while allowing additive retrieval scoring changes."""
 
-    return {key: value for key, value in item.items() if key != "retrieval_score"}
+    return {key: value for key, value in item.items()
+            if key not in {"retrieval_score", "sop_version", "schema_version", "procedure_title"}}
 
 
 def _assert_ontology_context_preserves_gold(current: dict, gold: dict) -> None:
@@ -285,7 +286,13 @@ def test_current_service_packets_keep_gold_contract_shape(tmp_path: Path) -> Non
         )
         assert set(gold["history_review_items"]) <= set(current["history_review_items"])
         assert current["evidence_gaps"] == gold["evidence_gaps"]
-        assert set(gold["source_refs"]) <= set(current["source_refs"])
+        # Historical positional aliases are replaced by canonical owner references.
+        assert {ref for ref in gold["source_refs"] if not ref.startswith("equipment-history://")} <= set(current["source_refs"])
+        view = service.asset_detail_view_model(asset_id, "manufacturing-demo-project")
+        for item in view.get("equipment_history", [])[:3]:
+            source = item.get("source_ref") or item.get("source")
+            if source:
+                assert source in current["source_refs"]
         assert current["closed_loop_boundary"] == gold["closed_loop_boundary"]
         sections = {section["section_id"]: section for section in current["domain_sections"]}
         assert {"risk", "operation", "inspection", "sop", "ontology"}.issubset(

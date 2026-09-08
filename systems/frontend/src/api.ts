@@ -1102,6 +1102,7 @@ export function getOperationsAgentReviewSummary(input: {
   datasetVersionId?: string | null;
   eventId?: string | null;
   historyWindow?: string;
+  signal?: AbortSignal;
 }): Promise<OperationsAgentReviewSummaryResponse> {
   const params = new URLSearchParams({
     project_id: input.projectId ?? "manufacturing-demo-project",
@@ -1112,6 +1113,7 @@ export function getOperationsAgentReviewSummary(input: {
   if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
+    { signal: input.signal },
   );
 }
 
@@ -1121,6 +1123,7 @@ export function createOperationsAgentReviewSummary(input: {
   datasetVersionId?: string | null;
   eventId?: string | null;
   historyWindow?: string;
+  signal?: AbortSignal;
   trigger?: "manual_materialization" | "ui_manual_regeneration";
 }): Promise<OperationsAgentReviewSummaryResponse> {
   const params = new URLSearchParams({
@@ -1133,7 +1136,7 @@ export function createOperationsAgentReviewSummary(input: {
   if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
-    { method: "POST" },
+    { method: "POST", signal: input.signal, headers: { "Idempotency-Key": crypto.randomUUID() } },
   );
 }
 

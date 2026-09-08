@@ -50,6 +50,8 @@ def run_once(
     stale_policy: str,
     source: str,
     require_live_provider: bool,
+    generation_policy: str = "always",
+    explicit_refresh: bool = False,
 ) -> dict:
     from app.operations.agent_review_summary_workflow import AgentReviewSummaryWorkflow
 
@@ -60,6 +62,8 @@ def run_once(
         trigger="polling_watcher",
         max_attempts=max_attempts,
         source=source,
+        generation_policy=generation_policy,
+        explicit_refresh=explicit_refresh,
         operating_mode={
             "mode": "watch" if watch else "once",
             "target_scope": "project",
@@ -125,6 +129,8 @@ def main() -> None:
         help="Exit non-zero if any materialized item used deterministic fallback.",
     )
     parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--generation-policy", choices=("click", "always", "hybrid"), default="always")
+    parser.add_argument("--refresh", action="store_true", help="Explicitly regenerate current snapshots through the guarded generation path (once only).")
     parser.add_argument("--interval-seconds", type=float, default=60.0)
     parser.add_argument("--max-iterations", type=int)
     parser.add_argument(
@@ -137,6 +143,8 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    if args.refresh and args.watch:
+        parser.error("--refresh is once-only; cannot combine with --watch")
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be positive when provided")
     if args.max_attempts < 1:
@@ -168,6 +176,8 @@ def main() -> None:
             stale_policy=args.stale_policy,
             source=args.source,
             require_live_provider=args.require_live_provider,
+            generation_policy=args.generation_policy,
+            explicit_refresh=args.refresh,
         )
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         if args.require_live_provider and not result.get("live_provider_ready"):

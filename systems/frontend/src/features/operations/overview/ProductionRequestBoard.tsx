@@ -1,3 +1,4 @@
+import { NaturalBriefing } from "./NaturalBriefing";
 import { LogOut, Printer } from "lucide-react";
 import { printProductionReport } from "./printProductionReport";
 import "./ProductionReportPrint.css";
@@ -16,6 +17,7 @@ import { amount, matchingCostAnalysis, numeric, productionQueue, queueStatus, ri
 import "./ProductionRequestBoard.css";
 
 type Props = {
+  canGenerateBrief?: boolean;
   projectId: string; workspaceId: string; model: OperationsBootstrapModel; workOrders: OpenInspectionWorkOrderReadModel[];
   workOrderError: boolean; currentUser: { displayName: string; title: string };
   onRefresh: () => void; onLogout: () => void | Promise<void>;
@@ -25,7 +27,7 @@ const when = (value: string | null | undefined) => value ? new Date(value).toLoc
 const outcome = { no_action_required: "추가 조치 불필요", maintenance_recommended: "정비 필요", data_check_required: "추천 정보 확인 대기" };
 const timing = { immediate: "즉시 정비", planned_window: "계획 시간 정비", reinspect_after: "후속 점검", no_action_baseline: "조치하지 않음" };
 
-export function ProductionRequestBoard({ projectId, workspaceId, model, workOrders, workOrderError, currentUser, onRefresh, onLogout }: Props) {
+export function ProductionRequestBoard({ canGenerateBrief = false, projectId, workspaceId, model, workOrders, workOrderError, currentUser, onRefresh, onLogout }: Props) {
   const [consultations, setConsultations] = useState<InspectionCoordination[]>([]);
   const [queueError, setQueueError] = useState(false);
   const [queueLoading, setQueueLoading] = useState(true);
@@ -131,11 +133,14 @@ export function ProductionRequestBoard({ projectId, workspaceId, model, workOrde
       </section>
       <section className="prb-card prb-review" aria-label="생산 대응 검토">
         <header><strong>생산 대응 검토</strong><span>{name}</span></header>
-        {selected ? <>
+        {selected ? <div className="prb-review-content">
+          <NaturalBriefing projectId={projectId} workspaceId={workspaceId} assetId={selected.assetId} eventId={selected.eventId}
+            datasetVersionId={model.context.datasetVersionId} observedAt={detail?.snapshot_basis?.observed_at}
+            role="process_manager" canGenerate={canGenerateBrief} revision={JSON.stringify([selected, detail?.snapshot_basis, revision])}/>
           <div className="prb-monitoring-stack">
             <RiskChart asset={asset} detail={detail} name={name}/>
           </div>
-        </> : <p className="prb-empty">정비 요청을 선택하면 해당 장비의 손익과 생산 영향을 표시합니다.</p>}
+        </div> : <p className="prb-empty">정비 요청을 선택하면 해당 장비의 손익과 생산 영향을 표시합니다.</p>}
       </section>
       <aside className="prb-card prb-actions" aria-label="작업 승인 검토">
         <header><strong>작업 승인 검토</strong><span>생산 영향·일정 확인</span></header>

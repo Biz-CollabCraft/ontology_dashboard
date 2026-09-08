@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ReactNode, type FormEvent } from "react";
 import { executeInspectedMaintenance, acceptInspectionWorkOrder, startInspectionWorkOrder, completeInspectionWorkOrder, type OpenInspectionWorkOrderReadModel, type InspectionCompletionPayload, type InspectionOutcome, type InspectionChecklistStatus } from "../../../api";
 import "./InspectionWorkOrderEditor.css";
 import { ProductionCoordinationPanel } from "./ProductionCoordinationPanel";
@@ -13,7 +13,8 @@ const checks = [
   ["parts-condition", "관련 부품 상태"],
 ] as const;
 
-export function InspectionWorkOrderEditor({ item, currentUserId, projectId, workspaceId, onRefresh, onConnectionChange }: {
+export function InspectionWorkOrderEditor({ briefing, item, currentUserId, projectId, workspaceId, onRefresh, onConnectionChange }: {
+  briefing?: ReactNode;
   item: OpenInspectionWorkOrderReadModel;
   currentUserId: string;
   projectId: string;
@@ -97,6 +98,7 @@ export function InspectionWorkOrderEditor({ item, currentUserId, projectId, work
   return <form className="inspection-work-editor" onSubmit={(event) => void submit(event)} aria-label="작업 결과 작성">
     {inspected ? <ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="maintenance" workOrderId={item.work_order_id} canRequest={mine && inspected && status === "approved"} onStateChange={setCoordination} onConnectionChange={onConnectionChange} /> : null}
     <header><strong>{item.equipment_id || item.asset_id}</strong><span>#{item.work_order_id.slice(-8)} · {label}</span></header>
+    {briefing}
     <p>담당 {item.assigned_to_display_name || (item.assigned_to ? "담당 보전팀" : "배정 대기")}</p>
     {message ? <p role="status" className="inspection-work-message">{message}</p> : null}
     {!canAct && status !== "completed" ? <p>이 작업은 배정된 보전팀 담당자만 시작하고 결과를 기록할 수 있습니다.</p> : null}

@@ -73,9 +73,12 @@ FORBIDDEN_PROSE_CLAIMS = (
     "auto approval",
 )
 
+AGENT_REVIEW_SUMMARY_SCHEMA_VERSION = "agent-review-summary-v1.1"
+ROLE_POLICY_VERSION = "briefing-role-policy-v1"
 ROLE_SUMMARY_DEFINITIONS = (
-    ("field_operator", "현장 담당자"),
-    ("process_manager", "공정 관리자"),
+    ("process_engineer", "설비 엔지니어"),
+    ("maintenance_technician", "보전 담당자"),
+    ("process_manager", "생산관리자"),
 )
 
 
@@ -92,7 +95,7 @@ def compose_deterministic_agent_review_summary(packet: dict[str, Any]) -> dict[s
     summary = _summary_text(packet=packet, draft=draft, risk=risk, targets=targets)
 
     return {
-        "schema_version": "agent-review-summary-v1.0",
+        "schema_version": AGENT_REVIEW_SUMMARY_SCHEMA_VERSION,
         "packet_schema_version": str(packet.get("schema_version") or ""),
         "asset_id": str(packet.get("asset_id") or ""),
         "generated_at": str(packet.get("generated_at") or ""),
@@ -287,11 +290,15 @@ def _role_summaries(
         )
 
     quotes = {
-        "field_operator": (
-            f"{asset_label}: {status} 알림. {location_text}에서 "
-            f"{component_text}{_object_particle(component_text)} 확인합니다. "
-            f"{factor_text}와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. "
-            f"{work_request_text} {part_text}"
+        "process_engineer": (
+            f"{asset_label}는 {status} 상태로, {location_text}에서 "
+            f"{component_text}{_object_particle(component_text)} 확인할 근거는 {factor_text}입니다. "
+            f"알람·사진·관측값을 대조하고 {similar_event_text}"
+        ),
+        "maintenance_technician": (
+            f"{asset_label}는 {status} 상태로, {location_text}의 "
+            f"{component_text} 점검 준비 시 {work_request_text} "
+            f"{part_text} 실제 작업은 작업지시와 승인 상태 확인 후 검토해야 합니다."
         ),
         "process_manager": manager_quote,
     }
@@ -705,7 +712,8 @@ def _generated_natural_language_values(summary: dict[str, Any]) -> list[str]:
     for item in summary.get("data_footnotes") or []:
         if isinstance(item, dict) and isinstance(item.get("note"), str):
             values.append(str(item["note"]))
-    return values
+    # Formatting must not hide claims from the existing grounding checks.
+    return [re.sub(r'\[\[ref:[^\]\n]+\]\]', '', value).replace('**', '') for value in values]
 
 
 def _normalized_forbidden_prose_claims(values: list[str]) -> set[str]:
@@ -719,9 +727,12 @@ def _normalized_forbidden_prose_claims(values: list[str]) -> set[str]:
 
 def _directive_prose_claims(values: list[str]) -> set[str]:
     text = " ".join(values)
+    # Exempt this explicit boundary statement only, not arbitrary negated clauses.
+    text = re.sub(r"수리\s*지시를\s*대신하지\s*않는\s*점을\s*유의하십시오", "", text)
     patterns = (
         r"(?:교체|생성|승인|발행|마감|종결|완료|수리|정비)[^.?!\n]{0,20}(?:하십시오|하세요|바랍니다)",
         r"(?:정비|교체|수리)[^.?!\n]{0,20}반드시\s*필요",
+        r"(?:승인|착수|작업\s*시점|작업\s*일정|정비\s*(?:일정|범위|착수)|라인|셀|생산\s*순서|정지\s*시점)[^.?!\n]{0,36}(?:결정|판단|진행|확정)(?:해야\s*합니다|하십시오|하세요|바랍니다)",
     )
     claims: set[str] = set()
     for pattern in patterns:
@@ -780,11 +791,9 @@ def _validate_prose_priorities(
 ) -> list[str]:
     text = " ".join(values).casefold()
     labels = ("immediate", "high", "medium", "low")
-    mentioned = {
-        label
-        for label in labels
-        if re.search(rf"(?<![a-z0-9_]){re.escape(label)}(?![a-z0-9_])", text)
-    }
+    # English labels must refer to priority, not production impact or risk grade.
+    priority_phrases = re.findall(r"(?:우선순위|priority)\s*[:=은는이가의\s\"']{0,6}(?:immediate|high|medium|low)(?![a-z0-9_])|\b(?:immediate|high|medium|low)\s+(?:priority|우선순위)", text)
+    mentioned = {label for label in labels if any(re.search(rf"\b{label}\b", phrase) for phrase in priority_phrases)}
     korean_priority_labels = {
         "immediate": ("즉시", "긴급"),
         "high": ("높음", "높은"),
@@ -820,7 +829,8 @@ def _validate_prose_lost_units(
         {
             match
             for match in re.findall(
-                r"(?:약\s*)?[0-9,]+\s*(?:건|개)\s*(?:생산\s*)?손실(?:\s*가능성|\s*예상)?",
+                r"(?:약\s*)?[0-9,]+\s*(?:건|개)(?:의)?\s*(?:생산\s*)?손실(?:\s*가능성|\s*예상)?"
+                r"|(?:추정\s*)?(?:물량\s*)?손실\s*(?:유닛\s*(?:수)?|수량|물량)?\s*(?:은|는|이|가|:)?\s*(?:약\s*)?[0-9,]+\s*(?:건|개)",
                 text,
             )
         }
@@ -850,7 +860,7 @@ def _normalize_claim_text(value: str) -> str:
 
 def _summary_schema_errors(summary: dict[str, Any]) -> list[str]:
     errors = sorted(
-        _summary_schema_validator().iter_errors(summary),
+        _summary_schema_validator(str(summary.get("schema_version", ""))).iter_errors(summary),
         key=lambda item: list(item.absolute_path),
     )
     return [
@@ -859,20 +869,21 @@ def _summary_schema_errors(summary: dict[str, Any]) -> list[str]:
     ]
 
 
-@lru_cache(maxsize=1)
-def summary_schema() -> dict[str, Any]:
-    schema_path = (
-        project_root()
-        / "contracts"
-        / "schemas"
-        / "agent-review-summary.schema.json"
-    )
+@lru_cache(maxsize=3)
+def summary_schema(version: str = AGENT_REVIEW_SUMMARY_SCHEMA_VERSION) -> dict[str, Any]:
+    filenames = {
+        "agent-review-summary-v1.0": "agent-review-summary.schema.json",
+        AGENT_REVIEW_SUMMARY_SCHEMA_VERSION: "agent-review-summary-v1.1.schema.json",
+    }
+    if version not in filenames:
+        return {"not": {}}  # Unknown persisted versions must fail closed.
+    schema_path = project_root() / "contracts" / "schemas" / filenames[version]
     return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
-@lru_cache(maxsize=1)
-def _summary_schema_validator() -> Draft202012Validator:
-    return Draft202012Validator(summary_schema())
+@lru_cache(maxsize=3)
+def _summary_schema_validator(version: str = AGENT_REVIEW_SUMMARY_SCHEMA_VERSION) -> Draft202012Validator:
+    return Draft202012Validator(summary_schema(version))
 
 
 def _collect_source_refs(value: Any) -> set[str]:
