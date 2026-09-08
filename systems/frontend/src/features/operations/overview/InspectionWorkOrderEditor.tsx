@@ -33,9 +33,6 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
   const [note, setNote] = useState("");
   const [measurements, setMeasurements] = useState<Record<string, string>>({});
   const [costBasis, setCostBasis] = useState<Record<string, string>>({});
-  const [workSummary, setWorkSummary] = useState("");
-  const [downtime, setDowntime] = useState("");
-  const [affectedItems, setAffectedItems] = useState("");
   const isCnc = item.asset_type.toLowerCase() === "cnc" || item.asset_id.startsWith("CNC-");
   const equipmentChecks: ReadonlyArray<readonly [string, string]> = isCnc ? [["tool-wear", "공구 마모 상태"], ["cooling-path", "냉각 경로 상태"]] : checks;
   const measurementFields = isCnc ? [["tool_wear_min", "공구 누적 사용 시간", "min"], ["coolant_temperature_c", "냉각수 온도", "C"]] : [];
@@ -50,8 +47,7 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
   const inspected = inspectionResult?.outcome === "maintenance_recommended";
   const canComplete = canAct && status === "in_progress" && !inspected;
   const awaitingProduction = inspected && status === "approved" && coordination?.status !== "confirmed";
-  const approvalValid = outcome !== "maintenance_recommended" || Boolean(workSummary.trim() && affectedItems.trim() && downtime.trim() && Number.isInteger(Number(downtime)) && Number(downtime) >= 0 && Number(downtime) <= 43200);
-  const valid = Boolean(outcome && findings.trim() && approvalValid && equipmentChecks.every(([id]) => checklist[id]) && Object.values(measurements).every((value) => !value || Number.isFinite(Number(value))));
+  const valid = Boolean(outcome && findings.trim() && equipmentChecks.every(([id]) => checklist[id]) && Object.values(measurements).every((value) => !value || Number.isFinite(Number(value))));
   const label = status === "completed" ? "결과 저장 완료" : status === "in_progress" ? (inspected ? "정비 진행 중" : "점검 진행 중") : status === "approved" ? (!inspected ? "접수 완료 · 점검 시작 대기" : awaitingProduction ? "점검 완료 · 정비 승인 대기" : "정비 승인 완료 · 착수 대기") : "요청 접수 대기";
 
   async function submit(event: FormEvent) {
@@ -69,7 +65,6 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
       measurements: measurementFields.filter(([id]) => measurements[id]?.trim()).map(([id, , unit]) => ({ name: id, value: Number(measurements[id]), unit })),
       findings: findings.split("\n").map((line) => line.trim()).filter(Boolean),
       note: note.trim(),
-      ...(outcome === "maintenance_recommended" ? {approval_request: {work_summary:workSummary.trim(),downtime_minutes:Number(downtime),affected_items:affectedItems.trim(),note:note.trim()}} : {}),
     };
     const fingerprint = JSON.stringify([item.work_order_id, status, status === "in_progress" ? payload : null]);
     if (attempt.current?.fingerprint !== fingerprint) attempt.current = { fingerprint, key: Array.from(crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(16).padStart(8, "0")).join("") };
@@ -91,7 +86,7 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
         setInspectionResult({ outcome: payload.outcome, findings: payload.findings, note: payload.note });
         setNote("");
         setStatus(outcome === "maintenance_recommended" ? "approved" : "completed");
-        setMessage(outcome === "maintenance_recommended" ? "점검 결과를 저장하고 생산 관리자에게 정비 승인 요청을 전달했습니다. 승인 후 정비를 시작할 수 있습니다." : "점검 결과를 저장했습니다. 조치 불필요로 종결하며 생산 관리자에게 승인 요청을 보내지 않습니다.");
+        setMessage(outcome === "maintenance_recommended" ? "점검 결과를 저장했습니다. 아래 정비 승인 요청을 작성하면 생산 관리자에게 전달됩니다." : "점검 결과를 저장했습니다. 조치 불필요로 종결하며 생산 관리자에게 승인 요청을 보내지 않습니다.");
       }
       onRefresh();
     } catch {
@@ -128,18 +123,11 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
       {measurementFields.map(([id, name, unit]) => <label key={id}>{name} ({unit}, 선택 입력)<input type="number" step="any" value={measurements[id] || ""} onChange={(event) => setMeasurements((previous) => ({ ...previous, [id]: event.target.value }))} /></label>)}
       {costFields.map(([id, name]) => <label key={id}>{name}<select value={costBasis[id] || ""} onChange={(event) => setCostBasis((previous) => ({ ...previous, [id]: event.target.value }))}><option value="">미확인 · 산정에서 제외</option><option value="pass">예</option><option value="fail">아니요</option></select></label>)}
       <label>점검 확인 내용<textarea required value={findings} onChange={(event) => setFindings(event.target.value)} placeholder="점검에서 확인한 현상과 판단 근거를 작성하세요." /></label>
-      {outcome === "maintenance_recommended" ? <section aria-label="정비 승인 요청 내용">
-        <strong>생산 관리자에게 전달할 정비 승인 요청</strong>
-        <label>정비 내용<textarea required maxLength={2000} value={workSummary} onChange={e => setWorkSummary(e.target.value)} /></label>
-        <label>예상 정지 시간(분)<input required type="number" min={0} max={43200} step={1} value={downtime} onChange={e => setDowntime(e.target.value)} /></label>
-        <label>영향 품목·생산 영향<textarea required maxLength={2000} value={affectedItems} onChange={e => setAffectedItems(e.target.value)} placeholder="영향이 없으면 '없음'을 입력하세요." /></label>
-        <p>점검 결과와 승인 요청이 함께 저장됩니다. 생산 관리자 승인 전에는 정비를 시작할 수 없습니다.</p>
-      </section> : null}
       <label>추가 메모<textarea maxLength={4000} value={note} onChange={(event) => setNote(event.target.value)} /></label>
       <p>점검 결과 기록이며, 실제 정비 완료나 효과 확인을 자동 처리하지 않습니다.</p>
     </fieldset> : null}
     {status !== "completed" ? <button type="submit" disabled={busy || !canAct || awaitingProduction || (status === "in_progress" && (inspected ? !note.trim() : !valid))}>
-      {busy ? "처리 중…" : status === "requested" ? "점검 요청 접수" : awaitingProduction ? "정비 승인 확인 대기" : status === "approved" ? (inspected ? "정비 시작" : "점검 시작") : inspected ? "정비 완료" : outcome === "no_action_required" ? "점검 결과 저장 · 종결" : outcome === "maintenance_recommended" ? "점검 결과 저장 · 정비 승인 요청" : "점검 결과 저장"}
+      {busy ? "처리 중…" : status === "requested" ? "점검 요청 접수" : awaitingProduction ? "정비 승인 확인 대기" : status === "approved" ? (inspected ? "정비 시작" : "점검 시작") : inspected ? "정비 완료" : outcome === "no_action_required" ? "점검 결과 저장 · 종결" : "점검 결과 저장"}
     </button> : null}
   </form>;
 }

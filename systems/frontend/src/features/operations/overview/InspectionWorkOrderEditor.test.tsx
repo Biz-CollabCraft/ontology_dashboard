@@ -33,13 +33,6 @@ async function fill() {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "현장 압력 확인 및 필터 점검");
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await act(async () => {
-    for (const [label,value] of [["정비 내용","필터 교체"],["예상 정지 시간(분)","30"],["영향 품목·생산 영향","없음"]]) {
-      const field=Array.from(host.querySelectorAll("label")).find(el=>el.textContent?.startsWith(label))!.querySelector("textarea,input")!;
-      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field),"value")!.set!.call(field,value);
-      field.dispatchEvent(new Event("input",{bubbles:true}));
-    }
-  });
 }
 beforeEach(() => {
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -109,8 +102,9 @@ describe("inspection result workflow", () => {
     expect(completeInspectionWorkOrder).not.toHaveBeenCalled();
     await fill(); await submit();
     expect(completeInspectionWorkOrder).toHaveBeenCalledWith(expect.objectContaining({ workOrderId: order.work_order_id, payload: expect.objectContaining({ outcome: "maintenance_recommended", findings: ["현장 압력 확인 및 필터 점검"], measurements: [], checklist: expect.arrayContaining([expect.objectContaining({ item_id: "equipment-condition", status: "pass" })]) }) }));
-    expect(completeInspectionWorkOrder).toHaveBeenCalledWith(expect.objectContaining({payload:expect.objectContaining({approval_request:{work_summary:"필터 교체",downtime_minutes:30,affected_items:"없음",note:""}})}));
-    expect(host.textContent).toContain("정비 승인 요청을 전달했습니다");
+    expect(vi.mocked(completeInspectionWorkOrder).mock.calls[0][0]).not.toHaveProperty("payload.approval_request");
+    expect(host.textContent).toContain("결과를 저장했습니다");
+    expect(host.textContent).toContain("아래 정비 승인 요청을 작성하면 생산 관리자에게 전달됩니다");
   });
   it("keeps drafts on polling refresh and failed saves, reusing the retry key", async () => {
     await render({ ...order, status: "in_progress" }); await fill();

@@ -43,12 +43,12 @@ it("sends a scoped request, keeps input on failure and reuses its retry key", as
   await render();
   await input("작업 내용", "공구 점검"); await input("예상 정지", "30"); await input("영향 품목", "품목 A");
   vi.mocked(requestInspectionCoordination).mockRejectedValueOnce(new Error("private failure"));
-  await click("생산 협의 요청");
+  await click("정비 승인 요청");
   expect(host.textContent).not.toContain("private failure");
   expect((host.querySelector("textarea") as HTMLTextAreaElement).value).toBe("공구 점검");
   const first = vi.mocked(requestInspectionCoordination).mock.calls[0][0];
   expect(first).toEqual(expect.objectContaining({ projectId: "project", workspaceId: "workspace", workOrderId: "inspection-1", payload: { work_summary: "공구 점검", downtime_minutes: 30, affected_items: "품목 A", note: "" } }));
-  await click("생산 협의 요청");
+  await click("정비 승인 요청");
   expect(vi.mocked(requestInspectionCoordination).mock.calls[1][0].idempotencyKey).toBe(first.idempotencyKey);
 });
 it("saves an explicit production reply bound to the selected request revision", async () => {
@@ -70,7 +70,7 @@ it("reloads completed work and its saved confirmation and result", async () => {
     history: [entry], inspection_result: { outcome: "no_action_required" as const, findings: ["현장 이상 없음"], note: "점검 완료" } };
   vi.mocked(listInspectionCoordinations).mockResolvedValue({ items: [confirmed] });
   await render("production");
-  expect(host.textContent).toContain("생산관리자 확인 완료");
+  expect(host.textContent).toContain("생산 관리자 확인 완료");
   expect(host.textContent).toContain("생산 담당");
   expect(host.textContent).toContain("현장 이상 없음");
   expect(host.querySelector(".coordination-reply-form")).toBeNull();

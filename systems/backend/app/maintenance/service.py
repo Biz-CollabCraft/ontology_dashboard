@@ -625,7 +625,6 @@ class MaintenanceLoopService:
         return self.repository.complete_inspection(
             work_order=completed,
             inspection_result=inspection_result,
-            approval_request=payload.approval_request.model_dump(mode="json") if payload.approval_request else None,
             actor_display_name=actor_display_name,
             request_idempotency_key=idempotency_key,
             request_fingerprint=self._fingerprint(

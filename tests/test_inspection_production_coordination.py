@@ -8,34 +8,6 @@ from test_maintenance_loop_router import client_for, BASE
 SCOPE = dict(organization_id="org-1", project_id="project-1", workspace_id="workspace-1")
 REQUEST = dict(work_summary="베어링 점검", downtime_minutes=30, affected_items="품목 A", note="교대 시간 협의")
 
-def test_inspection_and_approval_request_are_atomic_and_retryable(tmp_path, monkeypatch):
-    loop = service(tmp_path)
-    wid = loop.request_inspection(**SCOPE, payload=inspection_request(), actor_id="engineer", actor_display_name="엔지니어", idempotency_key="atomic-create-001")["work_order_id"]
-    loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.APPROVED, actor_id="tech", actor_display_name="보전팀", idempotency_key="atomic-accept-001")
-    loop.transition_inspection(**SCOPE, work_order_id=wid, target=WorkOrderStatus.IN_PROGRESS, actor_id="tech", actor_display_name="보전팀", idempotency_key="atomic-start-001")
-    payload = inspection_result().model_copy(update={"approval_request":InspectionCoordinationRequest(**REQUEST)})
-    original=loop.repository._record_activity
-    def fail_approval(*args, **kwargs):
-        if kwargs.get("activity_type")=="inspection.coordination.pending":
-            raise RuntimeError("test write failure")
-        return original(*args, **kwargs)
-    monkeypatch.setattr(loop.repository,"_record_activity",fail_approval)
-    kwargs=dict(**SCOPE,work_order_id=wid,payload=payload,actor_id="tech",actor_display_name="보전팀",idempotency_key="atomic-result-001")
-    with pytest.raises(RuntimeError): loop.complete_inspection(**kwargs)
-    item=loop.list_open_inspection_work_orders(**SCOPE)["items"][0]
-    assert item["status"]=="in_progress" and item["inspection_result"] is None
-    assert loop.list_inspection_coordination(**SCOPE)["items"]==[]
-    monkeypatch.setattr(loop.repository,"_record_activity",original)
-    first=loop.complete_inspection(**kwargs)
-    second=loop.complete_inspection(**kwargs)
-    assert first["approval_request_id"]==second["approval_request_id"]
-    rows=loop.list_inspection_coordination(**SCOPE)["items"]
-    assert len(rows)==1 and rows[0]["status"]=="pending"
-    assert rows[0]["request"]["downtime_minutes"]==30
-    with pytest.raises(InvalidTransition): start(loop,wid)
-    reply(loop,wid,first["approval_request_id"])
-    start(loop,wid)
-
 @pytest.fixture
 def accepted(tmp_path):
     loop = service(tmp_path)
@@ -58,6 +30,40 @@ def reply(loop, wid, rid, decision="confirmed", key="coord-response-001"):
 def start(loop, wid):
     return loop.coordinate_inspection(**SCOPE, work_order_id=wid, phase="execution", payload=InspectionExecutionRequest(action="start"),
         actor_id="tech", actor_display_name="보전팀", idempotency_key="start-order-001")
+
+def test_inspection_save_is_separate_from_approval_request(accepted, tmp_path):
+    loop, wid = accepted
+    assert loop.list_inspection_coordination(**SCOPE)["items"] == []
+    saved = service(tmp_path).list_open_inspection_work_orders(**SCOPE)["items"][0]
+    assert saved["inspection_result"]["outcome"] == "maintenance_recommended"
+    with pytest.raises(PermissionError):
+        loop.coordinate_inspection(**SCOPE, work_order_id=wid, phase="request",
+            payload=InspectionCoordinationRequest(**REQUEST), actor_id="other-tech",
+            actor_display_name="다른 담당자", idempotency_key="rejected-request-001")
+    assert loop.list_inspection_coordination(**SCOPE)["items"] == []
+    assert service(tmp_path).list_open_inspection_work_orders(**SCOPE)["items"][0]["inspection_result"] == saved["inspection_result"]
+    req = request(loop, wid)
+    assert request(loop, wid)["request_id"] == req["request_id"]
+    assert len(loop.list_inspection_coordination(**SCOPE)["items"]) == 1
+
+
+@pytest.mark.parametrize("outcome", ["maintenance_recommended", "no_action_required"])
+def test_inspection_save_retry_after_lost_response(tmp_path, outcome):
+    loop = service(tmp_path)
+    wid = loop.request_inspection(**SCOPE, payload=inspection_request(), actor_id="engineer",
+        actor_display_name="엔지니어", idempotency_key="create-order-001")["work_order_id"]
+    for target, key in [(WorkOrderStatus.APPROVED, "accept-order-001"), (WorkOrderStatus.IN_PROGRESS, "inspect-start-001")]:
+        loop.transition_inspection(**SCOPE, work_order_id=wid, target=target, actor_id="tech",
+            actor_display_name="보전팀", idempotency_key=key)
+    args = dict(**SCOPE, work_order_id=wid, payload=inspection_result(outcome), actor_id="tech",
+        actor_display_name="보전팀", idempotency_key="inspect-result-001")
+    first = loop.complete_inspection(**args)
+    retried = service(tmp_path).complete_inspection(**args)
+    assert retried["inspection_result_id"] == first["inspection_result_id"]
+    assert retried["work_order_status"] == first["work_order_status"]
+    assert retried["replayed"] is True
+    assert loop.list_inspection_coordination(**SCOPE)["items"] == []
+
 
 def test_request_creation_timestamp_is_preserved_in_queue_and_consultation(accepted):
     loop, wid = accepted

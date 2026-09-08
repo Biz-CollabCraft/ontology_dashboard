@@ -483,7 +483,6 @@ export type InspectionChecklistStatus = "pass" | "fail" | "not_checked";
 
 export interface InspectionCompletionPayload extends Record<string, unknown> {
   outcome: InspectionOutcome;
-  approval_request?: { work_summary: string; downtime_minutes: number; affected_items: string; note: string };
   checklist: Array<{
     item_id: string;
     status: InspectionChecklistStatus;
