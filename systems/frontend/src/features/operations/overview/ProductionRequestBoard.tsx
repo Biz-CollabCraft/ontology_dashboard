@@ -99,8 +99,8 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
   // Overall KPIs are independent of the selected request and queue filter.
   const impactedAssets = model.assets.filter(asset => asset.status !== "normal");
   const impactedLines = new Set(impactedAssets.map(asset => asset.line).filter(Boolean)).size;
-  const downtime = numeric(model.metrics?.estimatedDowntimeMinutes) ? Math.round(model.metrics.estimatedDowntimeMinutes) : null;
-  const downtimeLabel = downtime === null ? "정보 없음" : downtime >= 60 ? Math.floor(downtime / 60) + "시간 " + (downtime % 60) + "분" : downtime + "분";
+  const stopCost = selected ? referenceEconomics(selected.assetId, c?.request.downtime_minutes) : null;
+  const stopCostTotal = stopCost?.stopMinutes != null ? Math.round(stopCost.hourlyProductionCost * stopCost.stopMinutes / 60) : null;
   return <main className="engineer-lite-board production-request-board">
     <header className="engineer-factory-header">
       <div><strong>생산 대응 현황</strong><span>{model.context.workspaceName} · 정비 요청의 생산 영향과 작업 일정 협의</span></div>
@@ -109,11 +109,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
     <section className="prb-kpis" aria-label="전체 생산 영향 현황">
       <OverallKpi label="생산 영향 검토 설비" value={number(impactedAssets.length, "대")} description="주의 이상 설비를 생산계획과 대조합니다."/>
       <OverallKpi label="영향 가능 라인" value={number(impactedLines, "개")} description="현재 위험 설비가 포함된 라인입니다."/>
-      <OverallKpi label="예상 정지 영향" value={downtimeLabel} description="전체 현황 기준 · 부족분·납기 산정의 입력값입니다."/>
-    </section>
-    <section className="prb-impact-kpis" aria-label="선택 요청 생산 영향 지표">
-      <header><strong>{selected ? name + " · 생산 영향 요약" : "생산 영향 요약"}</strong><span>{selected ? "선택한 정비 요청 기준" : "정비 요청을 선택하세요"}</span></header>
-      <ImpactMetrics item={selected} detail={detail} requestedLoss={requestedLoss} loading={Boolean(selected && (!active || active.detailLoading))}/>
+      <OverallKpi label="예상 정지 영향 · 생산원가 기준" value={stopCost ? `-${stopCost.hourlyProductionCost.toLocaleString("ko-KR")}원/h` : "요청 선택 필요"} description={stopCost ? `${name} · ${stopCost.usesDefault ? "기본" : "요청"} 정지 ${stopCost.stopMinutes ?? "미확인"}분 · 원가 환산 ${stopCostTotal === null ? "미산정" : "-" + stopCostTotal.toLocaleString("ko-KR") + "원"} (가정·확정 손실 아님)` : "선택 요청의 정지 시간과 설비별 가정 생산원가 기준입니다."}/>
     </section>
     <div className="prb-columns">
       <section className="prb-card prb-queue" aria-label="정비 승인 요청 목록">

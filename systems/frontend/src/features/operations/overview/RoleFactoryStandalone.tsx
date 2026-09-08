@@ -137,7 +137,6 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
       {persona === "maintenance" ? <>
         <article><span>진행 중 점검 요청</span><strong>{inspectionOrders.length}<small>건</small></strong><p>점검 완료 건은 종결하거나 정비 승인 목록으로 이동합니다.</p></article>
         <article><span>긴급 설비</span><strong>{urgent.length}<small>대</small></strong><p>현장 안전과 작업 허가를 우선 확인합니다.</p></article>
-        <article><span>예상 정지 영향</span><strong>{minutes(model.metrics.estimatedDowntimeMinutes)}</strong><p>현재 위험 설비 기준 합계입니다.</p></article>
       </> : <>
         <article><span>생산 영향 검토 설비</span><strong>{risky.length}<small>대</small></strong><p>주의 이상 설비를 생산계획과 대조합니다.</p></article>
         <article><span>영향 가능 라인</span><strong>{impactedLines}<small>개</small></strong><p>현재 위험 설비가 포함된 라인입니다.</p></article>

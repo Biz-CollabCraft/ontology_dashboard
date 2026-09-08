@@ -8,6 +8,8 @@ html[data-theme="dark"] .engineer-factory-live button.operations-theme-toggle { 
   html[data-theme="dark"] .engineer-monitoring-toolbar :where(strong,span,label) { color:#c6dbf5; }
 }
 /* Screen-only overrides keep printed reports on their original light palette. */
+.role-factory-maintenance .engineer-factory-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+@media(max-width:600px) { .role-factory-maintenance .engineer-factory-kpis { grid-template-columns:1fr; } }
 @media screen {
   html[data-theme="dark"] .engineer-lite-board {
     --operations-accent:#80b5ff; --operations-success:#70dda2;
