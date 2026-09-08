@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type FormEvent } from "react";
 import { executeInspectedMaintenance, acceptInspectionWorkOrder, startInspectionWorkOrder, completeInspectionWorkOrder, type OpenInspectionWorkOrderReadModel, type InspectionCompletionPayload, type InspectionOutcome, type InspectionChecklistStatus } from "../../../api";
 import "./InspectionWorkOrderEditor.css";
 import { ProductionCoordinationPanel } from "./ProductionCoordinationPanel";
@@ -25,6 +25,13 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
   const [status, setStatus] = useState<string>(item.status);
   const [inspectionResult, setInspectionResult] = useState(item.inspection_result);
   const [coordination, setCoordination] = useState<InspectionCoordination | null>(null);
+  const [coordinationConnection, setCoordinationConnection] = useState<"loading" | "online" | "offline">("loading");
+  const [requestBusy, setRequestBusy] = useState(false);
+  const requestFormId = `approval-request-${item.work_order_id}`;
+  const handleConnectionChange = useCallback((value: { workOrderId: string; state: "loading" | "online" | "offline" }) => {
+    setCoordinationConnection(value.state);
+    onConnectionChange?.(value);
+  }, [onConnectionChange]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [outcome, setOutcome] = useState<InspectionOutcome | "">("");
@@ -46,13 +53,18 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
   const canAct = Boolean(currentUserId && (status === "requested" || mine));
   const inspected = inspectionResult?.outcome === "maintenance_recommended";
   const canComplete = canAct && status === "in_progress" && !inspected;
-  const awaitingProduction = inspected && status === "approved" && coordination?.status !== "confirmed";
+  const approvalStage = inspected && status === "approved";
+  const approvalUnavailable = approvalStage && coordinationConnection !== "online";
+  const needsApprovalRequest = approvalStage && !approvalUnavailable && (!coordination || coordination.status === "changes_requested");
+  const awaitingProduction = approvalStage && coordination?.status === "pending";
   const valid = Boolean(outcome && findings.trim() && equipmentChecks.every(([id]) => checklist[id]) && Object.values(measurements).every((value) => !value || Number.isFinite(Number(value))));
-  const label = status === "completed" ? "결과 저장 완료" : status === "in_progress" ? (inspected ? "정비 진행 중" : "점검 진행 중") : status === "approved" ? (!inspected ? "접수 완료 · 점검 시작 대기" : awaitingProduction ? "점검 완료 · 정비 승인 대기" : "정비 승인 완료 · 착수 대기") : "요청 접수 대기";
+  const label = status === "completed" ? "결과 저장 완료" : status === "in_progress" ? (inspected ? "정비 진행 중" : "점검 진행 중") : status === "approved" ? (!inspected ? "접수 완료 · 점검 시작 대기" : approvalUnavailable ? "점검 완료 · 승인 상태 확인 필요" : needsApprovalRequest ? "점검 완료 · 정비 승인 요청 필요" : awaitingProduction ? "점검 완료 · 정비 승인 대기" : "정비 승인 완료 · 착수 대기") : "요청 접수 대기";
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (locked.current || !canAct || awaitingProduction || status === "completed" || (status === "in_progress" && (inspected ? !note.trim() : !valid))) return;
+    if (locked.current || requestBusy || !canAct || approvalUnavailable || awaitingProduction || status === "completed" || (status === "in_progress" && (inspected ? !note.trim() : !valid))) return;
+    // Approval fields have their own form and API; never start maintenance here.
+    if (needsApprovalRequest) return;
     locked.current = true;
     setBusy(true);
     setMessage("");
@@ -86,7 +98,7 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
         setInspectionResult({ outcome: payload.outcome, findings: payload.findings, note: payload.note });
         setNote("");
         setStatus(outcome === "maintenance_recommended" ? "approved" : "completed");
-        setMessage(outcome === "maintenance_recommended" ? "점검 결과를 저장했습니다. 아래 정비 승인 요청을 작성하면 생산 관리자에게 전달됩니다." : "점검 결과를 저장했습니다. 조치 불필요로 종결하며 생산 관리자에게 승인 요청을 보내지 않습니다.");
+        setMessage(outcome === "maintenance_recommended" ? "점검 결과를 저장했습니다. 정비 내용과 예상 정지 시간, 생산 영향을 작성한 뒤 정비 승인 요청을 보내세요." : "점검 결과를 저장했습니다. 조치 불필요로 종결하며 생산 관리자에게 승인 요청을 보내지 않습니다.");
       }
       onRefresh();
     } catch {
@@ -98,15 +110,16 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
     }
   }
 
-  return <form className="inspection-work-editor" onSubmit={(event) => void submit(event)} aria-label="작업 결과 작성">
+  return <section className="inspection-work-editor" aria-label="작업 결과 작성">
     <header><strong>{item.equipment_id || item.asset_id}</strong><span>#{item.work_order_id.slice(-8)} · {label}</span></header>
     {briefing}
     <p>담당 {item.assigned_to_display_name || (item.assigned_to ? "담당 보전팀" : "배정 대기")}</p>
     {message ? <p role="status" className="inspection-work-message">{message}</p> : null}
     {!canAct && status !== "completed" ? <p>이 작업은 배정된 보전팀 담당자만 시작하고 결과를 기록할 수 있습니다.</p> : null}
     {inspectionResult ? <section aria-label="점검 결과"><strong>{inspected ? "점검 완료 · 정비 필요" : "점검 종결 · 조치 불필요"}</strong><p>{inspectionResult.findings.join(" / ")}</p></section> : null}
-    {inspected ? <ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="maintenance" workOrderId={item.work_order_id} canRequest={mine && status === "approved"} onStateChange={setCoordination} onConnectionChange={onConnectionChange} /> : null}
-    {status === "approved" && inspected && !awaitingProduction ? <p>생산 관리자 승인 완료 · 승인 일정과 착수 조건을 확인하고 정비를 시작하세요.</p> : null}
+    {inspected ? <ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="maintenance" workOrderId={item.work_order_id} canRequest={mine && needsApprovalRequest} onStateChange={setCoordination} onConnectionChange={handleConnectionChange} requestFormId={requestFormId} onRequestBusyChange={setRequestBusy} /> : null}
+    {approvalStage && !approvalUnavailable && coordination?.status === "confirmed" ? <p>생산 관리자 승인 완료 · 승인 일정과 착수 조건을 확인하고 정비를 시작하세요.</p> : null}
+    <form onSubmit={(event) => void submit(event)}>
     {inspected && status === "in_progress" ? <label>정비 수행 결과<textarea required value={note} onChange={e => setNote(e.target.value)} placeholder="실제 수행한 정비와 결과를 작성하세요." /></label> : null}
     {canComplete ? <fieldset disabled={busy}>
       <legend>점검 결과</legend>
@@ -126,8 +139,9 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
       <label>추가 메모<textarea maxLength={4000} value={note} onChange={(event) => setNote(event.target.value)} /></label>
       <p>점검 결과 기록이며, 실제 정비 완료나 효과 확인을 자동 처리하지 않습니다.</p>
     </fieldset> : null}
-    {status !== "completed" ? <button type="submit" disabled={busy || !canAct || awaitingProduction || (status === "in_progress" && (inspected ? !note.trim() : !valid))}>
-      {busy ? "처리 중…" : status === "requested" ? "점검 요청 접수" : awaitingProduction ? "정비 승인 확인 대기" : status === "approved" ? (inspected ? "정비 시작" : "점검 시작") : inspected ? "정비 완료" : outcome === "no_action_required" ? "점검 결과 저장 · 종결" : "점검 결과 저장"}
+    {status !== "completed" ? <button type="submit" form={needsApprovalRequest ? requestFormId : undefined} disabled={busy || requestBusy || !canAct || approvalUnavailable || awaitingProduction || (status === "in_progress" && (inspected ? !note.trim() : !valid))}>
+      {busy || requestBusy ? "처리 중…" : status === "requested" ? "점검 요청 접수" : approvalUnavailable ? "승인 상태 확인 필요" : needsApprovalRequest ? "정비 승인 요청" : awaitingProduction ? "정비 승인 확인 대기" : status === "approved" ? (inspected ? "정비 시작" : "점검 시작") : inspected ? "정비 완료" : outcome === "no_action_required" ? "점검 결과 저장 · 종결" : "점검 결과 저장"}
     </button> : null}
-  </form>;
+    </form>
+  </section>;
 }

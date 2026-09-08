@@ -6,6 +6,7 @@
 .inspection-work-editor label{display:flex;flex-direction:column;gap:6px;font-weight:600}
 .inspection-work-editor input,.inspection-work-editor select,.inspection-work-editor textarea{width:100%;box-sizing:border-box;font:inherit;padding:9px;border:1px solid #aabed8;border-radius:4px;background:#fff;color:#172b46}
 .inspection-work-editor textarea{min-height:80px;resize:vertical}
-.inspection-work-editor>button{padding:12px;background:#1769cf;color:white;border:0;border-radius:4px;font-weight:700}
-.inspection-work-editor>button:disabled{background:#dbe5f1;color:#526782;cursor:not-allowed}
+.inspection-work-editor>form{display:flex;flex-direction:column;gap:12px}
+.inspection-work-editor>form>button{padding:12px;background:#1769cf;color:white;border:0;border-radius:4px;font-weight:700}
+.inspection-work-editor>form>button:disabled{background:#dbe5f1;color:#526782;cursor:not-allowed}
 .inspection-work-message{padding:10px;border-left:3px solid #2878d6;background:#e8f1fc}

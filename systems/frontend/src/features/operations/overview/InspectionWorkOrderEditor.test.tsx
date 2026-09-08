@@ -3,8 +3,9 @@ import { act, useEffect } from "react";
 import type { InspectionCoordination } from "../../../api";
 const coordination = vi.hoisted(() => ({ status: "confirmed" as InspectionCoordination["status"] }));
 vi.mock("./ProductionCoordinationPanel", () => ({
-  ProductionCoordinationPanel: ({ onStateChange }: { onStateChange: (value: InspectionCoordination) => void }) => {
+  ProductionCoordinationPanel: ({ onStateChange, onConnectionChange }: { onStateChange: (value: InspectionCoordination) => void; onConnectionChange: (value: { workOrderId: string; state: "online" }) => void }) => {
     useEffect(() => onStateChange({ status: coordination.status } as InspectionCoordination), [onStateChange]);
+    useEffect(() => onConnectionChange({ workOrderId: "INSPECTION-12345678", state: "online" }), [onConnectionChange]);
     return null;
   },
 }));
@@ -104,7 +105,7 @@ describe("inspection result workflow", () => {
     expect(completeInspectionWorkOrder).toHaveBeenCalledWith(expect.objectContaining({ workOrderId: order.work_order_id, payload: expect.objectContaining({ outcome: "maintenance_recommended", findings: ["현장 압력 확인 및 필터 점검"], measurements: [], checklist: expect.arrayContaining([expect.objectContaining({ item_id: "equipment-condition", status: "pass" })]) }) }));
     expect(vi.mocked(completeInspectionWorkOrder).mock.calls[0][0]).not.toHaveProperty("payload.approval_request");
     expect(host.textContent).toContain("결과를 저장했습니다");
-    expect(host.textContent).toContain("아래 정비 승인 요청을 작성하면 생산 관리자에게 전달됩니다");
+    expect(host.textContent).toContain("정비 내용과 예상 정지 시간, 생산 영향을 작성한 뒤 정비 승인 요청을 보내세요");
   });
   it("keeps drafts on polling refresh and failed saves, reusing the retry key", async () => {
     await render({ ...order, status: "in_progress" }); await fill();
