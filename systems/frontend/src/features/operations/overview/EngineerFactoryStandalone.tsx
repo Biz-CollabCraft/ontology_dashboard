@@ -848,7 +848,7 @@ export function EngineerFactoryStandalone({
               </div>
               <NaturalBriefing projectId={model.context.projectId} workspaceId={model.context.workspaceId}
                 assetId={selected.assetId} eventId={selected.eventId} datasetVersionId={model.context.datasetVersionId}
-                observedAt={selected.observedAt} role={briefingRole} providedResponse={briefingResponse} canGenerate={canGenerateBrief && !readOnly} revision={JSON.stringify([selected, maintenanceDirectives.filter(item => item.asset_id === selected.assetId)])}/>
+                observedAt={selected.observedAt} role={briefingRole} providedResponse={briefingResponse} canGenerate={canGenerateBrief && !readOnly} revision={JSON.stringify(maintenanceDirectives.filter(item => item.asset_id === selected.assetId))}/>
               <ol>
                 {selected.topFactors.slice(0, 4).map((factor) => (
                   <li key={factor.id}>

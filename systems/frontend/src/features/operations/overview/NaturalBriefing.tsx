@@ -15,8 +15,9 @@ type Props = {
 // A new selection is a new instance: old prose and pending responses cannot cross it.
 export function NaturalBriefing(props: Props) {
   const revealed = useRef(new Set<string>());
-  return <Briefing revealed={revealed.current} key={JSON.stringify([props.projectId, props.workspaceId, props.assetId, props.eventId,
-    props.datasetVersionId, props.observedAt, props.role, props.revision, props.canGenerate, props.providedResponse?.trace.materialization?.summary_key, props.providedResponse?.trace.materialization?.status])} {...props}/>;
+  const dataset = props.eventId?.startsWith("FILE#") ? props.eventId.split("#")[1] : props.datasetVersionId;
+  return <Briefing revealed={revealed.current} key={JSON.stringify([props.projectId, props.workspaceId, props.assetId,
+    props.eventId?.startsWith("FILE#") ? dataset : props.eventId, props.role, props.revision, props.canGenerate, props.providedResponse?.trace.materialization?.summary_key, props.providedResponse?.trace.materialization?.status])} {...props} datasetVersionId={dataset}/>;
 }
 
 function accepted(response: OperationsAgentReviewSummaryResponse, assetId: string) {
@@ -30,6 +31,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
   const [summary, setSummary] = useState<OperationsAgentReviewSummary | null>(null);
   const [status, setStatus] = useState(supported ? "브리핑 조회 중" : "선택한 근거에 연결된 브리핑이 없습니다.");
   const [busy, setBusy] = useState(supported);
+  const [basis, setBasis] = useState({eventId: props.eventId, observedAt: props.observedAt});
   const controllerRef = useRef<AbortController | null>(null);
   const input = { assetId: props.assetId, eventId: props.eventId, projectId: props.projectId,
     datasetVersionId: props.datasetVersionId, historyWindow: "24h" };
@@ -57,6 +59,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
   async function generate() {
     const controller = controllerRef.current;
     if (busy || !props.canGenerate || !supported || !controller || controller.signal.aborted) return;
+    setBasis({eventId: props.eventId, observedAt: props.observedAt});
     setBusy(true); setSummary(null); setStatus("현재 근거로 자연어 브리핑을 작성하고 있습니다.");
     try {
       const result = await createOperationsAgentReviewSummary({ ...input, signal: controller.signal });
@@ -64,8 +67,10 @@ function Briefing(props: Props & { revealed: Set<string> }) {
       if (!accepted(result, props.assetId)) {
         setStatus("자연어 브리핑이 검증을 통과하지 못했습니다. 판단 근거를 확인하세요.");
       } else await read(controller);
-    } catch {
-      if (!controller.signal.aborted) setStatus("브리핑을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } catch (error) {
+      if (!controller.signal.aborted) setStatus(error instanceof Error && /429|rate.limit|잠시 후/.test(error.message)
+        ? "생성 요청이 많습니다. 약 1분 후 다시 시도해 주세요."
+        : "브리핑을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally { if (!controller.signal.aborted) setBusy(false); }
   }
 
@@ -75,11 +80,11 @@ function Briefing(props: Props & { revealed: Set<string> }) {
     <div className="natural-briefing-heading"><strong>AI 브리핑</strong>
       {supported && props.canGenerate ? <button type="button" disabled={busy} onClick={() => void generate()}>{busy ? "처리 중" : summary ? "다시 생성" : "브리핑 생성"}</button> : null}
     </div>
-    <p className="natural-briefing-status" role="status">{status}</p>
-    {summary ? <StreamingProse key={JSON.stringify([props.assetId, props.eventId, props.role, quote])}
-      rows={rows} identity={JSON.stringify([props.projectId, props.workspaceId, props.assetId, props.eventId, props.role, quote])}
+    <p className="natural-briefing-status" role="status">{status}{basis.eventId !== props.eventId ? " · 생성 기준 관측을 유지합니다. 최신 관측은 다시 생성 시 반영됩니다." : ""}</p>
+    {summary ? <StreamingProse key={JSON.stringify([props.assetId, basis.eventId, props.role, quote])}
+      rows={rows} identity={JSON.stringify([props.projectId, props.workspaceId, props.assetId, basis.eventId, props.role, quote])}
       revealed={props.revealed}/> : null}
-    {summary ? <div className="natural-briefing-basis">{props.assetId}{props.observedAt ? <> · 관측 기준 <time dateTime={props.observedAt}>{relativeRecordTime(props.observedAt)}</time></> : null}
+    {summary ? <div className="natural-briefing-basis">{props.assetId}{basis.observedAt ? <> · 관측 기준 <time dateTime={basis.observedAt}>{relativeRecordTime(basis.observedAt)}</time></> : null}
       {summary.limitations.length ? <details><summary>해석 시 유의사항</summary>{readerLimitations(summary.limitations).map((text, i) => <p key={i}>{text}</p>)}</details> : null}
     </div> : null}
   </section>;

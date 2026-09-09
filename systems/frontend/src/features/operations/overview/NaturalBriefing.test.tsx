@@ -78,3 +78,19 @@ it("uses server replay responses without product API calls and withdraws rejecte
  expect(host.querySelector('.natural-briefing-line')).toBeNull();
  expect(host.textContent).toContain("검증을 통과하지 못한 응답");
 });
+
+it("keeps in-flight generation bound while FILE observations advance", async () => {
+ let finish!: (value: OperationsAgentReviewSummaryResponse) => void;
+ post.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+ const props = {projectId:"project",workspaceId:"manufacturing-demo",assetId:"A",role:"process_engineer" as const,canGenerate:true};
+ await act(async()=>root.render(<NaturalBriefing {...props} eventId="FILE#original#obs1" datasetVersionId="wrong-new-run" observedAt="2026-09-09T01:00:00Z"/>));
+ expect(get).toHaveBeenLastCalledWith(expect.objectContaining({datasetVersionId:"original"}));
+ await act(async()=>host.querySelector<HTMLButtonElement>('button')!.click());
+ const signal=post.mock.calls[0][0].signal;
+ await act(async()=>root.render(<NaturalBriefing {...props} eventId="FILE#original#obs2" datasetVersionId="original" observedAt="2026-09-09T01:10:00Z"/>));
+ expect(signal?.aborted).toBe(false);
+ await act(async()=>finish(response()));
+ expect(get).toHaveBeenLastCalledWith(expect.objectContaining({eventId:"FILE#original#obs1",datasetVersionId:"original"}));
+ expect(host.querySelector('time')?.dateTime).toBe('2026-09-09T01:00:00Z');
+ expect(host.textContent).toContain('생성 기준 관측을 유지');
+});

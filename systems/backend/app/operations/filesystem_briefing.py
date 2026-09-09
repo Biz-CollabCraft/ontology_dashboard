@@ -4,6 +4,75 @@ from app.operations.agent_review_packet import compose_agent_review_packet
 from datetime import datetime
 from app.operations.operational_context_contract import OperationalRequestIdentity
 from app.operations.operational_planning_context import planning_context
+import csv
+import json
+import os
+import re
+from pathlib import Path
+from functools import lru_cache
+
+
+def _archive_roots():
+    roots = [Path('/home/bistell/gen_data/output')]
+    if os.getenv('GEN_DATA_OUTPUT_ROOT'):
+        roots.insert(0, Path(os.environ['GEN_DATA_OUTPUT_ROOT']))
+    roots.extend(Path('/home/bistell/ontology_dashboard/data_preprocessed/local-realtime/sessions').glob('*/gen-data-runtime'))
+    base = Path('/home/bistell/ontology_dashboard/data/demo-scenarios')
+    roots.extend(base.glob('generated/*'))
+    roots.extend(base.glob('scenario*'))
+    return roots
+
+
+@lru_cache(maxsize=128)
+def _recorded_tick(stream_name, asset_id, event_id, run_id):
+    stream = Path(stream_name)
+    with (stream.parents[1]/'canonical/asset_master.csv').open(encoding='utf-8-sig', newline='') as handle:
+        expected = {r['asset_id'] for r in csv.DictReader(handle)}
+    at, rows, matched = None, {}, False
+    with stream.open(encoding='utf-8') as handle:
+        for line in handle:
+            try:
+                row = json.loads(line)
+                current = row['observed_at']
+                asset = row['asset_id']
+            except (ValueError, KeyError):
+                continue
+            if current != at:
+                if matched and expected and set(rows) == expected:
+                    return at, rows
+                at, rows, matched = current, {}, False
+            rows[asset] = row
+            matched = matched or (asset == asset_id and f"FILE#{run_id}#{row.get('observation_id', asset)}" == event_id)
+    if matched and expected and set(rows) == expected:
+        return at, rows
+    raise KeyError(event_id)
+
+
+def _bound_ticks(asset_id, event_id, dataset_version_id):
+    from app.diagnosis.runtime_router import _latest_complete_file_tick
+    parts = event_id.split('#', 2)
+    if len(parts) != 3 or not re.fullmatch(r'[A-Za-z0-9_-]+', parts[1]):
+        raise KeyError(event_id)
+    run_id = parts[1]
+    if dataset_version_id and dataset_version_id != run_id:
+        raise KeyError(event_id)
+    try:
+        stream, latest_at, records, complete_ticks = _latest_complete_file_tick()
+        if stream.parents[1].name == run_id:
+            ticks = complete_ticks or [(latest_at, {str(row['asset_id']): row for row in records})]
+            if any(f"FILE#{run_id}#{rows.get(asset_id, {}).get('observation_id', '')}" == event_id for _, rows in ticks):
+                return run_id, ticks
+    except (KeyError, OSError, ValueError):
+        pass
+    for root in _archive_roots():
+        stream = root/'runs'/run_id/'source/sensor_records.jsonl'
+        if not stream.is_file() or not stream.resolve().is_relative_to(root.resolve()):
+            continue
+        try:
+            return run_id, [_recorded_tick(str(stream), asset_id, event_id, run_id)]
+        except (KeyError, OSError, ValueError):
+            continue
+    raise KeyError(event_id)
 
 
 def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, project_id, history_window,
@@ -11,11 +80,7 @@ def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, projec
     from app.diagnosis.runtime_router import _latest_complete_file_tick, _filesystem_event_artifact
     if project_id != "manufacturing-demo-project" or not event_id.startswith("FILE#"):
         raise KeyError(event_id)
-    stream, latest_at, records, complete_ticks = _latest_complete_file_tick()
-    run_id = stream.parents[1].name
-    if dataset_version_id and dataset_version_id != run_id:
-        raise KeyError(event_id)
-    ticks = complete_ticks or [(latest_at, {str(row["asset_id"]): row for row in records})]
+    run_id, ticks = _bound_ticks(asset_id, event_id, dataset_version_id)
     for observed_at, rows in reversed(ticks):
         record = rows.get(asset_id)
         if not record:
