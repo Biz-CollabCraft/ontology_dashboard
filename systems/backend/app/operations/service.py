@@ -1777,6 +1777,7 @@ def _has_closed_loop_records(context: dict[str, Any]) -> bool:
 
 def _work_order_context(item: dict[str, Any]) -> dict[str, Any]:
     return {
+        **{key: item[key] for key in ("asset_id", "equipment_id", "event_id", "approved_at", "started_at", "completed_at") if key in item},
         "work_order_id": str(item.get("work_order_id") or ""),
         "work_type": str(item.get("work_type") or ""),
         "status": str(item.get("status") or ""),
