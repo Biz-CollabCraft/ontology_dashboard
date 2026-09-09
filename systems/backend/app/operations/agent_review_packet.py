@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.operations.agent_briefing_context import preserve_inspection_details
+from app.operations.agent_briefing_context import preserve_inspection_details, briefing_activities
 
 from app.operations.asset_detail_view_model import _evidence_context
 
@@ -512,7 +512,7 @@ def _maintenance_history_summary(
         "inspection_results": inspection_results,
         "maintenance_actions": maintenance_actions,
         "maintenance_events": maintenance_events,
-        "activities": activities[:5],
+        "activities": briefing_activities(activities),
         "similar_events": similar_events[:5],
         "recent_equipment_history": recent_equipment_history,
         "source_refs": source_refs,

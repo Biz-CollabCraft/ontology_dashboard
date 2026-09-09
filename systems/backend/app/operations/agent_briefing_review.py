@@ -27,6 +27,26 @@ def decision_facts(packet):
             if len({r.get('status') for r in current})>1:
                 facts['excluded_records'].append({'record_id':current[0].get('record_id'),'reason':'conflicting_latest_status'});continue
             r=current[-1];facts[key].append({k:r[k] for k in ('record_id','status','outcome','findings','measurements','recorded_at','source_ref','owner_record_provenance','summary') if k in r})
+    facts['production_coordination'] = []
+    coordination_groups = {}
+    for raw in history.get('activities') or []:
+        if not raw.get('production_coordination'):
+            continue
+        record = record_context(raw, packet=packet)
+        scope = record['record_context']
+        if (scope['temporal_relation'] != 'at_or_before_basis'
+                or scope['asset_scope'] != 'matches_asset' or scope['event_relation'] != 'matches_event'):
+            facts['excluded_records'].append({'record_id': record.get('record_id'), 'scope': scope})
+            continue
+        coordination = record['production_coordination']
+        coordination_groups.setdefault(coordination.get('work_order_id'), []).append(record)
+    for revisions in coordination_groups.values():
+        latest = max(datetime.fromisoformat(r['recorded_at'].replace('Z', '+00:00')) for r in revisions)
+        current = [r for r in revisions if datetime.fromisoformat(r['recorded_at'].replace('Z', '+00:00')) == latest]
+        if len({r['production_coordination']['status'] for r in current}) != 1:
+            facts['excluded_records'].append({'record_id': current[0]['record_id'], 'reason': 'conflicting_coordination_status'})
+            continue
+        facts['production_coordination'].append(current[-1])
     facts['data_quality_hold'] = (packet.get('review_draft') or {}).get('priority_label') == '미확정'
     facts['operation_context'] = ({'production_impact': None, 'estimated_downtime_minutes': None,
                                    'estimated_lost_units': None, 'status': 'unconfirmed_due_to_data_quality'}
@@ -49,6 +69,17 @@ def briefing_issues(candidate,facts):
             checked = re.sub(r'승인(?:된| 상태)[^,;]{0,30}(?:없|미확인|확인되지)', '', sentence)
             if re.search(r'승인(?:된|되었|됐|되었습니다)|상태(?:는|가)?\s*승인|승인\s*상태(?:입니다|로)', checked):
                 issues.append('현재 설비·이벤트·기준 시각에 맞는 승인 기록이 없습니다. 제외된 기록을 현재 승인으로 설명하지 마세요.')
+    for record in facts.get('production_coordination', []):
+        coordination = record['production_coordination']
+        if coordination.get('status') == 'confirmed':
+            for role in ('maintenance_technician', 'process_manager'):
+                quote = roles.get(role, '')
+                if re.search(r'승인.{0,12}(기록이? 없|미확인|대기 중|검토 필요)', quote):
+                    issues.append('생산 관리자 승인 기록이 있습니다. 승인 미확인·대기로 설명하지 마세요.')
+                window = (coordination.get('response') or {}).get('scheduled_window')
+                normalize = lambda text: re.sub(r'[\s\W_]+', '', text)
+                if window and normalize(window) not in normalize(quote):
+                    issues.append('보전·생산관리 설명에 기록된 승인 일정 '+window+'을 그대로 반영하세요.')
     if not facts['inspection_results'] and not facts['work_orders']:return issues
     technician=roles.get('maintenance_technician','');manager=roles.get('process_manager','')
     for r in facts['inspection_results']:
@@ -62,7 +93,7 @@ def briefing_issues(candidate,facts):
     orders=facts['work_orders']
     if len(orders)==1:
         r=orders[0];status=r.get('status');provenance=r.get('owner_record_provenance') or {}
-        if status=='approved':
+        if status=='approved' and not facts.get('production_coordination') and (provenance.get('approved_at') or not any(r.get('outcome') == 'maintenance_recommended' for r in facts['inspection_results'])):
             for role,quote in (('보전',technician),('생산관리',manager)):
                 # A negated re-approval step does not contradict a recorded approval.
                 checked = re.sub(r'승인\s*여부(?:\s*재확인|를\s*다시\s*확인하는)?(?:\s*단계)?(?:가|이)?\s*아니라', '', quote)
@@ -108,6 +139,7 @@ def build_decision_flow(packet, facts=None):
         _inspection_target_step(packet),
         _inspection_result_step(facts),
         _work_order_step(facts),
+        _coordination_step(facts),
         _execution_state_step(packet),
         _readiness_gap_step(packet),
         _production_decision_step(facts),
@@ -121,6 +153,21 @@ def _current_stage(packet, facts):
     if facts.get('data_quality_hold'):
         return 'data_quality_hold_pending_observation'
     orders = facts.get('work_orders') or []
+    coordination = facts.get('production_coordination') or []
+    if any(order.get('status') == 'completed' for order in orders):
+        return 'maintenance_completed'
+    if any(order.get('status') == 'in_progress' for order in orders):
+        return 'maintenance_in_progress' if any(r.get('outcome') == 'maintenance_recommended' for r in facts.get('inspection_results', [])) else 'inspection_in_progress'
+    if coordination:
+        states = {r['production_coordination'].get('status') for r in coordination}
+        if 'pending' in states:
+            return 'production_approval_pending'
+        if states == {'confirmed'}:
+            return 'production_approved_pending_start'
+        return 'production_recoordination_required'
+    if (any(r.get('outcome') == 'maintenance_recommended' for r in facts.get('inspection_results', []))
+            and not any((r.get('owner_record_provenance') or {}).get('approved_at') for r in orders)):
+        return 'maintenance_approval_request_needed'
     if any(order.get('status') == 'approved' for order in orders):
         if not _has_execution_record(packet):
             return 'approved_work_order_pending_start'
@@ -134,6 +181,13 @@ def _current_stage(packet, facts):
 
 def _stage_label(stage):
     return {
+        'maintenance_completed': '기록된 정비 완료 결과 확인',
+        'maintenance_in_progress': '정비 진행 중 · 승인 일정과 결과 기록 확인',
+        'inspection_in_progress': '점검 진행 중 · 점검 결과 판단',
+        'production_approval_pending': '생산 관리자 정비 승인 대기',
+        'production_approved_pending_start': '생산 승인 완료 · 착수 조건 확인',
+        'production_recoordination_required': '정비 일정 재협의 필요',
+        'maintenance_approval_request_needed': '정비 필요 · 생산 관리자 승인 요청 준비',
         'data_quality_hold_pending_observation': '데이터 보강 후 위험·생산 영향 재판단',
         'approved_work_order_pending_start': '승인된 작업요청의 착수 조건 판단',
         'approved_work_order_in_execution_review': '작업 실행 기록과 후속 일정 판단',
@@ -231,13 +285,9 @@ def _work_order_step(facts):
 
 def _execution_state_step(packet):
     history = packet.get('maintenance_history_summary') or {}
-    has_start_or_completion = _has_execution_record(packet)
-    if has_start_or_completion:
-        facts = []
-        for key in ('maintenance_actions', 'maintenance_events', 'activities'):
-            for item in history.get(key) or []:
-                if isinstance(item, dict):
-                    facts.append(_fact(item.get('summary') or item.get('record_id') or key, status=item.get('status'), source_ref=item.get('source_ref')))
+    records = _execution_records(packet)
+    if records:
+        facts = [_fact(item.get('summary') or item.get('record_id'), status=item.get('status'), source_ref=item.get('source_ref')) for item in records]
         return {'step': 'execution_recorded', 'facts': facts[:4]}
     if history.get('work_orders') or history.get('inspection_results'):
         return {'step': 'execution_not_confirmed', 'facts': [_fact('시작 기록 없음'), _fact('완료 기록 없음')]}
@@ -245,14 +295,35 @@ def _execution_state_step(packet):
 
 
 def _has_execution_record(packet):
+    return bool(_execution_records(packet))
+
+
+def _execution_records(packet):
     history = packet.get('maintenance_history_summary') or {}
-    if any(history.get(key) for key in ('maintenance_actions', 'maintenance_events', 'activities')):
-        return True
-    for order in history.get('work_orders') or []:
-        provenance = order.get('owner_record_provenance') or {}
-        if provenance.get('started_at') or provenance.get('completed_at') or order.get('status') in ('started', 'completed', 'done'):
-            return True
-    return False
+    records = []
+    for kind in ('maintenance_actions', 'maintenance_events', 'activities', 'work_orders'):
+        for raw in history.get(kind) or []:
+            record = record_context(raw, packet=packet)
+            scope = record['record_context']
+            if (scope['temporal_relation'] != 'at_or_before_basis' or scope['asset_scope'] != 'matches_asset'
+                    or scope['event_relation'] != 'matches_event'):
+                continue
+            provenance = record.get('owner_record_provenance') or {}
+            if (kind == 'maintenance_events' or provenance.get('started_at') or provenance.get('completed_at')
+                    or record.get('status') in ('in_progress', 'started', 'completed', 'done')
+                    or record.get('activity_type') in ('inspection.execution.start', 'inspection.execution.complete')):
+                records.append(record)
+    return records
+
+
+def _coordination_step(facts):
+    records = facts.get('production_coordination') or []
+    if not records:
+        return None
+    return {'step': 'production_coordination_recorded', 'facts': [
+        _fact('생산 관리자 정비 승인 및 일정', **record['production_coordination'], source_ref=record['source_ref'])
+        for record in records
+    ]}
 
 
 def _readiness_gap_step(packet):

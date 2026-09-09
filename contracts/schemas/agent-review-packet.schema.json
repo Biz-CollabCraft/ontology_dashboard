@@ -246,8 +246,9 @@
       "required": ["provider", "query", "top_k", "returned_count", "mutation_allowed"],
       "additionalProperties": false,
       "properties": {
-        "provider": {"enum": ["local_sop_metadata_retriever"]},
+        "provider": {"enum": ["local_sop_metadata_retriever", "runtime_product_result"]},
         "query": {
+          "oneOf": [{
           "type": "object",
           "required": ["asset_type", "failure_mode", "factor_keys", "component_ids", "risk_grade", "criticality", "production_impact"],
           "additionalProperties": false,
@@ -260,6 +261,14 @@
             "criticality": {"type": "string"},
             "production_impact": {"type": "string"}
           }
+          }, {
+            "type": "object", "additionalProperties": false,
+            "required": ["asset_id", "event_id", "dataset_version_id"],
+            "properties": {
+              "asset_id": {"type": "string"}, "event_id": {"type": "string"},
+              "dataset_version_id": {"type": "string"}
+            }
+          }]
         },
         "top_k": {"type": "integer"},
         "returned_count": {"type": "integer"},
@@ -710,6 +719,23 @@
       "required": ["record_id", "record_type", "status", "activity_type", "recorded_at", "summary", "source_ref"],
       "additionalProperties": false,
       "properties": {
+        "production_coordination": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "request_id": {"type": "string"}, "work_order_id": {"type": "string"},
+            "status": {"type": "string"}, "requested_at": {"type": "string"},
+            "responded_at": {"type": "string"}, "requested_by_name": {"type": "string"},
+            "responded_by_name": {"type": "string"},
+            "request": {"type": "object", "additionalProperties": false, "properties": {
+              "work_summary": {"type": "string"}, "downtime_minutes": {"type": "number"},
+              "affected_items": {"type": "string"}, "note": {"type": "string"}
+            }},
+            "response": {"type": "object", "additionalProperties": false, "properties": {
+              "decision": {"type": "string"}, "scheduled_window": {"type": "string"},
+              "production_response": {"type": "string"}
+            }}
+          }
+        },
         "record_id": {"type": "string"},
         "record_type": {"type": "string"},
         "status": {"type": "string"},

@@ -41,6 +41,16 @@ Hard contract:
 - decision_facts contains event-matched records at the decision basis. Use these shared
   facts consistently across roles. excluded_records are not current-state evidence.
   Report absence only as no supplied record, not proof that an action never occurred.
+- production_coordination is the production manager's maintenance decision, separate
+  from acceptance of an inspection work order. Its confirmed response means production
+  approval was recorded. Use responded_at for that approval time, scheduled_window
+  verbatim for the approved schedule, and production_response for the response memo.
+  Do not replace requested downtime_minutes with minutes inferred from a free-text
+  scheduled_window; these are separate request and response facts. If they differ,
+  describe the recorded difference rather than silently resolving it.
+  in_progress means execution is underway, not approval pending. A coordination
+  pending/confirmed activity alone is not an execution start. The same workflow facts
+  must agree across all three role summaries even though each role's prose differs.
 - Answer these questions in useful Korean prose:
   Engineer: what was observed, and how does the applicable SOP relate to it?
   Technician: what did inspection find, what is the recorded request/approval state,
@@ -192,7 +202,7 @@ class AgentReviewSummaryProvider:
             usage = {k: sum(u.get(k, 0) or 0 for u in usages)
                      for k in ("prompt_tokens", "completion_tokens", "total_tokens")}
         allowed_refs = set(packet.get("source_refs") or [])
-        owner_refs = {r.get("source_ref") for kind in ("inspection_results", "work_orders")
+        owner_refs = {r.get("source_ref") for kind in ("inspection_results", "work_orders", "production_coordination")
                       for r in prompt_payload["decision_facts"][kind]}
         verified_refs = sorted(ref for ref in owner_refs if ref and ref in allowed_refs)
         summary["source_refs"] = list(dict.fromkeys([*summary["source_refs"], *verified_refs]))

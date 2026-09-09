@@ -38,6 +38,22 @@ def compact_sop_guidance(guidance: dict[str, Any]) -> dict[str, Any]:
 def preserve_inspection_details(item: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
     """Do not derive an approval/outcome from a checklist or an assigned actor."""
     record.update(pick(item, "outcome", "inspection_result_id", "work_order_id"))
+    # Coordination is a separate production decision, not work-order acceptance.
+    if isinstance(item.get("production_coordination"), dict):
+        record["production_coordination"] = deepcopy(item["production_coordination"])
+    elif str(item.get("activity_type", "")).startswith("inspection.coordination."):
+        payload = item.get("payload") or {}
+        if isinstance(payload, dict):
+            coordination = pick(payload, "request_id", "work_order_id", "status")
+            coordination.update({k: payload[k] for k in (
+                "requested_at", "responded_at", "requested_by_name", "responded_by_name"
+            ) if isinstance(payload.get(k), str)})
+            coordination["request"] = pick(payload.get("request") or {},
+                "work_summary", "downtime_minutes", "affected_items", "note")
+            coordination["response"] = pick(payload.get("response") or {},
+                "decision", "scheduled_window", "production_response")
+            record["production_coordination"] = coordination
+            record["status"] = str(payload.get("status") or record.get("status") or "")
     if "findings" in item:
         record["findings"] = [v for v in item["findings"] or [] if isinstance(v, str)]
     for name, fields in (("measurements", ("name", "value", "unit")),
@@ -45,6 +61,14 @@ def preserve_inspection_details(item: dict[str, Any], record: dict[str, Any]) ->
         if name in item:
             record[name] = [pick(v, *fields) for v in item[name] or [] if isinstance(v, dict)]
     return record
+
+
+def briefing_activities(activities):
+    """Keep decision/execution evidence even when routine timeline entries exceed five."""
+    important = [r for r in activities if str(r.get("activity_type", "")).startswith(
+        ("inspection.coordination.", "inspection.execution."))]
+    routine = [r for r in activities if r not in important]
+    return [*routine[-5:], *important]
 
 
 def _instant(value: Any) -> datetime | None:
