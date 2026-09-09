@@ -93,3 +93,45 @@ def test_provider_repair_metadata_is_measured_without_inventing_tokens(service):
     assert trace['generation_metrics']['repair_count'] == 1
     assert trace['generation_metrics']['usage'] == {'total_tokens': 123}
     assert trace['generation_metrics']['duration_ms'] >= 0
+
+
+def test_demand_tracks_cumulative_change_before_first_generation(service, monkeypatch):
+    p = packet()
+    monkeypatch.setattr(service, 'agent_review_packet', lambda *a, **kw: p)
+    assert watch(service, 'demand')['pending_count'] == 1
+    initial = p['risk_summary']['failure_probability']
+    for delta in (.002, .004):
+        p['risk_summary']['failure_probability'] = initial + delta
+        p['model_expression_context']['failure_probability'] = initial + delta
+        p['snapshot_basis']['source_sha256'] = f'cumulative-{delta}'
+        assert watch(service, 'demand')['pending_count'] == 1
+    p['risk_summary']['failure_probability'] = initial + .006
+    p['model_expression_context']['failure_probability'] = initial + .006
+    p['snapshot_basis']['source_sha256'] = 'cumulative-trigger'
+    assert watch(service, 'demand')['created_count'] == 1
+    assert service.agent_review_summary_provider.calls == 1
+    assert watch(service, 'demand')['reused_count'] == 1
+    assert service.agent_review_summary_provider.calls == 1
+
+
+def test_demand_detects_context_change_before_first_generation(service, monkeypatch):
+    p = packet()
+    monkeypatch.setattr(service, 'agent_review_packet', lambda *a, **kw: p)
+    assert watch(service, 'demand')['pending_count'] == 1
+    p['maintenance_history_summary']['last_maintenance_days_ago'] = 0
+    p['snapshot_basis']['source_sha256'] = 'maintenance-before-first-generation'
+    assert watch(service, 'demand')['created_count'] == 1
+    assert service.agent_review_summary_provider.calls == 1
+
+
+def test_invalid_first_observation_cannot_seed_demand_baseline(service, monkeypatch):
+    p = packet()
+    p['unexpected_field'] = 'invalid'
+    monkeypatch.setattr(service, 'agent_review_packet', lambda *a, **kw: p)
+    watch(service, 'demand')
+    assert service._briefing_observation_baselines == {}
+    assert service.agent_review_summary_provider.calls == 0
+    del p['unexpected_field']
+    assert watch(service, 'demand')['pending_count'] == 1
+    assert len(service._briefing_observation_baselines) == 1
+    assert service._briefing_generation_baselines == {}
