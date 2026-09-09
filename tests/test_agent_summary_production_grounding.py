@@ -60,6 +60,39 @@ def test_manager_expected_quantity_cannot_match_suffix_of_wrong_number():
     assert any(e.startswith('prose_lost_units_mismatch:') for e in errors)
 
 
+@pytest.mark.parametrize('builder', [build_agent_review_summary_prompt_payload, build_tool_selected_agent_review_summary_prompt_payload])
+def test_prompt_preserves_unlimited_selected_evidence(builder):
+    packet = packet_for('GS-004')
+    packet['evidence_context'] = {
+        'selection_policy_version': 'operational-evidence-selection-v0.1',
+        'decision_as_of': '2026-09-02T01:00:00+00:00',
+        'selected_candidate_count': 1,
+        'full_candidate_count': 1,
+        'selected_basis': [
+            {
+                'candidate_id': 'fact:maintenance-readiness-context-demo-v1#/concurrent_work_checks/0',
+                'candidate_type': 'fact',
+                'source_ref': 'maintenance-readiness-context-demo-v1#/concurrent_work_checks/0',
+                'domain': 'maintenance_readiness',
+                'fact_type': 'concurrent_work_checks',
+                'value_summary': 'concurrent_work_checks: check_id=CWCHK-001',
+                'freshness_state': 'fresh',
+                'required_for_boundary': True,
+            }
+        ],
+    }
+
+    payload = builder(
+        packet=packet,
+        baseline_summary=compose_deterministic_agent_review_summary(packet),
+    )
+    evidence = payload['summary_context']['selected_evidence']
+
+    assert evidence['selected_candidate_count'] == 1
+    assert evidence['full_candidate_count'] == 1
+    assert evidence['selected_basis'][0]['fact_type'] == 'concurrent_work_checks'
+
+
 @pytest.mark.parametrize('old_version', ['agent-review-summary-prompt-v1.8-demo-impact-boundary', 'agent-review-summary-prompt-v1.9-production-grounding', 'agent-review-summary-prompt-v1.9-three-role-briefing'])
 def test_prompt_version_separates_old_materialized_summaries(monkeypatch, old_version):
     from app.operations import agent_review_summary_materialization as materialization

@@ -132,6 +132,25 @@ class MaintenanceWindow(FrozenModel):
         return self
 
 
+class ConcurrentWorkCheck(FrozenModel):
+    check_id: str = Field(min_length=1, max_length=240)
+    asset_id: str = Field(min_length=1, max_length=240)
+    scope: str = Field(min_length=1, max_length=120)
+    check_type: str = Field(min_length=1, max_length=120)
+    checked_at: datetime
+    status: str = Field(min_length=1, max_length=80)
+    overlapping_work_order_ids: tuple[str, ...] = ()
+    planned_overlap_work_order_ids: tuple[str, ...] = ()
+    prohibited_by_sop: bool
+    relationship_state: RelationshipState
+    source_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_checked_at(self) -> ConcurrentWorkCheck:
+        _require_aware(self.checked_at, "checked_at")
+        return self
+
+
 class PartRequirement(FrozenModel):
     part_requirement_id: str = Field(min_length=1, max_length=240)
     action_candidate_id: str | None = Field(default=None, max_length=240)
@@ -212,6 +231,7 @@ class MaintenanceReadinessContext(FrozenModel):
     action_code: str = Field(min_length=1, max_length=120)
     required_skill_codes: tuple[str, ...] = Field(min_length=1)
     maintenance_windows: tuple[MaintenanceWindow, ...]
+    concurrent_work_checks: tuple[ConcurrentWorkCheck, ...] = ()
     part_requirements: tuple[PartRequirement, ...]
     inventory_snapshots: tuple[PartInventorySnapshot, ...]
     technician_candidates: tuple[TechnicianReadiness, ...]
@@ -238,6 +258,8 @@ class MaintenanceReadinessContext(FrozenModel):
                 )
         if any(window.asset_id != self.asset_id for window in self.maintenance_windows):
             raise ValueError("maintenance window asset mismatch")
+        if any(check.asset_id != self.asset_id for check in self.concurrent_work_checks):
+            raise ValueError("concurrent work check asset mismatch")
         return self
 
 

@@ -538,7 +538,11 @@ def _priority_hint(domain: str, fact_type: str, value: Mapping[str, Any]) -> int
         return 880
     if fact_type in {"production_orders", "wip", "delivery_commitments"}:
         return 840
-    if fact_type in {"part_requirements", "inventory_snapshots"}:
+    if fact_type in {
+        "concurrent_work_checks",
+        "part_requirements",
+        "inventory_snapshots",
+    }:
         return 820
     if fact_type in {"maintenance_windows", "technician_candidates"}:
         return 760
@@ -598,6 +602,7 @@ def _required_for_boundary(
         value.get("release_required")
         or value.get("quality_state") == "hold"
         or value.get("active_work_order_conflict")
+        or value.get("prohibited_by_sop")
         or value.get("relationship_state") in {"not_connected", "conflicting"}
     )
 
@@ -629,6 +634,7 @@ def _value_summary(fact_type: str, value: Mapping[str, Any]) -> str:
             "lot_id",
             "delivery_id",
             "window_id",
+            "check_id",
             "part_requirement_id",
             "part_id",
             "technician_id",

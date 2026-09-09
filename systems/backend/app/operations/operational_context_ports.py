@@ -361,6 +361,10 @@ class FixtureMaintenanceReadinessContextReadPort:
                     "maintenance_windows"
                 )
                 or [],
+                "concurrent_work_checks": self.context.get(
+                    "concurrent_work_checks"
+                )
+                or [],
                 "part_requirements": self.context.get("part_requirements")
                 or [],
                 "inventory_snapshots": self.context.get(
@@ -414,6 +418,10 @@ class FixtureMaintenanceReadinessContextReadPort:
                 "maintenance_windows": [
                     item.model_dump(mode="json")
                     for item in parsed.maintenance_windows
+                ],
+                "concurrent_work_checks": [
+                    item.model_dump(mode="json")
+                    for item in parsed.concurrent_work_checks
                 ],
                 "part_requirements": [
                     item.model_dump(mode="json")
@@ -527,6 +535,11 @@ def _maintenance_readiness(
         not item.active_work_order_conflict
         for item in context.maintenance_windows
     )
+    concurrent_work_ready = all(
+        item.status == "no_active_conflict"
+        and not item.overlapping_work_order_ids
+        for item in context.concurrent_work_checks
+    )
     skill_ready = any(
         set(context.required_skill_codes).issubset(item.skill_codes)
         for item in context.technician_candidates
@@ -534,6 +547,8 @@ def _maintenance_readiness(
     blockers: list[str] = []
     if not window_ready:
         blockers.append("maintenance_window")
+    if not concurrent_work_ready:
+        blockers.append("concurrent_work")
     if part_blockers:
         blockers.append("part_inventory")
     if not skill_ready:
@@ -542,6 +557,7 @@ def _maintenance_readiness(
     return {
         "overall_state": "blocked" if blockers else "ready_for_human_approval",
         "window_ready": window_ready,
+        "concurrent_work_ready": concurrent_work_ready,
         "part_ready": not part_blockers,
         "skill_candidate_ready": skill_ready,
         "blocked_part_requirement_ids": part_blockers,

@@ -383,7 +383,7 @@ class ManufacturingPredictiveMaintenanceService:
         project_id: str,
         event_id: str | None,
         role: str = "process_manager",
-        max_candidates: int = 8,
+        max_candidates: int | None = None,
         organization_id: str = "org-ontology-demo",
         workspace_id: str = "manufacturing-demo",
         context_repository: Any | None = None,
@@ -552,7 +552,7 @@ class ManufacturingPredictiveMaintenanceService:
         decision_as_of: datetime | None = None,
         retrieved_at: datetime | None = None,
         role: str = "process_manager",
-        max_candidates: int = 8,
+        max_candidates: int | None = None,
         required_evidence_ids: set[str] | None = None,
         required_limitation_ids: set[str] | None = None,
     ) -> dict[str, Any]:
