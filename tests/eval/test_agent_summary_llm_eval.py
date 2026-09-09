@@ -65,6 +65,43 @@ def test_mock_120_run_harness_aggregates_all_gold_packets(monkeypatch) -> None:
     assert all(row["gold_accuracy"]["accuracy_goldset_score"] == 1.0 for row in rows)
 
 
+def test_mock_holdout_run_uses_custom_manifest_and_gold_answers() -> None:
+    harness = _load_harness()
+    harness.GOLD_ANSWERS_PATH = (
+        harness.ROOT / "tests/fixtures/agent_review_packets_holdout/gold_answers.json"
+    )
+    harness._GOLD_ANSWERS_CACHE = None
+    manifest = harness._load_json(
+        harness.ROOT / "tests/fixtures/agent_review_packets_holdout/manifest.json"
+    )
+    packets = [
+        harness._load_json(harness.ROOT / case["fixture_path"])
+        for case in manifest["cases"]
+    ]
+
+    rows = [
+        harness._run_mock_candidate(
+            packet=packet,
+            iteration=1,
+            provider="mock-openai-compatible",
+            model="gpt-4o-mini",
+        )
+        for packet in packets
+    ]
+    aggregate = harness._aggregate(rows)
+
+    assert len(packets) == 8
+    assert rows[0]["gold_accuracy"]["answer_set_id"] == (
+        "agent-review-summary-holdout-gold-answers-v1"
+    )
+    assert aggregate["gold_accuracy"]["accuracy_goldset_score"] == 1.0
+    assert all(
+        row["gold_accuracy"]["role_scores"]["process_manager"]["score"] == 1.0
+        for row in rows
+    )
+    assert aggregate["gold_accuracy"]["missing_required_points"] == 0
+
+
 def test_quality_scores_detect_internal_language_and_missing_role_focus() -> None:
     harness = _load_harness()
     packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-004.json")
@@ -99,6 +136,121 @@ def test_gold_accuracy_scores_reference_answer_misses_and_forbidden_claims() -> 
     assert "수리 완료" in score["must_not_claim_violations"]
     assert score["unsupported_claim_count"] == 1
     assert score["missing_required_points"]
+
+
+def test_gold_accuracy_accepts_observed_process_manager_surface_variants() -> None:
+    harness = _load_harness()
+    packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-002.json")
+    candidate = harness.compose_deterministic_agent_review_summary(packet)
+    candidate["summary"] = (
+        "CNC-S04-L04-01는 현재 warning 상태이며 예측 위험도는 82.5%입니다. "
+        "공구/마모 계통과 동력 전달 계통을 함께 확인해야 합니다."
+    )
+    candidate["role_summaries"] = [
+        {
+            "role": "field_operator",
+            "quote": (
+                "공구 매거진 및 스핀들 공구 체결부와 주축 모터를 점검하고, 관측값을 "
+                "기록한 후 정비팀 또는 생산 관리자에게 인계해야 합니다."
+            ),
+        },
+        {
+            "role": "process_manager",
+            "quote": (
+                "현재 상태는 중간 정도의 생산 영향을 미치며, 예상되는 다운타임은 120분, "
+                "손실 예상 유닛은 25개입니다. 정비 우선순위 및 승인 검토가 필요합니다."
+            ),
+        },
+    ]
+
+    score = harness._gold_accuracy(candidate, packet=packet)
+
+    assert score["role_scores"]["process_manager"]["score"] == 1.0
+    assert score["role_scores"]["process_manager"]["missing_points"] == []
+    assert "생산 영향이 중간" in score["matched_required_points"]
+    assert "25건" in score["matched_required_points"]
+
+
+def test_gold_accuracy_does_not_match_inventory_counts_as_lost_units() -> None:
+    harness = _load_harness()
+
+    assert harness._contains_point("손실 예상 유닛은 25개입니다.", "25건")
+    assert not harness._contains_point("25개 부품 재고 확보를 검토합니다.", "25건")
+    assert not harness._contains_point("공구 25개를 점검합니다.", "25건")
+
+
+def test_gold_accuracy_keeps_data_quality_hold_process_manager_miss_visible() -> None:
+    harness = _load_harness()
+    packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-007.json")
+    candidate = harness.compose_deterministic_agent_review_summary(packet)
+    candidate["summary"] = (
+        "CNC-S04-L05-01는 데이터 품질 보류 상태라 위험 등급과 예측 위험도를 "
+        "확정하지 않습니다. 근거 공백이 있습니다."
+    )
+    candidate["role_summaries"] = [
+        {
+            "role": "field_operator",
+            "quote": "데이터 품질 보류 상태에 대한 증거를 기록하십시오.",
+        },
+        {
+            "role": "process_manager",
+            "quote": (
+                "현재 CNC-S04-L05-01의 생산 영향은 낮으며, 예상 다운타임은 40분입니다. 정비 "
+                "이력이 부족하여 생산 계획에 미치는 영향이 불확실합니다."
+            ),
+        },
+    ]
+
+    score = harness._gold_accuracy(candidate, packet=packet)
+
+    assert score["role_scores"]["process_manager"]["score"] == 0.0
+    assert score["role_scores"]["process_manager"]["missing_points"] == [
+        "추정 물량 손실",
+        "유사 이력은 아직",
+        "점검 승인",
+    ]
+
+
+def test_live_candidate_prefers_provider_reported_usage() -> None:
+    harness = _load_harness()
+    packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-002.json")
+
+    class ProviderWithUsage:
+        def generate_with_metadata(self, packet: dict) -> tuple[dict, dict]:
+            candidate = harness.compose_deterministic_agent_review_summary(packet)
+            candidate["mode"] = "llm"
+            return (
+                candidate,
+                {
+                    "usage": {
+                        "prompt_tokens": 123,
+                        "completion_tokens": 45,
+                        "total_tokens": 168,
+                    },
+                    "usage_measurement": "provider_reported",
+                },
+            )
+
+    row = harness._run_candidate(
+        packet=packet,
+        iteration=1,
+        provider="openai-compatible",
+        model="gpt-4o-mini",
+        mode="live",
+        live_provider=ProviderWithUsage(),
+    )
+    aggregate = harness._aggregate([row])
+
+    assert row["accepted"] is True
+    assert row["llm"]["usage"] == {
+        "prompt_tokens": 123,
+        "completion_tokens": 45,
+        "total_tokens": 168,
+    }
+    assert row["llm"]["usage_measurement"] == "provider_reported"
+    assert aggregate["tokens"]["usage_measurement"] == "provider_reported"
+    assert aggregate["tokens"]["provider_reported_rows"] == 1
+    assert aggregate["tokens"]["estimated_rows"] == 0
 
 
 def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:

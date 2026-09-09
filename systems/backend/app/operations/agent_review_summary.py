@@ -254,12 +254,16 @@ def _role_summaries(
     history_context = packet.get("maintenance_history_summary") or {}
     model_context = packet.get("model_expression_context") or {}
     ontology_context = packet.get("ontology_context") or {}
+    confidence_label = _confidence_label(packet)
     asset_label = _asset_label(packet)
     status = str(risk.get("status_grade") or "데이터 품질 보류")
     production_impact = _production_impact_label(operation_context.get("production_impact"))
+    production_impact_basis = _production_impact_basis_label(operation_context)
     downtime = operation_context.get("estimated_downtime_minutes")
     lost_units = operation_context.get("estimated_lost_units")
-    lost_units_text = f"약 {int(lost_units)}건" if isinstance(lost_units, (int, float)) else "추정 물량"
+    lost_units_text = (
+        f"약 {int(lost_units)}건" if isinstance(lost_units, (int, float)) else "추정 물량"
+    )
     downtime_text = f"{int(downtime)}분" if isinstance(downtime, (int, float)) else "예상 정지"
     component_text = _component_text(targets)
     location_text = _location_text(targets)
@@ -268,6 +272,19 @@ def _role_summaries(
     similar_event_text = _similar_event_text(history_context)
     part_text = _part_candidate_text(ontology_context)
     primary_refs = source_refs[:3] or _packet_source_refs(packet)[:1]
+    if confidence_label == "data_quality_hold":
+        manager_quote = (
+            f"{asset_label}는 데이터 품질 보류 상태라 생산 영향과 추정 물량 손실을 "
+            "확정하지 않습니다. 유사 이력은 아직 전용 이력 계약 미연결 상태입니다. "
+            "점검 승인 여부는 데이터 보강과 이력 조회 후 검토해야 합니다."
+        )
+    else:
+        manager_quote = (
+            f"{asset_label} 위험 감지 건은 {production_impact_basis} 생산 영향이 {production_impact}으로 분류되며, "
+            f"{downtime_text} 기준 {lost_units_text} 손실 가능성이 있습니다. "
+            f"모델 근거는 {factor_text}이고 {work_request_text} "
+            f"{similar_event_text} 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+        )
 
     quotes = {
         "field_operator": (
@@ -276,12 +293,7 @@ def _role_summaries(
             f"{factor_text}와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. "
             f"{work_request_text} {part_text}"
         ),
-        "process_manager": (
-            f"{asset_label} 위험 감지 건은 현재 생산 영향이 {production_impact}이며, "
-            f"{downtime_text} 기준 {lost_units_text} 손실 가능성이 있습니다. "
-            f"모델 근거는 {factor_text}이고 {work_request_text} "
-            f"{similar_event_text} 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
-        ),
+        "process_manager": manager_quote,
     }
     return [
         {
@@ -337,6 +349,25 @@ def _production_impact_label(value: Any) -> str:
         "high": "높은 수준",
     }
     return labels.get(str(value), "미제공")
+
+
+def _production_impact_basis_label(operation_context: dict[str, Any]) -> str:
+    source_ref = str(operation_context.get("source_ref") or "").lower()
+    limitations = " ".join(
+        str(item).lower() for item in operation_context.get("limitations") or []
+    )
+    demo_markers = (
+        "production-planning-context",
+        "demo assumption",
+        "synthetic",
+        "not a mes",
+        "not an erp",
+        "not an aps",
+        "planning impact estimates",
+    )
+    if any(marker in source_ref or marker in limitations for marker in demo_markers):
+        return "데모 가정 기준"
+    return "현재 근거 기준"
 
 
 def _component_text(targets: list[dict[str, Any]]) -> str:
@@ -595,7 +626,13 @@ def _validate_natural_language_grounding(
     ]:
         errors.append("history_summary_mismatch")
 
-    prose_values = _generated_natural_language_values(summary)
+    # Exact server-composed source notes are preserved evidence, not LLM edits.
+    # Modified or additional notes still undergo every prose safety check.
+    canonical_notes = _data_footnotes(packet=packet, source_refs=_packet_source_refs(packet))
+    prose_summary = {**summary, "data_footnotes": [
+        note for note in summary.get("data_footnotes") or [] if note not in canonical_notes
+    ]}
+    prose_values = _generated_natural_language_values(prose_summary)
     forbidden_claims = sorted(_normalized_forbidden_prose_claims(prose_values))
     if forbidden_claims:
         errors.append(f"forbidden_prose_claims:{','.join(forbidden_claims)}")

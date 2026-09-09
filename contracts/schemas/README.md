@@ -30,3 +30,5 @@
 - `agent-review-summary.schema.json`: Agent Review Packet만 입력으로 사용한 LLM 또는 deterministic fallback 요약 출력 계약. source ref와 권한 경계를 검증하며 WorkOrder, MaintenanceAction, MaintenanceEvent, Replay, 자동 승인 필드를 허용하지 않는다.
 
 스키마를 변경할 때는 fixture, Pydantic model, backend tests, Gold evaluator와 TypeScript type을 함께 변경해야 한다. LLM 출력은 스키마와 grounding 검사를 모두 통과하지 못하면 폐기하고 deterministic fallback을 사용한다.
+
+- `operational-context-read.schema.json`: 공통 근거 사이드뷰의 읽기 API 계약. tenant/snapshot/as-of, 검증된 원본·binding provenance, domain별 조회 상태와 deterministic 생산 영향 미산정 사유를 제공한다. 업무 상태나 실행 명령을 만들지 않는다.

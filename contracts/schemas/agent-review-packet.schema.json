@@ -28,6 +28,138 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "evidence_context": {
+      "type": "object",
+      "description": "Relation schema and deterministic evidence-selection context for this event. This is not a raw producer payload and does not authorize mutations.",
+      "required": [
+        "relation_schema_version",
+        "relation_resolution_version",
+        "selection_policy_version",
+        "decision_as_of",
+        "relation_retrieved_at",
+        "source_observed_at_min",
+        "source_observed_at_max",
+        "max_source_lag_seconds",
+        "temporal_status",
+        "selected_basis",
+        "selected_relation_paths",
+        "rejected_basis",
+        "limitations",
+        "source_ref_coverage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "relation_schema_version": {
+          "type": "string"
+        },
+        "relation_resolution_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selection_policy_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision_as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "relation_retrieved_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "source_observed_at_min": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "source_observed_at_max": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "max_source_lag_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "temporal_status": {
+          "enum": [
+            "aligned",
+            "stale",
+            "unknown"
+          ]
+        },
+        "selected_basis": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceContextBasis"
+          }
+        },
+        "selected_relation_paths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "candidate_id",
+              "source_ref",
+              "relation_path"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "candidate_id": {
+                "type": "string"
+              },
+              "source_ref": {
+                "type": "string"
+              },
+              "relation_path": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "rejected_basis": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceContextRejectedBasis"
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_ref_coverage": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
     "schema_version": {"const": "agent-review-packet-v1.0"},
     "project_id": {"type": "string"},
     "asset_id": {"type": "string"},
@@ -366,6 +498,153 @@
     "limitations": {"type": "array", "items": {"type": "string"}}
   },
   "$defs": {
+    "evidenceContextBasis": {
+      "type": "object",
+      "required": [
+        "candidate_id",
+        "candidate_type",
+        "source_ref",
+        "source_version",
+        "domain",
+        "relation_path",
+        "fact_type",
+        "value_summary",
+        "required_for_boundary",
+        "freshness_state",
+        "as_of",
+        "limitation_state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "type": "string"
+        },
+        "candidate_type": {
+          "enum": [
+            "fact",
+            "relationship",
+            "limitation"
+          ]
+        },
+        "source_ref": {
+          "type": "string"
+        },
+        "source_version": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "relation_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fact_type": {
+          "type": "string"
+        },
+        "value_summary": {
+          "type": "string"
+        },
+        "required_for_boundary": {
+          "type": "boolean"
+        },
+        "freshness_state": {
+          "type": "string"
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "limitation_state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "evidenceContextRejectedBasis": {
+      "type": "object",
+      "required": [
+        "candidate_id",
+        "candidate_type",
+        "source_ref",
+        "source_version",
+        "domain",
+        "relation_path",
+        "fact_type",
+        "value_summary",
+        "required_for_boundary",
+        "freshness_state",
+        "as_of",
+        "limitation_state",
+        "rejected_reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "type": "string"
+        },
+        "candidate_type": {
+          "enum": [
+            "fact",
+            "relationship",
+            "limitation"
+          ]
+        },
+        "source_ref": {
+          "type": "string"
+        },
+        "source_version": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "relation_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fact_type": {
+          "type": "string"
+        },
+        "value_summary": {
+          "type": "string"
+        },
+        "required_for_boundary": {
+          "type": "boolean"
+        },
+        "freshness_state": {
+          "type": "string"
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "limitation_state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rejected_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
     "evidenceSnapshotBasis": {
       "type": "object",
       "description": "Shared evidence basis copied from AssetDetailViewModel so the read-only agent packet can be compared with the UI projection.",
@@ -434,7 +713,8 @@
         "activity_type": {"type": "string"},
         "recorded_at": {"type": "string"},
         "summary": {"type": "string"},
-        "source_ref": {"type": "string"}
+        "source_ref": {"type": "string"},
+        "owner_record_provenance": {"type": "object", "additionalProperties": false, "properties": {"actor_user_id": {"type": "string"}, "actor_display_name": {"type": "string"}, "actor_id": {"type": "string"}, "recorded_by": {"type": "string"}, "assigned_to": {"type": "string"}, "assigned_at": {"type": "string"}, "created_at": {"type": "string"}, "updated_at": {"type": "string"}, "completed_at": {"type": "string"}, "recorded_at": {"type": "string"}, "work_order_id": {"type": "string"}, "event_id": {"type": "string"}, "asset_id": {"type": "string"}, "equipment_id": {"type": "string"}, "maintenance_action_id": {"type": "string"}, "maintenance_event_id": {"type": "string"}, "recommendation_id": {"type": "string"}, "recommendation_decision_id": {"type": "string"}}}
       }
     },
     "domainSection": {

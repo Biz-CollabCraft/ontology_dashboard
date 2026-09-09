@@ -22,6 +22,10 @@ function withBasePath(path: string) {
 
 export function navigate(path: string, options?: { replace?: boolean }) {
   const target = withBasePath(path);
+  if (path.startsWith("/factory-status-original/index.html")) {
+    if (options?.replace) window.location.replace(target); else window.location.assign(target);
+    return;
+  }
   if (options?.replace) window.history.replaceState({}, "", target);
   else window.history.pushState({}, "", target);
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -153,10 +157,10 @@ export function loginPath(returnTo?: string) {
 }
 
 export function safeApplicationReturnPath(value: string | null): string | null {
-  if (!value || !value.startsWith("/app/")) return null;
+  if (!value || !(value.startsWith("/app/") || value.startsWith("/factory-status-original/index.html"))) return null;
   try {
     const parsed = new URL(value, "https://ontology-dashboard.invalid");
-    if (parsed.origin !== "https://ontology-dashboard.invalid" || !parsed.pathname.startsWith("/app/")) return null;
+    if (parsed.origin !== "https://ontology-dashboard.invalid" || !(parsed.pathname.startsWith("/app/") || parsed.pathname === "/factory-status-original/index.html")) return null;
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return null;

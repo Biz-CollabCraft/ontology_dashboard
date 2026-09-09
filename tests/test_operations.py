@@ -326,6 +326,46 @@ def test_openai_provider_sends_json_schema_response_format(monkeypatch: pytest.M
     }
 
 
+def test_openai_provider_exposes_reported_usage_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Response:
+        status_code = 200
+        text = "{\"choices\": [{\"message\": {\"content\": \"{\\\"ok\\\": true}\"}}]}"
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "choices": [{"message": {"content": "{\"ok\": true}"}}],
+                "usage": {
+                    "prompt_tokens": 11,
+                    "completion_tokens": 7,
+                    "total_tokens": 18,
+                },
+            }
+
+    def fake_post(url: str, **kwargs) -> Response:
+        return Response()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "gpt-4o-mini")
+    monkeypatch.setattr("app.infra.llm.provider.httpx.post", fake_post)
+
+    provider = OpenAICompatibleProvider()
+    result = provider.generate_json_with_metadata("Return JSON.", {"input": "value"})
+
+    assert result["payload"] == {"ok": True}
+    assert result["provider_metadata"]["usage"] == {
+        "prompt_tokens": 11,
+        "completion_tokens": 7,
+        "total_tokens": 18,
+    }
+    assert result["provider_metadata"]["usage_measurement"] == "provider_reported"
+    assert provider.generate_json("Return JSON.", {"input": "value"}) == {"ok": True}
+
+
 def test_openai_provider_retries_json_object_when_json_schema_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -608,15 +648,15 @@ def test_exact_runtime_event_api_connects_sop_targets_and_agent_rag(
             "mode": "llm",
         }
     )
-    materialized_summary, materialized_trace = service._materialize_agent_review_packet(
-        packet=packet,
-        project_id="manufacturing-demo-project",
-        organization_id="org-ontology-demo",
-        workspace_id="manufacturing-demo",
-        history_window="24h",
-        trigger="polling_watcher",
-        engine="simple",
+    created = client.post(
+        f"/api/objects/{runtime.result.asset_id}/agent-review-summary",
+        params=params, headers=csrf_headers(client),
     )
+    assert created.status_code == 200, created.text
+    materialized_summary = created.json()["summary"]
+    materialized_trace = created.json()["trace"]
+    assert materialized_trace["materialization"]["summary_id"]
+    assert materialized_trace["workflow_run"]["status"] == "completed"
     summary_response = client.get(
         f"/api/objects/{runtime.result.asset_id}/agent-review-summary",
         params=params,
@@ -626,6 +666,16 @@ def test_exact_runtime_event_api_connects_sop_targets_and_agent_rag(
     assert summary_response.json()["trace"]["materialization"]["summary_id"] == (
         materialized_trace["materialization"]["summary_id"]
     )
+
+    wrong = {**params, "event_id": "RESULT#missing-selected-snapshot"}
+    for endpoint in ("agent-review-packet", "agent-review-summary"):
+        rejected = client.get(f"/api/objects/{runtime.result.asset_id}/{endpoint}", params=wrong)
+        assert rejected.status_code == 404, rejected.text
+    rejected = client.post(
+        f"/api/objects/{runtime.result.asset_id}/agent-review-summary",
+        params=wrong, headers=csrf_headers(client),
+    )
+    assert rejected.status_code == 404, rejected.text
 
     detail_response = client.get(
         f"/api/objects/{runtime.result.asset_id}/detail-view",
@@ -1445,6 +1495,34 @@ def test_agent_review_summary_materialization_key_changes_with_context_diff(
     model_key = summary_key(model_payload)
     history_key = summary_key(history_payload)
     assert len({base_key, model_key, history_key}) == 3
+
+
+def test_agent_review_summary_materialization_key_changes_with_snapshot_binding(
+    service: FactorySignalService,
+) -> None:
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+    packet["snapshot_basis"]["source_sha256"] = "a" * 64
+    same_source_new_as_of = json.loads(json.dumps(packet))
+    same_source_new_as_of["snapshot_basis"]["observed_at"] = "2026-08-01T00:05:00+09:00"
+    same_source_new_ref = json.loads(json.dumps(packet))
+    same_source_new_ref["snapshot_basis"]["evidence_payload_reference"] = "evidence://replacement"
+
+    payloads = [
+        summary_key_payload(
+            packet=item,
+            organization_id="org-ontology-demo",
+            project_id="manufacturing-demo-project",
+            workspace_id="manufacturing-demo",
+            history_window="24h",
+            provider=None,
+        )
+        for item in (packet, same_source_new_as_of, same_source_new_ref)
+    ]
+
+    assert len({payload["source_sha256"] for payload in payloads}) == 1
+    assert len({payload["evidence_basis_sha256"] for payload in payloads}) == 3
+    assert len({summary_key(payload) for payload in payloads}) == 3
+    assert payloads[1]["decision_as_of"] == "2026-08-01T00:05:00+09:00"
 
 
 def test_agent_review_summary_materialization_key_changes_with_tenant_scope(

@@ -18,13 +18,13 @@ from app.equipment.equipment_router import register_equipment_routes
 
 from .contracts import AgentQueryRequest, DecisionRequest, FollowUpRequest, LayoutRequest, NoteRequest, ReportRequest
 from .agent_context_tool_pipeline import run_read_only_tool_pipeline
-from .agent_review_summary import compose_deterministic_agent_review_summary, validate_agent_review_summary_contract
 from .asset_detail_view_model import AssetDetailViewModelService, compose_asset_detail_view_model
 from app.dependencies import (
     MANUFACTURING_WORKSPACE,
     get_identity_service,
     get_ontology_service,
     get_operational_decision_support_service,
+    get_operational_context_repository,
     get_predictive_maintenance_runtime_service,
     get_rate_limiter,
     get_runtime_asset_detail_service,
@@ -41,6 +41,8 @@ from app.ontology.projection import inspection_object_id, risk_event_object_id
 from app.ontology.ontology_service import OntologyService
 from .service import EventNotFound, ManufacturingPredictiveMaintenanceService
 from .operational_context_contract import OperationalRequestIdentity
+from .operational_planning_context import planning_context
+from .operational_context_read import OperationalContextRead
 from .operational_decision_brief import DecisionBriefRole
 from .operational_decision_support_port import (
     DecisionSupportMaterializationInProgress,
@@ -76,88 +78,12 @@ def _runtime_line(asset_id: str) -> str:
     return "-".join(parts[1:3]) if len(parts) >= 4 else asset_id
 
 
-def _runtime_operation_context(result: Any, event_id: str) -> dict[str, Any]:
-    """Materialize planning and capacity context for runtime Product Results."""
-
-    observed = result.observed_at.astimezone(timezone(timedelta(hours=9)))
-    status = str(result.status_grade)
-    downtime_by_status = {
-        "critical": 240,
-        "warning": 120,
-        "attention": 60,
-        "normal": 0,
-    }
-    downtime = downtime_by_status.get(status, 45)
-    asset_units_per_hour = 12.69
-    lost_units = round(downtime / 60 * asset_units_per_hour) if downtime else 0
-    if downtime >= 180:
-        production_impact = "high"
-        screen_priority = "plan_at_risk"
-    elif downtime >= 90:
-        production_impact = "medium"
-        screen_priority = "shift_inspection"
-    elif downtime > 0:
-        production_impact = "low"
-        screen_priority = "monitor"
-    else:
-        production_impact = "none"
-        screen_priority = "none"
-    variants = ("L", "M", "H")
-    product_variant = variants[sum(ord(char) for char in result.asset_id) % len(variants)]
-    snapshot_id = f"OPS-DEMO-{observed.strftime('%Y%m%dT%H%M%S')}-{result.asset_id}"
-    plan_id = f"PLAN-{observed.strftime('%Y-%m-%d')}-DEMO"
-    line = _runtime_line(result.asset_id)
-    return {
-        "load_level": "high" if production_impact in {"high", "medium"} else "normal",
-        "runtime_hours_7d": None,
-        "production_impact": production_impact,
-        "context_id": f"runtime-planning:{observed.date().isoformat()}",
-        "source_type": "capacity_model",
-        "temporal_scope": {
-            "snapshot_id": snapshot_id,
-            "timezone": "Asia/Seoul",
-            "valid_from": observed.replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
-            "valid_to": (observed.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).isoformat(),
-            "generated_at": observed.isoformat(),
-        },
-        "production_plan": {
-            "plan_id": plan_id,
-            "plan_date": observed.date().isoformat(),
-            "planned_units": 16200,
-            "product_mix": [
-                {"variant": "L", "share": 0.5, "planned_units": 8100},
-                {"variant": "M", "share": 0.3, "planned_units": 4860},
-                {"variant": "H", "share": 0.2, "planned_units": 3240},
-            ],
-        },
-        "capacity_model": {
-            "active_asset_count": 80,
-            "planned_operating_hours": 16,
-            "oee": 0.846,
-            "standard_cycle_minutes_per_unit": 4.0,
-            "asset_units_per_hour": asset_units_per_hour,
-            "daily_capacity_units": 16200,
-            "basis": "운영 capacity model · 80 CNC, 16h/day, OEE 0.846, cycle 4min",
-        },
-        "event_impact": {
-            "event_id": event_id,
-            "equipment_id": result.asset_id,
-            "line": line,
-            "product_variant": product_variant,
-            "screen_priority": screen_priority,
-            "impact_status": "not_applicable" if downtime == 0 else "estimated",
-            "estimated_lost_units": lost_units,
-            "basis": {
-                "estimated_downtime_minutes": downtime,
-                "asset_units_per_hour": asset_units_per_hour,
-                "formula": "estimated_downtime_minutes / 60 * asset_units_per_hour",
-            },
-        },
-        "limitations": [
-            "예상 손실 수량과 downtime은 현재 운영 계획과 capacity model을 기준으로 계산된 추정치입니다.",
-            "확정 재무 손실은 별도 결산 및 원가 정산 데이터로 검증해야 합니다.",
-        ],
-    }
+def _runtime_operation_context(result: Any, event_id: str, *, principal: Principal, project_id: str, workspace_id: str, repository: Any = None) -> dict[str, Any]:
+    identity = OperationalRequestIdentity(
+        organization_id=principal.organization_id, project_id=project_id, workspace_id=workspace_id,
+        asset_id=result.asset_id, evidence_snapshot_id=event_id, decision_as_of=result.observed_at,
+    )
+    return planning_context(repository if repository is not None else get_operational_context_repository(), identity)
 
 
 def _runtime_sop_context(result: Any, operation_context: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -541,6 +467,7 @@ def _runtime_agent_review_packet(
     selected_event_id: str | None = None,
     principal: Principal,
     runtime_service: PredictiveMaintenanceRuntimeService,
+    context_service: ManufacturingPredictiveMaintenanceService | None = None,
 ) -> dict[str, Any]:
     page = runtime_service.latest_results(
         organization_id=principal.organization_id,
@@ -557,207 +484,44 @@ def _runtime_agent_review_packet(
     event_id = _runtime_event_id(result)
     if selected_event_id and event_id != selected_event_id:
         raise EventNotFound(selected_event_id)
-    observed_at = result.observed_at.isoformat()
-    model_version = result.provenance.model_version
-    dataset_id = page.context.dataset_id
-    active_dataset_version = page.context.dataset_version_id
-    source_refs = [
-        f"dataset-version:{active_dataset_version}",
-        f"result-artifact:{event_id}",
-        f"prediction-result:{result.provenance.prediction_result_id}",
-    ]
-    factors = [
-        {
-            "rank": factor.rank,
-            "feature": factor.feature,
-            "display_name": factor.feature.replace("_", " "),
-            "value": factor.feature_value,
-            "unit": "model unit",
-            "contribution": factor.signed_contribution,
-            "direction": factor.direction,
-            "explanation_method": factor.explanation_method,
-            "source_ref": _runtime_factor_source_ref(event_id, factor.feature, factor.rank),
-        }
-        for factor in result.top_factors
-    ]
-    source_refs.extend(item["source_ref"] for item in factors)
-    operation_context = _runtime_operation_context(result, event_id)
-    sop_retrieval, sop_guidance = _runtime_sop_context(result, operation_context)
-    inspection_targets = _runtime_inspection_targets(sop_guidance)
-    source_refs.extend(
-        str(item.get("source_ref"))
-        for item in sop_guidance
-        if item.get("source_ref")
+    from .agent_review_packet import compose_agent_review_packet
+    view_model = _runtime_asset_detail_view_model(
+        asset_id=asset_id, project_id=project_id, workspace_id=workspace_id,
+        dataset_version_id=dataset_version_id, selected_event_id=event_id,
+        history_window="24h", principal=principal, runtime_service=runtime_service,
+        context_service=context_service,
     )
-
-    recommendation = result.recommended_action.action if result.recommended_action else "Review governed prediction"
-    risk_percent = round(result.failure_probability * 100)
-    priority_level = (
-        "immediate" if result.status_grade == "critical"
-        else "high" if result.status_grade == "warning"
-        else "medium" if result.status_grade == "attention"
-        else "low"
+    from .factory_records import read_records
+    records = read_records(
+        (context_service or get_service()).operational_context_repository,
+        identity=OperationalRequestIdentity(organization_id=principal.organization_id,
+            project_id=project_id,workspace_id=workspace_id,asset_id=asset_id,
+            evidence_snapshot_id=event_id,decision_as_of=result.observed_at),
+        dataset_version_id=page.context.dataset_version_id,
+        model_version=result.provenance.model_version,asset_ids=[asset_id])
+    if records.get("status")=="available" and records.get("similar_events_30d") is not None:
+        view_model["maintenance_context"]["similar_events_30d"]=records["similar_events_30d"]
+        view_model["evidence"]["gaps"]=[g for g in view_model["evidence"]["gaps"] if g["field"]!="maintenance_context.similar_events_30d"]
+    sop_retrieval, _ = _runtime_sop_context(result, view_model["operation_context"])
+    packet = compose_agent_review_packet(
+        project_id=project_id, view_model=view_model, sop_retrieval=sop_retrieval,
     )
-    factor_reason = " · ".join(
-        f"{item['display_name']} {item['value']} {item['unit']}" for item in factors[:3]
-    )
-    reasons = [
-        f"상태 {result.status_grade}",
-        f"고장 위험 {risk_percent}%",
-        f"권고 판단 {recommendation}",
-    ]
-    if factor_reason:
-        reasons.append(f"상위 모델 근거 {factor_reason}")
-
-    return {
-        "schema_version": "agent-review-packet-v1.0",
-        "project_id": project_id,
-        "asset_id": result.asset_id,
-        "asset_label": f"{result.asset_type.upper()} · {result.asset_id}",
-        "generated_at": observed_at,
-        "snapshot_basis": {
-            "event_id": event_id,
-            "dataset_id": dataset_id,
-            "dataset_version_id": active_dataset_version,
-            "dataset_version": active_dataset_version,
-            "model_version": model_version,
-            "observed_at": observed_at,
-            "source": "predictive-maintenance-runtime",
-            "source_sha256": result.provenance.result_artifact_source_sha256,
-        },
-        "domain_sections": [
-            {
-                "section_id": "runtime-risk",
-                "owner_domain": "diagnosis",
-                "source": "PostgreSQL Product Result runtime",
-                "packet_paths": ["risk_summary", "review_priority", "model_expression_context"],
-                "mutation_allowed": False,
-                "materialization": "runtime_packet_section",
-                "notes": ["Derived from the currently selected Team DB result artifact."],
-            },
-            {
-                "section_id": "runtime-operations-context",
-                "owner_domain": "operations",
-                "source": "Synthetic planning context adapter",
-                "packet_paths": ["operation_context_summary"],
-                "mutation_allowed": False,
-                "materialization": "runtime_packet_section",
-                "notes": ["Presentation planning assumptions; not MES/ERP/APS actuals."],
-            },
-            {
-                "section_id": "runtime-sop",
-                "owner_domain": "maintenance",
-                "source": "Local SOP metadata retrieval",
-                "packet_paths": ["sop_retrieval", "sop_guidance"],
-                "mutation_allowed": False,
-                "materialization": "runtime_packet_section",
-                "notes": ["Read-only guidance with human approval boundary."],
-            },
-        ],
-        "risk_summary": {
-            "status_grade": result.status_grade,
-            "failure_probability": result.failure_probability,
-            "prediction_horizon_hours": result.prediction_horizon_hours,
-        },
-        "review_priority": {
-            "level": priority_level,
-            "reasons": reasons,
-            "source_fields": [item["source_ref"] for item in factors] or source_refs,
-        },
-        "review_draft": {
-            "title": f"{result.asset_id} 운영 위험 검토",
-            "summary": (
-                f"Team DB의 최신 Product Result는 {result.asset_id}의 {result.prediction_horizon_hours}시간 이내 "
-                f"고장 위험을 {risk_percent}%로 산출했습니다. 권고 판단은 {recommendation}이며, "
-                "읽기 전용 검토 문맥으로만 사용됩니다."
-            ),
-            "priority_label": priority_level,
-            "recommended_next_step": recommendation,
-            "checklist": [
-                "상위 모델 근거와 센서 구간을 확인합니다.",
-                "권고 판단을 실행 전 사람 승인 경계에서 검토합니다.",
-                "정비/작업 상태는 별도 Closed-loop Action에서 확인합니다.",
-            ],
-            "history_summary": [
-                f"{observed_at} 관측 기준 Product Result",
-                f"dataset {active_dataset_version} · model {model_version}",
-            ],
-            "evidence_gap_count": 0 if factors else 1,
-            "boundary_note": "읽기 전용 Agent Review 문맥이며 workflow 상태를 변경하지 않습니다.",
-        },
-        "model_expression_context": {
-            "source_type": result.source_contract,
-            "model_version": model_version,
-            "dataset_version": active_dataset_version,
-            "failure_probability": result.failure_probability,
-            "threshold": None,
-            "confidence_label": f"{result.confidence * 100:.1f}% calibrated",
-            "top_factors": factors,
-            "source_refs": source_refs,
-        },
-        "sop_retrieval": sop_retrieval,
-        "inspection_targets": inspection_targets,
-        "sop_guidance": sop_guidance,
-        "operation_context_summary": {
-            "production_impact": operation_context["production_impact"],
-            "estimated_downtime_minutes": operation_context["event_impact"]["basis"]["estimated_downtime_minutes"],
-            "estimated_lost_units": operation_context["event_impact"]["estimated_lost_units"],
-            "product_variant": operation_context["event_impact"]["product_variant"],
-            "line": operation_context["event_impact"]["line"],
-            "planned_units": operation_context["production_plan"]["planned_units"],
-            "capacity_units": operation_context["capacity_model"]["daily_capacity_units"],
-            "basis": operation_context["capacity_model"]["basis"],
-            "limitations": operation_context["limitations"],
-            "source_ref": f"operation-context:{operation_context['temporal_scope']['snapshot_id']}",
-        },
-        "ontology_context": {
-            "provider": "runtime-result-context",
-            "mutation_allowed": False,
-            "traversals": [],
-            "source_refs": [],
-        },
-        "maintenance_history_summary": {
-            "provider": "runtime-result-context",
-            "mutation_allowed": False,
-            "open_work_order_exists": None,
-            "similar_events_30d": None,
-            "work_orders": [],
-            "inspection_results": [],
-            "maintenance_actions": [],
-            "maintenance_events": [],
-            "activities": [],
-            "equipment_history": [],
-            "recent_equipment_history": [],
-            "similar_events": [],
-            "source_refs": [],
-        },
-        "history_review_items": [],
-        "evidence_gaps": [] if factors else [{
-            "field": "top_factors",
-            "reason": "Runtime result did not expose ranked factor context.",
-            "owner_domain": "diagnosis",
-        }],
-        "source_refs": list(dict.fromkeys(source_refs)),
-        "closed_loop_boundary": {
-            "mutation_allowed": False,
-            "available_action_ids": [],
-            "forbidden_actions": [
-                "create_work_order",
-                "approve_work_order",
-                "start_maintenance_action",
-                "complete_maintenance_action",
-                "create_maintenance_event",
-                "request_replay",
-                "auto_approve",
-            ],
-            "note": "Runtime Agent Review context is read-only and cannot execute or approve actions.",
-        },
-        "limitations": [
-            "This packet is derived from Team DB runtime Product Result context and connected operational records.",
-            "Production planning impact is an estimate derived from the current capacity model and must be validated against financial settlement data before accounting use.",
-            "The assistant may explain priority and evidence but cannot approve, execute, or mutate workflow state.",
-        ],
-    }
+    if records.get("status")=="available":
+        ref=records["provenance"]["source_ref"]
+        packet["source_refs"].append(ref)
+        packet["maintenance_history_summary"]["source_refs"].append(ref)
+        packet["limitations"].append(f"운영 조치 검토 기준 {records['policy']['action_threshold']:.2f}, 정책 {records['policy']['version']}. 기존 위험 등급과 작업 권한은 변경하지 않음. 출처 {ref}")
+    # Use the same scoped read as the shared side view; absence is not readiness.
+    context_read = (context_service or get_service()).operational_context_repository.read_view(
+        identity=OperationalRequestIdentity(organization_id=principal.organization_id,
+            project_id=project_id, workspace_id=workspace_id, asset_id=asset_id,
+            evidence_snapshot_id=event_id, decision_as_of=result.observed_at),
+        retrieved_at=datetime.now(timezone.utc), risk_status=result.status_grade)
+    from .context_record_brief import record_limitations
+    packet["limitations"].extend(record_limitations(context_read.model_dump(mode="json")))
+    for item in context_read.domains.values():
+        packet["source_refs"].extend(ref for ref in item.context.source_refs if ref not in packet["source_refs"])
+    return packet
 
 
 def _runtime_asset_detail_view_model(
@@ -770,6 +534,7 @@ def _runtime_asset_detail_view_model(
     history_window: str,
     principal: Principal,
     runtime_service: PredictiveMaintenanceRuntimeService,
+    context_service: ManufacturingPredictiveMaintenanceService | None = None,
 ) -> dict[str, Any]:
     page = runtime_service.latest_results(
         organization_id=principal.organization_id,
@@ -840,12 +605,19 @@ def _runtime_asset_detail_view_model(
                 "prediction_task": result.provenance.prediction_task,
                 "prediction_id": result.provenance.prediction_id,
                 "prediction_result_id": result.provenance.prediction_result_id,
+                "source_sha256": result.provenance.result_artifact_source_sha256,
+                "evidence_payload_reference": f"result-artifact:{event_id}#evidence_payload",
                 "source_type": "product_runtime_inference",
                 "artifact_id": event_id,
             },
         }
     criticality = "high" if result.status_grade in {"critical", "warning"} else "medium" if result.status_grade == "attention" else "low"
-    operation_context = _runtime_operation_context(result, event_id)
+    context_repository = (context_service.operational_context_repository if context_service else get_operational_context_repository()).capture(
+        OperationalRequestIdentity(organization_id=principal.organization_id, project_id=project_id,
+            workspace_id=workspace_id, asset_id=asset_id, evidence_snapshot_id=event_id,
+            decision_as_of=result.observed_at)
+    )
+    operation_context = _runtime_operation_context(result, event_id, principal=principal, project_id=project_id, workspace_id=workspace_id, repository=context_repository)
     _, sop_guidance = _runtime_sop_context(result, operation_context)
     inspection_guidance: dict[str, dict[str, Any]] = {}
     if sop_guidance:
@@ -892,6 +664,18 @@ def _runtime_asset_detail_view_model(
             "open_work_order_exists": None,
         },
     }
+    maintenance_history = []
+    maintenance_warnings = []
+    try:
+        from .runtime_maintenance_read import read_runtime_maintenance
+        asset["maintenance_context"], maintenance_history = read_runtime_maintenance(
+            (context_service or get_service()).operational_context_repository,
+            organization_id=principal.organization_id, project_id=project_id,
+            workspace_id=workspace_id, dataset_version_id=page.context.dataset_version_id,
+            asset_id=asset_id, observed_at=result.observed_at,
+        )
+    except Exception:
+        maintenance_warnings.append("정비 기록 조회 실패 · 정비 현황은 미확인으로 유지합니다.")
     feature_series, runtime_prediction_history = _runtime_feature_and_risk_history(
         runtime_service=runtime_service,
         principal=principal,
@@ -909,27 +693,40 @@ def _runtime_asset_detail_view_model(
                 "failure_probability": result.failure_probability,
                 "status_grade": result.status_grade,
                 "prediction_id": result.provenance.prediction_id,
-                "source_kind": result.source_contract,
+                "source_kind": "runtime_inference",
                 "source_ref": f"result-artifact:{event_id}",
             }
         ]
-    return compose_asset_detail_view_model(
+    view = compose_asset_detail_view_model(
         asset=asset,
         result_artifact=artifact,
         feature_series=feature_series,
         runtime_prediction_history=runtime_prediction_history,
-        equipment_history=[],
+        equipment_history=maintenance_history,
         operation_context=asset["operation_context"],
+        evidence_context=(context_service or get_service()).evidence_context_for_snapshot(
+            asset_id=asset_id,
+            artifact={"artifact_id": event_id, "observed_at": observed_at},
+            project_id=project_id,
+            event_id=event_id,
+            organization_id=principal.organization_id,
+            workspace_id=workspace_id,
+            context_repository=context_repository,
+        ),
         inspection_guidance=inspection_guidance,
         data_status={
             "source": "canonical-runtime",
             "last_updated_at": observed_at,
             "is_stale": None,
-            "warnings": [],
+            "warnings": maintenance_warnings,
         },
         history_window=history_window,
         event_id=event_id,
     )
+
+    from .signal_unit_policy import apply_signal_units
+    return apply_signal_units(view, organization_id=principal.organization_id,
+                              project_id=project_id, workspace_id=workspace_id)
 
 
 def _merge_runtime_detail_supplemental(
@@ -940,6 +737,7 @@ def _merge_runtime_detail_supplemental(
 
     merged = dict(canonical)
     merged["operation_context"] = supplemental.get("operation_context")
+    merged["evidence_context"] = supplemental.get("evidence_context")
     supplemental_features = {
         str(feature.get("key") or ""): feature
         for feature in supplemental.get("features") or []
@@ -986,68 +784,13 @@ def _merge_runtime_detail_supplemental(
         if not str((gap or {}).get("field") or "").startswith("operation_context")
         and str((gap or {}).get("field") or "") != "review_priority"
     ]
+    gaps.extend(
+        gap for gap in (supplemental.get("evidence") or {}).get("gaps", [])
+        if str((gap or {}).get("field") or "").startswith("operation_context")
+    )
     evidence["gaps"] = gaps
     merged["evidence"] = evidence
     return merged
-
-
-def _dynamic_summary_from_packet(
-    *,
-    service: ManufacturingPredictiveMaintenanceService,
-    packet: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    provider = service.agent_review_summary_provider
-    provider_name = getattr(provider, "name", "none") if provider else "none"
-    if provider is not None and getattr(provider, "provider", None) is not None:
-        try:
-            summary = provider.generate(packet)
-            errors = validate_agent_review_summary_contract(summary, packet=packet)
-            if not errors:
-                return summary, {
-                    "provider": provider_name,
-                    "fallback": False,
-                    "reason": None,
-                    "validation_errors": [],
-                    "materialization": {
-                        "summary_id": None,
-                        "summary_key": f"runtime:{packet.get('asset_id')}",
-                        "workflow_run_id": None,
-                        "status": "ready",
-                        "reused": False,
-                        "source_sha256": "runtime-packet",
-                        "context_sha256": None,
-                        "prompt_version": "agent-review-summary-prompt-v1.0",
-                        "model_version": getattr(getattr(provider, "provider", None), "model", provider_name),
-                        "generated_at": summary.get("generated_at"),
-                        "created_at": None,
-                        "updated_at": None,
-                    },
-                }
-            fallback = compose_deterministic_agent_review_summary(packet)
-            return fallback, {
-                "provider": provider_name,
-                "fallback": True,
-                "reason": "llm_summary_validation_failed",
-                "validation_errors": errors,
-                "fallback_validation_errors": validate_agent_review_summary_contract(fallback, packet=packet),
-            }
-        except Exception as exc:
-            fallback = compose_deterministic_agent_review_summary(packet)
-            return fallback, {
-                "provider": provider_name,
-                "fallback": True,
-                "reason": f"{type(exc).__name__}: {exc}",
-                "validation_errors": [],
-                "fallback_validation_errors": validate_agent_review_summary_contract(fallback, packet=packet),
-            }
-    fallback = compose_deterministic_agent_review_summary(packet)
-    return fallback, {
-        "provider": provider_name,
-        "fallback": True,
-        "reason": "agent_review_summary_provider_disabled",
-        "validation_errors": [],
-        "fallback_validation_errors": validate_agent_review_summary_contract(fallback, packet=packet),
-    }
 
 
 def _require_active_event_project(
@@ -1149,12 +892,15 @@ def get_asset_detail_view(
                     history_window=history_window,
                     principal=principal,
                     runtime_service=get_predictive_maintenance_runtime_service(),
+                    context_service=service,
                 )
                 return _merge_runtime_detail_supplemental(canonical, supplemental)
             except Exception:
                 return canonical
-        except KeyError as exc:
-            raise EventNotFound(event_id) from exc
+        except KeyError:
+            # Canonical prediction-only rows use the normalized runtime path;
+            # that path independently checks the exact selected event identity.
+            pass
     if event_id:
         try:
             return _runtime_asset_detail_view_model(
@@ -1166,6 +912,7 @@ def get_asset_detail_view(
                 history_window=history_window,
                 principal=principal,
                 runtime_service=get_predictive_maintenance_runtime_service(),
+                context_service=service,
             )
         except EventNotFound:
             pass
@@ -1186,7 +933,40 @@ def get_asset_detail_view(
             history_window=history_window,
             principal=principal,
             runtime_service=get_predictive_maintenance_runtime_service(),
+            context_service=service,
         )
+
+
+def _selected_agent_review_packet(
+    *, service: ManufacturingPredictiveMaintenanceService, principal: Principal,
+    asset_id: str, project_id: str, dataset_version_id: str | None,
+    event_id: str, history_window: str,
+) -> dict[str, Any]:
+    try:
+        return service.runtime_agent_review_packet(
+            asset_id, project_id, organization_id=principal.organization_id,
+            workspace_id=MANUFACTURING_WORKSPACE,
+            dataset_version_id=dataset_version_id, event_id=event_id,
+            history_window=history_window,
+        )
+    except (KeyError, RuntimeError):
+        try:
+            return _runtime_agent_review_packet(
+                asset_id=asset_id, project_id=project_id,
+                workspace_id=MANUFACTURING_WORKSPACE,
+                dataset_version_id=dataset_version_id, selected_event_id=event_id,
+                principal=principal, runtime_service=get_predictive_maintenance_runtime_service(),
+                context_service=service,
+            )
+        except (KeyError, EventNotFound):
+            packet = service.agent_review_packet(
+                asset_id, project_id, dataset_version_id=dataset_version_id,
+                history_window=history_window,
+            )
+            basis = packet.get("snapshot_basis") or {}
+            if event_id not in (basis.get("event_id"), basis.get("artifact_id")):
+                raise EventNotFound(event_id)
+            return packet
 
 
 @router.get("/objects/{asset_id}/agent-review-packet")
@@ -1204,18 +984,11 @@ def get_agent_review_packet(
     if principal.active_project_id != project_id:
         raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
     if event_id:
-        try:
-            return _runtime_agent_review_packet(
-                asset_id=asset_id,
-                project_id=project_id,
-                workspace_id=MANUFACTURING_WORKSPACE,
-                dataset_version_id=dataset_version_id,
-                selected_event_id=event_id,
-                principal=principal,
-                runtime_service=get_predictive_maintenance_runtime_service(),
-            )
-        except EventNotFound:
-            pass
+        return _selected_agent_review_packet(
+            service=service, principal=principal, asset_id=asset_id,
+            project_id=project_id, dataset_version_id=dataset_version_id,
+            event_id=event_id, history_window=history_window,
+        )
     try:
         return service.agent_review_packet(
             asset_id,
@@ -1231,6 +1004,7 @@ def get_agent_review_packet(
             dataset_version_id=dataset_version_id,
             principal=principal,
             runtime_service=get_predictive_maintenance_runtime_service(),
+            context_service=service,
         )
 
 
@@ -1260,26 +1034,11 @@ def get_agent_review_summary(
     _authorize_agent_review_summary(principal=principal, project_id=project_id)
     if event_id:
         try:
-            try:
-                packet = service.runtime_agent_review_packet(
-                    asset_id,
-                    project_id,
-                    organization_id=principal.organization_id,
-                    workspace_id=MANUFACTURING_WORKSPACE,
-                    dataset_version_id=dataset_version_id,
-                    event_id=event_id,
-                    history_window=history_window,
-                )
-            except (KeyError, RuntimeError):
-                packet = _runtime_agent_review_packet(
-                    asset_id=asset_id,
-                    project_id=project_id,
-                    workspace_id=MANUFACTURING_WORKSPACE,
-                    dataset_version_id=dataset_version_id,
-                    selected_event_id=event_id,
-                    principal=principal,
-                    runtime_service=get_predictive_maintenance_runtime_service(),
-                )
+            packet = _selected_agent_review_packet(
+                service=service, principal=principal, asset_id=asset_id,
+                project_id=project_id, dataset_version_id=dataset_version_id,
+                event_id=event_id, history_window=history_window,
+            )
             summary, trace = service.cached_agent_review_summary_for_packet(
                 packet=packet,
                 project_id=project_id,
@@ -1295,7 +1054,7 @@ def get_agent_review_summary(
                 },
             )
         except EventNotFound:
-            pass
+            raise
     try:
         summary, trace = service.cached_agent_review_summary(
             asset_id,
@@ -1306,34 +1065,20 @@ def get_agent_review_summary(
             history_window=history_window,
         )
     except EventNotFound:
-        _runtime_agent_review_packet(
+        packet = _runtime_agent_review_packet(
             asset_id=asset_id,
             project_id=project_id,
             workspace_id=MANUFACTURING_WORKSPACE,
             dataset_version_id=dataset_version_id,
             principal=principal,
             runtime_service=get_predictive_maintenance_runtime_service(),
+            context_service=service,
         )
-        summary, trace = None, {
-            "provider": "runtime-product-result",
-            "fallback": False,
-            "reason": "runtime_packet_not_materialized_yet",
-            "validation_errors": [],
-            "materialization": {
-                "summary_id": None,
-                "summary_key": f"runtime:{asset_id}",
-                "workflow_run_id": None,
-                "status": "pending",
-                "reused": False,
-                "source_sha256": "runtime-packet",
-                "context_sha256": None,
-                "prompt_version": "agent-review-summary-prompt-v1.0",
-                "model_version": "runtime-product-result",
-                "generated_at": None,
-                "created_at": None,
-                "updated_at": None,
-            },
-        }
+        summary, trace = service.cached_agent_review_summary_for_packet(
+            packet=packet, project_id=project_id,
+            organization_id=principal.organization_id,
+            workspace_id=MANUFACTURING_WORKSPACE, history_window=history_window,
+        )
     status_code = 200 if summary is not None else 202
     return JSONResponse(
         status_code=status_code,
@@ -1371,19 +1116,20 @@ def create_agent_review_summary(
     )
     if event_id:
         try:
-            packet = _runtime_agent_review_packet(
-                asset_id=asset_id,
-                project_id=project_id,
-                workspace_id=MANUFACTURING_WORKSPACE,
-                dataset_version_id=dataset_version_id,
-                selected_event_id=event_id,
-                principal=principal,
-                runtime_service=get_predictive_maintenance_runtime_service(),
+            packet = _selected_agent_review_packet(
+                service=service, principal=principal, asset_id=asset_id,
+                project_id=project_id, dataset_version_id=dataset_version_id,
+                event_id=event_id, history_window=history_window,
             )
-            summary, trace = _dynamic_summary_from_packet(service=service, packet=packet)
+            summary, trace = service._materialize_agent_review_packet(
+                packet=packet, project_id=project_id,
+                organization_id=principal.organization_id,
+                workspace_id=MANUFACTURING_WORKSPACE,
+                history_window=history_window, trigger=trigger, engine="simple",
+            )
             return {"summary": summary, "trace": trace}
         except EventNotFound:
-            pass
+            raise
     try:
         summary, trace = service.agent_review_summary(
             asset_id,
@@ -1402,8 +1148,14 @@ def create_agent_review_summary(
             dataset_version_id=dataset_version_id,
             principal=principal,
             runtime_service=get_predictive_maintenance_runtime_service(),
+            context_service=service,
         )
-        summary, trace = _dynamic_summary_from_packet(service=service, packet=packet)
+        summary, trace = service._materialize_agent_review_packet(
+            packet=packet, project_id=project_id,
+            organization_id=principal.organization_id,
+            workspace_id=MANUFACTURING_WORKSPACE,
+            history_window=history_window, trigger=trigger, engine="simple",
+        )
     return {"summary": summary, "trace": trace}
 
 
@@ -1436,6 +1188,72 @@ def _decision_support_identity(
     )
 
 
+def _trusted_decision_support_risk(
+    identity: OperationalRequestIdentity,
+    service: ManufacturingPredictiveMaintenanceService,
+) -> str:
+    """Resolve the actual packet before accepting a brief identity or risk."""
+    try:
+        packet = service.runtime_agent_review_packet(
+            identity.asset_id, identity.project_id,
+            organization_id=identity.organization_id,
+            workspace_id=identity.workspace_id,
+            dataset_version_id=None,
+            event_id=identity.evidence_snapshot_id,
+        )
+    except (KeyError, RuntimeError):
+        # Canonical prediction-contract rows use the same runtime index as detail-view.
+        # They are not producer Artifacts and must not be coerced into that contract.
+        try:
+            page = get_predictive_maintenance_runtime_service().latest_results(
+                organization_id=identity.organization_id, project_id=identity.project_id,
+                workspace_id=identity.workspace_id, asset_id=identity.asset_id, dataset_version_id=None, limit=1,
+            )
+        except (KeyError, RuntimeError):
+            page = None
+        except HTTPException as exc:
+            if exc.status_code != 503:
+                raise
+            page = None  # Exact fixture identity validation below remains mandatory.
+        if page is not None and page.items:
+            result = page.items[0]
+            if _runtime_event_id(result) != identity.evidence_snapshot_id or result.asset_id != identity.asset_id:
+                raise HTTPException(status_code=409, detail="evidence_snapshot_mismatch")
+            if result.observed_at > identity.decision_as_of:
+                raise HTTPException(status_code=409, detail="evidence_snapshot_as_of_mismatch")
+            return str(result.status_grade)
+        # Fixture fallback is usable only for its exact immutable identity and workspace.
+        if identity.workspace_id != MANUFACTURING_WORKSPACE:
+            raise HTTPException(status_code=409, detail="evidence_snapshot_unavailable")
+        packet = service.agent_review_packet(identity.asset_id, identity.project_id)
+    basis = packet.get('snapshot_basis') or {}
+    if packet.get('asset_id') != identity.asset_id or basis.get('artifact_id') != identity.evidence_snapshot_id:
+        raise HTTPException(status_code=409, detail="evidence_snapshot_mismatch")
+    observed_at = datetime.fromisoformat(str(basis.get('observed_at')))
+    if observed_at.tzinfo is None or observed_at > identity.decision_as_of:
+        raise HTTPException(status_code=409, detail="evidence_snapshot_as_of_mismatch")
+    return str((packet.get('risk_summary') or {}).get('status_grade') or 'data_quality_hold')
+
+
+@router.get("/objects/{asset_id}/operational-context")
+def get_operational_context(
+    asset_id: str,
+    project_id: str = Query(default="manufacturing-demo-project"),
+    workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
+    evidence_snapshot_id: str = Query(min_length=1, max_length=240),
+    decision_as_of: datetime = Query(),
+    principal: Principal = Depends(require_permission("events.read")),
+    repository: Any = Depends(get_operational_context_repository),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+) -> OperationalContextRead:
+    identity = _decision_support_identity(
+        principal=principal, project_id=project_id, workspace_id=workspace_id,
+        asset_id=asset_id, evidence_snapshot_id=evidence_snapshot_id, decision_as_of=decision_as_of,
+    )
+    risk = _trusted_decision_support_risk(identity, service)
+    return repository.read_view(identity=identity, retrieved_at=datetime.now(timezone.utc), risk_status=risk)
+
+
 @router.get("/objects/{asset_id}/decision-support-brief")
 def get_decision_support_brief(
     asset_id: str,
@@ -1446,11 +1264,13 @@ def get_decision_support_brief(
     role: DecisionBriefRole = Query(default=DecisionBriefRole.PROCESS_ENGINEER),
     principal: Principal = Depends(require_permission("events.read")),
     decision_support: OperationalDecisionSupportService = Depends(get_operational_decision_support_service),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
     identity = _decision_support_identity(
         principal=principal, project_id=project_id, workspace_id=workspace_id,
         asset_id=asset_id, evidence_snapshot_id=evidence_snapshot_id, decision_as_of=decision_as_of,
     )
+    _trusted_decision_support_risk(identity, service)
     brief, trace = decision_support.cached_brief(identity=identity, actor_role=role)
     return JSONResponse(
         status_code=200 if brief is not None else 202,
@@ -1466,17 +1286,21 @@ def create_decision_support_brief(
     evidence_snapshot_id: str = Query(min_length=1, max_length=240),
     decision_as_of: datetime = Query(),
     role: DecisionBriefRole = Query(default=DecisionBriefRole.PROCESS_MANAGER),
-    risk_status: str = Query(default="critical", min_length=1, max_length=80),
+    risk_status: str | None = Query(default=None, min_length=1, max_length=80),
     trigger: Literal["manual_materialization", "ui_manual_regeneration"] = Query(default="manual_materialization"),
     principal: Principal = Depends(require_permission("agent.review.materialize")),
     _: None = Depends(require_csrf),
     decision_support: OperationalDecisionSupportService = Depends(get_operational_decision_support_service),
     limiter: RateLimiter = Depends(get_rate_limiter),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
     identity = _decision_support_identity(
         principal=principal, project_id=project_id, workspace_id=workspace_id,
         asset_id=asset_id, evidence_snapshot_id=evidence_snapshot_id, decision_as_of=decision_as_of,
     )
+    trusted_risk = _trusted_decision_support_risk(identity, service)
+    if risk_status is not None and risk_status != trusted_risk:
+        raise HTTPException(status_code=409, detail="evidence_risk_mismatch")
     limiter.check(
         bucket="decision-support-brief.materialize",
         subject=rate_limit_subject(
@@ -1487,7 +1311,7 @@ def create_decision_support_brief(
     )
     try:
         brief, trace = decision_support.materialize(
-            identity=identity, actor_role=role, risk_status=risk_status, trigger=trigger,
+            identity=identity, actor_role=role, risk_status=trusted_risk, trigger=trigger,
         )
     except (ValueError, DecisionSupportMaterializationInProgress) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1607,6 +1431,7 @@ def run_agent_query(
                 selected_event_id=request.event_id,
                 principal=principal,
                 runtime_service=get_predictive_maintenance_runtime_service(),
+                context_service=service,
             )
             packet_source = "runtime-product-result"
         except EventNotFound:
@@ -1628,6 +1453,7 @@ def run_agent_query(
                 selected_event_id=request.event_id,
                 principal=principal,
                 runtime_service=get_predictive_maintenance_runtime_service(),
+                context_service=service,
             )
             packet_source = "runtime-product-result"
     evidence = _packet_evidence(
@@ -1648,7 +1474,12 @@ def run_agent_query(
     if principal.is_admin or "agent.review.materialize" in principal.permissions:
         try:
             if packet_source == "runtime-product-result":
-                summary, summary_trace = _dynamic_summary_from_packet(service=service, packet=packet)
+                summary, summary_trace = service._materialize_agent_review_packet(
+                    packet=packet, project_id=request.project_id,
+                    organization_id=principal.organization_id,
+                    workspace_id=request.workspace_id, history_window="24h",
+                    trigger="manual_materialization", engine="simple",
+                )
             else:
                 summary, summary_trace = service.agent_review_summary(
                     request.object_id,
@@ -1876,3 +1707,32 @@ def event_activity(
     _require_active_event_project(principal, service, event_id)
     service.event(event_id)
     return service.repository.event_activity(event_id)
+
+
+@router.get("/objects/{asset_id}/factory-records")
+def get_factory_records(
+    asset_id: str,
+    project_id: str = Query(), workspace_id: str = Query(),
+    evidence_snapshot_id: str = Query(min_length=1, max_length=240),
+    decision_as_of: datetime = Query(),
+    principal: Principal = Depends(require_permission("events.read")),
+    repository: Any = Depends(get_operational_context_repository),
+):
+    from .factory_records import read_records
+    identity = _decision_support_identity(principal=principal, project_id=project_id,
+        workspace_id=workspace_id, asset_id=asset_id,
+        evidence_snapshot_id=evidence_snapshot_id, decision_as_of=decision_as_of)
+    page = get_predictive_maintenance_runtime_service().latest_results(
+        organization_id=principal.organization_id, project_id=project_id,
+        workspace_id=workspace_id, dataset_version_id=None, asset_id=asset_id, limit=1)
+    result = next((r for r in page.items if r.asset_id==asset_id), None)
+    if result is None or _runtime_event_id(result)!=evidence_snapshot_id or result.observed_at!=decision_as_of:
+        raise HTTPException(status_code=409, detail="factory_record_snapshot_mismatch")
+    with repository.connection(principal.organization_id, project_id) as connection:
+        asset_rows = repository.execute(connection,
+            "SELECT asset_id FROM pm_assets WHERE organization_id=? AND project_id=? AND workspace_id=? AND dataset_version_id=?",
+            (principal.organization_id, project_id, workspace_id, page.context.dataset_version_id)).fetchall()
+    return read_records(repository, identity=identity,
+        dataset_version_id=page.context.dataset_version_id,
+        model_version=result.provenance.model_version,
+        asset_ids=[r['asset_id'] for r in asset_rows])

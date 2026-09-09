@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.operations.asset_detail_view_model import _evidence_context
+
 from app.operations.context_providers import (
     AgentReviewContext,
+    preserve_owner_record_provenance,
     compose_default_agent_review_context,
 )
 
@@ -173,6 +176,7 @@ def compose_agent_review_packet(
         "inspection_targets": inspection_targets,
         "sop_guidance": sop_guidance,
         "operation_context_summary": agent_context.operation_context_summary,
+        "evidence_context": _evidence_context(view_model.get("evidence_context")),
         "ontology_context": _agent_ontology_context(ontology_context),
         "maintenance_history_summary": maintenance_history_summary,
         "history_review_items": list(dict.fromkeys(history_review_items)),
@@ -521,7 +525,7 @@ def _closed_loop_record(item: dict[str, Any], *, source_prefix: str) -> dict[str
         or item.get("id")
         or ""
     )
-    return {
+    record = {
         "record_id": record_id,
         "record_type": record_type,
         "status": str(item.get("status") or item.get("outcome") or ""),
@@ -536,6 +540,8 @@ def _closed_loop_record(item: dict[str, Any], *, source_prefix: str) -> dict[str
         "summary": str(item.get("label") or item.get("note") or item.get("outcome") or ""),
         "source_ref": f"{source_prefix}/{record_id}" if record_id else source_prefix,
     }
+    return preserve_owner_record_provenance(item, record)
+
 
 
 def _similar_events_from_ontology(context: dict[str, Any] | None) -> list[dict[str, Any]]:

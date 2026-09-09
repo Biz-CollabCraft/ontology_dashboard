@@ -272,6 +272,8 @@ function AppRouter() {
     return <Suspense fallback={<RouteLoading operation="Loading sign in" />}><LoginPage /></Suspense>;
   }
 
+  if (pathname === "/" || pathname === "/login") return <Redirect to="/factory-status-original/index.html" />;
+
   if (pathname === "/admin") return user.is_admin ? <AdminApp /> : <ForbiddenPage />;
 
   if (pathname === "/backup") {

@@ -108,7 +108,7 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
     packet = _load_gold("GS-004")
 
     assert packet["asset_id"] == "CNC-S04-L02-03"
-    assert packet["sop_guidance"] == []
+    assert packet["sop_guidance"][0]["sop_id"] == "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
     assert len(packet["inspection_targets"]) == 1
     target = packet["inspection_targets"][0]
     assert target["component_id"] == "drive_power"
@@ -116,7 +116,7 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
     assert target["source_ref"] in packet["source_refs"]
     assert target["location_source_ref"] in packet["source_refs"]
     assert "동력 전달 계통 중심" in packet["review_draft"]["summary"]
-    assert "SOP 근거" not in packet["review_draft"]["summary"]
+    assert "SOP 근거" in packet["review_draft"]["summary"]
     assert target["basis_refs"][:3] == [
         "factor.1.mechanical_power_w",
         "factor.2.overstrain_index",
@@ -144,6 +144,8 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
     assert history["work_orders"][0]["record_id"] == "WO-INS-GS-004-001"
     assert history["work_orders"][0]["status"] == "requested"
     assert history["activities"][0]["activity_type"] == "work_order.requested"
+    assert history["activities"][0]["record_id"] == "ACT-GS-004-001"
+    assert history["activities"][0]["source_ref"] == "closed-loop://activity/ACT-GS-004-001"
     assert history["similar_events"][0]["similar_event_id"] == (
         "SIM-EVT-CNC-DRIVE-2026-07-22"
     )
@@ -165,7 +167,7 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
                 "data/fixtures/inspection_location/"
                 "demo-cnc-inspection-location-reference-v1.json#drive_power"
             ),
-            "sop_ids": [],
+            "sop_ids": ["SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"],
             "spare_parts": [
                 {
                     "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
@@ -208,6 +210,7 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
                     "data/fixtures/inspection_location/"
                     "demo-cnc-inspection-location-reference-v1.json#drive_power"
                 ),
+                "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
                 "data/fixtures/spare_part/"
                 "demo-cnc-spare-part-context-v1.json#"
                 "SP-CNC-DRIVE-COUPLING-KIT",

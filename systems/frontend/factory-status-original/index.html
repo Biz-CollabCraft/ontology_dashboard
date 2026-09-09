@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script type="module" src="../src/standalone/main.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<dialog id="session-dialog" aria-label="세션 및 프로젝트 선택" style="font:14px IBM Plex Sans KR,system-ui;border:1px solid #C3D3E6;padding:20px"></dialog>
+<template id="factory-template">
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#EDF1F7"/><rect x="30" y="30" width="40" height="40" fill="#FFFFFF" stroke="#0F1E33" stroke-width="2"/><path d="M34 62 L44 55 L52 46 L60 38 L66 34" fill="none" stroke="#B93A28" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="30" y1="43" x2="70" y2="43" stroke="#C98A14" stroke-width="1.5" stroke-dasharray="3 3"/></svg></template>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #EDF1F7; }
+  body { font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: #003C96; text-decoration: none; }
+  a:hover { color: #002B6B; text-decoration: underline; }
+  @keyframes livepulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.72); } 100% { opacity: 1; transform: scale(1); } }
+  @keyframes signalrise { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slidein { from { transform: translateX(28px); opacity: .4; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes slidestep { from { transform: translateX(0); } to { transform: translateX(-14.667px); } }
+  @keyframes refill { from { width: 0%; } to { width: 100%; } }
+  @keyframes barslide { from { transform: translateX(0); } to { transform: translateX(-8.108%); } }
+  @keyframes ringpulse { 0%,100% { outline: 2px solid rgba(60,180,200,0); } 50% { outline: 2px solid rgba(60,180,200,.95); } }
+
+.recovery-button { font-family:inherit;font-size:11.5px;font-weight:600;padding:7px 11px;border:1px solid #003C96;background:#FFF;color:#003C96;cursor:pointer; }
+.recovery-button:disabled { color:#7C90A8;border-color:#DDE6F0;cursor:default; }
+.recovery-input { width:72px;border:1px solid #C3D3E6;padding:6px;font-family:'IBM Plex Mono',monospace; }
+.recovery-button:focus-visible,.recovery-input:focus-visible {outline:2px solid #003C96;outline-offset:2px;}
+</style>
+</helmet>
+<div style="min-height:100vh;background:#EDF1F7;color:#0F1E33;padding:14px;display:flex;flex-direction:column;gap:12px">
+
+  <header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;border-bottom:2px solid #003C96;padding-bottom:10px">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="display:flex;gap:2px;flex:none">
+        <button type="button" onClick="{{ onRoleShift }}" style="border:1px solid {{ shiftBorder }};background:{{ shiftBg }};color:{{ shiftFg }};font-family:inherit;font-size:12px;font-weight:{{ shiftW }};padding:7px 13px;cursor:pointer;white-space:nowrap;letter-spacing:-0.01em;display:flex;align-items:center;gap:7px">엔지니어 · 지금<span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;background:{{ shiftBadgeBg }};color:{{ shiftBadgeFg }};padding:1px 5px;line-height:1.4">{{ shiftBadge }}</span></button>
+        <button type="button" onClick="{{ onRolePlan }}" style="border:1px solid {{ planBorder }};background:{{ planBg }};color:{{ planFg }};font-family:inherit;font-size:12px;font-weight:{{ planW }};padding:7px 13px;cursor:pointer;white-space:nowrap;letter-spacing:-0.01em;display:flex;align-items:center;gap:7px">생산관리자 · 오늘<span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;background:{{ planBadgeBg }};color:{{ planBadgeFg }};padding:1px 5px;line-height:1.4">{{ planBadge }}</span></button>
+        <button type="button" onClick="{{ onRoleMaint }}" style="border:1px solid {{ maintBorder }};background:{{ maintBg }};color:{{ maintFg }};font-family:inherit;font-size:12px;font-weight:{{ maintW }};padding:7px 13px;cursor:pointer;white-space:nowrap;letter-spacing:-0.01em;display:flex;align-items:center;gap:7px">보전팀 · 작업 큐<span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;background:{{ maintBadgeBg }};color:{{ maintBadgeFg }};padding:1px 5px;line-height:1.4">{{ maintBadge }}</span></button>
+      </div>
+      <h1 style="margin:0;font-size:23px;font-weight:700;letter-spacing:-0.02em">공장 현황</h1>
+      <button type="button" title="프로젝트·워크스페이스·세션" onClick="{{ onSession }}" style="font:inherit;font-size:12.5px;color:#4A5C74;font-weight:500;border:0;background:none;padding:0;cursor:pointer">{{ siteLabel }}</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:7px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#3CB4C8;display:block;animation:livepulse 2s ease-in-out infinite"></span>
+        <span style="font-size:12px;color:#2C4159;font-weight:600">{{ sourceLabel }}</span>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4A5C74">기준 시각 {{ nowLabel }}</div>
+      <div style="font-size:11.5px;color:#4A5C74;border:1px solid #C3D3E6;background:#FFF;padding:4px 8px;font-weight:500;white-space:nowrap">예측 구간 {{ horizonLabel }}</div>
+    </div>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px">
+    <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="3">
+      <div style="background:#FFFFFF;border:1px solid #CBD8E8;border-top:3px solid #003C96;padding:14px 16px 15px;display:flex;flex-direction:column;gap:9px;min-width:0">
+        <div style="font-size:12.5px;font-weight:600;color:#3B5170;letter-spacing:-0.01em">{{ k.label }}</div>
+        <div style="display:flex;align-items:baseline;gap:7px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:40px;font-weight:600;line-height:0.9;letter-spacing:-0.03em">{{ k.value }}</span>
+          <span style="font-size:14px;font-weight:600;color:#4A5C74">{{ k.unit }}</span>
+        </div>
+        <div style="font-size:11.5px;color:#5A6E88;line-height:1.5;text-wrap:pretty">{{ k.note }}</div>
+      </div>
+    </sc-for>
+  </section>
+
+  <section style="display:grid;grid-template-columns:{{ gridCols }};gap:12px;align-items:start;transition:grid-template-columns .36s cubic-bezier(.2,0,0,1)">
+
+    <sc-if value="{{ isMaint }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#FFFFFF;border:1px solid #CBD8E8;padding:13px 14px 15px;display:flex;flex-direction:column;gap:10px;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid #DDE6F0;padding-bottom:8px">
+          <h2 style="margin:0;font-size:15px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap">받은 요청 큐</h2>
+          <span style="font-size:10.5px;color:#4A5C74;font-weight:600">미완료 {{ reqCount }}</span>
+        </div>
+        <sc-for list="{{ reqQueue }}" as="rq" hint-placeholder-count="1">
+          <div role="button" tabindex="0" onClick="{{ rq.onSelect }}" style="border:{{ rq.border }};border-left:4px solid {{ rq.color }};background:{{ rq.bg }};padding:11px 12px;cursor:pointer;display:flex;flex-direction:column;gap:7px;min-width:0">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#4A5C74;flex:none">{{ rq.id }}</span>
+              <span style="font-size:10.5px;font-weight:700;color:{{ rq.ink }};background:{{ rq.tint }};padding:2px 7px;white-space:nowrap;flex:none">{{ rq.state }}</span>
+            </div>
+            <div style="font-size:13px;font-weight:700;color:#0F1E33;line-height:1.4;text-wrap:pretty">{{ rq.what }}</div>
+            <div style="display:flex;flex-direction:column;gap:2px;font-size:11px;color:#4A5C74">
+              <span style="font-weight:600;color:#0F1E33">{{ rq.assetName }} · {{ rq.target }}</span>
+              <span>{{ rq.place }}</span>
+              <span style="color:#566B85">요청 {{ rq.from }} · {{ rq.age }} · 담당 {{ rq.assignee }}</span>
+            </div>
+            <button type="button" onClick="{{ rq.onAdvance }}" style="align-self:flex-start;display:{{ rq.nextShow }};border:1px solid #003C96;background:#003C96;color:#FFFFFF;font-family:inherit;font-size:11px;font-weight:600;padding:5px 10px;cursor:pointer;white-space:nowrap" style-hover="background:#002B6B">{{ rq.nextLabel }} →</button>
+          </div>
+        </sc-for>
+        <div style="font-size:11px;color:#566B85;line-height:1.6">{{ reqEmpty }}</div>
+      </div>
+    </sc-if>
+
+    <div onClick="{{ onFocusMap }}" title="빈 곳을 누르면 설비 맵을 크게 봅니다" style="display:{{ mapShow }};background:#FFFFFF;border:1px solid #CBD8E8;padding:13px 14px 15px;flex-direction:column;gap:11px;min-width:0;cursor:{{ zoomCursor }}">
+      <div style="display:flex;flex-direction:column;gap:7px;border-bottom:1px solid #DDE6F0;padding-bottom:9px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <h2 style="margin:0;font-size:15px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap">라인 · 셀 · 설비 상태</h2>
+          <button type="button" onClick="{{ onFocusMap }}" title="설비 맵 크게 보기" disabled="{{ mapIsBig }}" style="flex:none;width:26px;height:26px;border:1px solid {{ zoomBorder }};background:{{ zoomBg }};color:{{ zoomFg }};cursor:{{ zoomCursor }};font-family:inherit;font-size:13px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center" style-hover="border-color:#003C96">⤢</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="display:{{ legendShow }};align-items:center;gap:4px;white-space:nowrap;flex:none"><span style="font-size:11px;font-weight:700;color:#003C96;margin-right:2px">우선 순위</span><span style="display:flex;width:14px;height:14px;background:#003C96;color:#FFFFFF;font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:700;line-height:1;align-items:center;justify-content:center">1</span><span style="display:flex;width:14px;height:14px;background:#003C96;color:#FFFFFF;font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:700;line-height:1;align-items:center;justify-content:center">2</span><span style="display:flex;width:14px;height:14px;background:#003C96;color:#FFFFFF;font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:700;line-height:1;align-items:center;justify-content:center">3</span></span>
+          <div style="flex:1;height:4px;background:#EAF0F7;overflow:hidden;min-width:24px" title="서버 조회 기준">
+            <div style="height:100%;background:#3CB4C8;animation:{{ refillAnim }}"></div>
+          </div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#4A5C74;white-space:nowrap;flex:none">{{ refillLabel }}</span>
+        </div>
+      </div>
+      <sc-for list="{{ lines }}" as="ln" hint-placeholder-count="4">
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span style="font-size:12px;font-weight:600;color:#1E3450">{{ ln.name }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#566B85">{{ ln.summary }}</span>
+          </div>
+          <sc-for list="{{ ln.cells }}" as="cl" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:7px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5F7590;width:30px;flex:none">{{ cl.name }}</span>
+              <div style="display:flex;gap:5px;flex:1;min-width:0">
+                <sc-for list="{{ cl.assets }}" as="a" hint-placeholder-count="3">
+                  <button type="button" onClick="{{ a.onSelect }}" title="{{ a.title }}" style="position:relative;flex:1;min-width:0;height:{{ a.tileH }};transition:height .3s cubic-bezier(.2,0,0,1);border:{{ a.border }};background:{{ a.bg }};color:{{ a.fg }};cursor:pointer;padding:{{ a.tilePad }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:'IBM Plex Mono',monospace;outline-offset:-1px;overflow:hidden;animation:{{ a.pulse }}" style-hover="filter:brightness(.96)">
+                    <span style="position:absolute;top:3px;left:3px;width:14px;height:14px;background:{{ a.rankBg }};color:{{ a.rankFg }};font-size:9.5px;font-weight:700;line-height:1;align-items:center;justify-content:center;display:{{ a.rankShow }}">{{ a.rank }}</span>
+                    <span style="font-family:'IBM Plex Sans KR',sans-serif;font-size:{{ a.tileFs }};font-weight:600;letter-spacing:-0.02em;white-space:pre-line;text-align:center;line-height:1.25;flex-shrink:0;transition:font-size .3s ease">{{ a.code }}</span>
+                    <span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;display:{{ a.metaShow }}">{{ a.riskLabel }}</span>
+                    <span style="position:absolute;bottom:0;left:0;height:2.5px;width:{{ a.barW }};background:{{ a.barColor }};transition:width 2.8s linear"></span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;border-top:1px solid #DDE6F0;padding-top:9px">
+        <sc-for list="{{ legend }}" as="g" hint-placeholder-count="4">
+          <span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:#4A5C74;font-weight:500">
+            <span style="width:10px;height:10px;background:{{ g.color }};border:1px solid {{ g.line }};display:block"></span>{{ g.label }}
+          </span>
+        </sc-for>
+      </div>
+    </div>
+
+    <sc-if value="{{ isMaint }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#FFFFFF;border:1px solid #CBD8E8;padding:13px 14px 15px;display:flex;flex-direction:column;gap:11px;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid #DDE6F0;padding-bottom:8px">
+          <h2 style="margin:0;font-size:15px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap">작업 카드</h2>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#4A5C74">{{ curReqId }} · {{ curReqState }}</span>
+        </div>
+<div aria-label="AI 브리핑" style="border-bottom:1px solid #DDE6F0;padding:6px 0 10px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#697C92"><strong>AI 브리핑</strong><span>{{ aiStatus }}</span><button type="button" onClick="{{ onAiSummary }}" disabled="{{ aiDisabled }}" title="{{ aiHelp }}" style="margin-left:auto;font-family:inherit;padding:3px 7px;border:1px solid #CBD8E8;background:#F8FBFE;color:#365476">{{ aiButtonLabel }}</button></div>
+<sc-if value="{{ aiBriefVisible }}"><div style="font-size:13px;line-height:1.6;color:#2C4159">{{ priorityHead }}</div></sc-if>
+</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+            <span style="font-size:15px;font-weight:700;color:#0F1E33">{{ curReqAsset }}</span>
+            <span style="font-size:12px;color:#4A5C74;font-weight:500">{{ curReqWhat }}</span>
+          </div>
+          <span style="font-size:11px;color:#566B85">요청 {{ curReqFrom }} · 담당 {{ curReqAssignee }}</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #DDE6F0;background:#F8FBFE;padding:10px 12px">
+          <span style="flex:none;width:22px;height:22px;background:#003C96;color:#FFFFFF;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ curReqTargetNo }}</span>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+            <span style="font-size:13.5px;font-weight:700;color:#0F1E33">{{ curReqTargetName }}</span>
+            <span style="font-size:11.5px;color:#4A5C74;line-height:1.5">위치 {{ curReqWhere }}</span>
+            <span style="font-size:11.5px;color:#4A5C74;line-height:1.5;text-wrap:pretty">{{ curReqHow }}</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#003C96;font-weight:500">{{ curReqSop }}</span>
+          <span style="font-size:10.5px;font-weight:700;color:{{ curReqSafetyColor }};border:1px solid {{ curReqSafetyColor }}55;padding:2px 6px;white-space:nowrap">{{ curReqSafety }}</span>
+        </div>
+        <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ curReqChecks }}" as="ck" hint-placeholder-count="3">
+            <li style="display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.55;color:#1E3450">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5F7590;flex:none;padding-top:2px">{{ ck.no }}</span>
+              <span style="text-wrap:pretty">{{ ck.text }}</span>
+            </li>
+          </sc-for>
+        </ul>
+<div style="border:1px solid #C3D3E6;background:#F8FBFE;padding:12px;display:flex;flex-direction:column;gap:10px;font-size:12px;line-height:1.6" aria-label="보전 점검과 조치">
+<strong>{{ flowTitle }}</strong><span style="font-size:11px;color:#566B85">{{ flowSummary }}</span>
+<sc-if value="{{ flowInspect }}"><label>현장 점검 결과<textarea class="recovery-input" style="width:100%;box-sizing:border-box;min-height:55px;font-family:inherit" aria-label="현장 점검 결과" value="{{ flowInspection }}" onChange="{{ onFlowInspection }}"></textarea></label><label>필요 조치<input class="recovery-input" style="width:100%;box-sizing:border-box;font-family:inherit" aria-label="필요 조치" value="{{ flowProposal }}" onChange="{{ onFlowProposal }}" /></label><div style="display:flex;flex-wrap:wrap;gap:10px"><label>정지 시간 <input class="recovery-input" type="number" min="0.5" max="8" step="0.5" aria-label="필요 정지 시간" value="{{ flowHours }}" onChange="{{ onFlowHours }}" /> 시간</label><label>제안 일정 <input class="recovery-input" style="width:150px;font-family:inherit" aria-label="제안 일정" value="{{ flowSlot }}" onChange="{{ onFlowSlot }}" /></label></div><label>영향 품목 <select aria-label="영향 품목" class="recovery-input" style="width:auto;font-family:inherit" value="{{ flowSku }}" onChange="{{ onFlowSku }}"><option value="">품목 연결 확인</option><option value="0">A형 하우징</option><option value="1">B형 브래킷</option><option value="2">C형 커버</option></select></label><span style="font-size:11px;color:#566B85">품목·예상 정지시간·일정 저장 계약 확인이 필요합니다.</span><button type="button" class="recovery-button" onClick="{{ onFlowNoAction }}" disabled="{{ flowNoActionDisabled }}">조치 불필요 · 점검 결과 회신</button></sc-if>
+<sc-if value="{{ flowReady }}"><label><input type="checkbox" checked="{{ flowReadyChecked }}" onChange="{{ onFlowReady }}" /> 부품·인력·작업 허가·착수 조건 확인 필요</label><button type="button" class="recovery-button" onClick="{{ onFlowRevisit }}">조건 부족 · 일정 재협의</button></sc-if>
+<sc-if value="{{ flowWorking }}"><label>작업 후 점검 결과<textarea class="recovery-input" style="width:100%;box-sizing:border-box;min-height:55px;font-family:inherit" aria-label="작업 후 점검 결과" value="{{ flowResult }}" onChange="{{ onFlowResult }}"></textarea></label></sc-if>
+<button type="button" class="recovery-button" onClick="{{ onFlowAdvance }}" disabled="{{ flowDisabled }}">{{ flowAction }}</button>
+<span style="font-size:11px;color:#566B85">{{ flowClosure }}</span><span style="font-size:10.5px;color:#566B85">서버 저장 상태 조회 · 미지원 액션 비활성 · 성공 응답 후 다시 조회</span></div>        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid #DDE6F0;padding-top:9px;margin-top:auto;font-size:10.5px;color:#566B85">
+          <span>필요 부품은 아래 조달 현황에서 함께 봅니다</span>
+          <span style="font-size:11px;font-weight:700;color:#003C96;margin-left:auto;white-space:nowrap">{{ procurementSub }}</span>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#FFFFFF;border:1px solid #CBD8E8;padding:13px 14px 15px;display:flex;flex-direction:column;gap:11px;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid #DDE6F0;padding-bottom:8px">
+          <h2 style="margin:0;font-size:15px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap">주문별 진행 현황</h2>
+          <span style="font-size:10.5px;color:#4A5C74;font-weight:600">{{ planHeadNote }}</span>
+        </div>
+<div aria-label="AI 브리핑" style="border-bottom:1px solid #DDE6F0;padding:6px 0 10px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#697C92"><strong>AI 브리핑</strong><span>{{ aiStatus }}</span><button type="button" onClick="{{ onAiSummary }}" disabled="{{ aiDisabled }}" title="{{ aiHelp }}" style="margin-left:auto;font-family:inherit;padding:3px 7px;border:1px solid #CBD8E8;background:#F8FBFE;color:#365476">{{ aiButtonLabel }}</button></div>
+<sc-if value="{{ aiBriefVisible }}"><div style="font-size:13px;line-height:1.6;color:#2C4159">{{ priorityHead }}</div></sc-if>
+</div>
+        <sc-for list="{{ shifts }}" as="sh" hint-placeholder-count="3">
+          <div style="border:{{ sh.border }};background:#FFFFFF;padding:10px 12px 11px;display:flex;flex-direction:column;gap:8px;min-width:0">
+            <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+              <span style="font-size:13.5px;font-weight:700;color:#0F1E33;white-space:nowrap">{{ sh.name }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#566B85;white-space:nowrap">{{ sh.hours }}</span>
+              <span style="font-size:10.5px;font-weight:700;color:{{ sh.markFg }};background:{{ sh.markBg }};padding:2px 7px;margin-left:auto;white-space:nowrap;flex:none">{{ sh.mark }}</span>
+            </div>
+            <div style="display:flex;height:14px;background:#EAF0F7;border:1px solid #DDE6F0;overflow:hidden">
+              <div style="width:{{ sh.madePct }};background:#00806B;transition:width .6s ease"></div>
+              <div style="width:{{ sh.lossPct }};background:repeating-linear-gradient(135deg,#C0342B 0 4px,#E3A7A2 4px 8px);transition:width .6s ease"></div>
+            </div>
+            <div style="display:flex;gap:6px 16px;flex-wrap:wrap;font-size:11px;color:#4A5C74">
+              <span>계획 <strong style="font-family:'IBM Plex Mono',monospace;color:#0F1E33;font-weight:600">{{ sh.plan }}</strong></span>
+              <span>생산 <strong style="font-family:'IBM Plex Mono',monospace;color:#00594A;font-weight:600">{{ sh.made }}</strong></span>
+              <span style="margin-left:auto">재공 <strong style="font-family:'IBM Plex Mono',monospace;color:{{ sh.lossColor }};font-weight:600">{{ sh.loss }}</strong></span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <div onClick="{{ onFocusChart }}" style="display:{{ chartPanelShow }};background:#FFFFFF;border:1px solid #CBD8E8;padding:13px 14px 12px;flex-direction:column;gap:10px;min-width:0;cursor:{{ chartCursor }}">
+      <div style="display:flex;flex-direction:column;gap:9px;border-bottom:1px solid #DDE6F0;padding-bottom:9px">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <span style="font-size:11.5px;font-weight:700;color:#FFF;background:{{ priorityColor }};padding:4px 10px;white-space:nowrap;flex:none">{{ priorityLabel }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#566B85;flex:none;margin-left:auto;display:{{ reasonsShow }}">{{ selId }} · {{ selObservedAt }} 관측</span>
+
+        </div>
+<div aria-label="AI 브리핑" style="border-bottom:1px solid #DDE6F0;padding:6px 0 10px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#697C92"><strong>AI 브리핑</strong><span>{{ aiStatus }}</span><button type="button" onClick="{{ onAiSummary }}" disabled="{{ aiDisabled }}" title="{{ aiHelp }}" style="margin-left:auto;font-family:inherit;padding:3px 7px;border:1px solid #CBD8E8;background:#F8FBFE;color:#365476">{{ aiButtonLabel }}</button></div>
+<sc-if value="{{ aiBriefVisible }}"><div style="font-size:13px;line-height:1.6;color:#2C4159">{{ priorityHead }}</div></sc-if>
+</div>
+        <ul style="margin:0;padding:0;list-style:none;display:{{ reasonsShow }};flex-direction:column;gap:7px">
+          <sc-for list="{{ reasons }}" as="r" hint-placeholder-count="4">
+            <li style="display:flex;gap:9px;align-items:flex-start;font-size:12.5px;line-height:1.6;color:#1E3450">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#5F7590;flex:none;padding-top:2px">{{ r.no }}</span>
+              <span style="text-wrap:pretty"><sc-for list="{{ r.parts }}" as="pt" hint-placeholder-count="1"><span style="font-weight:{{ pt.weight }};color:{{ pt.color }}">{{ pt.text }}</span></sc-for></span>
+            </li>
+          </sc-for>
+        </ul>
+        <div style="display:{{ ctxShow }};grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;background:#DDE6F0;border:1px solid #DDE6F0">
+          <sc-for list="{{ context }}" as="c" hint-placeholder-count="6">
+            <div style="background:#F8FBFE;padding:8px 10px;display:flex;flex-direction:column;gap:3px;min-width:0">
+              <span style="font-size:10.5px;color:#4A5C74;font-weight:600">{{ c.label }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;color:{{ c.color }}">{{ c.value }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid #DDE6F0;padding-bottom:8px">
+        <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+          <h2 style="margin:0;font-size:13px;font-weight:700;letter-spacing:-0.01em">위험 점수 추세 · 조회된 관측 구간</h2>
+          <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+            <span style="font-size:15px;font-weight:700">{{ selName }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#5A6E88">{{ selId }} · {{ selPlace }}</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:14px">
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+            <span style="font-size:10.5px;color:#4A5C74;font-weight:600">현재 위험 점수</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600;line-height:1;letter-spacing:-0.02em;color:{{ selInk }}">{{ selRisk }}</span>
+          </div>
+          <span style="font-size:12px;font-weight:700;color:#FFF;background:{{ selSolid }};padding:5px 11px;letter-spacing:0.02em;white-space:nowrap;flex:none">{{ selGrade }}</span>
+          <button type="button" onClick="{{ onOpenSelected }}" style="border:1px solid #003C96;background:#003C96;color:#FFFFFF;font-family:inherit;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;white-space:nowrap" style-hover="background:#002B6B">설비 상세 →</button>
+        </div>
+      </div>
+      <div style="width:100%">
+        <div style="display:flex;align-items:stretch;gap:6px">
+        <div style="flex:1;min-width:0;position:relative">
+        <sc-if value="{{ hasRiskSeries }}"><span style="position:absolute;right:-5px;top:{{ nowTop }};width:10px;height:10px;border-radius:50%;background:{{ selInk }};box-shadow:0 0 0 2px #FFFFFF;transition:{{ nowTrans }};z-index:2"></span></sc-if>
+        <svg viewBox="0 0 352 300" preserveAspectRatio="none" style="width:100%;height:{{ chartH }};display:block;transition:height .36s cubic-bezier(.2,0,0,1)" role="img">
+          <rect x="0" y="0" width="352" height="{{ bandWarnH }}" fill="#FBEEEB"></rect>
+          <rect x="0" y="{{ bandWarnH }}" width="352" height="{{ bandAttnH }}" fill="#FCF6E7"></rect>
+          <rect x="0" y="{{ bandNormY }}" width="352" height="{{ bandNormH }}" fill="#F1F7F2"></rect>
+          <line x1="0" y1="{{ lineWarnY }}" x2="352" y2="{{ lineWarnY }}" stroke="#B93A28" stroke-width="1.2" stroke-dasharray="6 5"></line>
+          <line x1="0" y1="{{ lineAttnY }}" x2="352" y2="{{ lineAttnY }}" stroke="#C98A14" stroke-width="1.2" stroke-dasharray="6 5"></line>
+          <line x1="0" y1="300" x2="352" y2="300" stroke="#B9CBE0" stroke-width="1.2"></line>
+          <defs>
+            <clipPath id="plotclip"><rect x="0" y="0" width="352" height="301"></rect></clipPath>
+          </defs>
+          <g clip-path="url(#plotclip)">
+            <g style="animation:{{ slideAnim }}">
+              <path d="{{ chartArea }}" fill="{{ selFill }}"></path>
+              <path d="{{ chartLine }}" fill="none" stroke="{{ selInk }}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"></path>
+            </g>
+          </g>
+          <line x1="352" y1="0" x2="352" y2="300" stroke="{{ selInk }}" stroke-width="1.4"></line>
+
+        </svg>
+        </div>
+        <div style="flex:none;width:30px;position:relative">
+          <sc-if value="{{ showBands }}"><span style="position:absolute;top:{{ labWarnPct }};transform:translateY(-50%);font-size:11px;font-weight:700;color:#8E2A1D">위험</span></sc-if>
+          <sc-if value="{{ showBands }}"><span style="position:absolute;top:{{ labAttnPct }};transform:translateY(-50%);font-size:11px;font-weight:700;color:#8A6009">주의</span></sc-if>
+          <sc-if value="{{ showBands }}"><span style="position:absolute;top:{{ labNormPct }};transform:translateY(-50%);font-size:11px;font-weight:700;color:#1E5C3B">정상</span></sc-if>
+        </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding-top:5px;padding-right:36px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#566B85">
+          <sc-for list="{{ chartTicks }}" as="t" hint-placeholder-count="5">
+            <span>{{ t.label }}</span>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 18px;border-top:1px solid #DDE6F0;padding-top:8px;font-size:11px;color:#5A6E88">
+        <span>조회 구간 시작 <strong style="font-family:'IBM Plex Mono',monospace;color:#1E3450;font-weight:600">{{ selFirstRisk }}</strong></span>
+        <span>변화 <strong style="font-family:'IBM Plex Mono',monospace;color:{{ selInk }};font-weight:600">{{ selDelta }}</strong></span>
+        <span>기준선 주의 <strong style="font-family:'IBM Plex Mono',monospace;color:#8A6009;font-weight:600">{{ attnValLabel }}</strong> · 위험 <strong style="font-family:'IBM Plex Mono',monospace;color:#B93A28;font-weight:600">{{ warnValLabel }}</strong></span>
+        <span style="margin-left:auto;color:#566B85">{{ selSourceNote }}</span>
+      </div>
+    </div>
+
+    <div style="background:#FFFFFF;border:1px solid #CBD8E8;padding:13px 14px 15px;display:flex;flex-direction:column;gap:10px;min-width:0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;border-bottom:1px solid #DDE6F0;padding-bottom:7px">
+        <h2 style="margin:0;font-size:13px;font-weight:700;letter-spacing:-0.01em">{{ eventsTitle }}</h2>
+        <span style="font-size:10.5px;color:#566B85;font-weight:500">{{ eventsSub }}</span>
+      </div>
+      <sc-if value="{{ isMaint }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ windows }}" as="w" hint-placeholder-count="3">
+            <div style="border:1px solid #DDE6F0;background:#FFFFFF;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                <span style="font-size:12.5px;font-weight:700;color:#0F1E33;white-space:nowrap">{{ w.when }}</span>
+                <span style="font-size:10.5px;font-weight:700;color:{{ w.color }};background:{{ w.bg }};padding:2px 7px;white-space:nowrap;flex:none">{{ w.state }}</span>
+              </div>
+              <div style="display:flex;gap:6px 12px;flex-wrap:wrap;font-size:11px;color:#4A5C74">
+                <span style="font-weight:600">{{ w.line }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace">{{ w.span }}</span>
+              </div>
+              <span style="font-size:10.5px;color:#566B85;line-height:1.5">{{ w.note }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:{{ pendingShow }};flex-direction:column;gap:8px;border:2px solid #003C96;background:#F1F7FD;padding:11px 12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+              <span style="font-size:11.5px;font-weight:700;color:#003C96;white-space:nowrap">보전 조치·정지 일정 협의</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#4A5C74;flex:none">{{ pendingCount }}건</span>
+            </div>
+            <sc-for list="{{ windows }}" as="pw" hint-placeholder-count="1">
+              <div style="display:{{ pw.pendingDisplay }};flex-direction:column;gap:7px;background:#FFFFFF;border:1px solid #DDE6F0;padding:10px 11px;min-width:0">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:12.5px;font-weight:700;color:#0F1E33;white-space:nowrap">{{ pw.when }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#566B85;flex:none">{{ pw.span }}</span>
+                </div>
+                <span style="font-size:11.5px;color:#2C4159;font-weight:600">{{ pw.line }} 정지 요청</span>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <button type="button" onClick="{{ pw.onApprove }}" style="border:1px solid #00705E;background:#00705E;color:#FFFFFF;font-family:inherit;font-size:11.5px;font-weight:700;padding:6px 12px;cursor:pointer;white-space:nowrap">{{ pw.replyLabel }}</button>
+                  <button type="button" onClick="{{ pw.onReject }}" style="border:1px solid #B02F26;background:#FFFFFF;color:#94251E;font-family:inherit;font-size:11.5px;font-weight:700;padding:6px 12px;cursor:pointer;white-space:nowrap">다른 일정 협의</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <sc-for list="{{ planEvents }}" as="pe" hint-placeholder-count="3">
+            <div role="button" tabindex="0" onClick="{{ pe.onSelect }}" style="text-align:left;border:{{ pe.border }};background:{{ pe.bg }};padding:11px 12px;cursor:pointer;display:flex;flex-direction:column;gap:7px;min-width:0">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%">
+                <span style="font-size:10.5px;font-weight:700;color:#94251E;white-space:nowrap">{{ pe.cue }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;color:#94251E;flex:none">{{ pe.money }}</span>
+              </div>
+              <div style="font-size:13px;font-weight:600;color:#0F1E33;line-height:1.4;text-wrap:pretty">{{ pe.title }}</div>
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#3B5170;background:#EAF0F7;border:1px solid #D3E0EE;padding:2px 5px">{{ pe.assetId }}</span>
+                <span style="font-size:11px;color:#4A5C74;font-weight:500">{{ pe.place }}</span>
+              </div>
+              <div style="font-size:11px;color:#5A6E88;line-height:1.5;text-wrap:pretty">{{ pe.detail }}</div>
+              <button type="button" onClick="{{ pe.onOpen }}" style="align-self:flex-start;font-size:10.5px;font-weight:700;color:#003C96;background:transparent;border:none;border-bottom:1px solid #003C96;cursor:pointer;padding:0 0 1px;font-family:inherit">상세 보기</button>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-for list="{{ shiftEvents }}" as="e" hint-placeholder-count="3">
+        <div role="button" tabindex="0" onClick="{{ e.onSelect }}" style="text-align:left;border:{{ e.border }};background:{{ e.bg }};padding:11px 12px;cursor:pointer;display:flex;flex-direction:column;gap:7px;font-family:inherit;min-width:0;transition:background .12s ease" style-hover="background:#EFF5FB">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%">
+            <span style="display:flex;align-items:center;gap:6px;min-width:0">
+              <span style="width:7px;height:7px;background:{{ e.color }};flex:none;display:block"></span>
+              <span style="font-size:11px;font-weight:700;color:{{ e.gradeColor }};letter-spacing:0.02em">{{ e.grade }}</span>
+            </span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#566B85;flex:none">{{ e.time }}</span>
+          </div>
+          <div style="font-size:13px;font-weight:600;color:#0F1E33;line-height:1.4;text-wrap:pretty">{{ e.title }}</div>
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#3B5170;background:#EAF0F7;border:1px solid #D3E0EE;padding:2px 5px">{{ e.assetId }}</span>
+            <span style="font-size:11px;color:#4A5C74;font-weight:500">{{ e.place }}</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%">
+            <span style="font-size:10.5px;font-weight:600;color:{{ e.cueColor }}">{{ e.cue }}</span>
+            <button type="button" onClick="{{ e.onOpen }}" style="font-size:10.5px;font-weight:700;color:#003C96;background:transparent;border:none;border-bottom:1px solid #003C96;cursor:pointer;flex:none;padding:0 0 1px;font-family:inherit">상세 보기</button>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:grid;grid-template-columns:minmax(0,1fr);gap:12px">
+    <sc-if value="{{ isMaint }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#FFFFFF;border:1px solid #CBD8E8;padding:13px 15px 15px;display:flex;flex-direction:column;gap:11px;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid #DDE6F0;padding-bottom:7px">
+          <h2 style="margin:0;font-size:13px;font-weight:700;letter-spacing:-0.01em">부품 조달 현황</h2>
+          <span style="font-size:10.5px;color:#566B85;font-weight:500">미완료 요청에 필요한 부품 전체 · {{ procurementSub }}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:10px">
+          <sc-for list="{{ procurement }}" as="pr" hint-placeholder-count="2">
+            <div style="border:1px solid #DDE6F0;border-left:4px solid {{ pr.color }};background:#FFFFFF;padding:11px 12px;display:flex;flex-direction:column;gap:7px;min-width:0">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:9px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:700;color:#0F1E33">{{ pr.name }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#4A5C74;flex:none">{{ pr.code }}</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px;font-size:11px;color:#4A5C74">
+                <span style="font-weight:600;color:#2C4159">{{ pr.assetName }} · {{ pr.target }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#566B85">{{ pr.reqId }}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;border-top:1px solid #E7EEF6;padding-top:7px">
+                <span style="font-size:10.5px;font-weight:700;color:{{ pr.ink }};background:{{ pr.tint }};padding:2px 7px;white-space:nowrap">{{ pr.stock }}</span>
+                <span style="font-size:10.5px;color:#566B85">{{ pr.lead }}</span>
+                <span style="font-size:10.5px;font-weight:700;color:{{ pr.ink }};margin-left:auto;white-space:nowrap">{{ pr.state }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;color:#566B85;line-height:1.6">{{ procurementEmpty }}</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#FFFFFF;border:1px solid #CBD8E8;padding:13px 15px 15px;display:flex;flex-direction:column;gap:11px;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid #DDE6F0;padding-bottom:7px">
+          <h2 style="margin:0;font-size:13px;font-weight:700;letter-spacing:-0.01em">운영 선택별 생산 영향</h2>
+          <span style="font-size:10.5px;color:#566B85;font-weight:500">선택 설비 · 조건부 잔여 차질</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:10px">
+          <sc-for list="{{ variants }}" as="v" hint-placeholder-count="3">
+            <div style="border:1px solid #DDE6F0;background:#FFFFFF;padding:11px 12px 12px;display:flex;flex-direction:column;gap:9px;min-width:0">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:9px;flex-wrap:wrap">
+                <span style="font-size:13.5px;font-weight:700;color:#0F1E33">{{ v.name }}</span>
+                <span style="font-size:10.5px;font-weight:700;color:{{ v.dueColor }};background:{{ v.dueBg }};padding:2px 7px;white-space:nowrap;flex:none">{{ v.due }}</span>
+              </div>
+              <div style="display:flex;height:12px;background:#EAF0F7;border:1px solid #DDE6F0;overflow:hidden">
+                <div style="width:{{ v.okPct }};background:#00806B"></div>
+                <div style="width:{{ v.shortPct }};background:#C0342B"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:#DDE6F0;border:1px solid #DDE6F0">
+                <div style="background:#F8FBFE;padding:7px 9px;display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font-size:10px;color:#4A5C74;font-weight:600">검토 재공</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:#0F1E33">{{ v.plan }}</span>
+                </div>
+                <div style="background:#F8FBFE;padding:7px 9px;display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font-size:10px;color:#4A5C74;font-weight:600">잔여 차질</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:{{ v.shortColor }}">{{ v.short }}</span>
+                </div>
+                <div style="background:#F8FBFE;padding:7px 9px;display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font-size:10px;color:#4A5C74;font-weight:600">처리 가능</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:{{ v.shortColor }}">{{ v.money }}</span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:9px;flex-wrap:wrap;border-top:1px solid #E7EEF6;padding-top:7px;font-size:10.5px;color:#566B85">
+                <span>{{ v.price }}</span>
+                <span style="font-weight:600;color:#003C96">{{ v.moveable }}</span>
+              </div>
+              <button type="button" class="recovery-button" onClick="{{ v.onRecovery }}">{{ v.recoveryLabel }} →</button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="display:{{ signalShow }};background:#FFFFFF;border:1px solid #CBD8E8;padding:13px 15px 15px;flex-direction:column;gap:12px;min-width:0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid #DDE6F0;padding-bottom:7px">
+        <h2 style="margin:0;font-size:13px;font-weight:700;letter-spacing:-0.01em">조회된 상태 신호</h2>
+        <span style="font-size:10.5px;color:#566B85;font-weight:500">관측 신호 최대 4개 · 막대는 관측 범위 내 상대 크기 · {{ signalAgeLabel }}</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:10px;flex:1;min-height:150px">
+        <sc-for list="{{ signals }}" as="s" hint-placeholder-count="4">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px;height:100%">
+            <div style="flex:1;position:relative;background:#F2F6FB;border:1px solid #DDE6F0;display:flex;align-items:flex-end;min-height:110px">
+              <div style="position:absolute;left:0;right:0;bottom:{{ s.bandBottom }};height:{{ s.bandHeight }};background:#E4F4F8;border-top:1px dashed #3CB4C8;border-bottom:1px dashed #3CB4C8"></div>
+              <div style="position:relative;width:100%;height:110px;display:flex;align-items:flex-end;gap:1px;padding:0 2px">
+                <sc-for list="{{ s.bars }}" as="b" hint-placeholder-count="34">
+                  <div style="flex:1;min-width:0;height:{{ b.h }};background:{{ b.bg }};opacity:{{ b.op }};transition:height 2.9s linear,background .4s linear,opacity .8s linear"></div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+              <span style="display:flex;align-items:baseline;gap:4px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:{{ s.stateColor }}">{{ s.arrow }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:#0F1E33">{{ s.value }}</span>
+              </span>
+              <span style="font-size:10px;color:#566B85;font-family:'IBM Plex Mono',monospace">{{ s.unit }}</span>
+              <span style="font-size:11px;font-weight:600;color:#2C4159;line-height:1.35;text-wrap:pretty">{{ s.label }}</span>
+              <span style="font-size:10px;color:{{ s.stateColor }};font-weight:600">{{ s.state }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 14px;border-top:1px solid #DDE6F0;padding-top:8px;font-size:10.5px;color:#4A5C74">
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:8px;background:#E4F4F8;border-top:1px dashed #3CB4C8;border-bottom:1px dashed #3CB4C8;display:block"></span>정상 범위 미제공</span>
+        <span>왼쪽이 과거 · 오른쪽이 최근 관측</span>
+        <span style="margin-left:auto">{{ signalQualityNote }}</span>
+      </div>
+    </div>
+  </section>
+
+  <sc-if value="{{ detailOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:40;display:flex;justify-content:flex-end">
+      <div onClick="{{ onCloseDetail }}" style="position:absolute;inset:0;background:rgba(15,30,51,.34)"></div>
+      <aside style="position:relative;width:min(740px,96vw);height:100%;background:#FFFFFF;border-left:2px solid #003C96;box-shadow:-14px 0 40px rgba(15,30,51,.18);display:flex;flex-direction:column;animation:slidein .22s cubic-bezier(.2,0,0,1)">
+
+        <div style="flex:none;padding:14px 18px 0;border-bottom:1px solid #DDE6F0;background:#F8FBFE">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#566B85">공장 현황 / {{ selPlace }}</span>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+                <h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-0.02em">{{ selName }}</h2>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4A5C74">{{ selId }}</span>
+              </div>
+            </div>
+            <button type="button" onClick="{{ onCloseDetail }}" title="닫기 (Esc)" style="flex:none;width:32px;height:32px;border:1px solid #C3D3E6;background:#FFFFFF;color:#2C4159;cursor:pointer;font-size:15px;line-height:1;font-family:inherit" style-hover="background:#EAF0F7">✕</button>
+          </div>
+
+          <sc-if value="{{ recoveryClosed }}"><div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 0 13px">
+            <span style="font-size:12.5px;font-weight:700;color:#FFF;background:{{ selSolid }};padding:5px 11px;white-space:nowrap;flex:none">{{ selGrade }}</span>
+            <div style="display:flex;align-items:baseline;gap:6px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600;line-height:1;color:{{ selInk }}">{{ selRisk }}</span>
+              <span style="font-size:11px;color:#4A5C74;font-weight:600">위험 점수</span>
+            </div>
+            <span style="font-size:11.5px;color:#4A5C74">예측 구간 {{ horizonLabel }} · 조치 기준선 {{ warnValLabel }}</span>
+            <span title="{{ artifactLine }}" style="font-size:11px;font-weight:600;color:{{ staleColor }};margin-left:auto">{{ staleLine }}</span>
+          </div></sc-if><sc-if value="{{ recoveryOpen }}"><div style="padding:12px 0;font-size:12px;color:#566B85">{{ recoveryDue }} · 대응 전 부족 {{ recoveryShort }}개 · 근거 기준 확인 필요</div></sc-if>
+
+          <div style="display:flex;gap:2px">
+            <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
+              <button type="button" onClick="{{ tb.onSelect }}" style="border:none;background:{{ tb.bg }};color:{{ tb.fg }};font-weight:{{ tb.weight }};font-size:12.5px;font-family:inherit;padding:9px 14px;cursor:pointer;letter-spacing:-0.01em">{{ tb.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:16px 18px 22px;display:flex;flex-direction:column;gap:16px"><sc-if value="{{ recoveryClosed }}">
+
+          <sc-if value="{{ isSummary }}" hint-placeholder-val="{{ true }}"><sc-if value="{{ flowObservationShow }}"><div style="border:1px solid #C3D3E6;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:12px"><strong>보전팀 점검·작업 결과</strong><span>{{ flowObservationResult }}</span><label>후속 관측 확인 메모<input class="recovery-input" style="width:100%;box-sizing:border-box;font-family:inherit" aria-label="후속 관측 확인 메모" value="{{ flowObservationNote }}" onChange="{{ onFlowObservationNote }}" /></label><button type="button" class="recovery-button" onClick="{{ onFlowObservation }}" disabled="{{ flowObservationDisabled }}">후속 관측 확인 기록</button><span style="font-size:11px;color:#566B85">사용자 확인 기록입니다. 설비 위험도나 생산 실적을 자동으로 변경하지 않습니다.</span></div></sc-if>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                  <span style="font-size:11.5px;font-weight:700;color:#FFF;background:{{ priorityColor }};padding:4px 10px">{{ priorityLabel }}</span>
+                  <span style="font-size:12.5px;color:#2C4159;font-weight:500">{{ priorityHead }}</span>
+                </div>
+                <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px">
+                  <sc-for list="{{ reasons }}" as="r" hint-placeholder-count="4">
+                    <li style="display:flex;gap:9px;align-items:flex-start;font-size:12.5px;line-height:1.6;color:#1E3450">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#5F7590;flex:none;padding-top:2px">{{ r.no }}</span>
+                      <span style="text-wrap:pretty"><sc-for list="{{ r.parts }}" as="pt" hint-placeholder-count="1"><span style="font-weight:{{ pt.weight }};color:{{ pt.color }}">{{ pt.text }}</span></sc-for></span>
+                    </li>
+                  </sc-for>
+                </ul>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <h3 style="margin:0;font-size:12px;font-weight:700;color:#2C4159;border-bottom:1px solid #DDE6F0;padding-bottom:6px">지금 할 일과 인계</h3>
+                <sc-if value="{{ readOnlyNote }}" hint-placeholder-val="{{ false }}">
+                  <div style="border:1px solid #DDE6F0;background:#F2F6FB;padding:11px 12px;display:flex;flex-direction:column;gap:5px">
+                    <span style="font-size:12.5px;font-weight:700;color:#0F1E33">{{ primaryLabel }}</span>
+                    <span style="font-size:11px;color:#4A5C74;line-height:1.6;text-wrap:pretty">{{ readOnlyNote }}</span>
+                  </div>
+                </sc-if>
+                <div style="display:{{ handoffShow }};border:1px solid #CBD8E8;background:#F8FBFE;padding:12px 13px;flex-direction:column;gap:9px">
+                  <div style="font-size:14px;font-weight:700;color:#0F1E33">{{ primaryLabel }}</div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:#4A5C74">
+                    <span style="background:#EAF0F7;border:1px solid #D3E0EE;padding:2px 6px;font-weight:600">담당 {{ primaryOwner }}</span>
+                  </div>
+
+                  <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-top:1px solid #DDE6F0;padding-top:9px">
+                    <span style="font-size:11px;color:#4A5C74;font-weight:600;white-space:nowrap">설비 엔지니어</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#003C96;font-weight:700">→</span>
+                    <span style="font-size:12.5px;font-weight:700;color:#FFFFFF;background:#003C96;padding:3px 9px;white-space:nowrap">{{ handoffTo }}</span>
+                    <span style="font-size:12px;color:#2C4159;font-weight:600">{{ handoffWhat }}</span>
+                  </div>
+                  <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px">
+                    <sc-for list="{{ handoffNeed }}" as="hn" hint-placeholder-count="3">
+                      <li style="display:flex;gap:7px;align-items:flex-start;font-size:11.5px;line-height:1.5;color:#2C4159">
+                        <span style="color:#003C96;flex:none;font-weight:700">·</span>
+                        <span style="text-wrap:pretty">{{ hn.text }}</span>
+                      </li>
+                    </sc-for>
+                  </ul>
+                  <sc-if value="{{ handoffBlocked }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:11px;color:#94251E;line-height:1.6;background:#FBEDEC;border:1px solid #E3A7A2;padding:8px 10px;text-wrap:pretty">{{ handoffBlocked }}</div>
+                  </sc-if>
+                  <sc-if value="{{ handoffSent }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#E8F5F2;border:1px solid #A9D5CB;padding:9px 11px">
+                      <span style="font-size:11.5px;font-weight:700;color:#00594A;white-space:nowrap">서버 저장 완료</span>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#2C4159">{{ handoffSentLabel }}</span>
+                    </div>
+                  </sc-if>
+                  <button type="button" onClick="{{ onHandoff }}" disabled="{{ handoffDisabled }}" style="align-self:flex-start;border:1px solid {{ handoffBtnBorder }};background:{{ handoffBtnBg }};color:{{ handoffBtnFg }};font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;cursor:{{ handoffBtnCursor }};white-space:nowrap" style-hover="border-color:#002B6B">{{ handoffBtnLabel }}</button>
+                  <div style="font-size:11px;color:{{ handoffPlanColor }};line-height:1.6;text-wrap:pretty">{{ handoffPlan }}</div>
+                  <sc-if value="{{ planConstraint }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;gap:4px;background:#FBEDEC;border:1px solid #E3A7A2;padding:9px 11px">
+                      <span style="font-size:11px;font-weight:700;color:#94251E">생산관리자 → 보전팀 · 일정 재협의</span>
+                      <span style="font-size:11px;color:#94251E;line-height:1.6;text-wrap:pretty">{{ planConstraint }}</span>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <h3 style="margin:0;font-size:12px;font-weight:700;color:#2C4159;border-bottom:1px solid #DDE6F0;padding-bottom:6px">진행 단계 · 지금 {{ stepNow }}</h3>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <sc-for list="{{ steps }}" as="st" hint-placeholder-count="11">
+                    <div style="display:flex;align-items:center;gap:9px;background:{{ st.bg }};border:{{ st.border }};padding:6px 10px">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:{{ st.subFg }};flex:none;width:16px">{{ st.no }}</span>
+                      <span style="font-size:11px;color:{{ st.fg }};flex:none;width:12px;text-align:center">{{ st.glyph }}</span>
+                      <span style="font-size:12.5px;font-weight:{{ st.weight }};color:{{ st.fg }};flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ st.label }}</span>
+                      <span style="font-size:10.5px;font-weight:600;color:{{ st.subFg }};flex:none;white-space:nowrap">{{ st.mark }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <h3 style="margin:0;font-size:12px;font-weight:700;color:#2C4159;border-bottom:1px solid #DDE6F0;padding-bottom:6px">정비 · 생산 현황</h3>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:#DDE6F0;border:1px solid #DDE6F0">
+                  <sc-for list="{{ roleContext }}" as="c" hint-placeholder-count="6">
+                    <div style="background:#F8FBFE;padding:9px 10px;display:flex;flex-direction:column;gap:4px;min-width:0">
+                      <span style="font-size:10.5px;color:#4A5C74;font-weight:600">{{ c.label }}</span>
+                      <span style="font-family:'IBM Plex Sans KR',sans-serif;font-size:13px;font-weight:600;line-height:1.5;white-space:pre-line;word-break:keep-all;overflow-wrap:anywhere;color:{{ c.color }}">{{ c.value }}</span>
+                    </div>
+                  </sc-for>
+
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isSignals }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:11px">
+              <div style="font-size:11.5px;color:#4A5C74;line-height:1.6">위험 점수를 밀어올린 순서대로 정렬했습니다. 오른쪽 선은 최근 24시간 흐름입니다.</div>
+              <sc-for list="{{ detailSignals }}" as="d" hint-placeholder-count="4">
+                <div style="border:1px solid #CBD8E8;border-left:4px solid {{ d.color }};background:#FFFFFF;padding:12px 13px;display:flex;flex-direction:column;gap:9px">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                    <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+                        <span style="font-size:14px;font-weight:700;color:#0F1E33">{{ d.label }}</span>
+                        <span style="font-size:10.5px;font-weight:600;color:#4A5C74">{{ d.rank }}</span>
+                      </div>
+                      <div style="display:flex;align-items:baseline;gap:5px">
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;color:#0F1E33">{{ d.value }}</span>
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#566B85">{{ d.unit }}</span>
+                        <span style="font-size:11px;font-weight:600;color:{{ d.stateColor }};margin-left:4px">{{ d.state }}</span>
+                      </div>
+                    </div>
+                    <svg viewBox="0 0 108 32" style="flex:none;width:108px;height:32px;display:block">
+                      <path d="{{ d.spark }}" fill="none" stroke="{{ d.color }}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></path>
+                    </svg>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:5px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:#4A5C74">
+                      <span style="font-weight:600">{{ d.direction }}</span>
+                      <span style="font-family:'IBM Plex Mono',monospace;color:#566B85">모델 기여값 {{ d.contribVal }}</span>
+                    </div>
+                    <div style="height:6px;background:#EAF0F7;border:1px solid #DDE6F0">
+                      <div style="height:100%;width:{{ d.contribPct }};background:{{ d.color }};transition:width .9s cubic-bezier(.4,0,.2,1)"></div>
+                    </div>
+                  </div>
+                  <div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:10.5px;color:#4A5C74;border-top:1px solid #E7EEF6;padding-top:7px">
+                    <span>{{ d.baseline }}</span>
+                    <span style="color:{{ d.qualityColor }};font-weight:600">{{ d.quality }}</span>
+                    <span style="width:100%">{{ d.window }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isMachine }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid #DDE6F0;padding-bottom:6px">
+                  <h3 style="margin:0;font-size:12px;font-weight:700;color:#2C4159">설비 계통도</h3>
+                  <span style="font-size:10.5px;color:#566B85;font-weight:500">번호를 아래 목록에서 같은 번호로 찾습니다</span>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+                  <span style="font-size:14.5px;font-weight:700;color:#0F1E33">{{ machineKind }}</span>
+                  <span style="font-size:11.5px;color:#4A5C74">{{ machineSpec }}</span>
+                </div>
+                <div style="border:1px solid #DDE6F0;background:#F8FBFE;padding:14px 12px 12px">
+                  <div style="display:flex;align-items:flex-start;gap:0;min-width:0">
+                    <sc-for list="{{ machineFlow }}" as="fl" hint-placeholder-count="6">
+                      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:0">
+                       <div style="display:flex;align-items:center;gap:0;min-width:0">
+                        <div style="position:relative;flex:1;min-width:0;border:{{ fl.border }};background:#FFFFFF;padding:13px 6px 9px;display:flex;flex-direction:column;align-items:center;gap:2px">
+                          <span style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);width:17px;height:17px;background:#003C96;color:#FFFFFF;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;line-height:1;align-items:center;justify-content:center;display:{{ fl.badgeShow }}">{{ fl.no }}</span>
+                          <span style="font-size:11px;font-weight:700;color:{{ fl.fg }};text-align:center;line-height:1.3;letter-spacing:-0.02em">{{ fl.label }}</span>
+                          <span style="font-size:9.5px;color:#5F7590;text-align:center;line-height:1.3">{{ fl.sub }}</span>
+                        </div>
+                        <span style="flex:none;width:14px;height:1.5px;background:#8FA3B8;display:{{ fl.arrowShow }}"></span>
+                       </div>
+                       <sc-if value="{{ fl.hasBranch }}" hint-placeholder-val="{{ false }}">
+                         <div style="display:flex;flex-direction:column;align-items:center;min-width:0;padding-right:{{ fl.branchPad }}">
+                           <span style="width:1.5px;height:16px;background:#8FA3B8;flex:none"></span>
+                           <div style="width:100%;border:{{ fl.branchBorder }};background:#FFFFFF;padding:6px 8px;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0">
+                             <span style="width:17px;height:17px;background:#003C96;color:#FFFFFF;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;line-height:1;display:{{ fl.branchBadgeShow }};align-items:center;justify-content:center;flex:none">{{ fl.branchNo }}</span>
+                             <span style="font-size:11px;font-weight:700;color:{{ fl.branchFg }};letter-spacing:-0.02em;text-align:center;line-height:1.3">{{ fl.branchLabel }}</span>
+                             <span style="font-size:9.5px;color:#5F7590;text-align:center;line-height:1.3">{{ fl.branchSub }}</span>
+                           </div>
+                         </div>
+                       </sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid #DDE6F0;padding-bottom:6px">
+                  <h3 style="margin:0;font-size:12px;font-weight:700;color:#2C4159">점검 부위와 교체 부품</h3>
+                  <span style="font-size:10.5px;color:#566B85;font-weight:500">우선순위 3위까지</span>
+                </div>
+                <sc-for list="{{ machineTargets }}" as="mt" hint-placeholder-count="5">
+                  <div style="border:1px solid #DDE6F0;border-left:4px solid {{ mt.color }};background:#FFFFFF;padding:12px 13px 13px;display:flex;flex-direction:column;gap:10px;min-width:0">
+
+                    <div style="display:flex;align-items:flex-start;gap:10px">
+                      <span style="flex:none;width:22px;height:22px;background:#003C96;color:#FFFFFF;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ mt.no }}</span>
+                      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                        <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+                          <span style="font-size:14px;font-weight:700;color:#0F1E33">{{ mt.name }}</span>
+                          <span style="font-size:10.5px;font-weight:700;color:{{ mt.ink }};white-space:nowrap">{{ mt.label }}</span>
+                          <span style="font-size:10.5px;font-weight:700;color:{{ mt.maturityColor }};margin-left:auto;white-space:nowrap;flex:none">{{ mt.maturity }}</span>
+                        </div>
+                        <span style="font-size:11.5px;color:#4A5C74;line-height:1.5;text-wrap:pretty">{{ mt.assoc }}</span>
+                      </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:#DDE6F0;border:1px solid #DDE6F0">
+                      <div style="background:#F8FBFE;padding:8px 10px;display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <span style="font-size:10.5px;color:#4A5C74;font-weight:600">현장 위치</span>
+                        <span style="font-size:12px;font-weight:600;color:#0F1E33;line-height:1.45">{{ mt.where }}</span>
+                      </div>
+                      <div style="background:#F8FBFE;padding:8px 10px;display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <span style="font-size:10.5px;color:#4A5C74;font-weight:600">확인 방법</span>
+                        <span style="font-size:12px;font-weight:600;color:#0F1E33;line-height:1.45">{{ mt.how }}</span>
+                      </div>
+                    </div>
+
+                    <sc-if value="{{ mt.hasParts }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;flex-direction:column;gap:7px;border-top:1px solid #E7EEF6;padding-top:9px">
+                        <span style="font-size:11px;font-weight:700;color:#2C4159">{{ mt.partsNote }}</span>
+                        <sc-for list="{{ mt.parts }}" as="pt" hint-placeholder-count="1">
+                          <div style="background:#F8FBFE;border:1px solid #DDE6F0;padding:9px 10px;display:flex;flex-direction:column;gap:7px;min-width:0">
+                            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:9px;flex-wrap:wrap">
+                              <span style="font-size:12.5px;font-weight:700;color:#0F1E33">{{ pt.name }}</span>
+                              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#4A5C74;flex:none">{{ pt.code }}</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:9px">
+                              <div style="flex:1;min-width:0;height:7px;background:#EAF0F7;border:1px solid #DDE6F0;overflow:hidden">
+                                <div style="height:100%;width:{{ pt.pct }};background:{{ pt.color }};transition:width .6s ease"></div>
+                              </div>
+                              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:{{ pt.ink }};flex:none">{{ pt.pctLabel }}</span>
+                              <span style="font-size:10px;font-weight:700;color:{{ pt.ink }};background:{{ pt.tint }};padding:2px 6px;flex:none;white-space:nowrap">{{ pt.state }}</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:10.5px;color:#4A5C74">
+                              <span style="font-family:'IBM Plex Mono',monospace">{{ pt.used }}</span>
+                              <span style="font-weight:700;color:{{ pt.stockColor }};background:{{ pt.stockBg }};padding:2px 6px;margin-left:auto;white-space:nowrap">{{ pt.stock }}</span>
+                              <span>{{ pt.lead }}</span>
+                            </div>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ mt.noParts }}" hint-placeholder-val="{{ false }}">
+                      <div style="font-size:11px;color:#4A5C74;line-height:1.6;background:#F2F6FB;border:1px solid #DDE6F0;padding:8px 10px">{{ mt.noParts }}</div>
+                    </sc-if>
+
+                    <div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid #E7EEF6;padding-top:9px">
+                      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#003C96;font-weight:500">{{ mt.sopLine }}</span>
+                        <span style="font-size:10.5px;font-weight:700;color:{{ mt.safetyColor }};border:1px solid {{ mt.safetyColor }}55;padding:2px 6px;white-space:nowrap">{{ mt.safety }}</span>
+                        <span style="font-size:10.5px;font-weight:600;color:#4A5C74;background:#EAF0F7;border:1px solid #D3E0EE;padding:2px 6px;white-space:nowrap">{{ mt.approval }}</span>
+                      </div>
+                      <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px">
+                        <sc-for list="{{ mt.checks }}" as="ck" hint-placeholder-count="3">
+                          <li style="display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.55;color:#1E3450">
+                            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5F7590;flex:none;padding-top:2px">{{ ck.no }}</span>
+                            <span style="text-wrap:pretty">{{ ck.text }}</span>
+                          </li>
+                        </sc-for>
+                      </ul>
+                      <div style="display:flex;flex-wrap:wrap;gap:5px">
+                        <sc-for list="{{ mt.measures }}" as="ms" hint-placeholder-count="2">
+                          <span style="font-size:10.5px;font-weight:600;color:#2C4159;background:#F2F6FB;border:1px solid #DDE6F0;padding:3px 7px">측정 {{ ms.text }}</span>
+                        </sc-for>
+                        <span style="font-size:10.5px;font-weight:600;color:#2C4159;background:#F2F6FB;border:1px solid #DDE6F0;padding:3px 7px">신호 {{ mt.signal }}</span>
+                      </div>
+                      <div style="font-size:11px;color:#4A5C74;line-height:1.6;background:#FBF3E3;border:1px solid #EBDFC0;padding:8px 10px;text-wrap:pretty">{{ mt.boundary }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="font-size:10.5px;color:#566B85;line-height:1.6">{{ machineHiddenNote }}</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isHistory }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:17px">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <h3 style="margin:0;font-size:12px;font-weight:700;color:#2C4159;border-bottom:1px solid #DDE6F0;padding-bottom:6px">판단 진행 상황</h3>
+                <sc-for list="{{ timeline }}" as="tl" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid #E9F0F7">
+                    <span style="flex:none;width:7px;height:7px;background:{{ tl.color }};display:block;margin-top:5px"></span>
+                    <div style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1">
+                      <span style="font-size:12.5px;font-weight:600;color:#0F1E33">{{ tl.label }}</span>
+                      <span style="font-size:11px;color:#4A5C74">{{ tl.who }}</span>
+                    </div>
+                    <div style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#566B85">{{ tl.when }}</span>
+                      <span style="font-size:10px;font-weight:700;color:{{ tl.fg }};background:{{ tl.bg }};padding:2px 6px">{{ tl.status }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <h3 style="margin:0;font-size:12px;font-weight:700;color:#2C4159;border-bottom:1px solid #DDE6F0;padding-bottom:6px">설비 이력</h3>
+                <sc-for list="{{ eqHistory }}" as="eh" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid #E9F0F7">
+                    <span style="flex:none;width:7px;height:7px;background:{{ eh.color }};display:block;margin-top:5px"></span>
+                    <div style="display:flex;flex-direction:column;gap:3px;min-width:0;flex:1">
+                      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+                        <span style="font-size:12.5px;font-weight:600;color:#0F1E33">{{ eh.kind }}</span>
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#566B85">{{ eh.when }}</span>
+                      </div>
+                      <span style="font-size:11.5px;color:#4A5C74;line-height:1.55;text-wrap:pretty">{{ eh.desc }}</span>
+                      <span style="font-size:10.5px;color:#5F7590">출처 {{ eh.src }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <h3 style="margin:0;font-size:12px;font-weight:700;color:#2C4159;border-bottom:1px solid #DDE6F0;padding-bottom:6px">아직 확인 안 된 정보</h3>
+                <sc-for list="{{ gaps }}" as="gp" hint-placeholder-count="1">
+                  <div style="display:flex;align-items:stretch;border:1px solid #DDE6F0;background:#FFFFFF">
+                    <div style="flex:none;width:13px;background:repeating-linear-gradient(135deg,#DDE6F0 0 3px,#F8FBFE 3px 7px)"></div>
+                    <div style="flex:1;min-width:0;padding:10px 12px 11px;display:flex;flex-direction:column;gap:6px">
+                      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+                        <span style="font-size:13px;font-weight:700;color:#0F1E33">{{ gp.name }}</span>
+                        <span style="font-size:10.5px;font-weight:700;color:{{ gp.stateColor }};border:1px solid {{ gp.stateColor }}55;padding:2px 7px;flex:none">{{ gp.state }}</span>
+                      </div>
+                      <span style="font-size:11.5px;color:#4A5C74;line-height:1.55;text-wrap:pretty">{{ gp.reason }}</span>
+                      <div style="display:flex;align-items:baseline;gap:8px;border-top:1px dashed #DDE6F0;padding-top:7px;flex-wrap:wrap">
+                        <span style="font-size:10.5px;font-weight:700;color:#2C4159;background:#F2F6FB;border:1px solid #DDE6F0;padding:2px 7px;flex:none">{{ gp.owner }}</span>
+                        <span style="font-size:11px;color:#4A5C74;line-height:1.5;text-wrap:pretty">{{ gp.blocks }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+        </sc-if><sc-if value="{{ recoveryOpen }}"><div style="display:flex;flex-direction:column;gap:14px">
+<div style="font-size:13px;color:#0F1E33;line-height:1.7">부족한 물량을 어떻게 메울지 비교하세요. 추가 생산과 납기 조정을 구분합니다.</div>
+<sc-for list="{{ recoveryOptions }}" as="ro"><div style="border:1px solid #DDE6F0;background:#F8FBFE;padding:13px;display:flex;flex-direction:column;gap:9px"><strong style="font-size:13px">{{ ro.title }}</strong><label style="font-size:12px;color:#4A5C74">{{ ro.label }} <input class="recovery-input" type="number" min="0" max="{{ ro.max }}" step="1" value="{{ ro.value }}" onChange="{{ ro.onChange }}" aria-label="{{ ro.label }}" /> {{ ro.unit }}</label><span style="font-size:11px;color:#566B85;line-height:1.6">{{ ro.note }}</span></div></sc-for>
+<div style="border:1px solid #C3D3E6;background:#F1F7FD;padding:13px;font-size:12px;line-height:1.9"><strong>추가 생산 예상 {{ recoveryAdded }}개 · 예상 잔여 부족 {{ recoveryRemaining }}개</strong><div>납기 이월 제안 {{ recoveryDeferred }}개 · 처리방안 미정 {{ recoveryUncovered }}개</div><div style="font-size:11px;color:#566B85">납기 이월은 생산 증가가 아닙니다. 원래 계획과 실적은 변경하지 않습니다.</div></div>
+<details style="font-size:11px;color:#566B85;line-height:1.7"><summary>계산 가정과 확인할 조건</summary>계산·저장 계약 미지원. 인력·자재·품목 적합성·여력·납기 전 완료 여부는 확인 전입니다.</details>
+<div style="border-top:1px solid #DDE6F0;padding-top:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span style="font-size:11px;color:#566B85" aria-live="polite">{{ recoverySaveNote }}</span><button type="button" class="recovery-button" onClick="{{ onSaveRecovery }}" disabled="{{ recoverySaveDisabled }}">대응안 초안 저장</button></div><sc-if value="{{ flowReplyShow }}"><button type="button" class="recovery-button" onClick="{{ onFlowReply }}" disabled="{{ flowReplyDisabled }}">생산 대응·정지 일정 회신</button><span style="font-size:11px;color:#566B85">저장한 대응안을 회신합니다. 보전팀이 착수 조건을 별도로 확인합니다.</span></sc-if><sc-if value="{{ flowProductionShow }}"><label style="font-size:12px">생산 실적·납기 확인 메모<input class="recovery-input" style="width:100%;box-sizing:border-box;font-family:inherit" aria-label="생산 실적 확인 메모" value="{{ flowProductionNote }}" onChange="{{ onFlowProductionNote }}" /></label><button type="button" class="recovery-button" onClick="{{ onFlowProduction }}" disabled="{{ flowProductionDisabled }}">생산 대응 결과 기록</button></sc-if>
+</div></sc-if></div>
+      </aside>
+    </div>
+  </sc-if>
+</div>
+
+</template>
+<script type="text/x-dc" data-dc-script>
+const DEFAULTS={"attnValLabel": "미확인", "bandAttnH": "미확인", "bandNormH": "미확인", "bandNormY": "미확인", "bandWarnH": "미확인", "chartArea": "미확인", "chartCursor": "미확인", "chartH": "미확인", "chartLine": "미확인", "chartPanelShow": "미확인", "chartTicks": [], "context": [], "ctxShow": "미확인", "curReqAsset": "미확인", "curReqAssignee": "미확인", "curReqChecks": [], "curReqFrom": "미확인", "curReqHow": "미확인", "curReqId": "미확인", "curReqSafety": "미확인", "curReqSafetyColor": "미확인", "curReqSop": "미확인", "curReqState": "미확인", "curReqTargetName": "미확인", "curReqTargetNo": "미확인", "curReqWhat": "미확인", "curReqWhere": "미확인", "detailOpen": false, "detailSignals": [], "eqHistory": [], "eventsSub": "미확인", "eventsTitle": "미확인", "flowAction": false, "flowClosure": false, "flowDisabled": false, "flowHours": false, "flowInspect": false, "flowInspection": false, "flowNoActionDisabled": false, "flowObservationDisabled": false, "flowObservationNote": false, "flowObservationResult": false, "flowObservationShow": false, "flowProductionDisabled": false, "flowProductionNote": false, "flowProductionShow": false, "flowProposal": false, "flowReady": false, "flowReadyChecked": false, "flowReplyDisabled": false, "flowReplyShow": false, "flowResult": false, "flowSku": false, "flowSlot": false, "flowSummary": false, "flowTitle": false, "flowWorking": false, "gaps": [], "gridCols": "미확인", "handoffBlocked": "미확인", "handoffBtnBg": "미확인", "handoffBtnBorder": "미확인", "handoffBtnCursor": "미확인", "handoffBtnFg": "미확인", "handoffBtnLabel": "미확인", "handoffNeed": [], "handoffPlan": "미확인", "handoffPlanColor": "미확인", "handoffSent": false, "handoffSentLabel": false, "handoffShow": "미확인", "handoffTo": "미확인", "handoffWhat": "미확인", "headFs": "미확인", "horizonLabel": "미확인", "isHistory": false, "isMachine": false, "isMaint": false, "isPlan": false, "isSignals": false, "isSummary": false, "kpis": [], "labAttnPct": "미확인", "labNormPct": "미확인", "labWarnPct": "미확인", "legend": [], "legendShow": "미확인", "lineAttnY": "미확인", "lineWarnY": "미확인", "lines": [], "machineFlow": [], "machineHiddenNote": "미확인", "machineKind": "미확인", "machineSpec": "미확인", "machineTargets": [], "maintBadge": "미확인", "maintBadgeBg": "미확인", "maintBadgeFg": "미확인", "maintBg": "미확인", "maintBorder": "미확인", "maintFg": "미확인", "maintW": "미확인", "mapIsBig": "미확인", "mapShow": "미확인", "nowLabel": "미확인", "nowTop": "미확인", "nowTrans": "미확인", "opCtx": [], "pendingCount": "미확인", "pendingShow": "미확인", "planBadge": "미확인", "planBadgeBg": "미확인", "planBadgeFg": "미확인", "planBg": "미확인", "planBorder": "미확인", "planConstraint": "미확인", "planEvents": [], "planFg": "미확인", "planHeadNote": "미확인", "planW": "미확인", "primaryInput": "미확인", "primaryLabel": "미확인", "primaryOwner": "미확인", "priorityColor": "미확인", "priorityHead": "미확인", "priorityLabel": "미확인", "procurement": [], "procurementEmpty": "미확인", "procurementSub": "미확인", "readOnlyNote": "미확인", "reasons": [], "reasonsShow": "미확인", "recoverLabel": "미확인", "recoveryAdded": false, "recoveryClosed": false, "recoveryDeferred": false, "recoveryDue": false, "recoveryOpen": false, "recoveryOptions": [], "recoveryRate": false, "recoveryRemaining": false, "recoverySaveDisabled": false, "recoverySaveNote": false, "recoveryShort": false, "recoveryUncovered": false, "refillAnim": "미확인", "refillLabel": "미확인", "reqCount": "미확인", "reqEmpty": "미확인", "reqQueue": [], "selDelta": "미확인", "selFill": "미확인", "selFirstRisk": "미확인", "selGrade": "미확인", "selId": "미확인", "selInk": "미확인", "selName": "미확인", "selObservedAt": "미확인", "selPlace": "미확인", "selRisk": "미확인", "selSolid": "미확인", "selSourceNote": "미확인", "shiftBadge": "미확인", "shiftBadgeBg": "미확인", "shiftBadgeFg": "미확인", "shiftBg": "미확인", "shiftBorder": "미확인", "shiftEvents": [], "shiftFg": "미확인", "shiftW": "미확인", "shifts": [], "signalAgeLabel": "미확인", "signalQualityNote": "미확인", "signalShow": "미확인", "signals": [], "slideAnim": "미확인", "staleColor": "미확인", "staleLine": "미확인", "stepNow": "미확인", "steps": [], "tabs": [], "timeline": [], "variants": [], "warnValLabel": "미확인", "windows": [], "zoomBg": "미확인", "zoomBorder": "미확인", "zoomCursor": "미확인", "zoomFg": "미확인"};
+const CALLBACKS=["onAiSummary","onCloseDetail", "onFlowAdvance", "onFlowHours", "onFlowInspection", "onFlowNoAction", "onFlowObservation", "onFlowObservationNote", "onFlowProduction", "onFlowProductionNote", "onFlowProposal", "onFlowReady", "onFlowReply", "onFlowResult", "onFlowRevisit", "onFlowSku", "onFlowSlot", "onFocusChart", "onFocusMap", "onHandoff", "onOpenSelected", "onRoleMaint", "onRolePlan", "onRoleShift", "onSaveRecovery"];
+class Component extends DCLogic {
+ constructor(props){super(props);this.state={payload:null,role:null,focus:'chart',tab:'summary',detailOpen:false,result:''};}
+ componentDidMount(){this._message=e=>{const p=e.detail;const changed=this.state.payload?.selectedAssetId!==p.selectedAssetId||this.state.payload?.selectedEventId!==p.selectedEventId||JSON.stringify(this.state.payload?.detail?.snapshotBasis)!==JSON.stringify(p.detail?.snapshotBasis);this.setState({payload:p,...(changed?{result:''}:{})});};window.addEventListener('factory:state',this._message);this._key=e=>{if(e.key==='Escape')this.setState({detailOpen:false});};window.addEventListener('keydown',this._key);window.dispatchEvent(new CustomEvent('factory:ready'));if(window.factoryState)this._message({detail:window.factoryState});}
+ componentWillUnmount(){window.removeEventListener('factory:state',this._message);window.removeEventListener('keydown',this._key);}
+ send(type,data={}){window.dispatchEvent(new CustomEvent('factory:request',{detail:{type,...data}}));}
+ select(a,open=false){if(this.state.payload?.busy)return;this.setState({focus:'chart',detailOpen:open||this.state.payload?.selectedAssetId===a.assetId,result:''});this.send('operations:select',{assetId:a.assetId,eventId:a.eventId});}
+ renderVals(){
+ const p=this.state.payload||{},m=p.model||{},d=p.detail||null,all=m.assets||[],sel=all.find(a=>a.assetId===p.selectedAssetId)||all[0]||{}, role=this.state.role||({process_manager:'plan',maintenance_technician:'maint'}[p.role]||'shift'),big=this.state.focus==='map';
+ const n=v=>v==null?'미산정':String(v),r=v=>v==null?'미산정':v.toFixed(2),grade=a=>['warning','critical'].includes(a.status)?'warning':a.status==='attention'?'attention':a.status==='normal'?'normal':'hold';
+ const C={normal:'#00806B',attention:'#B57A00',warning:'#C0342B',hold:'#5A6E88'},INK={normal:'#00594A',attention:'#8A5C00',warning:'#94251E',hold:'#3B5170'},TINT={normal:'#E8F5F2',attention:'#FBF3E3',warning:'#FBEDEC',hold:'#EEF3F8'},SOLID={normal:'#00705E',attention:'#8A5C00',warning:'#B02F26',hold:'#4A5C74'},FILL={normal:'rgba(0,128,107,.13)',attention:'rgba(181,122,0,.15)',warning:'rgba(192,52,43,.14)',hold:'rgba(90,110,136,.12)'};
+ const g=grade(sel),series=d?.riskSeries||[],factors=d?.topFactors||[],impact=d?.operationContext?.productionImpact,impactText=impact==null?'미확인':impact==='none'?'없음':'있음';
+ const choose=a=>e=>{e?.stopPropagation();this.select(a);},open=a=>e=>{e?.stopPropagation();this.select(a,true);};
+ const lineNames=[...new Set(all.map(a=>a.line))];
+ const lines=lineNames.map(name=>{const aa=all.filter(a=>a.line===name);return{name,summary:`설비 ${aa.length}대`,cells:[...new Set(aa.map(a=>a.cell))].map(cell=>({name:cell||'셀 미확인',assets:aa.filter(a=>a.cell===cell).map(a=>{const g=grade(a),on=a.assetId===sel.assetId;return{code:a.displayName,no:a.assetId,riskLabel:r(a.failureProbability),onSelect:choose(a),title:a.displayName,bg:on?SOLID[g]:TINT[g],fg:on?'#FFF':INK[g],border:on?'2px solid #003C96':'1px solid '+C[g]+'55',metaShow:big?'block':'none',rank:'',rankShow:'none',rankBg:'#003C96',rankFg:'#FFF',pulse:'none',tileH:big?'52px':'30px',tileFs:big?'11px':'9.5px',tilePad:big?'0 4px':'0 1px',barW:a.failureProbability==null?'0%':(a.failureProbability*100)+'%',barColor:on?'rgba(255,255,255,.85)':C[g]};})}))};});
+ const events=(m.events||[]).slice(0,6).map(e=>{const a=all.find(a=>a.assetId===e.assetId)||{assetId:e.assetId,eventId:e.eventId};const g=grade(e);return{assetId:e.assetId,title:e.assetName+' · '+(e.predictedFailureType||'진단 확인 필요'),place:e.line,time:e.observedAt||'미확인',color:C[g],grade:{normal:'정상',attention:'주의',warning:'위험',hold:'보류'}[g],gradeColor:INK[g],cue:'근거 확인',cueColor:INK[g],onSelect:choose({...a,eventId:e.eventId}),onOpen:open({...a,eventId:e.eventId}),bg:e.assetId===sel.assetId?'#F1F7FD':'#FFFFFF',border:e.assetId===sel.assetId?'2px solid #003C96':'1px solid #DDE6F0',money:'비용 미산정',detail:'생산 영향·정지시간은 선택한 근거에서 확인합니다.'};});
+ const ctx=[{label:'생산 영향',value:impactText,color:'#0F1E33'},{label:'예상 정지시간',value:d?.event?.estimatedDowntimeMinutes==null?'미산정':d.event.estimatedDowntimeMinutes+'분',color:'#0F1E33'},{label:'기준 시각',value:d?.snapshotBasis?.observedAt||'미확인',color:'#0F1E33'}];
+ const ps=series.map((x,i)=>[series.length>1?i*352/(series.length-1):0,300-x.failureProbability*300]);const path=ps.map((v,i)=>(i?'L':'M')+v.join(' ')).join(' ');
+ const unknownShift={name:'교대 계획 확인 필요',hours:'구간 미확인',mark:'미산정',markFg:'#4A5C74',markBg:'#EEF3F8',border:'1px solid #DDE6F0',plan:'미산정',made:'미확인',loss:'미산정',madePct:'0%',lossPct:'0%',lossColor:'#4A5C74'};
+ const knownPlan=d?.operationContext?.productionPlan;
+ const work=p.lineage?.work_orders||[],results=p.lineage?.inspection_results||[],action=p.lineage?.maintenance_actions?.at(-1),result=results.at(-1),names={requested:'접수 대기',approved:'승인됨',in_progress:'진행 중',completed:'작업 완료',planned:'계획됨'};
+ const blocked=p.error||p.detailError||p.workflowError||p.blockedReason||'현재 서버의 역할·허용 액션 및 착수 조건 계약을 확인해야 합니다.';
+ const v={...DEFAULTS};
+ for(const key of CALLBACKS)v[key]=()=>{};
+ Object.assign(v,{siteLabel:(m.context?.workspaceName||'작업장 확인 필요')+' · '+lineNames.length+'개 라인 · 설비 '+all.length+'대',sourceLabel:p.error||p.workflowError||p.notice||(m.context?.warnings?.length?'일부 조회 미연결 · 상세 근거 확인':null)||m.context?.sourceStatus||'조회 대기',nowLabel:m.context?.observedAt||'미확인',horizonLabel:d?.predictionHorizonHours==null?'미확인':d.predictionHorizonHours+'시간',
+ onSession:()=>this.send('operations:session'),recoverySaveDisabled:true,hasRiskSeries:series.length>0,showBands:false,detailOpen:this.state.detailOpen,onCloseDetail:()=>this.setState({detailOpen:false}),onOpenSelected:open(sel),onRoleShift:()=>this.setState({role:'shift',detailOpen:false}),onRolePlan:()=>this.setState({role:'plan',detailOpen:false}),onRoleMaint:()=>this.setState({role:'maint',detailOpen:false}),onFocusMap:()=>this.setState({focus:'map'}),onFocusChart:()=>this.setState({focus:'chart'}),
+ isShift:role==='shift',isPlan:role==='plan',isMaint:role==='maint',isMachine:this.state.tab==='machine',isSummary:this.state.tab==='summary',isSignals:this.state.tab==='signals',isHistory:this.state.tab==='history',recoveryClosed:true,recoveryOpen:false,
+ tabs:[['summary','요약'],['signals','신호 근거'],['machine','설비 점검'],['history','진행 이력']].map(([id,label])=>({label,bg:this.state.tab===id?'#FFFFFF':'transparent',fg:this.state.tab===id?'#003C96':'#566B85',weight:this.state.tab===id?700:500,onSelect:()=>this.setState({tab:id})})),
+ kpis:role==='plan'?[{label:'오늘 계획 수량',value:n(knownPlan?.plannedUnits),unit:'개',note:'생산 계획 조회 기준'},{label:'위험 반영 예상 달성',value:'미산정',unit:'개',note:'생산 영향 계산 결과 확인 필요'},{label:'부족분',value:'미산정',unit:'개',note:'실제 생산·납기 근거 확인 필요'}]:role==='maint'?[{label:'조회한 요청',value:p.lineage?String(work.length):'미확인',unit:'건',note:'선택 이벤트의 서버 저장 상태'},{label:'부품 대기',value:'미확인',unit:'건',note:'재고·착수 조건 계약 미지원'},{label:'오늘 정비 창',value:'미확인',unit:'구간',note:'일정 협의 저장 계약 미지원'}]:[{label:'직시 조치 필요 설비',value:n(m.metrics?m.metrics.warning+m.metrics.critical:null),unit:'대',note:'위험 근거 확인 대상'},{label:'조회된 설비',value:String(all.length),unit:'대',note:'가동 여부는 별도 확인 필요'},{label:'계획 생산 지장 예상',value:'미산정',unit:'개',note:'생산 영향은 근거 확인 필요'}],
+ lines,legend:Object.entries(INK).map(([key,color])=>({color,label:{normal:'정상',attention:'주의',warning:'위험',hold:'보류'}[key],line:'solid'})),shiftEvents:role==='shift'?events.slice(0,3):[],planEvents:events.slice(0,3).filter(e=>e.grade!=='정상'),eventsTitle:role==='maint'?'정비 창':role==='plan'?'계획 위험 이벤트':'최근 이벤트',eventsSub:(m.events||[]).length+'건',mapShow:role==='maint'?'none':'flex',
+ gridCols:role==='maint'?'minmax(252px,1.05fr) minmax(330px,2fr) minmax(216px,0.85fr)':!big?'minmax(206px,1fr) minmax(330px,2.2fr) minmax(226px,1fr)':'minmax(360px,2.3fr) minmax(250px,1.15fr) minmax(226px,0.95fr)',
+ mapIsBig:big,zoomBorder:big?'#DDE6F0':'#C3D3E6',zoomBg:big?'#F2F6FB':'#FFFFFF',zoomFg:big?'#A8BACE':'#003C96',zoomCursor:big?'default':'pointer',chartCursor:big?'pointer':'default',chartPanelShow:role==='shift'?'flex':'none',signalShow:role==='shift'?'flex':'none',metaShow:big?'block':'none',legendShow:big?'flex':'none',reasonsShow:big?'none':'flex',ctxShow:big?'none':'grid',headFs:big?'12px':'13px',chartH:big?'168px':'212px',refillAnim:'none',barSlide:'none',slideAnim:'none',nowTrans:'none',refillLabel:'서버 조회',
+ selName:sel.displayName||'설비 선택',selId:sel.assetId||'미확인',selPlace:(sel.line||'')+' · '+(sel.cell||''),selRisk:r(d?.event?.failureProbability??sel.failureProbability),selGrade:{normal:'정상',attention:'주의',warning:'위험',hold:'보류'}[g],selColor:C[g],selInk:INK[g],selSolid:SOLID[g],selFill:FILL[g],selFirstRisk:r(series[0]?.failureProbability),selDelta:series.length>1?r(series.at(-1).failureProbability-series[0].failureProbability):'미산정',selThreshold:r(d?.threshold),selSourceNote:(p.detailError||d?.warnings?.join(' · ')||'출처는 근거 산출물에서 확인'),selObservedAt:d?.snapshotBasis?.observedAt||'미확인',chartLine:path,chartArea:ps.length?path+' L352 300 L0 300 Z':'',chartTicks:series.filter((_,i)=>i===0||i===series.length-1).map(x=>({label:x.observedAt})),nowTop:ps.length?(ps.at(-1)[1]/3)+'%':'100%',bandWarnH:0,bandAttnH:0,bandNormY:0,bandNormH:0,lineWarnY:d?.threshold==null?-1:300-d.threshold*300,lineAttnY:-1,labWarnPct:'0%',labAttnPct:'0%',labNormPct:'0%',warnValLabel:r(d?.threshold),attnValLabel:'미확인',
+ context:ctx,opCtx:ctx,reasons:factors.map((f,i)=>({no:String(i+1).padStart(2,'0'),parts:[{text:f.label+' '+n(f.value)+' '+(f.unit||''),weight:600,color:'#0F1E33'}]})),signals:(d?.sensors||[]).map(s=>({label:s.label,value:n(s.value),unit:s.unit||'',state:'조회 근거',stateColor:'#4A5C74',arrow:'',bandBottom:'0%',bandHeight:'0%',bars:[]})),detailSignals:factors.map((f,i)=>({rank:i+1,label:f.label,value:n(f.value),unit:f.unit||'',baseline:'미확인',contribPct:(f.contribution*100)+'%',contribVal:r(f.contribution),direction:f.direction==='risk_up'?'위험 증가':'위험 감소',color:C[g],state:'Backend 근거',stateColor:INK[g],quality:'확인 필요',qualityColor:'#4A5C74',window:'조회 구간',spark:''})),
+ priorityLabel:sel.status?({normal:'관찰',attention:'확인',warning:'우선 확인',hold:'데이터 확인'}[g]):'선택 필요',priorityColor:SOLID[g],priorityHead:p.detailError||sel.predictedFailureType||'진단 근거를 확인하세요.',signalAgeLabel:d?.snapshotBasis?.observedAt||'미확인',signalQualityNote:d?.dataQualityWarnings?.map(w=>w.message).join(' · ')||'신호 품질 확인 필요',
+ shifts:[unknownShift],planHeadNote:'교대별 실적 조회 계약 확인 필요',recoverLabel:'미산정',variants:(knownPlan?.productMix?.length?knownPlan.productMix:[{variant:'품목 계획 확인 필요',plannedUnits:null}]).map(x=>({name:x.variant,plan:n(x.plannedUnits),price:'미산정',due:'미확인',dueColor:'#4A5C74',dueBg:'#EEF3F8',short:'미산정',money:'미산정',moveable:'확인 필요',shortColor:'#4A5C74',okPct:'0%',shortPct:'0%',recoveryLabel:'계약 확인 필요',onRecovery:()=>{this.setState({detailOpen:true,tab:'history'});}})),pendingShow:'none',pendingCount:'미확인',planConstraint:'협의 일정·생산 대응 기록 API 미지원. 모든 정비는 명시적 승인 필요.',windows:[{when:'일정 확인 필요',span:'미확인',line:'정비 창 조회 계약 미지원',state:'미확인',color:'#4A5C74',bg:'#EEF3F8',note:'명시적 정비 승인과 일정 합의는 별개입니다.',pendingDisplay:'none'}],
+ reqQueue:work.map(w=>({id:w.work_order_id,what:w.work_type==='inspection'?'보전 점검 요청':'정비 작업',assetName:sel.displayName,target:'저장 결과',place:sel.line,from:'서버 기록',age:'시각 미확인',assignee:w.assigned_to||'미배정',state:names[w.status]||w.status,color:'#003C96',ink:'#003C96',tint:'#EAF0F7',border:'1px solid #DDE6F0',bg:'#FFFFFF',nextShow:'none',nextLabel:'근거 확인',onSelect:()=>this.setState({detailOpen:true}),onAdvance:()=>{}})),reqCount:p.lineage?String(work.length):'미확인',reqEmpty:p.workflowError||(work.length?'':'선택 이벤트의 저장된 요청 없음 / 조회 필요'),procurement:[],procurementEmpty:'부품 재고·착수 조건 확인 필요',procurementSub:'계약 미지원',
+ curReqId:work.at(-1)?.work_order_id||'요청 확인 필요',curReqAsset:sel.displayName||'설비 선택',curReqWhat:'저장된 요청 확인',curReqState:names[work.at(-1)?.status]||'미확인',curReqAssignee:work.at(-1)?.assigned_to||'미배정',curReqFrom:'서버 기록',curReqSop:d?.inspectionTargets?.[0]?.inspectionGuidance?.sopId||'미확인',curReqTargetName:d?.inspectionTargets?.[0]?.componentLabel||'점검 대상 확인 필요',curReqTargetNo:'',curReqWhere:d?.inspectionTargets?.[0]?.locationLabel||'미확인',curReqHow:d?.inspectionTargets?.[0]?.inspectionMethod||'미확인',curReqChecks:[],curReqSafety:'작업 허가·안전 조건 확인 필요',curReqSafetyColor:'#8A5C00',
+ flowTitle:result?.outcome==='no_action_required'?'조치 불필요 · 점검 결과 회신':result?.outcome==='data_check_required'?'추가 확인 필요':'업무 계약 확인',flowSummary:(p.candidates?.length?'Backend 후보: '+p.candidates.map(c=>c.action_code+' ('+c.action_candidate_id+')').join(' · ')+' · ':'')+blocked,flowInspect:false,flowReady:false,flowWorking:p.command?.actionId==='complete_maintenance_action',flowResult:this.state.result,flowAction:p.command?.label||'서버 허용 액션 없음',flowDisabled:!p.command||p.busy||(p.command?.actionId==='complete_maintenance_action'&&!this.state.result.trim()),onFlowResult:e=>this.setState({result:e.target.value}),onFlowAdvance:()=>this.send('operations:command',{eventId:p.selectedEventId,assetId:p.selectedAssetId,command:p.command,snapshotBasis:p.detail?.snapshotBasis,outcome:this.state.result}),flowNoActionDisabled:true,flowReplyShow:false,flowReplyDisabled:true,flowObservationShow:false,flowProductionShow:false,flowObservationDisabled:true,flowProductionDisabled:true,flowClosure:p.prediction||'정비 완료와 이상 해소는 별도 확인 · 후속 관측 대기',
+ handoffShow:role==='maint'?'none':'flex',handoffTo:'보전팀',handoffWhat:'보전 점검 요청',handoffNeed:[{text:'선택한 event·snapshot 근거 유지'},{text:'서버 역할·요청 권한 계약 필요'}],handoffBlocked:p.command?'':p.detailError||(p.blockedReason||'서버 허용 액션과 승인 대상 근거 확인 필요.'),handoffPlan:'생산 영향 '+impactText+' · 명시적 정비 승인 별도',handoffPlanColor:'#566B85',handoffSent:!!p.notice,handoffDisabled:!p.command||p.busy,handoffBtnLabel:p.command?.label||'보전 점검 요청 · 권한 계약 대기',onHandoff:()=>this.send('operations:command',{eventId:p.selectedEventId,assetId:p.selectedAssetId,command:p.command,snapshotBasis:p.detail?.snapshotBasis,outcome:this.state.result}),handoffBtnBg:'#F2F6FB',handoffBtnFg:'#7C90A8',handoffBtnBorder:'#DDE6F0',handoffBtnCursor:'default',handoffSentLabel:p.notice||'',readOnlyNote:p.role!==({shift:'process_engineer',plan:'process_manager',maint:'maintenance_technician'}[role])?'다른 역할 화면 열람 중 · 실제 계정 권한은 변경되지 않습니다.':blocked,
+ artifactLine:'근거 산출물 '+(d?.snapshotBasis?.artifactId||'미확인')+' · 모델 '+(d?.provenance?.modelVersion||'미확인'),shaLine:'스냅샷 '+(d?.snapshotBasis?.sourceSha256||'미확인'),staleLine:p.detailError||d?.warnings?.join(' · ')||'신선도 확인 필요',staleColor:'#4A5C74',stepNow:names[action?.status]||'저장 상태 확인 필요',primaryLabel:p.command?.label||'서버 허용 액션 없음',primaryOwner:p.role||'로그인 확인',primaryInput:blocked,steps:[],timeline:(d?.activity||[]).map(a=>({label:a.title,status:a.detail,when:a.createdAt,who:a.actor,bg:'#EEF3F8',color:'#003C96',fg:'#4A5C74'})),eqHistory:(d?.equipmentHistory||[]).map(h=>({when:h.occurredAt,kind:h.kind,desc:h.description,src:h.source,color:'#003C96'})),gaps:[...Object.entries(p.contextRead?.domains||{}).filter(([name,item])=>item.reason_codes?.length).map(([name,item])=>({name,reason:item.context.limitations.join(' · '),owner:name,blocks:item.reason_codes.join(' · '),state:item.context.status,stateColor:'#4A5C74'})),...(p.contextError?[{name:'운영 Context 조회',reason:p.contextError,owner:'운영 근거',blocks:'미산정 유지',state:'조회 실패',stateColor:'#4A5C74'}]:[]),...(d?.evidenceGaps||[]).map(g=>({name:g.field,reason:g.reason,owner:g.ownerDomain,blocks:'확인 필요',state:'미확인',stateColor:'#4A5C74'})),{name:'업무 계약·근거 상태',reason:blocked,owner:'Backend 계약',blocks:'미확인 값은 정상으로 처리하지 않음',state:'확인 필요',stateColor:'#4A5C74'}],
+ machineKind:sel.assetType||'설비 유형 미확인',machineSpec:'상세 사양 확인 필요',machineFlow:[],machineTargets:(d?.inspectionTargets||[]).map((t,i)=>({no:String(i+1).padStart(2,'0'),name:t.componentLabel,assoc:t.association,where:t.locationLabel||'미확인',how:t.inspectionMethod||'미확인',signal:'조회 근거',color:'#003C96',ink:'#003C96',label:'점검 참고',maturity:t.locationMaturity||'미확인',maturityColor:'#4A5C74',sopLine:(t.inspectionGuidance?.sopId||'SOP 미확인')+' '+(t.inspectionGuidance?.version||''),safety:t.inspectionGuidance?.safetyLevel||'미확인',safetyColor:'#8A5C00',approval:'명시적 정비 승인 필요',checks:(t.inspectionGuidance?.checklistDraft||[]).map((text,i)=>({no:i+1,text})),measures:[],boundary:t.inspectionGuidance?.maintenanceReviewPrerequisites?.decisionBoundary||'Backend 점검 결과로 후보 판단',hasParts:false,parts:[],noParts:'부품 정보 미확인',partsNote:''})),machineHiddenNote:'조회된 점검 대상만 표시합니다.'});
+ ['shift','plan','maint'].forEach(x=>{const on=role===x;Object.assign(v,{[x+'Border']:on?'#003C96':'#C3D3E6',[x+'Bg']:on?'#003C96':'#FFFFFF',[x+'Fg']:on?'#FFFFFF':'#4A5C74',[x+'W']:on?'700':'500',[x+'BadgeBg']:on?'rgba(255,255,255,.24)':'#EAF0F7',[x+'BadgeFg']:on?'#FFFFFF':'#003C96',[x+'Badge']:x==='maint'?(p.lineage?String(work.length):'—'):String((m.events||[]).length)});});
+ return window.factoryDisplay?window.factoryDisplay(v,p):v;
+ }
+}
+
+</script>
+</body></html>

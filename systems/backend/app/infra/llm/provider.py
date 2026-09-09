@@ -21,6 +21,15 @@ class LLMProvider(Protocol):
         response_schema_name: str = "structured_response",
     ) -> dict[str, Any]: ...
 
+    def generate_json_with_metadata(
+        self,
+        system_prompt: str,
+        payload: dict[str, Any],
+        *,
+        response_schema: dict[str, Any] | None = None,
+        response_schema_name: str = "structured_response",
+    ) -> dict[str, Any]: ...
+
 
 class ProviderUnavailable(RuntimeError):
     pass
@@ -37,6 +46,21 @@ class VertexAIProvider:
         self.model = os.getenv("LLM_MODEL", "gemini-2.5-flash")
 
     def generate_json(
+        self,
+        system_prompt: str,
+        payload: dict[str, Any],
+        *,
+        response_schema: dict[str, Any] | None = None,
+        response_schema_name: str = "structured_response",
+    ) -> dict[str, Any]:
+        return self.generate_json_with_metadata(
+            system_prompt,
+            payload,
+            response_schema=response_schema,
+            response_schema_name=response_schema_name,
+        )["payload"]
+
+    def generate_json_with_metadata(
         self,
         system_prompt: str,
         payload: dict[str, Any],
@@ -64,7 +88,14 @@ class VertexAIProvider:
         )
         if not response.text:
             raise ProviderUnavailable("Vertex AI returned an empty response")
-        return json.loads(response.text)
+        usage = _normalize_vertex_usage(getattr(response, "usage_metadata", None))
+        return {
+            "payload": json.loads(response.text),
+            "provider_metadata": {
+                "usage": usage,
+                "usage_measurement": "provider_reported" if usage else "not_reported",
+            },
+        }
 
 
 class OpenAICompatibleProvider:
@@ -77,6 +108,21 @@ class OpenAICompatibleProvider:
         self.timeout_seconds = float(os.getenv("LLM_TIMEOUT_SECONDS", "20"))
 
     def generate_json(
+        self,
+        system_prompt: str,
+        payload: dict[str, Any],
+        *,
+        response_schema: dict[str, Any] | None = None,
+        response_schema_name: str = "structured_response",
+    ) -> dict[str, Any]:
+        return self.generate_json_with_metadata(
+            system_prompt,
+            payload,
+            response_schema=response_schema,
+            response_schema_name=response_schema_name,
+        )["payload"]
+
+    def generate_json_with_metadata(
         self,
         system_prompt: str,
         payload: dict[str, Any],
@@ -116,8 +162,16 @@ class OpenAICompatibleProvider:
             raise ProviderUnavailable(
                 f"OpenAI request rejected: {response.status_code} {response.text}"
             )
-        content = response.json()["choices"][0]["message"]["content"]
-        return json.loads(content)
+        response_body = response.json()
+        content = response_body["choices"][0]["message"]["content"]
+        usage = _normalize_openai_usage(response_body.get("usage"))
+        return {
+            "payload": json.loads(content),
+            "provider_metadata": {
+                "usage": usage,
+                "usage_measurement": "provider_reported" if usage else "not_reported",
+            },
+        }
 
     def _post_chat_completion(self, request_body: dict[str, Any]) -> httpx.Response:
         response = httpx.post(
@@ -163,3 +217,33 @@ def _openai_compatible_schema(schema: dict[str, Any]) -> dict[str, Any]:
         return converted
 
     return convert(schema)
+
+
+def _normalize_openai_usage(usage: Any) -> dict[str, int] | None:
+    if not isinstance(usage, dict):
+        return None
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    total_tokens = usage.get("total_tokens")
+    if not all(isinstance(value, int) for value in (prompt_tokens, completion_tokens, total_tokens)):
+        return None
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def _normalize_vertex_usage(usage: Any) -> dict[str, int] | None:
+    if usage is None:
+        return None
+    prompt_tokens = getattr(usage, "prompt_token_count", None)
+    completion_tokens = getattr(usage, "candidates_token_count", None)
+    total_tokens = getattr(usage, "total_token_count", None)
+    if not all(isinstance(value, int) for value in (prompt_tokens, completion_tokens, total_tokens)):
+        return None
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+    }
