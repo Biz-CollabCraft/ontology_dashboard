@@ -1655,6 +1655,7 @@ def test_agent_review_summary_watcher_reads_runtime_candidates(
         "workspace_id": "manufacturing-demo",
         "dataset_version_id": None,
         "limit": 1,
+        "offset": 0,
     }
     assert runtime_detail.detail_query == {
         "organization_id": "org-ontology-demo",

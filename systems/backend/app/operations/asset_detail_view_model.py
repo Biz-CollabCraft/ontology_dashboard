@@ -64,6 +64,7 @@ class AssetDetailReadPort(Protocol):
         workspace_id: str,
         dataset_version_id: str | None,
         limit: int,
+        offset: int = 0,
     ) -> list[dict[str, Any]]: ...
 
     def feature_series(
@@ -196,6 +197,7 @@ class AssetDetailViewModelService:
         workspace_id: str,
         dataset_version_id: str | None = None,
         limit: int = 20,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         return self.read_port.latest_result_artifact_references(
             organization_id=organization_id,
@@ -203,6 +205,7 @@ class AssetDetailViewModelService:
             workspace_id=workspace_id,
             dataset_version_id=dataset_version_id,
             limit=limit,
+            offset=offset,
         )
 
     def _detail_view(
