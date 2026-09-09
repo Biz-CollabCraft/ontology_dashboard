@@ -135,6 +135,7 @@ class ManufacturingPredictiveMaintenanceService:
         self.agent_review_summary_provider = agent_review_summary_provider
         # Scheduling baseline only; never a source for GET or cached prose.
         self._briefing_generation_baselines = {}
+        self._briefing_observation_baselines = {}
         self.agent_answer_provider = agent_answer_provider
         self.agent_review_context_registry = agent_review_context_registry
         self.maintenance_lineage_query = maintenance_lineage_query
@@ -764,6 +765,15 @@ class ManufacturingPredictiveMaintenanceService:
             )
             scope = (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window)
             previous_packet, previous_identity = self._briefing_generation_baselines.get(scope, (None, None))
+            input_valid = packet_is_current(packet)
+            demand_previous = previous_packet
+            if generation_policy == "demand" and trigger == "polling_watcher":
+                if demand_previous is None:
+                    demand_previous = self._briefing_observation_baselines.get(scope)
+                if input_valid and demand_previous is None:
+                    # Keep the first valid observation until generation succeeds.
+                    # Updating on every poll would erase cumulative small changes.
+                    self._briefing_observation_baselines[scope] = deepcopy(packet)
             policy_trace = decide_generation(
                 policy=generation_policy,
                 current_fingerprint=policy_fingerprint(materialization_key),
@@ -772,8 +782,8 @@ class ManufacturingPredictiveMaintenanceService:
                 explicit_refresh=force,
                 retry_fallback=retry_fallback,
                 model_id=key_payload["model_version"],
-                input_valid=packet_is_current(packet),
-                background_required=background_generation_required(packet, previous_packet),
+                input_valid=input_valid,
+                background_required=background_generation_required(packet, demand_previous),
                 material_change=material_change_required(
                     packet, previous_packet, current_identity=key_payload,
                     previous_identity=previous_identity,
@@ -819,6 +829,7 @@ class ManufacturingPredictiveMaintenanceService:
                 )
                 if not trace.get("fallback"):
                     self._briefing_generation_baselines[scope] = (deepcopy(packet), deepcopy(key_payload))
+                    self._briefing_observation_baselines.pop(scope, None)
                 _record_briefing_event("completion", scope, fallback=trace.get("fallback"),
                                        reason=trace.get("reason"), generation_metrics=trace.get("generation_metrics"))
                 status = _workflow_run_status(trace)
