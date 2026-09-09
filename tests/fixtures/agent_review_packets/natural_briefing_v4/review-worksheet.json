@@ -1,0 +1,1353 @@
+{
+  "protocol_id": "agent-review-decision-grounding-v4",
+  "profile": null,
+  "reviewer": null,
+  "reviewer_type": null,
+  "candidate_anonymous_id": null,
+  "candidate_artifact_sha256": null,
+  "status": "not_measured",
+  "items": [
+    {
+      "criterion_id": "GS-001.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.E4",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-001.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.E4",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-002.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.E4",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-003.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.E4",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.T1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.T2",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-004.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.E4",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-005.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.E4",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-006.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-007.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.E4",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    },
+    {
+      "criterion_id": "GS-008.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "score": null,
+      "candidate_quote": null,
+      "support_ids": [],
+      "reason": null,
+      "critical_error": null
+    }
+  ]
+}

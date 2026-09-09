@@ -1,0 +1,11 @@
+{
+  "status": "passed",
+  "reference_schema_valid": 8,
+  "evidence_bindings_resolved": 96,
+  "non_hold_numeric_checks": 7,
+  "legacy_gold_unchanged": true,
+  "frozen_inputs_unchanged": true,
+  "scope": "Artifact structure, provenance, numeric consistency. Not a semantic or human usefulness score.",
+  "human_review": "not_measured",
+  "provider_calls": 0
+}

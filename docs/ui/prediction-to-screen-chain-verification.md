@@ -60,7 +60,7 @@ DB에 `fallback`으로 저장된 결과를 상위 워크플로우가 실패로 �
 - `tests/test_agent_prediction_to_screen_chain.py`: 예측·근거·제공자·워크플로우·저장·조회 API·무변경·갱신 검사
 - `scripts/serve_briefing_chain_test.py`: 실제 연결 결과를 기존 demo에 전달하는 테스트 전용 서버
 - `scripts/verify_prediction_to_screen_chain.mjs`: 실제 표시 문장·값·시각 대조 및 실패 차단 검사
-- `docs/eval/final-demo-evidence-20260908/prediction-to-screen-chain-results.json`: 실행 근거
+- `/private/tmp/prediction-to-screen-chain-results.json`: 아래 브라우저 검증 명령으로 생성되는 로컬 실행 근거. 원시 JSON은 Git에 포함하지 않으며 [근거 목록](../eval/final-demo-evidence-20260908/README.md)의 해시는 당시 보관본 기준이다.
 
 서버 테스트:
 
