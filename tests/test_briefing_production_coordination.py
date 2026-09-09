@@ -73,5 +73,7 @@ def test_schedule_formatting_does_not_reject_same_recorded_window():
     candidate = {'role_summaries': [{'role': role, 'quote': '승인 일정은 **저녁시간**, **30분만**입니다.'}
                                   for role in ('maintenance_technician', 'process_manager')]}
     assert not briefing_issues(candidate, facts)
+    candidate['role_summaries'][0]['quote'] = '승인과 저녁시간 30분 작업 일정이 확정되었습니다.'
+    assert not briefing_issues(candidate, facts)
     candidate['role_summaries'][0]['quote'] = '승인 일정은 저녁시간 60분만입니다.'
     assert briefing_issues(candidate, facts)

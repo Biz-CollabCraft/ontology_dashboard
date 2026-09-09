@@ -77,7 +77,11 @@ def briefing_issues(candidate,facts):
                 if re.search(r'승인.{0,12}(기록이? 없|미확인|대기 중|검토 필요)', quote):
                     issues.append('생산 관리자 승인 기록이 있습니다. 승인 미확인·대기로 설명하지 마세요.')
                 window = (coordination.get('response') or {}).get('scheduled_window')
-                normalize = lambda text: re.sub(r'[\s\W_]+', '', text)
+                def normalize(text):
+                    compact = re.sub(r'[\s\W_]+', '', text)
+                    # A Korean particle is not a different duration. Keep the
+                    # number, unit and named window; do not accept 60 for 30.
+                    return re.sub(r'(?<=분)만|(?<=시간)만', '', compact)
                 if window and normalize(window) not in normalize(quote):
                     issues.append('보전·생산관리 설명에 기록된 승인 일정 '+window+'을 그대로 반영하세요.')
     if not facts['inspection_results'] and not facts['work_orders']:return issues
