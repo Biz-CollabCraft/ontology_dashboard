@@ -4,7 +4,7 @@
 
 브라우저/전체 연결 재실행 방법과 최신 검증 범위는 [통합 보고](../../ui/final-demo-ai-briefing-integration.md)를 따른다. 발표 캡처는 [화면 이미지](../../ui/assets/final-briefing/)에 보관했다.
 
-## 이번 로컬 실행 증거 해시
+## 최초 통합 시 보관본 해시 (재실행 결과와 구분)
 
 | 파일 | SHA-256 |
 |---|---|
@@ -16,3 +16,5 @@
 | `usefulness-aggregate.json` | `b82f299f554ad18389b48a1dccc91f28c0d2eb856382ee49327d007a4914467e` |
 
 승인 후 실제 호출 결과: [최신 프롬프트 실제 LLM 확인](../../ui/final-demo-live-llm-verification.md).
+
+최종 병합 코드 재점검과 DB 읽기 일관성은 [최종 안정성 평가](../../ui/final-demo-final-stability-evaluation.md)를 따른다. 재실행 시 browser 결과는 `/private/tmp/briefing-stability-results.json`, 전체 연결 결과는 `/private/tmp/prediction-to-screen-chain-results.json`에 기록된다. 해시는 실행 시각·기록 ID 등에 따라 달라질 수 있다.

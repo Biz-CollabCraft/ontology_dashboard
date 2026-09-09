@@ -1,0 +1,11 @@
+{
+  "reference_schema_valid": 8,
+  "expanded_role_briefings": 24,
+  "added_text_source_pointers_resolved": 96,
+  "active_rubric_axes": 5,
+  "rating_cells": 40,
+  "prior_artifacts_unchanged": true,
+  "human_review": "not_measured",
+  "runtime_prompt_changed": false,
+  "scope": "Structural and source pointer verification, not model performance or exhaustive semantic validation."
+}

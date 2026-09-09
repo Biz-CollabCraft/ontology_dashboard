@@ -143,7 +143,7 @@ class PostgreSQLAssetDetailReadAdapter:
             cell_id=None,
             asset_type=None,
             status_grade=None,
-            offset=0,
+            offset=max(0, int(query.get("offset") or 0)),
             limit=max(1, int(query.get("limit") or 20)),
         )
         if source_contract != "result_artifact":

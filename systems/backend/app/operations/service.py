@@ -136,6 +136,7 @@ class ManufacturingPredictiveMaintenanceService:
         # Scheduling baseline only; never a source for GET or cached prose.
         self._briefing_generation_baselines = {}
         self._briefing_observation_baselines = {}
+        self._briefing_scan_offsets = {}
         self.agent_answer_provider = agent_answer_provider
         self.agent_review_context_registry = agent_review_context_registry
         self.maintenance_lineage_query = maintenance_lineage_query
@@ -1088,7 +1089,7 @@ class ManufacturingPredictiveMaintenanceService:
                 workspace_id=workspace_id,
                 limit=limit,
             )
-            if self.runtime_asset_detail_service is not None
+            if self.runtime_asset_detail_service is not None and normalized_source != "fixture"
             else []
         )
         if normalized_source == "post-maintenance":
@@ -1145,13 +1146,29 @@ class ManufacturingPredictiveMaintenanceService:
         limit: int | None,
     ) -> list[dict[str, Any]]:
         assert self.runtime_asset_detail_service is not None
-        return self.runtime_asset_detail_service.latest_result_artifact_references(
-            organization_id=organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-            dataset_version_id=None,
-            limit=limit or 20,
-        )
+        scope = (organization_id, project_id, workspace_id)
+        page_size = limit or 20
+        # Advance bounded scans instead of polling the same first page forever.
+        # This cursor is process-local; a restarted watcher begins at page zero.
+        with _agent_review_summary_lock("scan:" + json.dumps((id(self), *scope))):
+            offset = self._briefing_scan_offsets.get(scope, 0)
+            def read_page(start):
+                return self.runtime_asset_detail_service.latest_result_artifact_references(
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    dataset_version_id=None,
+                    limit=page_size,
+                    offset=start,
+                )
+            candidates = read_page(offset)
+            if not candidates and offset:
+                offset = 0
+                candidates = read_page(0)
+            self._briefing_scan_offsets[scope] = (
+                offset + len(candidates) if len(candidates) == page_size else 0
+            )
+            return candidates
 
     def _runtime_agent_review_packet_for_candidate(
         self,

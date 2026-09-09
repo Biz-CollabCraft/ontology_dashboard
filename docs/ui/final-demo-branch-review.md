@@ -1,6 +1,6 @@
 # 최종 시연 브랜치 흡수 검토
 
-2026-09-08 · base `origin/demo` = `ae6141ef98cb4ee6ec6ea405b798f97b6fd9b1e1` (원격 갱신 후 확인)
+2026-09-08 통합 시작 시점 · 당시 base `origin/demo` = `ae6141ef98cb4ee6ec6ea405b798f97b6fd9b1e1` (원격 갱신 후 확인)
 
 대상은 `codex/demo-ai-briefing-placement`, 소스는 `codex/pr167-ai-briefing-optimization-plan`의 HEAD `8a5c50d8`와 로컬 미커밋 변경이다. 소스와 다른 작업 트리는 수정하지 않았다. 타깃의 기존 58개 변경은 통합 전에 별도 보관했다. 커밋 개수 대신 실제 생성·검증·조회·표시 경로와 파일 내용을 대조했다.
 
@@ -52,4 +52,4 @@
 
 **Architecture Pass (검토 범위):** raw producer/hidden truth를 UI에 전달하지 않고 Result/Evidence와 ViewModel을 소비한다. AI 편집은 설명 문장에 한정한다. 점검·승인·정비 실행의 권한과 소유권을 변경하지 않는다.
 
-커밋은 서버 구현·계약/회귀, 기존 화면 통합·전체 연결 검증, 문서·평가 근거의 세 묶음으로 구성한다. 최신 결과와 재실행은 [통합 보고](final-demo-ai-briefing-integration.md)를 따른다.
+초기 세 커밋은 서버 구현·계약/회귀, 기존 화면 통합·전체 연결 검증, 문서·평가 근거로 나눴다. 이후 실제 LLM 점검과 회귀 수정 3개를 추가해 PR #168의 총 6개 커밋을 demo `ab63cfe9`에 병합했다. 최신 결과와 재실행은 [통합 보고](final-demo-ai-briefing-integration.md)를 따른다.
