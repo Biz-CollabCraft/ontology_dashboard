@@ -149,7 +149,7 @@ def compose_agent_review_packet(
         ontology_context=ontology_context,
         evidence_gaps=evidence_gaps,
     )
-    return {
+    packet = {
         "schema_version": "agent-review-packet-v1.0",
         "project_id": project_id,
         "asset_id": str((view_model.get("asset") or {}).get("asset_id") or ""),
@@ -204,6 +204,8 @@ def compose_agent_review_packet(
         },
         "limitations": list(dict.fromkeys(limitations)),
     }
+    from app.operations.briefing_economics import attach_economics
+    return attach_economics(packet)
 
 
 def _operation_context_source_refs(context: AgentReviewContext) -> list[str]:

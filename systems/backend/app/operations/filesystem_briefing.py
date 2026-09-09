@@ -10,6 +10,34 @@ import os
 import re
 from pathlib import Path
 from functools import lru_cache
+from app.operations.sop_retrieval import retrieve_inspection_sops
+
+
+def _file_sops(view, artifact):
+    root = Path(__file__).resolve().parents[4] / 'data/fixtures/inspection_sop'
+    procedures = []
+    for path in sorted(root.glob('*.json')):
+        try:
+            procedure = json.loads(path.read_text(encoding='utf-8'))
+            if artifact['asset_type'] in procedure.get('asset_types', []):
+                procedures.append(procedure)
+        except (OSError, ValueError):
+            continue
+    retrieval = retrieve_inspection_sops(fixture={'equipment': {'asset_type': artifact['asset_type']}},
+                                        artifact=artifact, procedures=procedures, top_k=3)
+    targets = []
+    for item in retrieval['results']:
+        p = item['procedure']; g = p.get('guidance') or {}
+        for component in p.get('component_ids') or []:
+            targets.append({'target_id': p['sop_id'] + ':' + component,
+                'component_id': component, 'component_label': component.replace('_', ' '),
+                'location_label': g.get('reference_location_label'),
+                'inspection_method': g.get('suggested_check_method'),
+                'source_ref': item['source_ref'], 'location_source_ref': item['source_ref'],
+                'inspection_guidance': {**g, 'sop_id': p['sop_id'],
+                    'source_type': p.get('source_kind'), 'source_ref': item['source_ref']}})
+    view['inspection_targets'] = targets
+    return retrieval
 
 
 def _archive_roots():
@@ -110,8 +138,9 @@ def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, projec
                 project_id=project_id, event_id=event_id, organization_id=organization_id,
                 workspace_id=workspace_id, context_repository=repository,
             )
+        retrieval = _file_sops(view, artifact)
         return compose_agent_review_packet(project_id=project_id, view_model=view,
-            sop_retrieval={"provider": "runtime_product_result", "query": {"asset_id": asset_id, "event_id": event_id, "dataset_version_id": run_id}, "top_k": 0, "returned_count": 0, "results": []},
+            sop_retrieval=retrieval,
             context=service.agent_review_context_registry.context_for_packet(view_model=view)
                 if service is not None and service.agent_review_context_registry else None)
     raise KeyError(event_id)

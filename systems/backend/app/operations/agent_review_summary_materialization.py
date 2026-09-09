@@ -290,6 +290,7 @@ def _summary_context_sha256(packet: dict[str, Any]) -> str:
             "review_priority": packet.get("review_priority"),
             "model_expression_context": packet.get("model_expression_context") or {},
             "operation_context_summary": packet.get("operation_context_summary") or {},
+            "reference_economics": packet.get("reference_economics") or {},
             "evidence_context": {
                 key: value for key, value in (packet.get("evidence_context") or {}).items()
                 if key != "relation_retrieved_at"  # Read audit time is not generation evidence.

@@ -28,6 +28,12 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "reference_economics": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {"status": {"enum": ["illustrative_not_site_quote", "unavailable", "not_applicable"]}},
+      "description": "Versioned UI reference cost table, computed values, units and assumptions; never authoritative planning or realized loss."
+    },
     "evidence_context": {
       "type": "object",
       "description": "Relation schema and deterministic evidence-selection context for this event. This is not a raw producer payload and does not authorize mutations.",

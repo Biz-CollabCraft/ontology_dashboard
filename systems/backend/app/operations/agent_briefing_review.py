@@ -51,6 +51,7 @@ def decision_facts(packet):
     facts['operation_context'] = ({'production_impact': None, 'estimated_downtime_minutes': None,
                                    'estimated_lost_units': None, 'status': 'unconfirmed_due_to_data_quality'}
                                   if facts['data_quality_hold'] else packet.get('operation_context_summary') or {})
+    facts['reference_economics'] = packet.get('reference_economics') or {'status': 'unavailable'}
     facts['citation_catalog'] = {str(i): ref for i, ref in enumerate(dict.fromkeys(packet.get('source_refs') or []), 1)}
     return facts
 
@@ -59,6 +60,16 @@ def briefing_issues(candidate,facts):
     def plain(value):return re.sub(r'\[\[ref:[^\]\n]+\]\]', '', value).replace('**','')
     roles={r.get('role'):plain(r.get('quote','')) for r in candidate.get('role_summaries',[]) if isinstance(r,dict)}
     prose=' '.join([candidate.get('summary',''),*roles.values()]);issues=[]
+    economics = facts.get('reference_economics') or {}
+    if economics.get('status') == 'illustrative_not_site_quote':
+        manager = roles.get('process_manager', '')
+        numbers = {float(n.replace(',', '')) for n in re.findall(r'\d[\d,]*(?:\.\d+)?', manager)}
+        metrics = economics['metrics']
+        for key in ('hourly_production_cost', 'stop_production_cost', 'stop_minutes'):
+            if metrics[key]['value'] not in numbers:
+                issues.append('생산관리 설명에 참고 비용표의 '+key+' 값 '+str(metrics[key]['value'])+' '+metrics[key]['unit']+'를 반영하세요. 가정 기반 참고액으로 표현하세요.')
+        if not re.search(r'가정|참고', manager):
+            issues.append('비용표의 금액은 가정 기반 참고액임을 명시하세요. 확정 손실이 아닙니다.')
     if facts.get('data_quality_hold'):
         for sentence in re.split(r'[.!?\n]', prose):
             if re.search(r'생산\s*영향|손실', sentence) and re.search(r'(?:확정|확인|산정|판단)할\s*수\s*있|확정(?:됐|되었|됩니다|입니다)', sentence):
