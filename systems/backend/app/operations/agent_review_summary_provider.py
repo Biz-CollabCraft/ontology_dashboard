@@ -123,7 +123,9 @@ AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\n결정 흐름 사용 규칙: prompt pay
 AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\n표현 점검: maintenance_recommended는 반드시 정비 권고로, requested는 작업요청 등록으로 번역하세요. 데모 계획 가정, 합성 데이터, outcome, 스냅샷 같은 내부 표현을 본문에 넣지 마세요. \"운영 스냅샷\"이나 \"계획 가정\"처럼 시스템 내부 분류로 보이는 말 대신, \"제공 자료에는 실제 재고 수량/작업 가능 시간/담당자 배정이 없어 착수 조건을 확정할 수 없습니다\"처럼 누락된 값과 그 값이 막는 결정을 직접 말하세요. 마지막 줄은 독자가 할 수 있는 구체적인 다음 행동으로 마무리하세요. 현재 승인 상태를 첫 줄에 포함하세요. 승인 여부를 다시 확인하라고 하지 마세요.\n"
 
 AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\n마지막 다음 판단 문장에서는 결정을 좌우하는 대상·조건·판단 근거 1~2개를 반드시 **굵게** 표시하세요. 예: **인서트 교체 여부**, **현재 설비의 점검 결과**, **조치 범위**, **같은 정지 조건**. 해당 입력과 문장에 실제로 있는 표현만 강조하고, 예시 내용을 새 사실로 추가하지 마세요. 접속어·일반 동사·문장 전체는 강조하지 마세요.\n"
-AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v3.4-next-decision-emphasis"
+AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\nproduction_coordination이 있는 점검 작업지시의 approved는 점검 접수이며 생산 승인이 아닙니다. production_coordination.status가 pending이면 점검 완료·정비 권고·생산 관리자 승인 대기를 설명하고, request.downtime_minutes를 요청 정지 시간으로 보전·생산 역할 본문에 포함하세요. 점검 접수 시각을 생산 승인 시각으로 부르지 마세요. 각 근거 문장 끝에 반드시 citation_catalog의 [[ref:번호]]를 붙이세요."
+
+AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v3.5-workflow-coordination"
 AGENT_REVIEW_SUMMARY_PAYLOAD_PROFILE = "compact-editable-v1"
 ROLE_PRIORITIES = {
     "process_engineer": ["이상 위치", "모델 근거", "점검 포인트", "유사 이력", "근거 공백"],
@@ -535,6 +537,7 @@ def _selected_evidence_context(packet: dict[str, Any]) -> dict[str, Any]:
         "selected_basis": [
             _pick(item, "candidate_id", "candidate_type", "source_ref",
                   "source_snapshot_id", "source_version", "domain", "relation_path",
+                  "relation_paths", "display_fields",
                   "fact_type", "as_of", "value_summary", "freshness_state",
                   "required_for_boundary", "limitation_state")
             for item in context.get("selected_basis") or []

@@ -37,7 +37,7 @@ def compact_sop_guidance(guidance: dict[str, Any]) -> dict[str, Any]:
 
 def preserve_inspection_details(item: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
     """Do not derive an approval/outcome from a checklist or an assigned actor."""
-    record.update(pick(item, "outcome", "inspection_result_id", "work_order_id"))
+    record.update(pick(item, "outcome", "inspection_result_id", "work_order_id", "production_coordination"))
     if "findings" in item:
         record["findings"] = [v for v in item["findings"] or [] if isinstance(v, str)]
     for name, fields in (("measurements", ("name", "value", "unit")),
@@ -68,7 +68,7 @@ def record_context(item: dict[str, Any], *, packet: dict[str, Any]) -> dict[str,
     supplied = [v for v in stamps if v not in (None, "")]
     parsed = [_instant(v) for v in supplied]
     basis = packet.get("snapshot_basis") or {}
-    as_of = basis.get("observed_at") or packet.get("generated_at")
+    as_of = (packet.get("maintenance_history_summary") or {}).get("workflow_as_of") or basis.get("observed_at") or packet.get("generated_at")
     cutoff = _instant(as_of)
     if cutoff is None or not parsed or any(v is None for v in parsed):
         temporal = "unknown"

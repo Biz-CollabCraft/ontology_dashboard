@@ -1083,6 +1083,8 @@ export function getOperationsAgentReviewPacket(input: {
   datasetVersionId?: string | null;
   eventId?: string | null;
   historyWindow?: string;
+  signal?: AbortSignal;
+  expectedSummaryKey?: string;
 }): Promise<OperationsAgentReviewPacket> {
   const params = new URLSearchParams({
     project_id: input.projectId ?? "manufacturing-demo-project",
@@ -1091,8 +1093,10 @@ export function getOperationsAgentReviewPacket(input: {
   if (input.datasetVersionId)
     params.set("dataset_version_id", input.datasetVersionId);
   if (input.eventId) params.set("event_id", input.eventId);
+  if (input.expectedSummaryKey) params.set("expected_summary_key", input.expectedSummaryKey);
   return request<OperationsAgentReviewPacket>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-packet?${params.toString()}`,
+    { signal: input.signal },
   );
 }
 

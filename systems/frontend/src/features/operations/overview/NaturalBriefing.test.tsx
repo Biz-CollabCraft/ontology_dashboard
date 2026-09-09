@@ -5,12 +5,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NaturalBriefing } from "./NaturalBriefing";
 import { getOperationsAgentReviewSummary, createOperationsAgentReviewSummary } from "../../../api";
 import type { OperationsAgentReviewSummaryResponse } from "../api/operationsContracts";
-vi.mock("../../../api", () => ({ getOperationsAgentReviewSummary: vi.fn(), createOperationsAgentReviewSummary: vi.fn() }));
+vi.mock("../../../api", () => ({ getOperationsAgentReviewSummary: vi.fn(), createOperationsAgentReviewSummary: vi.fn(), getOperationsAgentReviewPacket: vi.fn() }));
 const get = vi.mocked(getOperationsAgentReviewSummary), post = vi.mocked(createOperationsAgentReviewSummary);
 function response(assetId = "A", quote = "**관측된 토크**와 점검 기록을 대조합니다. [[ref:1]]\n작업 시작 기록은 확인되지 않습니다."): OperationsAgentReviewSummaryResponse {
   return { summary: { asset_id: assetId, mode: "llm", summary: "공통 설명", source_refs: ["evidence:A"], limitations: [],
     role_summaries: [{ role: "process_engineer", quote }, { role: "maintenance_technician", quote: "보전 담당자의 자연어 설명" }, { role: "process_manager", quote: "생산 관리자의 자연어 설명" }] },
-    trace: { fallback: false, materialization: { status: "ready" } } } as unknown as OperationsAgentReviewSummaryResponse;
+    trace: { fallback: false, materialization: { status: "ready", summary_key: "summary-key-A" } } } as unknown as OperationsAgentReviewSummaryResponse;
 }
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
@@ -77,4 +77,65 @@ it("uses server replay responses without product API calls and withdraws rejecte
  await act(async()=>root.render(<NaturalBriefing {...props} providedResponse={rejected}/>));
  expect(host.querySelector('.natural-briefing-line')).toBeNull();
  expect(host.textContent).toContain("검증을 통과하지 못한 응답");
+});
+
+it("loads the exact cited evidence only when opened", async () => {
+  const { getOperationsAgentReviewPacket } = await import("../../../api");
+  vi.mocked(getOperationsAgentReviewPacket).mockResolvedValue({
+    project_id: "project", asset_id: "A", generated_at: "2026-09-09T00:00:00Z",
+    snapshot_basis: { event_id: "event-A" }, source_refs: ["evidence:A"],
+    model_expression_context: { top_factors: [{ source_ref: "evidence:A", display_name: "관측 토크", value: 72, unit: "Nm" }] },
+  } as never);
+  await render();
+  expect(getOperationsAgentReviewPacket).not.toHaveBeenCalled();
+  await act(async () => {
+    const details = host.querySelector("details")!; details.open = true; details.dispatchEvent(new Event("toggle"));
+  });
+  expect(getOperationsAgentReviewPacket).toHaveBeenCalledWith(expect.objectContaining({ assetId: "A", eventId: "event-A", expectedSummaryKey: "summary-key-A" }));
+  expect(host.querySelector('[aria-label="연결 근거 상세"]')?.textContent).toContain("72 Nm");
+});
+
+it("refuses evidence returned for a different event on the same asset", async () => {
+  const { getOperationsAgentReviewPacket } = await import("../../../api");
+  vi.mocked(getOperationsAgentReviewPacket).mockResolvedValue({
+    project_id: "project", asset_id: "A", snapshot_basis: { event_id: "old-event" }, source_refs: ["evidence:A"],
+    model_expression_context: { top_factors: [{ source_ref: "evidence:A", display_name: "OLD", value: 999, unit: "Nm" }] },
+  } as never);
+  await render();
+  get.mockResolvedValue({summary:null,trace:{fallback:false,materialization:{status:"pending"}}} as never);
+  await act(async () => { const details = host.querySelector("details")!; details.open = true; details.dispatchEvent(new Event("toggle")); });
+  expect(host.textContent).toContain("브리핑이 아직 없습니다");
+  expect(host.querySelector(".natural-briefing-line")).toBeNull();
+  expect(host.textContent).not.toContain("999 Nm");
+});
+
+it("discards a pending evidence response when the selected event changes", async () => {
+  const { getOperationsAgentReviewPacket } = await import("../../../api");
+  let finish!: (value: never) => void;
+  vi.mocked(getOperationsAgentReviewPacket).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  await render();
+  await act(async () => { const details = host.querySelector("details")!; details.open = true; details.dispatchEvent(new Event("toggle")); });
+  get.mockResolvedValue(response("B", "B 사건의 설명"));
+  await render("B");
+  await act(async () => finish({project_id:"project",asset_id:"A",snapshot_basis:{event_id:"event-A"},source_refs:["evidence:A"],model_expression_context:{top_factors:[{source_ref:"evidence:A",display_name:"이전 관측",value:999,unit:"Nm"}]}} as never));
+  expect(host.textContent).toContain("B 사건의 설명");
+  expect(host.textContent).not.toContain("999 Nm");
+  expect(host.querySelector('[aria-label="연결 근거 상세"]')).toBeNull();
+});
+
+it("withdraws old prose and rereads when the server reports changed evidence", async () => {
+  const { getOperationsAgentReviewPacket } = await import("../../../api");
+  vi.mocked(getOperationsAgentReviewPacket).mockRejectedValue({status:409});
+  await render();
+  get.mockResolvedValue({summary:null,trace:{fallback:false,materialization:{status:"pending"}}} as never);
+  await act(async () => { const details = host.querySelector("details")!; details.open = true; details.dispatchEvent(new Event("toggle")); });
+  expect(host.querySelector(".natural-briefing-line")).toBeNull();
+  expect(host.textContent).toContain("브리핑이 아직 없습니다");
+});
+
+
+it("keeps packet evidence available when prose omits inline citation tokens", async () => {
+  get.mockResolvedValue(response("A", "점검 완료 후 생산 승인을 기다립니다."));
+  await render();
+  expect(host.querySelector("details summary")?.textContent).toBe("브리핑 전체 근거");
 });

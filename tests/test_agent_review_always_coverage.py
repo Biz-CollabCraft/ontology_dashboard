@@ -1,3 +1,5 @@
+import pytest
+
 from tests.test_agent_review_generation_policy import service, runtime_candidate
 
 
@@ -38,7 +40,8 @@ def test_scan_offset_reaches_repository_without_changing_scope():
         'organization_id':'org','project_id':'project','workspace_id':'workspace','dataset_version_id':'version-1','offset':20,'limit':10}
 
 
-def test_initial_http_generation_reuses_watcher_result_but_explicit_regeneration_runs(service, runtime_candidate, tmp_path, monkeypatch):
+@pytest.mark.parametrize("email,password", [("manager@ontology.local", "Manager!2026"), ("engineer@ontology.local", "Engineer!2026"), ("technician@ontology.local", "Technician!2026")])
+def test_initial_http_generation_reuses_watcher_result_but_explicit_regeneration_runs(service, runtime_candidate, tmp_path, monkeypatch, email, password):
     from fastapi.testclient import TestClient
     from app.main import app
     from app.dependencies import get_service, get_identity_service
@@ -51,7 +54,7 @@ def test_initial_http_generation_reuses_watcher_result_but_explicit_regeneration
     path = f'/api/objects/{asset}/agent-review-summary?' + urlencode({
         'event_id':runtime_candidate['event_id'], 'dataset_version_id':runtime_candidate['dataset_version_id']})
     with TestClient(app) as client:
-        assert client.post('/api/auth/login',json={'email':'manager@ontology.local','password':'Manager!2026'}).status_code == 200
+        assert client.post('/api/auth/login',json={'email':email,'password':password}).status_code == 200
         assert client.get(path).json()['summary'] is None
         # Another watcher creates the exact summary after this tab's GET.
         service.materialize_agent_review_summaries(source='live',limit=1)

@@ -26,7 +26,7 @@ def decision_facts(packet):
             latest=max(at(r) for r in revisions);current=[r for r in revisions if at(r)==latest]
             if len({r.get('status') for r in current})>1:
                 facts['excluded_records'].append({'record_id':current[0].get('record_id'),'reason':'conflicting_latest_status'});continue
-            r=current[-1];facts[key].append({k:r[k] for k in ('record_id','status','outcome','findings','measurements','recorded_at','source_ref','owner_record_provenance','summary') if k in r})
+            r=current[-1];facts[key].append({k:r[k] for k in ('record_id','status','outcome','findings','measurements','recorded_at','source_ref','owner_record_provenance','summary','production_coordination') if k in r})
     facts['data_quality_hold'] = (packet.get('review_draft') or {}).get('priority_label') == '미확정'
     facts['operation_context'] = ({'production_impact': None, 'estimated_downtime_minutes': None,
                                    'estimated_lost_units': None, 'status': 'unconfirmed_due_to_data_quality'}
@@ -58,11 +58,24 @@ def briefing_issues(candidate,facts):
             if term in findings and term not in technician:issues.append('보전 설명에 기록된 발견 사항 '+term+'을 반영하세요.')
         if r.get('outcome')=='maintenance_recommended' and 'maintenance_recommended' not in technician and not re.search(r'정비.{0,8}(권고|권장)',technician):
             issues.append('점검 결과 maintenance_recommended를 정비 권고로 설명하세요. 확정 실행으로 바꾸지 마세요.')
+    for order in facts['work_orders']:
+        coordination = order.get('production_coordination')
+        if not coordination:
+            continue
+        minutes = (coordination.get('request') or {}).get('downtime_minutes')
+        for role in ('maintenance_technician', 'process_manager'):
+            quote = roles.get(role, '')
+            if coordination.get('status') == 'pending' and not re.search(r'승인.{0,12}(대기|기다)', quote):
+                issues.append('생산 관리자 승인 대기 상태를 보전·생산 브리핑에 명시하세요. 작업지시 approved는 점검 접수이며 생산 승인이 아닙니다.')
+            if coordination.get('status') == 'pending' and re.search(r'승인 시각|승인 완료|승인되었습니다', quote):
+                issues.append('생산 승인 대기 중입니다. 점검 접수 시각을 생산 승인 시각으로 표현하지 마세요.')
+            if minutes is not None and str(minutes) not in quote:
+                issues.append(f'보전·생산 브리핑에 요청 정지 {minutes}분을 반영하세요.')
     if '승인 여부는 검토 중' in prose:issues.append('기록에 없는 승인 검토 진행 상태를 단정하지 마세요.')
     orders=facts['work_orders']
     if len(orders)==1:
         r=orders[0];status=r.get('status');provenance=r.get('owner_record_provenance') or {}
-        if status=='approved':
+        if status=='approved' and not r.get('production_coordination'):
             for role,quote in (('보전',technician),('생산관리',manager)):
                 # A negated re-approval step does not contradict a recorded approval.
                 checked = re.sub(r'승인\s*여부(?:\s*재확인|를\s*다시\s*확인하는)?(?:\s*단계)?(?:가|이)?\s*아니라', '', quote)
@@ -121,6 +134,8 @@ def _current_stage(packet, facts):
     if facts.get('data_quality_hold'):
         return 'data_quality_hold_pending_observation'
     orders = facts.get('work_orders') or []
+    if any((order.get('production_coordination') or {}).get('status') == 'pending' for order in orders):
+        return 'inspection_completed_pending_production_approval'
     if any(order.get('status') == 'approved' for order in orders):
         if not _has_execution_record(packet):
             return 'approved_work_order_pending_start'
@@ -134,6 +149,7 @@ def _current_stage(packet, facts):
 
 def _stage_label(stage):
     return {
+        'inspection_completed_pending_production_approval': '점검 완료 · 생산 관리자 승인 대기',
         'data_quality_hold_pending_observation': '데이터 보강 후 위험·생산 영향 재판단',
         'approved_work_order_pending_start': '승인된 작업요청의 착수 조건 판단',
         'approved_work_order_in_execution_review': '작업 실행 기록과 후속 일정 판단',
@@ -214,6 +230,9 @@ def _inspection_result_step(facts):
 
 
 def _work_order_step(facts):
+    coordinated = [item for item in facts.get('work_orders') or [] if item.get('production_coordination')]
+    if coordinated:
+        return {'step': 'production_approval_review', 'facts': coordinated, 'boundary': '작업지시 approved는 점검 접수 상태이며 생산 승인은 production_coordination.status로 판단한다.'}
     orders = []
     for item in facts.get('work_orders') or []:
         provenance = item.get('owner_record_provenance') or {}
@@ -246,6 +265,11 @@ def _execution_state_step(packet):
 
 def _has_execution_record(packet):
     history = packet.get('maintenance_history_summary') or {}
+    if any(order.get('production_coordination') for order in history.get('work_orders') or []):
+        if history.get('maintenance_actions') or history.get('maintenance_events'):
+            return True
+        return any(item.get('activity_type') in ('maintenance.execution.start', 'maintenance.execution.complete')
+                   for item in history.get('activities') or [])
     if any(history.get(key) for key in ('maintenance_actions', 'maintenance_events', 'activities')):
         return True
     for order in history.get('work_orders') or []:

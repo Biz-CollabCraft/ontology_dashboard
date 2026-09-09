@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+// These workflow fixtures render outside the application preferences provider.
+vi.mock("../../../ui/foundry/displayPreferences", () => ({ useDisplayPreferences: () => ({ preferences: { theme: "light" }, setTheme: vi.fn() }) }));
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { RoleFactoryStandalone } from "./RoleFactoryStandalone";
 import type { ComponentProps } from "react";
