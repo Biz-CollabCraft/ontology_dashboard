@@ -1117,6 +1117,18 @@ export function getOperationsAgentReviewSummary(input: {
   );
 }
 
+function briefingRequestId(): string {
+  // randomUUID requires a secure context; getRandomValues also works on HTTP.
+  if (typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export function createOperationsAgentReviewSummary(input: {
   assetId: string;
   projectId?: string;
@@ -1136,7 +1148,7 @@ export function createOperationsAgentReviewSummary(input: {
   if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
-    { method: "POST", signal: input.signal, headers: { "Idempotency-Key": crypto.randomUUID() } },
+    { method: "POST", signal: input.signal, headers: { "Idempotency-Key": briefingRequestId() } },
   );
 }
 
