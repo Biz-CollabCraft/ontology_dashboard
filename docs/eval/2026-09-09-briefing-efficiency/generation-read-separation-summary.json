@@ -1,0 +1,91 @@
+{
+  "scope": "historical method with current contract helpers vs current SQLite materialize/read; prebuilt identical packet; replay provider; no network",
+  "windows": 120,
+  "reads_per_arm": 1800,
+  "fresh_http_calls": 0,
+  "fresh_tokens": 0,
+  "provider_record_count": 181,
+  "before_modeled_http": 2715,
+  "after_modeled_http": 181,
+  "before_modeled_tokens": {
+    "prompt_tokens": 23957025,
+    "completion_tokens": 5025675,
+    "total_tokens": 28982700
+  },
+  "after_modeled_tokens": {
+    "prompt_tokens": 1597135,
+    "completion_tokens": 335045,
+    "total_tokens": 1932180
+  },
+  "before_query_modeled_ms": {
+    "n": 1800,
+    "p50": 25335.286958508193,
+    "p95": 42401.30312498752,
+    "sum": 47826999.83271678
+  },
+  "after_all_query_modeled_ms": {
+    "n": 1800,
+    "p50": 6.946271503693424,
+    "p95": 20151.815625005635,
+    "sum": 3208337.3947954704
+  },
+  "after_cold_query_modeled_ms": {
+    "n": 120,
+    "p50": 25351.295833011507,
+    "p95": 42432.197457989445,
+    "sum": 3192580.681496215
+  },
+  "after_warm_read_measured_ms": {
+    "n": 1680,
+    "p50": 6.902145512867719,
+    "p95": 12.737707991618663,
+    "sum": 15756.713299255352
+  },
+  "after_miss_measured_ms": {
+    "n": 120,
+    "p50": 1.301312498981133,
+    "p95": 2.1400830009952188,
+    "sum": 199.5570441649761
+  },
+  "after_generation_local_measured_ms": {
+    "n": 120,
+    "p50": 26.430958008859307,
+    "p95": 47.32654200051911,
+    "sum": 4414.681496215053
+  },
+  "before_local_measured_ms": {
+    "n": 1800,
+    "p50": 2.133166999556124,
+    "p95": 3.8505420088768005,
+    "sum": 4509.832716779783
+  },
+  "cached_equal_windows": 120,
+  "changed_evidence_blocked_windows": 120,
+  "historical_ready_windows": 114,
+  "sensitivity": [
+    {
+      "reads_per_evidence": 1,
+      "modeled_token_saving_percent": 0.0
+    },
+    {
+      "reads_per_evidence": 2,
+      "modeled_token_saving_percent": 50.0
+    },
+    {
+      "reads_per_evidence": 5,
+      "modeled_token_saving_percent": 80.0
+    },
+    {
+      "reads_per_evidence": 15,
+      "modeled_token_saving_percent": 93.33333333333333
+    }
+  ],
+  "limitations": [
+    "Not whole historical checkout A/B: old method/current contract helpers to isolate read generation behavior.",
+    "Recorded responses reused, no new prompt quality measurement or live bill.",
+    "No packet building, HTTP API/auth, browser rendering, production DB, network contention included.",
+    "15 stable reads and one explicit generation per window; no evidence changes inside window.",
+    "Fallback windows remain fallback; background fallback retries not scheduled.",
+    "Total time is summed request service time, not concurrent elapsed wall time."
+  ]
+}

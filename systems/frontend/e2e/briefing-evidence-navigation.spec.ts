@@ -28,7 +28,9 @@ test("cited evidence opens its object path and is removed on selection and work 
   await expect(page.getByLabel("연결 근거 상세")).toHaveCount(0);
   await expect(page.locator(".natural-briefing-accessible")).toContainText("B 설비");
   await page.getByText("근거",{exact:true}).click();
-  await expect(page.getByLabel("연결 근거 상세")).toContainText("B · event-B");
+  await expect(page.getByLabel("연결 근거 상세")).toContainText("B · 선택한 사건의 브리핑 근거");
+  await expect(page.getByLabel("근거 연결 경로").locator("li")).toHaveText(["B","OP-20","ORDER-10","DELIVERY-10"]);
+  await expect(page.getByLabel("연결 근거 상세")).not.toContainText("event-B");
   pending = true;
   await page.getByRole("button",{name:"작업 상태 갱신"}).click();
   await expect(page.getByLabel("연결 근거 상세")).toHaveCount(0);

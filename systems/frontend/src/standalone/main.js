@@ -1,7 +1,7 @@
 import {acceptedBrief, briefingGenerationTrigger} from './aiBrief.js';
 import {mapPresentation, label} from './presentation.js';
 window.factoryDisplay=mapPresentation;
-import { API_BASE, getCurrentUser, getProjects, getProjectWorkspaces, setActiveProject, logout, getMaintenanceEventLineage, getMaintenanceActionCandidates, getPostMaintenanceProductResults } from '../api';
+import { API_BASE, createOperationsAgentReviewSummary, getCurrentUser, getProjects, getProjectWorkspaces, setActiveProject, logout, getMaintenanceEventLineage, getMaintenanceActionCandidates, getPostMaintenanceProductResults } from '../api';
 import { loadOperationsBootstrap } from '../features/operations/api/operationsApi';
 import { composeEventDetail, applyAssetDetailViewModel } from '../features/operations/api/operationsAdapters';
 
@@ -103,7 +103,7 @@ async function loadAiBrief(token,signal){
 async function generateAi(data){
  if(!state.canGenerateAi||state.aiGenerating||state.aiLoading||!state.detail||state.error||data.assetId!==state.selectedAssetId||data.eventId!==state.selectedEventId)return;
  const token=generation,signal=controller.signal;state.aiGenerating=true;state.aiError=null;emit();
- try{const response=await request(aiPath()+'&trigger='+briefingGenerationTrigger(state),{method:'POST',body:'{}',headers:{'Idempotency-Key':crypto.randomUUID()},signal});if(token!==generation)return;
+ try{const response=await createOperationsAgentReviewSummary({assetId:state.selectedAssetId,projectId,eventId:state.selectedEventId,datasetVersionId:state.model?.context.datasetVersionId,historyWindow:'24h',trigger:briefingGenerationTrigger(state),signal});if(token!==generation)return;
  const generated=acceptedBrief(response,state.selectedAssetId);
  state.aiFallback=response.trace?.fallback?response.trace:null;
  if(!generated){state.aiBrief=null;state.aiError='AI 설명을 제공하지 못했습니다. 현재 판단 근거를 확인하세요.';return;}

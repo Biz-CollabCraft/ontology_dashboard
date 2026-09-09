@@ -128,7 +128,7 @@ def test_prompt_payload_includes_same_decision_flow_on_both_context_paths():
 
 
 def test_prompt_version_and_system_prompt_explain_decision_flow_contract():
-    assert AGENT_REVIEW_SUMMARY_PROMPT_VERSION == "agent-review-summary-prompt-v3.5-workflow-coordination"
+    assert AGENT_REVIEW_SUMMARY_PROMPT_VERSION == "agent-review-summary-prompt-v3.6-grounded-workflow"
     assert "해당 입력과 문장에 실제로 있는 표현만 강조" in AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
     assert "decision_flow는 코드가 만든 결정론적 관계 순서" in AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
     assert "현재 상태 → 원인 관계 → 확인된 기록 → 남은 공백 → 다음 판단" in AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
