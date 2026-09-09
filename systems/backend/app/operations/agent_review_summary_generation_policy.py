@@ -22,7 +22,39 @@ from app.operations.agent_review_summary import validate_agent_review_summary_co
 ROLE_POLICY_VERSION = "role-briefing-policy-v2"
 MINOR_PROBABILITY_DELTA = 0.005  # Fixed before temporal v3 evaluation: 0.5 percentage point.
 MODEL_POLICY_VERSION = "exact-materialization-model-v1"
-GENERATION_POLICIES = ("click", "always", "hybrid")
+GENERATION_POLICIES = ("click", "always", "hybrid", "demand")
+
+
+def background_generation_required(packet, previous=None):
+    """Demand policy: precompute urgent/unknown risk; ordinary risk waits for a request.
+
+    This is a scheduling gate, never a cache-validity decision. Deliberately
+    conservative for unknown risk, and independent of changing snapshot IDs.
+    """
+    risk = packet.get("risk_summary") or {}
+    grade = risk.get("status_grade")
+    priority = (packet.get("review_priority") or {}).get("level")
+    probability = risk.get("failure_probability")
+    threshold = (packet.get("model_expression_context") or {}).get("threshold")
+    if previous is None and (packet.get("maintenance_history_summary") or {}).get("open_work_order_exists") is True:
+        return True
+    if previous is not None:
+        for field in ("maintenance_history_summary", "operation_context_summary", "review_priority"):
+            if packet.get(field) != previous.get(field):
+                return True
+        old_risk = previous.get("risk_summary") or {}
+        old_probability = old_risk.get("failure_probability")
+        if old_risk.get("status_grade") != grade:
+            return True
+        if type(old_probability) not in (int, float) or type(probability) not in (int, float):
+            return True
+        if not math.isfinite(old_probability) or abs(probability - old_probability) > MINOR_PROBABILITY_DELTA:
+            return True
+    if grade not in {"normal", "attention"} or priority == "immediate":
+        return True
+    if type(probability) not in (int, float) or type(threshold) not in (int, float):
+        return True
+    return not (math.isfinite(probability) and math.isfinite(threshold)) or probability >= threshold
 
 
 class SnapshotGuardedRepository:
@@ -218,6 +250,7 @@ def decide_generation(
     model_id: str = "unknown",
     material_change: bool = True,
     input_valid: bool = True,
+    background_required: bool = True,
 ) -> dict[str, Any]:
     if policy not in GENERATION_POLICIES:
         raise ValueError(f"unknown generation policy: {policy}")
@@ -237,6 +270,8 @@ def decide_generation(
         reason = "exact_stored_snapshot" if exact_cached else "await_explicit_refresh"
     elif exact_cached and not retry_fallback:
         trigger, decision, reason = "INITIAL", "REUSE", "exact_stored_snapshot"
+    elif policy == "demand" and not background_required:
+        trigger, decision, reason = "AWAIT_DEMAND", "ON_DEMAND", "ordinary_risk_waits_for_explicit_request"
     elif retry_fallback:
         trigger, decision, reason = "RETRY", "PREGENERATE", "retry_existing_fallback"
     elif policy == "hybrid" and not material_change:
@@ -255,6 +290,7 @@ def decide_generation(
         "generation_action": "GENERATE" if input_valid and (explicit_refresh or decision == "PREGENERATE") else "DEFER",
         "reuse_eligibility": reuse_eligibility,
         "decision_reason": reason,
+        "background_required": background_required,
         "previous_fingerprint": previous_fingerprint,
         "current_fingerprint": current_fingerprint,
         "role_policy_version": ROLE_POLICY_VERSION,

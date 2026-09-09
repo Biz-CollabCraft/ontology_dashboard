@@ -10,3 +10,11 @@ it('selects exactly the requested role and falls back to common legacy prose',()
 });
 it('accepts only validated stored LLM prose for this asset',()=>{const r={summary:{asset_id:'A',mode:'llm',summary:'근거'},trace:{fallback:false,materialization:{status:'ready'}}};expect(acceptedBrief(r,'A')).toBe(r.summary);expect(()=>acceptedBrief(r,'B')).toThrow();expect(acceptedBrief({...r,trace:{fallback:true,materialization:{status:'fallback'}}},'A')).toBeNull();expect(acceptedBrief({summary:null},'A')).toBeNull();});
 it('does not grant generation rights through display tabs',()=>{expect(briefPresentation({detail:{},canGenerateAi:false}).aiDisabled).toBe(true);expect(briefPresentation({detail:{},canGenerateAi:true,aiGenerating:true}).aiDisabled).toBe(true);expect(briefPresentation({detail:{},canGenerateAi:true,aiError:'403'}).aiStatus).toBe('403');});
+it('keeps current evidence available while AI is pending, generating, or fallback',()=>{
+ for(const flags of [{},{aiGenerating:true},{aiFallback:{reason:'TimeoutError'}}]){
+  const v=briefPresentation({detail:{},canGenerateAi:true,...flags});
+  expect(v.aiAvailabilityNote).toContain('현재 상태와 판단 근거');
+ }
+ expect(briefPresentation({detail:{},canGenerateAi:true,aiFallback:{}}).aiStatus).toBe('기본 근거 제공');
+ expect(briefPresentation({detail:{},canGenerateAi:true,aiGenerating:true,aiLoading:true}).aiStatus).toBe('생성 중');
+});

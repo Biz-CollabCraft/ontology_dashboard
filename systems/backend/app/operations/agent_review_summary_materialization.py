@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from typing import Any
 
 from app.operations.agent_review_summary import (
@@ -140,6 +141,15 @@ class AgentReviewSummaryMaterializer:
         }
 
     def _generate_summary(self, packet: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        started = time.monotonic()
+        metrics = {"provider_invocations": 0, "content_attempt_count": None,
+                   "repair_count": None, "usage": None}
+        summary, trace = self._generate_summary_measured(packet, metrics)
+        return summary, {**trace, "generation_metrics": {
+            **metrics, "duration_ms": round((time.monotonic() - started) * 1000, 3),
+        }}
+
+    def _generate_summary_measured(self, packet, metrics):
         provider = self.provider
         if provider is None:
             summary, errors = validated_agent_review_summary(packet=packet)
@@ -151,7 +161,16 @@ class AgentReviewSummaryMaterializer:
             }
 
         try:
-            candidate = provider.generate(packet)
+            metrics["provider_invocations"] = 1
+            if hasattr(provider, "generate_with_metadata"):
+                candidate, metadata = provider.generate_with_metadata(packet)
+                attempts = metadata.get("content_review_attempts")
+                if isinstance(attempts, list):
+                    metrics["content_attempt_count"] = len(attempts)
+                    metrics["repair_count"] = max(0, len(attempts) - 1)
+                metrics["usage"] = metadata.get("usage")
+            else:
+                candidate = provider.generate(packet)
             candidate_errors = validate_agent_review_summary_contract(
                 candidate, packet=packet
             )
@@ -173,6 +192,10 @@ class AgentReviewSummaryMaterializer:
                 "fallback_validation_errors": errors,
             }
         except Exception as exc:
+            attempts = getattr(exc, "review_attempts", None)
+            if isinstance(attempts, list):
+                metrics["content_attempt_count"] = len(attempts)
+                metrics["repair_count"] = max(0, len(attempts) - 1)
             summary, errors = validated_agent_review_summary(packet=packet)
             return summary, {
                 "provider": getattr(provider, "name", "unknown"),

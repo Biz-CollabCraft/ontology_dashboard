@@ -106,7 +106,7 @@ async function generateAi(data){
  try{const response=await request(aiPath()+'&trigger=ui_manual_regeneration',{method:'POST',body:'{}',headers:{'Idempotency-Key':crypto.randomUUID()},signal});if(token!==generation)return;
  const generated=acceptedBrief(response,state.selectedAssetId);
  state.aiFallback=response.trace?.fallback?response.trace:null;
- if(!generated){state.aiBrief=null;state.aiError='AI 생성 결과가 검증을 통과하지 못했습니다. 기존 판단 근거를 확인하세요.';return;}
+ if(!generated){state.aiBrief=null;state.aiError='AI 설명을 제공하지 못했습니다. 현재 판단 근거를 확인하세요.';return;}
  await loadAiBrief(token,signal);
  }catch(e){if(token!==generation||signal.aborted)return;state.aiError=errorText(e);}
  finally{if(token===generation){state.aiGenerating=false;emit();}}
