@@ -32,3 +32,20 @@ def test_incomplete_data_does_not_change_selection(isolated):
     (isolated/'normal-window.json').write_text(json.dumps({'ticks':[]}))
     with pytest.raises(ValueError): scenarios.select_scenario('normal','tester')
     assert scenarios.scenario_status()['mode']=='live'
+
+@pytest.mark.parametrize('mode', ['normal', 'emergency', 'live'])
+def test_generated_tick_refreshes_without_partial_frames(isolated, mode):
+    run = isolated/'generated'/mode/'runs'/'test'
+    (run/'source').mkdir(parents=True)
+    (run/'canonical').mkdir()
+    (run/'canonical'/'asset_master.csv').write_text('asset_id\nA\nB\n')
+    stream = run/'source'/'sensor_records.jsonl'
+    rows = [{'asset_id': asset, 'observed_at': '2026-09-09T00:00:00Z'} for asset in ('A','B')]
+    rows.append({'asset_id':'A','observed_at':'2026-09-09T00:10:00Z'})
+    stream.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+    (isolated/'live-state.json').write_text(json.dumps({mode:{'stream':str(stream)}}))
+    scenarios.select_scenario(mode, 'tester')
+    assert scenarios.selected_window()[1] == '2026-09-09T00:00:00Z'
+    with stream.open('a') as handle:
+        handle.write(json.dumps({'asset_id':'B','observed_at':'2026-09-09T00:10:00Z'})+'\n')
+    assert scenarios.selected_window()[1] == '2026-09-09T00:10:00Z'
