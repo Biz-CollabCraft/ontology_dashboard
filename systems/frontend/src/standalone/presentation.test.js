@@ -27,3 +27,12 @@ it('preserves deterministic reasons while AI is pending or unavailable',()=>{
  expect(fallback.reasons).toEqual(pending.reasons);
  expect(fallback.priorityHead).toContain('현재 판단 근거');
 });
+
+it('shows the lookup error and briefing controls before detail is available',()=>{
+ const v=mapPresentation({lines:[]},{detail:null,error:'설비 조회 실패',canGenerateAi:true});
+ expect(v.sourceLabel).toBe('설비 조회 실패');
+ expect(v.aiButtonLabel).toBe('생성');
+ expect(v.aiDisabled).toBe(true);
+ expect(v.aiBriefEmpty).toBe(true);
+ expect(v.priorityHead).toBe('설비 조회 실패');
+});
