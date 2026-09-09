@@ -183,6 +183,10 @@ class AgentReviewSummaryProvider:
                     response_schema_name="agent_review_summary_editable",
                 )
                 metadata = {"usage": None, "usage_measurement": "not_reported"}
+            payload = _ensure_reference_economics_in_manager_quote(
+                payload,
+                prompt_payload["decision_facts"],
+            )
             summary = _merge_llm_editable_fields(baseline_summary=baseline_summary, candidate=payload)
             issues = briefing_issues(payload, prompt_payload["decision_facts"])
             issues.extend(_editable_prose_review_issues(payload))
@@ -295,6 +299,47 @@ def _merge_llm_editable_fields(
         for item in baseline_summary.get("role_summaries") or []
     ]
     return summary
+
+
+def _ensure_reference_economics_in_manager_quote(
+    payload: dict[str, Any],
+    facts: dict[str, Any],
+) -> dict[str, Any]:
+    """Preserve supplied reference costs when the prose model omits them."""
+
+    economics = facts.get("reference_economics") or {}
+    if economics.get("status") != "illustrative_not_site_quote":
+        return payload
+    metrics = economics.get("metrics") or {}
+    required = {
+        "hourly_production_cost": metrics.get("hourly_production_cost"),
+        "stop_minutes": metrics.get("stop_minutes"),
+        "stop_production_cost": metrics.get("stop_production_cost"),
+    }
+    if any(not isinstance(item, dict) or item.get("value") is None for item in required.values()):
+        return payload
+
+    next_payload = deepcopy(payload)
+    for item in next_payload.get("role_summaries") or []:
+        if not isinstance(item, dict) or item.get("role") != "process_manager":
+            continue
+        quote = str(item.get("quote") or "")
+        plain = re.sub(r"\[\[ref:[^\]\n]+\]\]", "", quote).replace("**", "")
+        numbers = {float(n.replace(",", "")) for n in re.findall(r"\d[\d,]*(?:\.\d+)?", plain)}
+        required_values = {float(item["value"]) for item in required.values()}
+        has_required_values = required_values.issubset(numbers)
+        has_assumption_label = bool(re.search(r"가정|참고", plain))
+        if has_required_values and has_assumption_label:
+            return payload
+        line = (
+            "가정 기반 참고액은 "
+            f"시간당 생산원가 {required['hourly_production_cost']['value']} {required['hourly_production_cost']['unit']}, "
+            f"정지 시간 {required['stop_minutes']['value']} {required['stop_minutes']['unit']}, "
+            f"정지 생산원가 환산액 {required['stop_production_cost']['value']} {required['stop_production_cost']['unit']}입니다."
+        )
+        item["quote"] = (quote.rstrip() + "\n" + line).strip() if quote.strip() else line
+        return next_payload
+    return payload
 
 
 def _expression_policy(packet):
