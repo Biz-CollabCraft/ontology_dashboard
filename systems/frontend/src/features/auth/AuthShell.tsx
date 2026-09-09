@@ -1,6 +1,7 @@
 import { navigate } from "../../routing";
 import { useEffect, useState } from "react";
-import { Activity, ArrowLeft, ArrowRight, BarChart3, ClipboardCheck, FileText, Gauge, LockKeyhole, MapPinned, ShieldCheck, Wrench } from "lucide-react";
+import { Activity, ArrowLeft, ArrowRight, BarChart3, ClipboardCheck, FileText, Gauge, LockKeyhole, MapPinned, ShieldCheck, Wrench, Sun, Moon } from "lucide-react";
+import { useDisplayPreferences } from "../../ui/foundry/displayPreferences";
 import { useI18n } from "../../ui/i18n/I18nProvider";
 import { CollabCraftLogo } from "../../ui/foundry/CollabCraftLogo";
 
@@ -71,6 +72,11 @@ export function AuthShell({
 }) {
   const { locale } = useI18n();
   const english = locale === "en-US";
+  const { preferences, setTheme } = useDisplayPreferences();
+  const isDark = preferences.theme === "dark" || (preferences.theme === "system" && document.documentElement.dataset.theme === "dark");
+  const themeLabel = english
+    ? (isDark ? "Switch to light mode" : "Switch to dark mode")
+    : (isDark ? "라이트 모드로 전환" : "다크 모드로 전환");
   const [storyIndex, setStoryIndex] = useState(0);
 
   useEffect(() => {
@@ -86,7 +92,12 @@ export function AuthShell({
     <main className="auth-page">
       <header className="auth-platform-bar">
         <button className="auth-brand" onClick={() => navigate("/login")}><span className="brand-mark collabcraft-brand-mark"><CollabCraftLogo /></span><span><strong>CollabCraft</strong><small>Reliability Operations</small></span></button>
-        <div><span><Activity size={13} /> {english ? "Monitoring live" : "실시간 모니터링"}</span><span><ShieldCheck size={13} /> {english ? "Decision traceable" : "판단 근거 추적"}</span><span>Asia/Seoul</span></div>
+        <div><span><Activity size={13} /> {english ? "Monitoring live" : "실시간 모니터링"}</span><span><ShieldCheck size={13} /> {english ? "Decision traceable" : "판단 근거 추적"}</span>
+          <button className="auth-theme-toggle" type="button" aria-label={themeLabel} title={themeLabel}
+            onClick={() => setTheme(isDark ? "light" : "dark")}>
+            {isDark ? <Moon size={20} aria-hidden="true" /> : <Sun size={20} aria-hidden="true" />}
+          </button>
+        </div>
       </header>
       <div className="auth-control-plane">
         <aside className="auth-resource-context">

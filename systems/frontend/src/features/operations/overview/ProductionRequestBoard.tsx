@@ -1,4 +1,5 @@
 import { NaturalBriefing } from "./NaturalBriefing";
+import { DemoScenarioControl } from "./DemoScenarioControl";
 import { LogOut, Printer } from "lucide-react";
 import { printProductionReport } from "./printProductionReport";
 import "./ProductionReportPrint.css";
@@ -163,6 +164,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
         </section></div>
       </div>
     </section></div> : null}
+    <DemoScenarioControl />
   </main>;
 }
 function EquipmentObservation({ asset }: { asset: OperationsAsset | null }) {

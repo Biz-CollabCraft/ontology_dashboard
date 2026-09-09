@@ -115,6 +115,10 @@ def _measurement_factors(record: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]], list[tuple[str, dict[str, dict[str, Any]]]]]:
+    from app.diagnosis.demo_scenarios import selected_window
+    scenario = selected_window()
+    if scenario is not None:
+        return scenario
     configured_root = os.getenv(GEN_DATA_OUTPUT_ROOT_ENV, "").strip()
     session_roots = sorted(
         Path("/home/bistell/ontology_dashboard/data_preprocessed/local-realtime/sessions").glob(
@@ -770,6 +774,31 @@ def filesystem_overview(
         workspace_id=workspace_id,
     )
     return _filesystem_overview(project_id, workspace_id)
+
+
+@router.get("/demo-scenario")
+def get_demo_scenario(project_id: str, workspace_id: str,
+    principal: Principal = Depends(require_permission("events.read")),
+    identity: IdentityService = Depends(get_identity_service)):
+    require_scope(principal=principal, identity=identity, project_id=project_id, workspace_id=workspace_id)
+    if project_id != "manufacturing-demo-project" or workspace_id != "manufacturing-demo":
+        raise HTTPException(status_code=404, detail="Demo only")
+    from app.diagnosis.demo_scenarios import scenario_status
+    return scenario_status()
+
+
+@router.post("/demo-scenario")
+def set_demo_scenario(project_id: str, workspace_id: str,
+    mode: Literal["live", "normal", "emergency"] = Body(embed=True),
+    principal: Principal = Depends(require_permission("events.read")),
+    _: None = Depends(require_csrf),
+    identity: IdentityService = Depends(get_identity_service)):
+    get_demo_scenario(project_id, workspace_id, principal, identity)
+    from app.diagnosis.demo_scenarios import select_scenario
+    try:
+        return select_scenario(mode, principal.user_id)
+    except (ValueError, FileNotFoundError):
+        raise HTTPException(status_code=409, detail="시연 데이터 준비 상태를 확인해 주세요.")
 
 
 @router.get("/results/post-maintenance")

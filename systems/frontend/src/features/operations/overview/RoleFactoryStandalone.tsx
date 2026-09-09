@@ -1,4 +1,5 @@
 import { NaturalBriefing } from "./NaturalBriefing";
+import { DemoScenarioControl } from "./DemoScenarioControl";
 import { LogOut } from "lucide-react";
 import { MaintenanceApprovalList } from "./MaintenanceApprovalList";
 import "./MaintenanceRequestList.css";
@@ -97,6 +98,7 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
   const [coordinationConnection, setCoordinationConnection] = useState<{ workOrderId: string; state: "loading" | "online" | "offline" } | null>(null);
   const selectedWorkOrder = workOrders.find((item) => item.work_order_id === selectedWorkOrderId);
   const inspectionOrders = workOrders.filter((item) => !item.inspection_result);
+  const approvalCount = workOrders.filter(item => item.inspection_result?.outcome === "maintenance_recommended" && (item.status === "approved" || item.status === "in_progress")).length;
   const risky = [...model.assets].filter((asset) => asset.status !== "normal").sort((a, b) => severity(b) - severity(a) || (b.failureProbability ?? -1) - (a.failureProbability ?? -1));
   const urgent = risky.filter((asset) => tone(asset) === "critical");
   const impactedLines = new Set(risky.map((asset) => asset.line)).size;
@@ -135,7 +137,8 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
 
     <section className="engineer-factory-kpis">
       {persona === "maintenance" ? <>
-        <article><span>진행 중 점검 요청</span><strong>{inspectionOrders.length}<small>건</small></strong><p>점검 완료 건은 종결하거나 정비 승인 목록으로 이동합니다.</p></article>
+        <article><span>점검 요청 목록</span><strong>{workOrderError ? "확인 필요" : inspectionOrders.length}{!workOrderError && <small>건</small>}</strong><p>접수 전·점검 진행 중인 요청입니다.</p></article>
+        <article><span>정비 승인 목록</span><strong>{workOrderError ? "확인 필요" : approvalCount}{!workOrderError && <small>건</small>}</strong><p>정비 필요 판정 후 승인 요청·승인 대기·정비 진행 항목입니다.</p></article>
         <article><span>긴급 설비</span><strong>{urgent.length}<small>대</small></strong><p>현장 안전과 작업 허가를 우선 확인합니다.</p></article>
       </> : <>
         <article><span>생산 영향 검토 설비</span><strong>{risky.length}<small>대</small></strong><p>주의 이상 설비를 생산계획과 대조합니다.</p></article>
@@ -193,5 +196,6 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
         <section className="role-impact-evidence"><header><strong>생산 영향 상세 현황</strong><span>현재 설비 관측 기준</span></header><div className="role-financial-summary"><article><span>예상 생산 손실</span><strong>{detail?.operation_context.event_impact?.estimated_lost_units != null ? `${detail.operation_context.event_impact.estimated_lost_units.toLocaleString("ko-KR")}개` : "정보 없음"}</strong></article><article><span>예상 금전 손실</span><strong>산정 기준 미연결</strong><small>품목 단가 계약 필요</small></article></div><section className="role-current-metrics"><header><strong>현 지표</strong><span>위험 기여도 순</span></header><div>{selectedAsset.topFactors.slice(0,4).map((factor) => <article key={factor.id}><span>{displayEquipmentSensorLabel(selectedAsset.assetId, factor.feature, factor.label)}</span><strong>{typeof factor.value === "number" ? `${factor.value.toLocaleString("ko-KR",{maximumFractionDigits:2})}${factor.unit ? ` ${factor.unit}` : ""}` : "확인 필요"}</strong><small>위험 기여 {Math.round(Math.abs(factor.contribution) * 100)}%</small></article>)}</div></section><section className="role-sensor-trends"><header><strong>센서별 자세한 추이</strong><span>{selectedAsset.sensorHistory?.length ?? 0}개 센서</span></header><div>{selectedAsset.sensorHistory?.length ? selectedAsset.sensorHistory.map((sensor) => <article key={sensor.feature}><header><b>{displayEquipmentSensorLabel(selectedAsset.assetId, sensor.feature, sensor.label)}</b><strong>{sensor.points.at(-1)?.value.toLocaleString("ko-KR",{maximumFractionDigits:2})}{sensor.unit ? ` ${sensor.unit}` : ""}</strong></header><svg viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={sensorPoints(sensor.points)}/></svg><footer><span>이전</span><span>{sensor.points.length}개 관측</span><span>현재</span></footer></article>) : <p>표시할 센서 관측 이력이 없습니다.</p>}</div></section></section>
       </div>
     </aside></div> : null}
+    <DemoScenarioControl />
   </main>;
 }
