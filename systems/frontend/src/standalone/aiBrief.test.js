@@ -18,3 +18,14 @@ it('keeps current evidence available while AI is pending, generating, or fallbac
  expect(briefPresentation({detail:{},canGenerateAi:true,aiFallback:{}}).aiStatus).toBe('기본 근거 제공');
  expect(briefPresentation({detail:{},canGenerateAi:true,aiGenerating:true,aiLoading:true}).aiStatus).toBe('생성 중');
 });
+
+import {briefingGenerationTrigger} from './aiBrief.js';
+it('keeps initial creation reusable even if a watcher finishes after the last lookup',()=>{
+ const pending={detail:{},canGenerateAi:true,aiBrief:null};
+ expect(briefPresentation(pending).aiButtonLabel).toBe('생성');
+ expect(briefingGenerationTrigger(pending)).toBe('manual_materialization');
+ const ready={...pending,aiBrief:{mode:'llm'}};
+ expect(briefPresentation(ready).aiButtonLabel).toBe('다시 생성');
+ expect(briefingGenerationTrigger(ready)).toBe('ui_manual_regeneration');
+ expect(briefingGenerationTrigger({...pending,aiFallback:{}})).toBe('manual_materialization');
+});
