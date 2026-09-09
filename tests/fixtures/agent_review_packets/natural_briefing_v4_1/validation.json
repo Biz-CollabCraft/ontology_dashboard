@@ -1,0 +1,11 @@
+{
+  "status": "passed",
+  "cases": 8,
+  "role_quotes": 24,
+  "reference_schema_valid": 8,
+  "excluded_source_disclaimer_phrases_found": 0,
+  "resource_lead_time_and_production_numeric_checks": 7,
+  "original_v4_unchanged": true,
+  "human_review": "not_measured",
+  "model_reevaluation": "not_measured"
+}

@@ -1,0 +1,469 @@
+{
+  "gold_answer_set_id": "agent-review-decision-briefing-v4.2",
+  "base_reference_sha256": "c13fc7ed41f895803ae426a4d404360338acdcc5624ae30a5020cac924c9efb2",
+  "source_file_sha256": "64542521b01b1b6628b6a54b1ae1e4510f6c5b9ac39f4ca47e149518a5ac4228",
+  "human_review": "not_measured",
+  "authoring_policy": {
+    "style": "공통 요약 약 2문장, 역할별 상세 브리핑 약 3~5문장. 관련 이력·자원·업무 영향·남은 결정을 연결한다.",
+    "reference_scope": "외부 문서는 브리핑 구성 참고용이며 사례의 사실 근거는 고정 입력뿐이다.",
+    "runtime_status": "gold 작성 지침만 확장했다. 기존 provider prompt의 1~2문장 제한은 변경하지 않았다. 신규 생성 평가 전 prompt 버전을 맞춰야 한다.",
+    "source_disclaimers_in_prose": false
+  },
+  "scoring": {
+    "active_axes": [
+      "근거 충실성",
+      "관계 연결",
+      "우선순위·판단",
+      "실무 활용성",
+      "전달력"
+    ],
+    "scale": {
+      "0": "핵심 누락 또는 잘못된 판단",
+      "1": "부분 충족, 일부 연결이 약함",
+      "2": "핵심 근거와 판단이 충분하고 명확함"
+    },
+    "reporting": "사례당 5축, 8개 사례 총 40개 평정 칸. 총점이나 모델 순위는 만들지 않고 축별 결과를 보고한다.",
+    "critical_errors": "원인·승인·완료 날조, 요인 방향 반전, 잘못된 부품 연결, 미확인을 수량 0으로 바꾸는 오류는 별도 기록하며 좋은 문체로 상쇄하지 않는다.",
+    "legacy_details": "v4의 97개 항목은 근거 점검용 체크리스트로 보존하며 이번 5축 평정에 97개를 추가 합산하지 않는다. 96개는 v3의 근거 포인터 확인 수다.",
+    "input_limits": "모델에 없는 중요도·재고 수량·담당자는 미언급 감점 금지. 판정할 수 없는 축은 null과 사유로 남긴다.",
+    "field_unit": "공통 요약+선택 역할을 한 화면으로 읽는 사용 맥락에서 평가한다. 세 역할 문장을 모두 읽어야만 한 역할의 핵심이 충족되는 구성은 피한다."
+  },
+  "references": [
+    {
+      "title": "HSE: Shift handover",
+      "url": "https://www.hse.gov.uk/humanfactors/topics/shift-handover.htm",
+      "application": "수신자의 정보 필요에 맞춘 전달, 현재 작업 상태와 시점 구분, 확인이 필요한 사항의 인계."
+    },
+    {
+      "title": "IBM: Work order management",
+      "url": "https://www.ibm.com/think/topics/work-order-management",
+      "application": "필요성·긴급성·자원 제약을 우선순위와 일정에 연결하는 구성. 담당자·작업상태·부품 정보는 실제 입력 범위에서만 사용."
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "GS-001",
+      "reference_briefing": {
+        "title": "정상 범위 — 추세 확인 후 점검 판단",
+        "summary": "1구역 1셀 CNC 가공기 1은 정상 등급이며 예측 위험도는 11.6%입니다. 위험도 변화 이력이 없어 추세는 판단하기 어려우므로, 동력 전달부와 냉각 계통의 관측 근거를 대조해 점검 필요성을 검토하세요.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "기계 동력·토크·온도 차이는 위험도를 낮추는 방향으로 반영됐습니다. 주축 모터·커플링과 냉각 라인이 점검 후보이며, 점검 필요성 판단에는 현장 관측값과 변화 이력의 대조가 필요합니다. 다른 설비의 7월 22일 유사 사례에서는 동력 전달부 체결 확인과 커플링 편심 재조정 후 토크·과부하 지표가 완화됐습니다. 이번 설비의 위험 요인은 하향 방향이므로, 이 사례는 점검 범위를 정하는 참고로 활용하고 곧바로 같은 정비를 적용할 근거로 삼지는 않습니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "커플링 키트와 냉각 팬 유닛은 가용으로 등록돼 있으며, 조달 예상 기간은 각각 2일과 1일입니다. 재고 수량과 작업요청·승인 상태는 미확인입니다. 교체가 필요해질 경우 커플링 작업 예상 시간은 3시간, 냉각 팬 작업 예상 시간은 90분입니다. 현재는 점검 필요성을 판단하는 단계이므로, 두 부품이 모두 교체 대상인 것으로 준비 범위를 확정할 필요는 없습니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "생산 영향은 없음으로 분류되며, 45분 정지 가정의 예상 손실은 0개입니다. 점검 필요성과 작업요청 상태에 따라 생산 순서 조정 여부를 검토할 수 있습니다. 현재 정상 등급과 낮은 예측 위험도만으로 긴급 교체 일정을 잡을 근거는 부족합니다. 현장 점검에서 추가 조치가 필요해지면 해당 작업 범위에 맞춰 정지 시간과 생산 영향을 다시 대조해야 합니다."
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "다른 설비의 7월 22일 유사 사례에서는 동력 전달부 체결 확인과 커플링 편심 재조정 후 토크·과부하 지표가 완화됐습니다. 이번 설비의 위험 요인은 하향 방향이므로, 이 사례는 점검 범위를 정하는 참고로 활용하고 곧바로 같은 정비를 적용할 근거로 삼지는 않습니다.",
+          "source_pointers": [
+            "/cases/0/prompt_payload/summary_context/model_factors",
+            "/cases/0/prompt_payload/summary_context/inspection_targets",
+            "/cases/0/prompt_payload/summary_context/similar_event_context",
+            "/cases/0/prompt_payload/summary_context/evidence_gaps"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "교체가 필요해질 경우 커플링 작업 예상 시간은 3시간, 냉각 팬 작업 예상 시간은 90분입니다. 현재는 점검 필요성을 판단하는 단계이므로, 두 부품이 모두 교체 대상인 것으로 준비 범위를 확정할 필요는 없습니다.",
+          "source_pointers": [
+            "/cases/0/prompt_payload/summary_context/spare_part_context",
+            "/cases/0/prompt_payload/summary_context/maintenance_history",
+            "/cases/0/prompt_payload/summary_context/generated_at",
+            "/cases/0/prompt_payload/summary_context/sop_guidance"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재 정상 등급과 낮은 예측 위험도만으로 긴급 교체 일정을 잡을 근거는 부족합니다. 현장 점검에서 추가 조치가 필요해지면 해당 작업 범위에 맞춰 정지 시간과 생산 영향을 다시 대조해야 합니다.",
+          "source_pointers": [
+            "/cases/0/prompt_payload/summary_context/operation_context",
+            "/cases/0/prompt_payload/summary_context/spare_part_context",
+            "/cases/0/prompt_payload/summary_context/risk_summary",
+            "/cases/0/prompt_payload/summary_context/maintenance_history"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "GS-002",
+      "reference_briefing": {
+        "title": "경고 — 공구 마모와 과부하 근거 확인",
+        "summary": "4구역 4셀 CNC 가공기 1은 경고 등급이며 예측 위험도는 82.5%입니다. 공구 마모와 과부하 지표가 위험도를 높이는 방향으로 반영돼, 공구 체결부와 동력 전달부의 점검 근거를 우선 대조할 필요가 있습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "공구 마모는 공구 매거진·스핀들 공구 체결부, 과부하는 주축 모터·커플링의 점검 근거입니다. 토크는 위험도를 낮추는 방향으로 반영됐으며, 최근 악화 여부를 판단할 변화 이력은 제공되지 않았습니다. 다른 설비의 7월 18일 유사 사례에서는 공구 체결 상태를 점검하고 마모된 절삭 인서트를 교체한 뒤 공구 사용 시간 상승 추세가 안정화됐습니다. 이번에도 공구 체결부를 우선 점검할 근거로 참고할 수 있지만, 인서트 교체 여부는 이번 점검 결과로 판단해야 합니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "절삭 인서트와 커플링 키트는 가용으로 등록돼 있으며, 조달 예상 기간은 각각 1일과 2일입니다. 공구 계통 점검 절차는 연결돼 있으나 재고 수량과 작업요청·승인 상태는 미확인입니다. 커플링 교체 예상 시간은 3시간이며, 인서트 교체 시간은 등록되지 않았습니다. 점검 결과가 인서트 교체인지 동력 전달부 조정·교체인지에 따라 필요한 부품과 작업 시간이 달라지므로, 조치 범위를 정한 뒤 준비 일정을 구체화해야 합니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "생산 영향은 중간 수준이며, 120분 정지 시 예상 손실은 25개입니다. 작업요청·승인 상태를 확인한 뒤 점검 시점과 생산 순서 조정을 검토할 필요가 있습니다. 커플링 교체가 필요한 경우 작업 예상 시간은 3시간으로, 생산 영향 계산에 사용된 정지 2시간과 다릅니다. 교체 범위가 확정되면 같은 정지 조건으로 손실을 다시 산정해야 하며, 현재 25개 추정치를 그대로 적용하기는 어렵습니다."
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "다른 설비의 7월 18일 유사 사례에서는 공구 체결 상태를 점검하고 마모된 절삭 인서트를 교체한 뒤 공구 사용 시간 상승 추세가 안정화됐습니다. 이번에도 공구 체결부를 우선 점검할 근거로 참고할 수 있지만, 인서트 교체 여부는 이번 점검 결과로 판단해야 합니다.",
+          "source_pointers": [
+            "/cases/1/prompt_payload/summary_context/model_factors",
+            "/cases/1/prompt_payload/summary_context/inspection_targets",
+            "/cases/1/prompt_payload/summary_context/similar_event_context",
+            "/cases/1/prompt_payload/summary_context/evidence_gaps"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "커플링 교체 예상 시간은 3시간이며, 인서트 교체 시간은 등록되지 않았습니다. 점검 결과가 인서트 교체인지 동력 전달부 조정·교체인지에 따라 필요한 부품과 작업 시간이 달라지므로, 조치 범위를 정한 뒤 준비 일정을 구체화해야 합니다.",
+          "source_pointers": [
+            "/cases/1/prompt_payload/summary_context/spare_part_context",
+            "/cases/1/prompt_payload/summary_context/maintenance_history",
+            "/cases/1/prompt_payload/summary_context/generated_at",
+            "/cases/1/prompt_payload/summary_context/sop_guidance"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "커플링 교체가 필요한 경우 작업 예상 시간은 3시간으로, 생산 영향 계산에 사용된 정지 2시간과 다릅니다. 교체 범위가 확정되면 같은 정지 조건으로 손실을 다시 산정해야 하며, 현재 25개 추정치를 그대로 적용하기는 어렵습니다.",
+          "source_pointers": [
+            "/cases/1/prompt_payload/summary_context/operation_context",
+            "/cases/1/prompt_payload/summary_context/spare_part_context",
+            "/cases/1/prompt_payload/summary_context/risk_summary",
+            "/cases/1/prompt_payload/summary_context/maintenance_history"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "GS-003",
+      "reference_briefing": {
+        "title": "경고 — 냉각 경로의 관측 근거 확인",
+        "summary": "1구역 4셀 CNC 가공기 3은 경고 등급이며 예측 위험도는 60.2%입니다. 공정과 주변 공기의 온도 차이가 위험도를 높이는 방향으로 반영돼, 스핀들 냉각 라인과 열 배출 경로를 중심으로 점검 근거를 확인할 필요가 있습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "온도 차이가 위험 상승 요인으로 나타나 스핀들 냉각 라인과 열 배출 경로를 우선 점검할 필요가 있습니다. 해당 계통에 점검 절차가 연결돼 있으며, 토크와 기계 동력은 위험도를 낮추는 방향으로 반영됐습니다. 다른 설비의 7월 24일 유사 사례에서는 냉각 라인 막힘과 방열 팬을 점검한 뒤 온도 차이가 완화됐습니다. 이번 점검에서도 냉각 경로를 먼저 대조하되, 막힘이나 팬 고장이 현재 확인된 것으로 해석해서는 안 됩니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "냉각 팬 유닛은 가용으로 등록돼 있으며, 조달 예상 기간은 1일이고 교체 예상 시간은 90분입니다. 냉각 계통 점검 절차는 연결돼 있으나 작업요청·승인 상태는 미확인입니다. 함께 연결된 커플링 키트도 가용으로 등록돼 있으며 조달 예상 기간은 2일, 교체 예상 시간은 3시간입니다. 온도 차이에 연결된 냉각 계통을 먼저 살펴보고, 동력 전달부까지 작업을 확대할지는 점검 결과로 구분할 필요가 있습니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "생산 영향은 중간 수준이며, 150분 정지 시 예상 손실은 32개입니다. 냉각 계통 점검 시점과 생산 순서 조정이 검토 대상이며, 현재 작업요청·승인 상태는 미확인입니다. 냉각 팬 교체 예상 90분과 생산 영향 계산의 정지 150분은 서로 다른 계획값입니다. 실제 작업 범위가 정해지면 준비·점검을 포함한 정지 시간을 확인해 생산 영향과 일정 변경 범위를 다시 대조해야 합니다."
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "다른 설비의 7월 24일 유사 사례에서는 냉각 라인 막힘과 방열 팬을 점검한 뒤 온도 차이가 완화됐습니다. 이번 점검에서도 냉각 경로를 먼저 대조하되, 막힘이나 팬 고장이 현재 확인된 것으로 해석해서는 안 됩니다.",
+          "source_pointers": [
+            "/cases/2/prompt_payload/summary_context/model_factors",
+            "/cases/2/prompt_payload/summary_context/inspection_targets",
+            "/cases/2/prompt_payload/summary_context/similar_event_context",
+            "/cases/2/prompt_payload/summary_context/evidence_gaps"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "함께 연결된 커플링 키트도 가용으로 등록돼 있으며 조달 예상 기간은 2일, 교체 예상 시간은 3시간입니다. 온도 차이에 연결된 냉각 계통을 먼저 살펴보고, 동력 전달부까지 작업을 확대할지는 점검 결과로 구분할 필요가 있습니다.",
+          "source_pointers": [
+            "/cases/2/prompt_payload/summary_context/spare_part_context",
+            "/cases/2/prompt_payload/summary_context/maintenance_history",
+            "/cases/2/prompt_payload/summary_context/generated_at",
+            "/cases/2/prompt_payload/summary_context/sop_guidance"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "냉각 팬 교체 예상 90분과 생산 영향 계산의 정지 150분은 서로 다른 계획값입니다. 실제 작업 범위가 정해지면 준비·점검을 포함한 정지 시간을 확인해 생산 영향과 일정 변경 범위를 다시 대조해야 합니다.",
+          "source_pointers": [
+            "/cases/2/prompt_payload/summary_context/operation_context",
+            "/cases/2/prompt_payload/summary_context/spare_part_context",
+            "/cases/2/prompt_payload/summary_context/risk_summary",
+            "/cases/2/prompt_payload/summary_context/maintenance_history"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "GS-004",
+      "reference_briefing": {
+        "title": "위험 — 동력 전달부 점검과 기록 시점 확인",
+        "summary": "4구역 2셀 CNC 가공기 3은 위험 등급이며 예측 위험도는 90.8%로, 기계 동력·과부하·토크가 위험도를 높이는 방향으로 반영됐습니다. 동력 전달부 점검을 우선 검토하되, 함께 제공된 작업요청은 기준 시각 이후 기록이므로 당시 상태와 구분해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "기계 동력·과부하·토크가 모두 위험 상승 요인으로 나타나 주축 모터·커플링·동력 전달 하우징의 점검을 우선 검토해야 합니다. 고장 부위와 교체 필요성을 판단하려면 현장 관측값과 점검 결과가 필요합니다. 다른 설비의 7월 22일 유사 사례에서는 체결 상태 확인과 커플링 편심 재조정 후 토크·과부하 지표가 완화됐습니다. 따라서 커플링을 바로 교체하는 결론보다 체결·정렬 상태를 포함한 점검 결과로 조치 범위를 정하는 접근이 타당합니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "커플링 키트는 현재 가용 불가로 등록돼 있으며, 조달 예상 기간은 2일이고 교체 예상 시간은 3시간입니다. 점검은 우선 검토하되 교체 일정은 부품 확보 시점에 맞춰 조정해야 하며, 00:05 작업요청 기록만으로 기준 시각인 00:00의 승인 상태를 확인할 수는 없습니다. 작업요청 기록의 상태는 요청 단계이며, 승인·작업 시작·완료 기록은 제공되지 않았습니다. 교체 필요성이 확인되면 조달 예상 기간과 실제 확보 가능 시점을 대조해 작업 시간을 잡아야 합니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "생산 영향은 높은 수준이며, 240분 정지 시 예상 손실은 51개입니다. 점검을 우선 검토하고 교체가 필요하면 부품 조달 2일을 일정에 반영해야 하며, 기준 이후의 작업요청 기록으로 당시 승인을 확정할 수는 없습니다. 교체 예상 3시간과 생산 영향 계산의 정지 4시간은 다른 값이며, 부품 조달 2일 동안 계속 설비가 정지한다는 근거는 없습니다. 따라서 점검 시점, 교체가 필요할 때의 부품 확보 시점, 실제 정지 시간을 나누어 생산 계획을 검토해야 합니다."
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "다른 설비의 7월 22일 유사 사례에서는 체결 상태 확인과 커플링 편심 재조정 후 토크·과부하 지표가 완화됐습니다. 따라서 커플링을 바로 교체하는 결론보다 체결·정렬 상태를 포함한 점검 결과로 조치 범위를 정하는 접근이 타당합니다.",
+          "source_pointers": [
+            "/cases/3/prompt_payload/summary_context/model_factors",
+            "/cases/3/prompt_payload/summary_context/inspection_targets",
+            "/cases/3/prompt_payload/summary_context/similar_event_context",
+            "/cases/3/prompt_payload/summary_context/evidence_gaps"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "작업요청 기록의 상태는 요청 단계이며, 승인·작업 시작·완료 기록은 제공되지 않았습니다. 교체 필요성이 확인되면 조달 예상 기간과 실제 확보 가능 시점을 대조해 작업 시간을 잡아야 합니다.",
+          "source_pointers": [
+            "/cases/3/prompt_payload/summary_context/spare_part_context",
+            "/cases/3/prompt_payload/summary_context/maintenance_history",
+            "/cases/3/prompt_payload/summary_context/generated_at",
+            "/cases/3/prompt_payload/summary_context/sop_guidance"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "교체 예상 3시간과 생산 영향 계산의 정지 4시간은 다른 값이며, 부품 조달 2일 동안 계속 설비가 정지한다는 근거는 없습니다. 따라서 점검 시점, 교체가 필요할 때의 부품 확보 시점, 실제 정지 시간을 나누어 생산 계획을 검토해야 합니다.",
+          "source_pointers": [
+            "/cases/3/prompt_payload/summary_context/operation_context",
+            "/cases/3/prompt_payload/summary_context/spare_part_context",
+            "/cases/3/prompt_payload/summary_context/risk_summary",
+            "/cases/3/prompt_payload/summary_context/maintenance_history"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "GS-005",
+      "reference_briefing": {
+        "title": "경고 — 공구와 동력 전달부 점검 검토",
+        "summary": "3구역 1셀 CNC 가공기 3은 경고 등급이며 예측 위험도는 77.2%입니다. 공구 마모·과부하·기계 동력이 위험도를 높이는 방향으로 반영돼, 공구 계통과 동력 전달부의 점검 근거를 함께 확인할 필요가 있습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "공구 마모는 공구 체결부, 과부하와 기계 동력은 주축 모터·커플링의 점검 근거입니다. 공구 계통과 동력 전달부를 함께 점검할 필요가 있으며, 최근 30일의 유사 이벤트 전체 건수는 미확인입니다. 다른 설비의 관련 이력에는 7월 18일 공구 체결 점검·인서트 교체와 7월 22일 커플링 편심 재조정 사례가 있습니다. 공구와 동력 전달부를 구분해 점검 결과를 남기면 어느 계통의 조치가 필요한지 판단하는 데 도움이 됩니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "절삭 인서트와 커플링 키트는 가용으로 등록돼 있으며, 조달 예상 기간은 각각 1일과 2일입니다. 공구 계통 점검 절차는 연결돼 있으나 재고 수량과 작업요청·승인 상태는 미확인입니다. 커플링 교체 예상 시간은 3시간이고 인서트 교체 시간은 등록되지 않았습니다. 부품이 가용으로 표시돼 있어도 수량과 작업 승인이 확인된 것은 아니므로, 점검 결과로 필요한 자재를 좁힌 뒤 준비 완료 여부를 판단해야 합니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "생산 영향은 낮은 수준이며, 100분 정지 시 예상 손실은 18개입니다. 설비 위험도는 77.2%로 경고 수준이므로, 생산 영향과 별도로 점검 시점을 검토해야 합니다. 커플링 교체 예상 시간은 3시간으로, 현재 손실 계산에 사용된 정지 100분보다 깁니다. 동력 전달부 교체가 필요한 것으로 판단되면 현재 손실 추정치 18개를 그대로 사용하지 말고 실제 작업 범위에 맞춰 정지 계획을 다시 검토해야 합니다."
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "다른 설비의 관련 이력에는 7월 18일 공구 체결 점검·인서트 교체와 7월 22일 커플링 편심 재조정 사례가 있습니다. 공구와 동력 전달부를 구분해 점검 결과를 남기면 어느 계통의 조치가 필요한지 판단하는 데 도움이 됩니다.",
+          "source_pointers": [
+            "/cases/4/prompt_payload/summary_context/model_factors",
+            "/cases/4/prompt_payload/summary_context/inspection_targets",
+            "/cases/4/prompt_payload/summary_context/similar_event_context",
+            "/cases/4/prompt_payload/summary_context/evidence_gaps"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "커플링 교체 예상 시간은 3시간이고 인서트 교체 시간은 등록되지 않았습니다. 부품이 가용으로 표시돼 있어도 수량과 작업 승인이 확인된 것은 아니므로, 점검 결과로 필요한 자재를 좁힌 뒤 준비 완료 여부를 판단해야 합니다.",
+          "source_pointers": [
+            "/cases/4/prompt_payload/summary_context/spare_part_context",
+            "/cases/4/prompt_payload/summary_context/maintenance_history",
+            "/cases/4/prompt_payload/summary_context/generated_at",
+            "/cases/4/prompt_payload/summary_context/sop_guidance"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "커플링 교체 예상 시간은 3시간으로, 현재 손실 계산에 사용된 정지 100분보다 깁니다. 동력 전달부 교체가 필요한 것으로 판단되면 현재 손실 추정치 18개를 그대로 사용하지 말고 실제 작업 범위에 맞춰 정지 계획을 다시 검토해야 합니다.",
+          "source_pointers": [
+            "/cases/4/prompt_payload/summary_context/operation_context",
+            "/cases/4/prompt_payload/summary_context/spare_part_context",
+            "/cases/4/prompt_payload/summary_context/risk_summary",
+            "/cases/4/prompt_payload/summary_context/maintenance_history"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "GS-006",
+      "reference_briefing": {
+        "title": "주의 — 추세와 현장 근거를 보완",
+        "summary": "2구역 2셀 CNC 가공기 2는 주의 등급이며 예측 위험도는 29.5%입니다. 위험도 변화 이력이 없어 악화 여부는 판단하기 어려우므로, 공구 계통과 동력 전달부의 관측 근거를 대조해 점검 필요성을 검토하세요.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "공구 마모·토크·기계 동력은 위험도를 낮추는 방향으로 반영됐습니다. 공구 매거진과 주축 모터·커플링이 점검 후보이며, 적용할 점검 절차와 변화 이력은 제공되지 않았습니다. 관련 이력에는 공구 체결 점검·인서트 교체와 커플링 편심 재조정 사례가 있습니다. 다만 이번 위험 요인은 모두 하향 방향이므로, 과거 조치 이력만으로 즉시 교체를 결정할 근거는 부족합니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "절삭 인서트와 커플링 키트는 가용으로 등록돼 있으며, 조달 예상 기간은 각각 1일과 2일입니다. 적용할 점검 절차와 작업요청·승인 상태가 미확인이므로 준비 완료 여부는 판단할 수 없습니다. 커플링 교체 예상 시간은 3시간이며 인서트 교체 시간은 등록되지 않았습니다. 현재는 적용할 절차와 점검 범위를 정하는 단계로, 과거 유사 사례에서 교체했다는 이유만으로 이번 작업도 교체로 확정할 수는 없습니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "생산 영향은 낮은 수준이며, 60분 정지 시 예상 손실은 13개입니다. 점검 필요성과 작업요청 상태에 따라 생산 순서 조정 여부를 검토할 수 있습니다. 현재의 정지 60분은 커플링 교체 예상 3시간과 동일한 작업 조건이 아닙니다. 교체가 필요한 상황으로 바뀌면 생산 영향도 다시 검토해야 하며, 현재 자료만으로 교체 일정이나 확정 손실량을 정할 수는 없습니다."
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "관련 이력에는 공구 체결 점검·인서트 교체와 커플링 편심 재조정 사례가 있습니다. 다만 이번 위험 요인은 모두 하향 방향이므로, 과거 조치 이력만으로 즉시 교체를 결정할 근거는 부족합니다.",
+          "source_pointers": [
+            "/cases/5/prompt_payload/summary_context/model_factors",
+            "/cases/5/prompt_payload/summary_context/inspection_targets",
+            "/cases/5/prompt_payload/summary_context/similar_event_context",
+            "/cases/5/prompt_payload/summary_context/evidence_gaps"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "커플링 교체 예상 시간은 3시간이며 인서트 교체 시간은 등록되지 않았습니다. 현재는 적용할 절차와 점검 범위를 정하는 단계로, 과거 유사 사례에서 교체했다는 이유만으로 이번 작업도 교체로 확정할 수는 없습니다.",
+          "source_pointers": [
+            "/cases/5/prompt_payload/summary_context/spare_part_context",
+            "/cases/5/prompt_payload/summary_context/maintenance_history",
+            "/cases/5/prompt_payload/summary_context/generated_at",
+            "/cases/5/prompt_payload/summary_context/sop_guidance"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재의 정지 60분은 커플링 교체 예상 3시간과 동일한 작업 조건이 아닙니다. 교체가 필요한 상황으로 바뀌면 생산 영향도 다시 검토해야 하며, 현재 자료만으로 교체 일정이나 확정 손실량을 정할 수는 없습니다.",
+          "source_pointers": [
+            "/cases/5/prompt_payload/summary_context/operation_context",
+            "/cases/5/prompt_payload/summary_context/spare_part_context",
+            "/cases/5/prompt_payload/summary_context/risk_summary",
+            "/cases/5/prompt_payload/summary_context/maintenance_history"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "GS-007",
+      "reference_briefing": {
+        "title": "판단 보류 — 온도·토크 데이터 보강",
+        "summary": "4구역 5셀 CNC 가공기 1은 데이터 품질 문제로 위험 등급과 예측 위험도를 판단할 수 없습니다. 주변 공기 온도·토크 관측값과 이력 시각을 보강한 뒤 다시 검토해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "주변 공기 온도·토크 관측값과 과거 관측 시각의 유효성 확인이 우선입니다. 현재는 위험 판단 근거와 점검 대상이 없어, 데이터를 보강한 뒤 점검 범위를 정해야 합니다. 특히 현재 온도·토크 값뿐 아니라 과거 관측 시각도 불충분해 전후 변화를 비교할 수 없습니다. 유효한 관측 구간을 확보하는 것이 위험도 재평가와 점검 대상 선정의 선행 조건입니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "점검 대상과 부품 정보가 없어 필요한 자재와 작업 시간을 판단할 수 없습니다. 온도·토크 데이터와 이력 시각을 보강한 뒤 준비 범위를 정해야 하며, 작업요청·승인 상태도 미확인입니다. 현재 정보로는 부품 가용 여부나 조달 기간을 안내할 수 없습니다. 데이터 보강 후 점검 대상이 정해지면 그 대상에 맞는 절차·부품 정보를 연결해 준비 여부를 판단해야 합니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "생산 영향과 예상 손실량을 산정할 근거가 부족합니다. 데이터를 보강한 뒤 점검 승인과 생산 일정 변경 여부를 판단해야 합니다. 지금 필요한 결정은 정비 일정을 확정하는 것이 아니라 판단 가능한 데이터를 확보하는 것입니다. 이를 생산 영향 없음이나 위험 해소로 처리하지 않고, 위험도와 작업 범위가 확인된 뒤 일정 판단으로 이어가야 합니다."
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "특히 현재 온도·토크 값뿐 아니라 과거 관측 시각도 불충분해 전후 변화를 비교할 수 없습니다. 유효한 관측 구간을 확보하는 것이 위험도 재평가와 점검 대상 선정의 선행 조건입니다.",
+          "source_pointers": [
+            "/cases/6/prompt_payload/summary_context/model_factors",
+            "/cases/6/prompt_payload/summary_context/inspection_targets",
+            "/cases/6/prompt_payload/summary_context/similar_event_context",
+            "/cases/6/prompt_payload/summary_context/evidence_gaps"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "현재 정보로는 부품 가용 여부나 조달 기간을 안내할 수 없습니다. 데이터 보강 후 점검 대상이 정해지면 그 대상에 맞는 절차·부품 정보를 연결해 준비 여부를 판단해야 합니다.",
+          "source_pointers": [
+            "/cases/6/prompt_payload/summary_context/spare_part_context",
+            "/cases/6/prompt_payload/summary_context/maintenance_history",
+            "/cases/6/prompt_payload/summary_context/generated_at",
+            "/cases/6/prompt_payload/summary_context/sop_guidance"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "지금 필요한 결정은 정비 일정을 확정하는 것이 아니라 판단 가능한 데이터를 확보하는 것입니다. 이를 생산 영향 없음이나 위험 해소로 처리하지 않고, 위험도와 작업 범위가 확인된 뒤 일정 판단으로 이어가야 합니다.",
+          "source_pointers": [
+            "/cases/6/prompt_payload/summary_context/operation_context",
+            "/cases/6/prompt_payload/summary_context/spare_part_context",
+            "/cases/6/prompt_payload/summary_context/risk_summary",
+            "/cases/6/prompt_payload/summary_context/maintenance_history"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "GS-008",
+      "reference_briefing": {
+        "title": "경고 — 공구 점검 근거와 준비 상태 확인",
+        "summary": "4구역 4셀 CNC 가공기 2는 경고 등급이며 예측 위험도는 82.5%입니다. 공구 마모와 과부하 지표가 위험도를 높이는 방향으로 반영돼, 공구 체결부와 동력 전달부의 점검 근거를 대조할 필요가 있습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "공구 마모와 과부하를 근거로 공구 매거진·스핀들 공구 체결부 및 주축 모터·커플링의 점검을 검토해야 합니다. 토크는 위험도를 낮추는 방향으로 반영됐으며, 교체 여부는 현장 점검 결과에 따라 판단할 사항입니다. 관련 공구 사례에서는 체결 상태 점검 후 인서트를 교체했고, 동력 전달부 사례에서는 커플링 편심을 재조정했습니다. 같은 위험도 수치가 나온 다른 설비와 혼동하지 말고, 이 설비의 점검 결과에 따라 두 계통의 조치 필요성을 구분해야 합니다."
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "절삭 인서트와 커플링 키트는 가용으로 등록돼 있으며, 조달 예상 기간은 각각 1일과 2일입니다. 공구 계통 점검 절차는 연결돼 있으나 재고 수량과 작업요청·승인 상태는 미확인입니다. 커플링 교체 예상 시간은 3시간이며 인서트 교체 시간은 등록되지 않았습니다. 두 부품을 일괄 교체하는 계획보다 공구 체결부와 동력 전달부 점검 결과에 맞춰 필요한 자재와 작업 범위를 구분하는 것이 적절합니다."
+          },
+          {
+            "role": "process_manager",
+            "quote": "생산 영향은 중간 수준이며, 120분 정지 시 예상 손실은 25개입니다. 작업요청·승인 상태를 확인한 뒤 점검 시점과 생산 순서 조정을 검토할 필요가 있습니다. 커플링 교체 예상 3시간은 생산 영향 계산의 정지 2시간과 차이가 있습니다. 교체 여부와 범위가 정해지면 정지 조건을 맞춰 손실을 다시 산정하고, 현재 정보만으로 다른 설비보다 먼저 작업할 순서를 확정하지 않아야 합니다."
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "관련 공구 사례에서는 체결 상태 점검 후 인서트를 교체했고, 동력 전달부 사례에서는 커플링 편심을 재조정했습니다. 같은 위험도 수치가 나온 다른 설비와 혼동하지 말고, 이 설비의 점검 결과에 따라 두 계통의 조치 필요성을 구분해야 합니다.",
+          "source_pointers": [
+            "/cases/7/prompt_payload/summary_context/model_factors",
+            "/cases/7/prompt_payload/summary_context/inspection_targets",
+            "/cases/7/prompt_payload/summary_context/similar_event_context",
+            "/cases/7/prompt_payload/summary_context/evidence_gaps"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "커플링 교체 예상 시간은 3시간이며 인서트 교체 시간은 등록되지 않았습니다. 두 부품을 일괄 교체하는 계획보다 공구 체결부와 동력 전달부 점검 결과에 맞춰 필요한 자재와 작업 범위를 구분하는 것이 적절합니다.",
+          "source_pointers": [
+            "/cases/7/prompt_payload/summary_context/spare_part_context",
+            "/cases/7/prompt_payload/summary_context/maintenance_history",
+            "/cases/7/prompt_payload/summary_context/generated_at",
+            "/cases/7/prompt_payload/summary_context/sop_guidance"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "커플링 교체 예상 3시간은 생산 영향 계산의 정지 2시간과 차이가 있습니다. 교체 여부와 범위가 정해지면 정지 조건을 맞춰 손실을 다시 산정하고, 현재 정보만으로 다른 설비보다 먼저 작업할 순서를 확정하지 않아야 합니다.",
+          "source_pointers": [
+            "/cases/7/prompt_payload/summary_context/operation_context",
+            "/cases/7/prompt_payload/summary_context/spare_part_context",
+            "/cases/7/prompt_payload/summary_context/risk_summary",
+            "/cases/7/prompt_payload/summary_context/maintenance_history"
+          ]
+        }
+      ]
+    }
+  ]
+}
