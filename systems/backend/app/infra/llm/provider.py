@@ -208,6 +208,11 @@ def _openai_compatible_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
         converted: dict[str, Any] = {}
         for key, child in value.items():
+            if key in {"properties", "patternProperties", "$defs", "definitions"} and isinstance(child, dict):
+                # These keys hold maps of user-defined names, not schema keywords.
+                # A field named "title" or "description" must survive conversion.
+                converted[key] = {name: convert(subschema) for name, subschema in child.items()}
+                continue
             if key in {"$schema", "$id", "title", "description", "minLength"}:
                 continue
             if key == "const":

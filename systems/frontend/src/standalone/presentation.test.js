@@ -15,3 +15,15 @@ describe('field mappings and Korean field labels',()=>{
 
 it('reports only the missing maintenance field',()=>{expect(message('maintenance: maintenance_context.similar_events_30d - maintenance_context_missing_or_unresolved')).toBe('최근 30일 유사 사례 집계가 연결되지 않았습니다.');expect(message('operations: operation_context.runtime_hours_7d - operation_context_missing_or_unresolved')).toBe('최근 7일 가동시간 집계가 연결되지 않았습니다.');});
 it('shows server state totals and policy without deriving grades',()=>{const s=state();s.factoryRecords={status:'available',total:100,counts:{running:92,stopped:5,maintenance:3,unknown:0},policy:{action_threshold:0.6,attention_threshold:0.3,version:'v1'}};const v=mapPresentation({...base(),isPlan:false,isShift:true,kpis:[{},{},{}]},s);expect(v.kpis[1].value).toBe('92');expect(v.warnValLabel).toBe('0.6');expect(v.attnValLabel).toBe('0.3');expect(v.selGrade).toBe('긴급 확인');});
+it('preserves deterministic reasons while AI is pending or unavailable',()=>{
+ const s=state();s.canGenerateAi=true;
+ const pending=mapPresentation(base(),s);
+ s.aiGenerating=true;
+ const generating=mapPresentation(base(),s);
+ s.aiGenerating=false;s.aiFallback={reason:'TimeoutError'};
+ const fallback=mapPresentation(base(),s);
+ expect(pending.reasons.length).toBeGreaterThan(0);
+ expect(generating.reasons).toEqual(pending.reasons);
+ expect(fallback.reasons).toEqual(pending.reasons);
+ expect(fallback.priorityHead).toContain('현재 판단 근거');
+});

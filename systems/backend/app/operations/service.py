@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from copy import deepcopy
 import os
 import time
@@ -31,7 +32,7 @@ from app.operations.agent_review_summary_materialization import (
 from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider
 from app.operations.agent_review_summary_generation_policy import (
     SnapshotGuardedRepository, cached_record_is_valid, decide_generation,
-    packet_is_current, policy_fingerprint, material_change_required,
+    packet_is_current, policy_fingerprint, material_change_required, background_generation_required,
 )
 from app.operations.asset_detail_view_model import (
     AssetDetailViewModelService,
@@ -653,6 +654,66 @@ class ManufacturingPredictiveMaintenanceService:
         generation_policy: str = "always",
         packet_loader=None,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        # Coalesce only background work. Explicit event-bound requests retain their
+        # own snapshot; never return a newer event's prose under an older identity.
+        scope = (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window)
+        queue_scope = (id(self), *scope)
+        token = object()
+        try:
+            observed_at = datetime.fromisoformat(str((packet.get("snapshot_basis") or {}).get("observed_at")).replace("Z", "+00:00"))
+            if observed_at.tzinfo is None:
+                observed_at = observed_at.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            observed_at = datetime.min.replace(tzinfo=timezone.utc)
+        background = trigger == "polling_watcher"
+        if background:
+            with _AGENT_REVIEW_SUMMARY_LOCKS_GUARD:
+                pending = _AGENT_REVIEW_PENDING.get(queue_scope)
+                if pending is None or observed_at >= pending[0]:
+                    _AGENT_REVIEW_PENDING[queue_scope] = (observed_at, token)
+        def run():
+            return self._materialize_agent_review_packet_now(
+                packet=packet, project_id=project_id, organization_id=organization_id,
+                workspace_id=workspace_id, history_window=history_window, trigger=trigger,
+                engine=engine, generation_policy=generation_policy, packet_loader=packet_loader,
+            )
+        if not background:
+            return run()
+        with _agent_review_summary_lock("scope:" + json.dumps(queue_scope)):
+            with _AGENT_REVIEW_SUMMARY_LOCKS_GUARD:
+                pending = _AGENT_REVIEW_PENDING.get(queue_scope)
+                superseded = pending is None or pending[1] is not token
+            if superseded:
+                summary, trace = self.cached_agent_review_summary_for_packet(
+                    packet=packet, project_id=project_id, organization_id=organization_id,
+                    workspace_id=workspace_id, history_window=history_window,
+                )
+                decision = {"policy": generation_policy, "generation_action": "DEFER",
+                            "decision_reason": "superseded_before_generation",
+                            "reuse_eligibility": trace["reuse_eligibility"]}
+                _record_briefing_event("decision", scope, **decision)
+                return summary, {**trace, "generation_policy": decision}
+            try:
+                return run()
+            finally:
+                with _AGENT_REVIEW_SUMMARY_LOCKS_GUARD:
+                    pending = _AGENT_REVIEW_PENDING.get(queue_scope)
+                    if pending is not None and pending[1] is token:
+                        _AGENT_REVIEW_PENDING.pop(queue_scope, None)
+
+    def _materialize_agent_review_packet_now(
+        self,
+        *,
+        packet: dict[str, Any],
+        project_id: str,
+        organization_id: str,
+        workspace_id: str,
+        history_window: str,
+        trigger: str,
+        engine: str,
+        generation_policy: str = "always",
+        packet_loader=None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         materializer = AgentReviewSummaryMaterializer(
             self.repository,
             self.agent_review_summary_provider,
@@ -712,11 +773,13 @@ class ManufacturingPredictiveMaintenanceService:
                 retry_fallback=retry_fallback,
                 model_id=key_payload["model_version"],
                 input_valid=packet_is_current(packet),
+                background_required=background_generation_required(packet, previous_packet),
                 material_change=material_change_required(
                     packet, previous_packet, current_identity=key_payload,
                     previous_identity=previous_identity,
                 ),
             )
+            _record_briefing_event("decision", scope, **policy_trace)
             if policy_trace["generation_action"] == "DEFER":
                 return cached_summary, {**cached_trace, "generation_policy": policy_trace}
 
@@ -756,6 +819,8 @@ class ManufacturingPredictiveMaintenanceService:
                 )
                 if not trace.get("fallback"):
                     self._briefing_generation_baselines[scope] = (deepcopy(packet), deepcopy(key_payload))
+                _record_briefing_event("completion", scope, fallback=trace.get("fallback"),
+                                       reason=trace.get("reason"), generation_metrics=trace.get("generation_metrics"))
                 status = _workflow_run_status(trace)
                 finished = self.repository.finish_agent_review_workflow_run(
                     run["workflow_run_id"],
@@ -768,6 +833,7 @@ class ManufacturingPredictiveMaintenanceService:
                         "fallback": trace.get("fallback"),
                         "reason": trace.get("reason"),
                         "validation_errors": trace.get("validation_errors") or [],
+                        "generation_metrics": trace.get("generation_metrics"),
                     },
                 )
                 return summary, {
@@ -776,6 +842,8 @@ class ManufacturingPredictiveMaintenanceService:
                     "workflow_run": _workflow_run_trace(finished),
                 }
             except Exception as exc:
+                _record_briefing_event("failure", scope, error_type=type(exc).__name__,
+                                       summary_key=materialization_key)
                 finished = self.repository.finish_agent_review_workflow_run(
                     run["workflow_run_id"],
                     status="failed",
@@ -851,6 +919,9 @@ class ManufacturingPredictiveMaintenanceService:
             workspace_id=workspace_id,
             history_window=history_window,
         )
+        _record_briefing_event("lookup", (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window),
+                               summary_key=materialization_key, hit=summary is not None,
+                               status=(trace.get("materialization") or {}).get("status"))
         return summary, {
             **trace,
             "reuse_eligibility": "EXACT_VALIDATED" if summary is not None else "INELIGIBLE",
@@ -1739,3 +1810,14 @@ def _available_closed_loop_actions(work_orders: list[dict[str, Any]]) -> list[di
 # Temporary compatibility alias for integrations that still import the historical
 # service name. New code should use ManufacturingPredictiveMaintenanceService.
 FactorySignalService = ManufacturingPredictiveMaintenanceService
+
+
+_AGENT_REVIEW_PENDING: dict[tuple, tuple] = {}
+
+
+def _record_briefing_event(event, scope, **fields):
+    # No prose or packets in logs. Aggregate by scope and exact key, never assume
+    # that one workflow invocation equals one provider/model request.
+    logging.getLogger("app.operations.briefing").info(
+        "briefing_efficiency %s", json.dumps({"event": event, "scope": scope, **fields}, default=str)
+    )
