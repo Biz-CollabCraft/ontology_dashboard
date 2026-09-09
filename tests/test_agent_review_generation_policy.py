@@ -169,6 +169,28 @@ def test_policy_rejects_unknown_and_refresh_overrides_cache():
         assert trace["reuse_eligibility"] == "EXACT_VALIDATED"
 
 
+def test_hybrid_minor_change_forces_generation_after_max_deferral():
+    deferred = decide_generation(
+        policy="hybrid",
+        current_fingerprint="changed-key",
+        previous_fingerprint="previous-key",
+        material_change=False,
+    )
+    assert deferred["generation_trigger"] == "MINOR_CHANGE"
+    assert deferred["generation_action"] == "DEFER"
+
+    expired = decide_generation(
+        policy="hybrid",
+        current_fingerprint="changed-key",
+        previous_fingerprint="previous-key",
+        material_change=False,
+        minor_change_deferral_expired=True,
+    )
+    assert expired["generation_trigger"] == "MINOR_CHANGE_MAX_WAIT"
+    assert expired["generation_decision"] == "PREGENERATE"
+    assert expired["generation_action"] == "GENERATE"
+
+
 def test_temporal_80_snapshot_evaluation_preserves_critical_queries_with_bounded_deferral():
     report = evaluate()
     assert report["fixture_snapshots"] == 80

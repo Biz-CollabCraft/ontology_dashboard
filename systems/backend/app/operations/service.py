@@ -31,6 +31,7 @@ from app.operations.agent_review_summary_materialization import (
 )
 from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider
 from app.operations.agent_review_summary_generation_policy import (
+    MAX_MINOR_CHANGE_DEFERRAL_SECONDS,
     SnapshotGuardedRepository, cached_record_is_valid, decide_generation,
     packet_is_current, policy_fingerprint, material_change_required, background_generation_required,
 )
@@ -136,6 +137,7 @@ class ManufacturingPredictiveMaintenanceService:
         # Scheduling baseline only; never a source for GET or cached prose.
         self._briefing_generation_baselines = {}
         self._briefing_observation_baselines = {}
+        self._briefing_minor_change_deferred_since = {}
         self._briefing_scan_offsets = {}
         self.agent_answer_provider = agent_answer_provider
         self.agent_review_context_registry = agent_review_context_registry
@@ -767,6 +769,22 @@ class ManufacturingPredictiveMaintenanceService:
             scope = (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window)
             previous_packet, previous_identity = self._briefing_generation_baselines.get(scope, (None, None))
             input_valid = packet_is_current(packet)
+            material_change = material_change_required(
+                packet, previous_packet, current_identity=key_payload,
+                previous_identity=previous_identity,
+            )
+            minor_change_deferral_expired = False
+            if generation_policy == "hybrid":
+                if cached_summary is not None or force or material_change or not input_valid:
+                    self._briefing_minor_change_deferred_since.pop(scope, None)
+                elif previous_packet is not None:
+                    now_monotonic = time.monotonic()
+                    deferred_since = self._briefing_minor_change_deferred_since.setdefault(
+                        scope, now_monotonic
+                    )
+                    minor_change_deferral_expired = (
+                        now_monotonic - deferred_since >= MAX_MINOR_CHANGE_DEFERRAL_SECONDS
+                    )
             demand_previous = previous_packet
             if generation_policy == "demand" and trigger == "polling_watcher":
                 if demand_previous is None:
@@ -785,10 +803,8 @@ class ManufacturingPredictiveMaintenanceService:
                 model_id=key_payload["model_version"],
                 input_valid=input_valid,
                 background_required=background_generation_required(packet, demand_previous),
-                material_change=material_change_required(
-                    packet, previous_packet, current_identity=key_payload,
-                    previous_identity=previous_identity,
-                ),
+                material_change=material_change,
+                minor_change_deferral_expired=minor_change_deferral_expired,
             )
             _record_briefing_event("decision", scope, **policy_trace)
             if policy_trace["generation_action"] == "DEFER":
@@ -816,6 +832,7 @@ class ManufacturingPredictiveMaintenanceService:
                     "reuse_eligibility": "EXACT_VALIDATED",
                     "decision_reason": "concurrent_materialization_completed_for_exact_key",
                 }
+                self._briefing_minor_change_deferred_since.pop(scope, None)
                 return summary, {**trace, "generation_policy": policy_trace}
             try:
                 summary, trace = materializer.materialize(
@@ -831,6 +848,7 @@ class ManufacturingPredictiveMaintenanceService:
                 if not trace.get("fallback"):
                     self._briefing_generation_baselines[scope] = (deepcopy(packet), deepcopy(key_payload))
                     self._briefing_observation_baselines.pop(scope, None)
+                    self._briefing_minor_change_deferred_since.pop(scope, None)
                 _record_briefing_event("completion", scope, fallback=trace.get("fallback"),
                                        reason=trace.get("reason"), generation_metrics=trace.get("generation_metrics"))
                 status = _workflow_run_status(trace)

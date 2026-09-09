@@ -2,7 +2,11 @@ from copy import deepcopy
 import json
 from pathlib import Path
 import pytest
-from app.operations.agent_review_summary_generation_policy import material_change_required, packet_is_current
+from app.operations.agent_review_summary_generation_policy import (
+    MAX_MINOR_CHANGE_DEFERRAL_SECONDS,
+    material_change_required,
+    packet_is_current,
+)
 from app.operations.agent_review_summary_materialization import summary_key_payload
 from tests.test_agent_review_generation_policy import service, watch
 
@@ -62,6 +66,24 @@ def test_minor_change_defers_without_returning_old_prose_then_refreshes(service,
     assert service.cached_agent_review_summary(first["items"][0]["asset_id"])[0] is None
     assert watch(service, "hybrid", True)["created_count"] == 1
     assert service.agent_review_summary_provider.calls == 2
+
+
+def test_minor_change_max_wait_forces_background_regeneration(service, monkeypatch):
+    watch(service, "hybrid")
+    original = service.agent_review_packet
+    monkeypatch.setattr(service, "agent_review_packet", lambda *a, **k: changed(original(*a, **k), .001))
+
+    pending = watch(service, "hybrid")
+    assert pending["pending_count"] == 1
+    assert service.agent_review_summary_provider.calls == 1
+    scope = next(iter(service._briefing_minor_change_deferred_since))
+    service._briefing_minor_change_deferred_since[scope] -= MAX_MINOR_CHANGE_DEFERRAL_SECONDS + 1
+
+    refreshed = watch(service, "hybrid")
+    assert refreshed["created_count"] == 1
+    assert refreshed["items"][0]["generation_policy"]["generation_trigger"] == "MINOR_CHANGE_MAX_WAIT"
+    assert service.agent_review_summary_provider.calls == 2
+    assert scope not in service._briefing_minor_change_deferred_since
 
 def test_all_temporal_packets_are_schema_valid():
     from scripts.evaluate_agent_review_generation_policy import temporal_snapshots
