@@ -11,6 +11,6 @@ export function roleBrief(summary,role){
 }
 export function briefPresentation(state){
  const b=state.aiBrief;
- let status=state.aiLoading?'조회 중':state.aiGenerating?'생성 중':state.aiError|| (b?'저장됨':state.aiFallback?'검증 실패':state.canGenerateAi?'생성 대기':'생성 권한 없음');
- return {aiStatus:status,aiButtonLabel:state.aiGenerating?'생성 중':b?'다시 생성':'생성',aiDisabled:!state.canGenerateAi||state.aiGenerating||state.aiLoading||!state.detail||!!state.error,aiHelp:state.aiError||''};
+ let status=state.aiGenerating?'생성 중':state.aiLoading?'조회 중':state.aiFallback?'기본 근거 제공':state.aiError|| (b?'저장됨':state.canGenerateAi?'요청 시 생성':'생성 권한 없음');
+ return {aiStatus:status,aiButtonLabel:state.aiGenerating?'생성 중':b?'다시 생성':'생성',aiDisabled:!state.canGenerateAi||state.aiGenerating||state.aiLoading||!state.detail||!!state.error,aiHelp:state.aiError||'',aiAvailabilityNote:state.detail&&!state.error?'현재 상태와 판단 근거는 AI 설명 생성 여부와 관계없이 제공됩니다.':'현재 설비 정보를 먼저 확인하세요.'};
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
@@ -98,6 +99,7 @@ def _live_provider_ready(result: dict) -> bool:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO)  # Events use stderr; the JSON report stays on stdout.
     parser = argparse.ArgumentParser(
         description=(
             "Materialize read-only Agent Review Summaries. Run once by default; "
@@ -129,7 +131,7 @@ def main() -> None:
         help="Exit non-zero if any materialized item used deterministic fallback.",
     )
     parser.add_argument("--watch", action="store_true")
-    parser.add_argument("--generation-policy", choices=("click", "always", "hybrid"), default="always")
+    parser.add_argument("--generation-policy", choices=("click", "always", "hybrid", "demand"), default="always")
     parser.add_argument("--refresh", action="store_true", help="Explicitly regenerate current snapshots through the guarded generation path (once only).")
     parser.add_argument("--interval-seconds", type=float, default=60.0)
     parser.add_argument("--max-iterations", type=int)

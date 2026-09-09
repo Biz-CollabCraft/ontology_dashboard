@@ -179,7 +179,7 @@ export function mapPresentation(values,state){
    const displayRole=v.isMaint?'maintenance_technician':v.isPlan?'process_manager':v.isShift?'process_engineer':state.role;
    v.priorityHead=roleBrief(state.aiBrief,displayRole);
  }else{
-   v.priorityHead=state.aiError?message(state.aiError):state.aiFallback?'생성 결과 검증 실패':state.canGenerateAi?'생성 대기':'생성 권한 없음';
+   v.priorityHead=state.aiGenerating?'AI 설명을 생성하고 있습니다.':state.aiFallback?'AI 설명 대신 현재 판단 근거를 확인하세요.':state.aiError?'AI 설명을 불러오지 못했습니다.':state.canGenerateAi?'필요할 때 AI 설명을 요청할 수 있습니다.':'AI 설명 생성은 권한이 있는 담당자에게 요청하세요.';
  }
  v.aiBriefRows=state.aiBrief?briefRows(v.priorityHead,state.aiBrief.source_refs||[]).map(row=>({...row,refs:row.refs.map(ref=>({...ref,text:referenceLabels(ref.text).join(" · ")}))})):[];
  v.aiBriefHasRows=v.aiBriefRows.length>0;
