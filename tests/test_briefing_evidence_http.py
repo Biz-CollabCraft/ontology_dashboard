@@ -26,7 +26,7 @@ def test_packet_rejects_old_briefing_when_history_changes_at_same_observation(tm
         monkeypatch.setattr(service, 'runtime_agent_review_packet',
             lambda asset, project, **kwargs: service.agent_review_packet(
                 asset, project, history_window=kwargs['history_window']))
-    asset='CNC-S04-L04-01' 
+    asset='CNC-S04-L04-01'
     with TestClient(app) as client:
         assert client.post('/api/auth/login',json={'email':'manager@ontology.local','password':'Manager!2026'}).status_code == 200
         url=f'/api/objects/{asset}/agent-review-packet'

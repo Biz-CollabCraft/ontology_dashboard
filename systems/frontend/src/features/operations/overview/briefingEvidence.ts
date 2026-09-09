@@ -60,7 +60,7 @@ export function resolveBriefingEvidence(packet: OperationsAgentReviewPacket, ref
       risk?.status_grade ? `위험 상태: ${grades[risk.status_grade] ?? risk.status_grade}` : "위험 상태: 확인 필요",
       risk?.failure_probability != null ? `고장 확률: ${(risk.failure_probability * 100).toFixed(1)}%` : "고장 확률: 미산정",
       snapshot.observed_at ? `관측 시각: ${evidenceTime(snapshot.observed_at)}` : "",
-      
+
     ].filter(Boolean).join(" · ");
     for (const ref of [snapshot.artifact_id, snapshot.evidence_payload_reference]) {
       add(ref, { id: "prediction-snapshot", title: "예측 결과와 관측 기준", text, paths: [], details: [...new Set((packet.evidence_gaps ?? []).map(gapLabel))].map(value => ({ label: "확인 필요", value })) });
