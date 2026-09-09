@@ -134,7 +134,8 @@ AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\n표현 점검: maintenance_recommended�
 
 AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\n마지막 다음 판단 문장에서는 결정을 좌우하는 대상·조건·판단 근거 1~2개를 반드시 **굵게** 표시하세요. 예: **인서트 교체 여부**, **현재 설비의 점검 결과**, **조치 범위**, **같은 정지 조건**. 해당 입력과 문장에 실제로 있는 표현만 강조하고, 예시 내용을 새 사실로 추가하지 마세요. 접속어·일반 동사·문장 전체는 강조하지 마세요.\n"
 AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\n비용 참고 근거: decision_facts.reference_economics는 화면과 동일한 버전의 참고 단가표를 계산한 결과입니다. 실제 생산계획 operation_context와 별도입니다. status=illustrative_not_site_quote이면 생산관리 설명에 metrics의 시간당 생산원가(hourly_production_cost), 정지 시간(stop_minutes), 해당 정지 생산원가 환산액(stop_production_cost)을 숫자와 원/시간·분·원 단위로 포함하고 반드시 가정 기반 참고액이라고 밝히세요. 생산원가 환산액을 확정 손실·매출·영업이익으로 부르거나 기회손실과 합산하지 마세요. 정비 노무비와 교체 부품비는 profile.part_scope에 해당하는 작업의 조건부 예시입니다. 실제 생산계획이 없더라도 참고 단가까지 미제공이라고 하지 마세요. reference_lost_units는 실제 예상 손실 수량이 아니므로 본문에서는 생략하고 기존 operation_context의 수량 규칙을 유지하세요. 기본 정지 시간은 승인된 시간이 아니며 승인 일정으로 서술하지 마세요. 제공된 금액을 재계산하거나 위험 점수를 금전 확률로 쓰지 마세요. 참고 비용 출처도 citation_catalog에서 인용하세요.\n"
-AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v3.5-linked-reference-economics"
+AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += '\n승인 일정 인용 규칙: confirmed인 production_coordination의 scheduled_window는 보전팀과 생산 관리자 설명에 반드시 원문 그대로 따옴표로 인용하세요. 예를 들어 원문이 지금이면 승인 일정 기록은 “지금”입니다라고 쓰세요. 이는 기록 인용이며 AI가 현재 작업을 지시하는 뜻이 아닙니다. 상대 시간 계산 금지와 원문 일정 인용을 혼동하지 마세요. 다음 행동은 명령이 아닌 남은 확인 조건으로 서술하세요. “승인하세요”, “정비를 진행하세요”, “일정을 결정해야 합니다” 대신 “남은 확인 사항은 **기록된 착수 조건**입니다”처럼 실제 입력에 있는 조건만 요약하세요.\n'
+AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v3.6-linked-reference-economics"
 AGENT_REVIEW_SUMMARY_PAYLOAD_PROFILE = "compact-editable-v1"
 ROLE_PRIORITIES = {
     "process_engineer": ["이상 위치", "모델 근거", "점검 포인트", "유사 이력", "근거 공백"],
