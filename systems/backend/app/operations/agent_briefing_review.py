@@ -59,7 +59,7 @@ def decision_facts(packet):
 def briefing_issues(candidate,facts):
     def plain(value):return re.sub(r'\[\[ref:[^\]\n]+\]\]', '', value).replace('**','')
     roles={r.get('role'):plain(r.get('quote','')) for r in candidate.get('role_summaries',[]) if isinstance(r,dict)}
-    prose=' '.join([candidate.get('summary',''),*roles.values()]);issues=[]
+    prose=' '.join([plain(candidate.get('title','')),plain(candidate.get('summary','')),*roles.values()]);issues=[]
     economics = facts.get('reference_economics') or {}
     if economics.get('status') == 'illustrative_not_site_quote':
         manager = roles.get('process_manager', '')
@@ -72,7 +72,7 @@ def briefing_issues(candidate,facts):
             issues.append('비용표의 금액은 가정 기반 참고액임을 명시하세요. 확정 손실이 아닙니다.')
     if facts.get('data_quality_hold'):
         for sentence in re.split(r'[.!?\n]', prose):
-            if re.search(r'생산\s*영향|손실', sentence) and re.search(r'(?:확정|확인|산정|판단)할\s*수\s*있|확정(?:됐|되었|됩니다|입니다)', sentence):
+            if re.search(r'생산\s*영향|손실', sentence) and re.search(r'(?:확정|확인|산정|판단)할\s*수\s*있(?!도록)|확정(?:됐|되었|됩니다|입니다)', sentence):
                 issues.append('데이터 품질 보류에서는 생산 영향과 예상 손실을 확정할 수 있다고 쓰지 마세요. 미확인 상태를 유지하세요.')
     if not facts['work_orders'] and facts.get('excluded_records'):
         for sentence in re.split(r'[.!?\n]', prose):

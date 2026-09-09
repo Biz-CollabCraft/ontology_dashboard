@@ -128,8 +128,12 @@ def test_prompt_payload_includes_same_decision_flow_on_both_context_paths():
 
 
 def test_prompt_version_and_system_prompt_explain_decision_flow_contract():
-    assert AGENT_REVIEW_SUMMARY_PROMPT_VERSION == "agent-review-summary-prompt-v3.6-linked-reference-economics"
+    assert AGENT_REVIEW_SUMMARY_PROMPT_VERSION == "agent-review-summary-prompt-v3.7-economics-expression-boundaries"
     assert "상대 시간 계산 금지와 원문 일정 인용을 혼동하지" in AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
+    from app.operations.agent_review_summary_provider import _expression_policy
+    policy = _expression_policy({})
+    assert "scheduled_window verbatim" in policy['recorded_schedule']
+    assert "metrics.stop_production_cost" in policy['reference_economics']
     assert "해당 입력과 문장에 실제로 있는 표현만 강조" in AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
     assert "decision_flow는 코드가 만든 결정론적 관계 순서" in AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
     assert "현재 상태 → 원인 관계 → 확인된 기록 → 남은 공백 → 다음 판단" in AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
