@@ -945,12 +945,17 @@ def _selected_agent_review_packet(
     event_id: str, history_window: str,
 ) -> dict[str, Any]:
     if event_id.startswith("FILE#"):
-        from .filesystem_briefing import filesystem_briefing_packet
+        from .filesystem_briefing import BriefingHistoryUnavailable, filesystem_briefing_packet
         try:
             return filesystem_briefing_packet(asset_id=asset_id, event_id=event_id,
                 dataset_version_id=dataset_version_id, project_id=project_id, history_window=history_window, service=service)
         except KeyError:
             raise EventNotFound(event_id)
+        except BriefingHistoryUnavailable as exc:
+            raise HTTPException(status_code=503, detail={
+                "code": "briefing_history_unavailable",
+                "message": str(exc),
+            }) from exc
     try:
         return service.runtime_agent_review_packet(
             asset_id, project_id, organization_id=principal.organization_id,

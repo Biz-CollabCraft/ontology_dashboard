@@ -1,17 +1,20 @@
 """Adapt exact demo file observations through the existing artifact contract."""
 from copy import deepcopy
 from datetime import datetime
-from fastapi import HTTPException
 
 from app.operations.asset_detail_view_model import compose_asset_detail_view_model
 from app.operations.agent_review_packet import compose_agent_review_packet
+from app.diagnosis.contracts import filesystem_event_artifact, latest_complete_file_tick
+
+
+class BriefingHistoryUnavailable(RuntimeError):
+    pass
 
 
 def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, project_id, history_window, service):
-    from app.diagnosis.runtime_router import _latest_complete_file_tick, _filesystem_event_artifact
     if project_id != "manufacturing-demo-project" or not event_id.startswith("FILE#"):
         raise KeyError(event_id)
-    stream, latest_at, records, complete_ticks = _latest_complete_file_tick()
+    stream, latest_at, records, complete_ticks = latest_complete_file_tick()
     run_id = stream.parents[1].name
     if dataset_version_id and dataset_version_id != run_id:
         raise KeyError(event_id)
@@ -23,7 +26,7 @@ def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, projec
         expected = f"FILE#{run_id}#{record.get('observation_id', asset_id)}"
         if expected != event_id:
             continue
-        artifact = _filesystem_event_artifact(run_id=run_id, observed_at=observed_at, record=record, event_id=event_id)
+        artifact = filesystem_event_artifact(run_id=run_id, observed_at=observed_at, record=record, event_id=event_id)
         for rank, factor in enumerate(artifact.get("top_factors", []), 1):
             factor.setdefault("rank", rank)
             factor.setdefault("explanation_method", "filesystem-risk-policy-v1")
@@ -92,5 +95,4 @@ def filesystem_workflow_context(*, service, asset_id, event_id, project_id, obse
         context["available_actions"] = []
         return context, workflow_as_of
     except Exception as exc:
-        raise HTTPException(status_code=503, detail={"code": "briefing_history_unavailable",
-            "message": "점검·승인 이력을 조회하지 못해 브리핑을 구성할 수 없습니다."}) from exc
+        raise BriefingHistoryUnavailable("점검·승인 이력을 조회하지 못해 브리핑을 구성할 수 없습니다.") from exc
