@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createOperationsAgentReviewSummary, getOperationsAgentReviewSummary } from "../../../api";
 import type { OperationsAgentReviewSummary, OperationsAgentReviewSummaryResponse } from "../api/operationsContracts";
 import { briefRows, relativeRecordTime, referenceLabels, readerLimitations } from "../../../standalone/briefFormat.js";
+import { BriefingEvidencePanel } from "./BriefingEvidencePanel";
 import "./NaturalBriefing.css";
 
 type Props = {
@@ -28,6 +29,7 @@ function accepted(response: OperationsAgentReviewSummaryResponse, assetId: strin
 
 function Briefing(props: Props & { revealed: Set<string> }) {
   const supported = props.workspaceId === "manufacturing-demo" && Boolean(props.eventId);
+  const [summaryKey, setSummaryKey] = useState<string | undefined>();
   const [summary, setSummary] = useState<OperationsAgentReviewSummary | null>(null);
   const [status, setStatus] = useState(supported ? "브리핑 조회 중" : "선택한 근거에 연결된 브리핑이 없습니다.");
   const [busy, setBusy] = useState(supported);
@@ -41,6 +43,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
     if (controller.signal.aborted) return;
     const next = accepted(response, props.assetId);
     setSummary(next);
+    setSummaryKey(next ? response.trace.materialization?.summary_key : undefined);
     setStatus(next ? "저장된 브리핑" : response.trace.fallback ? "검증된 자연어 브리핑이 없습니다. 아래 판단 근거를 확인하세요." : "현재 근거의 브리핑이 아직 없습니다.");
   }
   useEffect(() => {
@@ -48,7 +51,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
     controllerRef.current = controller;
     if (props.providedResponse) {
       const next = accepted(props.providedResponse, props.assetId);
-      setSummary(next); setBusy(false);
+      setSummary(next); setSummaryKey(next ? props.providedResponse.trace.materialization?.summary_key : undefined); setBusy(false);
       setStatus(next ? "내용 검사 통과 · 기록된 응답" : props.providedResponse.trace.fallback ? "검증을 통과하지 못한 응답입니다. 판단 근거를 직접 확인하세요." : "현재 근거의 브리핑 검증을 기다리고 있습니다.");
     } else if (supported) void read(controller).catch(() => {
       if (!controller.signal.aborted) setStatus("브리핑을 불러오지 못했습니다. 판단 근거는 계속 확인할 수 있습니다.");
@@ -76,6 +79,13 @@ function Briefing(props: Props & { revealed: Set<string> }) {
 
   const quote = summary?.role_summaries.find(item => item.role === props.role)?.quote?.trim() || summary?.summary || "";
   const rows = briefRows(quote, summary?.source_refs ?? []);
+  const evidenceScope = { ...props, expectedSummaryKey: summaryKey, onEvidenceChanged: () => {
+        setSummary(null); setBusy(true); setStatus("근거가 변경되어 이전 브리핑을 숨겼습니다. 현재 브리핑을 확인하고 있습니다.");
+        const controller = controllerRef.current;
+        if (controller && !controller.signal.aborted) void read(controller).catch(() => {
+          if (!controller.signal.aborted) setStatus("현재 브리핑을 불러오지 못했습니다. 다시 조회해 주세요.");
+        }).finally(() => { if (!controller.signal.aborted) setBusy(false); });
+      } };
   return <section className="natural-briefing" aria-label="AI 자연어 브리핑" aria-busy={busy}>
     <div className="natural-briefing-heading"><strong>AI 브리핑</strong>
       {supported && props.canGenerate ? <button type="button" disabled={busy} onClick={() => void generate()}>{busy ? "처리 중" : summary ? "다시 생성" : "브리핑 생성"}</button> : null}
@@ -91,8 +101,8 @@ function Briefing(props: Props & { revealed: Set<string> }) {
 }
 
 // Reveal already validated prose locally; this does not stream unvalidated model tokens.
-function StreamingProse({ rows, identity, revealed }: {
-  rows: ReturnType<typeof briefRows>; identity: string; revealed: Set<string>;
+function StreamingProse({ rows, identity, revealed, evidenceScope }: {
+  rows: ReturnType<typeof briefRows>; identity: string; revealed: Set<string>; evidenceScope: Props & { expectedSummaryKey?: string; onEvidenceChanged?: () => void };
 }) {
   const total = rows.reduce((n, row) => n + row.parts.reduce((m, part) => m + Array.from(part.text).length, 0), 0);
   const [count, setCount] = useState(() => revealed.has(identity) || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? total : 0);
@@ -132,8 +142,17 @@ function StreamingProse({ rows, identity, revealed }: {
           const Tag = part.weight === "700" ? "strong" : "span";
           return <Tag key={i}>{letters.slice(0, visible).join("")}{cursor ? <span className="natural-briefing-cursor"/> : null}<span style={{visibility:"hidden"}}>{letters.slice(visible).join("")}</span></Tag>;
         })}</p>
-        {row.refs.map((ref, i) => <details key={i} style={{visibility:count >= end ? "visible" : "hidden"}}><summary>근거</summary><p>{referenceLabels(ref.text).join(" · ")}</p></details>)}
+        {row.refs.map((ref, i) => <EvidenceDisclosure key={i} visible={count >= end} refs={ref.text} scope={evidenceScope}/>)}
       </div>;
     })}
   </div>;
+}
+
+
+function EvidenceDisclosure({ visible, refs, scope, label = "근거" }: { visible: boolean; refs: string; label?: string; scope: Props & { expectedSummaryKey?: string; onEvidenceChanged?: () => void } }) {
+  const [open, setOpen] = useState(false);
+  return <details style={{ visibility: visible ? "visible" : "hidden" }} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>{label}</summary><p>{referenceLabels(refs).join(" · ")}</p>
+    {open && !scope.providedResponse ? <BriefingEvidencePanel {...scope} refs={refs.split("\n").filter(Boolean)}/> : null}
+  </details>;
 }

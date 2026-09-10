@@ -88,7 +88,14 @@ export function mapPresentation(values,state){
  const tileCount=v.lines.reduce((sum,line)=>sum+line.cells.reduce((n,c)=>n+c.assets.length,0),0);
  v.siteLabel=`${state.model?.context?.workspaceName||'작업장 확인 필요'} · ${v.lines.length}개 라인 · ${v.lines.reduce((n,l)=>n+l.cells.length,0)}개 셀 · 설비 ${tileCount}대`;
 
- if(!d)return displayTree(v);
+ if(!d){
+  Object.assign(v,briefPresentation(state));
+  v.sourceLabel=state.error?message(state.error):'설비 정보 조회 중';
+  v.aiBriefVisible=true;v.aiBriefRows=[];v.aiBriefHasRows=false;v.aiBriefEmpty=true;
+  v.priorityHead=state.error?message(state.error):'설비 정보를 조회한 뒤 AI 브리핑을 확인할 수 있습니다.';
+  v.aiBasis='설비 상세 정보 조회 필요';
+  return displayTree(v);
+ }
  const oc=d.operationContext||{},planning=ctx?.domains?.planning?.context;
  const plan=planning?.status==='available'?planning.data.production_plan:null;
  const currentPlan=plan?{plannedUnits:plan.planned_units,productMix:plan.product_mix?.map(x=>({variant:x.variant,plannedUnits:x.planned_units})),planDate:plan.plan_date}:oc.productionPlan;

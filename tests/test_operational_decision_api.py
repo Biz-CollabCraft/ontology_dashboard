@@ -157,7 +157,9 @@ def test_materialize_requires_csrf_and_permission(api_client) -> None:
     url = f"/api/objects/{ASSET_ID}/decision-support-brief"
     assert client.post(url, params=PARAMS).status_code == 403
 
-    login(client, "engineer@ontology.local", "Engineer!2026")
+    # Briefing generation is available to all three operational roles.
+    # A read-only executive still cannot materialize a briefing.
+    login(client, "executive@ontology.local", "Executive!2026")
     denied = client.post(url, params=PARAMS, headers=csrf(client))
     assert denied.status_code == 403
 

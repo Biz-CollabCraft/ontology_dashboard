@@ -5,12 +5,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NaturalBriefing } from "./NaturalBriefing";
 import { getOperationsAgentReviewSummary, createOperationsAgentReviewSummary } from "../../../api";
 import type { OperationsAgentReviewSummaryResponse } from "../api/operationsContracts";
-vi.mock("../../../api", () => ({ getOperationsAgentReviewSummary: vi.fn(), createOperationsAgentReviewSummary: vi.fn() }));
+vi.mock("../../../api", () => ({ getOperationsAgentReviewSummary: vi.fn(), createOperationsAgentReviewSummary: vi.fn(), getOperationsAgentReviewPacket: vi.fn() }));
 const get = vi.mocked(getOperationsAgentReviewSummary), post = vi.mocked(createOperationsAgentReviewSummary);
 function response(assetId = "A", quote = "**관측된 토크**와 점검 기록을 대조합니다. [[ref:1]]\n작업 시작 기록은 확인되지 않습니다."): OperationsAgentReviewSummaryResponse {
   return { summary: { asset_id: assetId, mode: "llm", summary: "공통 설명", source_refs: ["evidence:A"], limitations: [],
     role_summaries: [{ role: "process_engineer", quote }, { role: "maintenance_technician", quote: "보전 담당자의 자연어 설명" }, { role: "process_manager", quote: "생산 관리자의 자연어 설명" }] },
-    trace: { fallback: false, materialization: { status: "ready" } } } as unknown as OperationsAgentReviewSummaryResponse;
+    trace: { fallback: false, materialization: { status: "ready", summary_key: "summary-key-A" } } } as unknown as OperationsAgentReviewSummaryResponse;
 }
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {

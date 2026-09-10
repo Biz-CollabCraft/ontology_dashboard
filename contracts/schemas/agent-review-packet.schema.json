@@ -415,6 +415,7 @@
       "properties": {
         "provider": {"type": "string"},
         "mutation_allowed": {"const": false},
+        "workflow_as_of": {"type": "string", "format": "date-time"},
         "last_maintenance_days_ago": {"type": ["integer", "null"]},
         "similar_events_30d": {"type": ["integer", "null"]},
         "open_work_order_exists": {"type": ["boolean", "null"]},
@@ -534,6 +535,8 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "display_fields": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["label","value"],"properties":{"label":{"type":"string"},"value":{"type":"string"}}}},
+        "relation_paths": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["steps"],"properties":{"steps":{"type":"array","minItems":1,"items":{"type":"object","additionalProperties":false,"required":["edge_id","source_type","source_id","relationship_type","target_type","target_id","source_version","source_refs"],"properties":{"edge_id":{"type":"string","minLength":1},"source_type":{"type":"string","minLength":1},"source_id":{"type":"string","minLength":1},"relationship_type":{"type":"string","minLength":1},"target_type":{"type":"string","minLength":1},"target_id":{"type":"string","minLength":1},"source_version":{"type":"string","minLength":1},"source_refs":{"type":"array","minItems":1,"items":{"type":"string"}}}}}}}},
         "candidate_id": {
           "type": "string"
         },
@@ -605,6 +608,8 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "display_fields": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["label","value"],"properties":{"label":{"type":"string"},"value":{"type":"string"}}}},
+        "relation_paths": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["steps"],"properties":{"steps":{"type":"array","minItems":1,"items":{"type":"object","additionalProperties":false,"required":["edge_id","source_type","source_id","relationship_type","target_type","target_id","source_version","source_refs"],"properties":{"edge_id":{"type":"string","minLength":1},"source_type":{"type":"string","minLength":1},"source_id":{"type":"string","minLength":1},"relationship_type":{"type":"string","minLength":1},"target_type":{"type":"string","minLength":1},"target_id":{"type":"string","minLength":1},"source_version":{"type":"string","minLength":1},"source_refs":{"type":"array","minItems":1,"items":{"type":"string"}}}}}}}},
         "candidate_id": {
           "type": "string"
         },
@@ -744,6 +749,7 @@
         },
         "record_id": {"type": "string"},
         "record_type": {"type": "string"},
+        "production_coordination": {"type": "object"},
         "status": {"type": "string"},
         "activity_type": {"type": "string"},
         "recorded_at": {"type": "string"},

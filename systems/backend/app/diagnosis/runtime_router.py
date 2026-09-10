@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import csv
 import hmac
-import hashlib
 import json
 import os
 from collections import defaultdict
@@ -36,6 +34,14 @@ from app.diagnosis.evidence_projection import (
 )
 from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
 from app.diagnosis.ports import ALLOWED_DERIVED_MEASURES
+from app.diagnosis.contracts import (
+    CompleteFileTickNotFound,
+    filesystem_event_artifact as _contract_filesystem_event_artifact,
+    latest_complete_file_tick as _contract_latest_complete_file_tick,
+    measurement_factors as _contract_measurement_factors,
+    risk_from_file_record as _contract_risk_from_file_record,
+    risk_status as _contract_risk_status,
+)
 
 router = APIRouter(
     prefix="/api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance",
@@ -44,74 +50,18 @@ router = APIRouter(
 internal_router = APIRouter(prefix="/internal", tags=["prediction-result-inbox"])
 PREDICTION_RESULT_INGEST_TOKEN_ENV = "PREDICTION_RESULT_INGEST_TOKEN"
 PREDICTION_RESULT_INGEST_ORG_ENV = "PREDICTION_RESULT_INGEST_ORGANIZATION_ID"
-GEN_DATA_OUTPUT_ROOT_ENV = "GEN_DATA_OUTPUT_ROOT"
 
 
 def _risk_from_file_record(record: dict[str, Any]) -> float:
-    measurements = record.get("measurements") or {}
-    if record.get("asset_type") == "compressor":
-        zone_floor = {
-            "attention": 0.45,
-            "warning": 0.58,
-            "alert": 0.72,
-            "danger": 0.86,
-        }.get(str(measurements.get("relative_vibration_zone", "")).lower(), 0.0)
-        vibration_score = min(abs(float(measurements.get("relative_vibration_z") or 0)) / 4.0, 1.0)
-        return round(max(zone_floor, vibration_score), 4)
-    wear = min(float(measurements.get("tool_wear_min") or 0) / 240.0, 1.0)
-    torque = min(float(measurements.get("torque_nm") or 0) / 80.0, 1.0)
-    temperature_gap = max(
-        float(measurements.get("process_temperature_k") or 0)
-        - float(measurements.get("air_temperature_k") or 0),
-        0.0,
-    )
-    return round(min(wear * 0.68 + torque * 0.22 + min(temperature_gap / 15.0, 1.0) * 0.1, 1.0), 4)
+    return _contract_risk_from_file_record(record)
 
 
 def _risk_status(score: float) -> str:
-    if score >= 0.75:
-        return "critical"
-    if score >= 0.55:
-        return "warning"
-    if score >= 0.35:
-        return "attention"
-    return "normal"
+    return _contract_risk_status(score)
 
 
 def _measurement_factors(record: dict[str, Any]) -> list[dict[str, Any]]:
-    measurements = record.get("measurements") or {}
-    if record.get("asset_type") == "compressor":
-        definitions = (
-            ("relative_vibration_z", "상대 진동 이상도", "σ", lambda value: min(abs(value) / 4.0, 1.0)),
-            ("vibration_raw", "진동", None, lambda value: min(abs(value) / 80.0, 1.0)),
-            ("pressure_raw", "압력", None, lambda value: min(abs(value - 100.0) / 35.0, 1.0)),
-            ("rotation_raw", "회전", None, lambda value: min(abs(value - 450.0) / 250.0, 1.0)),
-        )
-    else:
-        definitions = (
-            ("tool_wear_min", "공구 마모", "분", lambda value: min(value / 240.0, 1.0)),
-            ("torque_nm", "토크", "N·m", lambda value: min(value / 80.0, 1.0)),
-            ("rotational_speed_rpm", "회전 속도", "rpm", lambda value: min(abs(value - 1500.0) / 900.0, 1.0)),
-            ("process_temperature_k", "공정 온도", "K", lambda value: min(max(value - 305.0, 0.0) / 20.0, 1.0)),
-        )
-    factors: list[dict[str, Any]] = []
-    for feature, label, unit, contribution_fn in definitions:
-        raw_value = measurements.get(feature)
-        if not isinstance(raw_value, (int, float)) or isinstance(raw_value, bool):
-            continue
-        value = float(raw_value)
-        contribution = round(contribution_fn(value), 4)
-        factors.append({
-            "id": f"{record.get('asset_id')}:{feature}",
-            "feature": feature,
-            "label": label,
-            "value": value,
-            "unit": unit,
-            "contribution": contribution,
-            "direction": "risk_up" if contribution > 0 else "risk_down",
-            "explanationMethod": "실시간 센서 범위 비교",
-        })
-    return sorted(factors, key=lambda item: abs(item["contribution"]), reverse=True)
+    return _contract_measurement_factors(record)
 
 
 def _latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]], list[tuple[str, dict[str, dict[str, Any]]]]]:
@@ -182,86 +132,12 @@ def _latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]], list[
 def _filesystem_event_artifact(
     *, run_id: str, observed_at: str, record: dict[str, Any], event_id: str
 ) -> dict[str, Any]:
-    asset_id = str(record["asset_id"])
-    asset_type = str(record.get("asset_type") or "equipment")
-    score = _risk_from_file_record(record)
-    status_grade = _risk_status(score)
-    action_id = "review_shutdown" if status_grade == "critical" else "request_inspection"
-    factors = _measurement_factors(record)
-    source_body = json.dumps(
-        {"event_id": event_id, "record": record},
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    source_sha256 = hashlib.sha256(source_body).hexdigest()
-    artifact_id = f"FILE-ART-{source_sha256[:24]}"
-    sensors = {
-        factor["feature"]: {
-            "display_name": factor["label"],
-            "current": factor["value"],
-            "window_mean": factor["value"],
-            "unit": factor.get("unit") or "",
-            "z_score": None,
-            "basis": {"source": "gen_data filesystem observation"},
-        }
-        for factor in factors
-    }
-    top_factors = [
-        {
-            "evidence_field_id": f"measurements.{factor['feature']}",
-            "feature": factor["feature"],
-            "display_name": factor["label"],
-            "value": factor["value"],
-            "unit": factor.get("unit") or "",
-            "normal_range": "실시간 기준 범위",
-            "direction": factor["direction"],
-            "contribution": factor["contribution"],
-            "source_type": "observed",
-        }
-        for factor in factors
-    ]
-    return {
-        "artifact_id": artifact_id,
-        "artifact_type": "prediction_result",
-        "schema_version": "result-artifact-v1.0",
-        "event_id": event_id,
-        "asset_id": asset_id,
-        "asset_type": asset_type,
-        "observed_at": observed_at,
-        "generated_at": observed_at,
-        "failure_probability": score,
-        "threshold": 0.55,
-        "status_grade": status_grade,
-        "confidence": None,
-        "confidence_label": "unavailable",
-        "predicted_failure_type": str(record.get("branch_kind") or "live_sensor_anomaly"),
-        "recommended_action": {"action": action_id},
-        "top_factors": top_factors,
-        "source_sha256": source_sha256,
-        "policy_version": "filesystem-risk-policy-v1",
-        "model_mode": "filesystem_live",
-        "evidence_payload": {
-            "sensor_evidence": {"sensors": sensors},
-            "recommended_actions": [{"action_id": action_id, "label": "정비 승인 검토"}],
-            "source_fields": [factor["evidence_field_id"] for factor in top_factors],
-        },
-        "provenance": {
-            "dataset_version": run_id,
-            "model_version": str(record.get("generator_version") or "filesystem-risk-v1"),
-            "prediction_id": str(record.get("observation_id") or event_id),
-            "source_type": "filesystem_live_observation",
-            "evidence_payload_reference": f"gen_data://runs/{run_id}/source/sensor_records.jsonl#{record.get('observation_id', asset_id)}",
-            "source_sha256": source_sha256,
-            "canonical_source_mutated": False,
-        },
-        "lineage": {
-            "policy_version": "filesystem-risk-policy-v1",
-            "model_mode": "filesystem_live",
-            "sensor_source": "gen_data filesystem observation",
-            "source_sha256": source_sha256,
-        },
-    }
+    return _contract_filesystem_event_artifact(
+        run_id=run_id,
+        observed_at=observed_at,
+        record=record,
+        event_id=event_id,
+    )
 
 
 def filesystem_event_evidence_projection(event_id: str) -> dict[str, Any] | None:

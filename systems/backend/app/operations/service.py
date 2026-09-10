@@ -999,93 +999,103 @@ class ManufacturingPredictiveMaintenanceService:
     ) -> dict[str, Any]:
         """Materialize missing Agent Review Summaries from explicit candidates."""
 
-        items: list[dict[str, Any]] = []
-        candidates = self._agent_review_summary_candidates(
-            project_id=project_id,
-            organization_id=organization_id,
-            workspace_id=workspace_id,
-            limit=limit,
-            source=source,
-        )
-
-        for candidate in candidates:
-            asset_id = str(candidate.get("asset_id") or "")
-            if not asset_id:
-                continue
-            if candidate.get("source_kind") == "fixture":
-                packet = self.agent_review_packet(
-                    asset_id,
-                    project_id,
-                    dataset_version_id=candidate.get("dataset_version_id"),
-                    history_window=history_window,
-                )
-            else:
-                packet = self._runtime_agent_review_packet_for_candidate(
-                    candidate,
+        # Keep failed pages eligible for workflow retries. Serialize cursor rollback
+        # with other materializations in the same service/scope.
+        scope = (organization_id, project_id, workspace_id)
+        with _agent_review_summary_lock("batch:" + json.dumps((id(self), *scope))):
+            previous_offset = self._briefing_scan_offsets.get(scope, 0)
+            try:
+                items: list[dict[str, Any]] = []
+                candidates = self._agent_review_summary_candidates(
                     project_id=project_id,
                     organization_id=organization_id,
                     workspace_id=workspace_id,
-                    history_window=history_window,
+                    limit=limit,
+                    source=source,
                 )
-            summary, trace = self._materialize_agent_review_packet(
-                packet=packet,
-                project_id=project_id,
-                organization_id=organization_id,
-                workspace_id=workspace_id,
-                history_window=history_window,
-                trigger="ui_manual_regeneration" if explicit_refresh else "polling_watcher",
-                engine="simple",
-                generation_policy=generation_policy,
-                packet_loader=(
-                    (lambda: self.agent_review_packet(
-                        asset_id, project_id,
-                        dataset_version_id=candidate.get("dataset_version_id"),
-                        history_window=history_window,
-                    )) if candidate.get("source_kind") == "fixture" else
-                    (lambda: self._runtime_agent_review_packet_for_candidate(
-                        candidate, project_id=project_id,
-                        organization_id=organization_id, workspace_id=workspace_id,
-                        history_window=history_window,
-                    ))
-                ),
-            )
-            materialization = trace.get("materialization") or {}
-            items.append(
-                {
-                    "source_kind": candidate.get("source_kind"),
-                    "asset_id": asset_id,
-                    "event_id": candidate.get("event_id"),
-                    "dataset_version_id": candidate.get("dataset_version_id"),
-                    "source_sha256": candidate.get("source_sha256"),
-                    "lineage_event_id": candidate.get("lineage_event_id"),
-                    "stale_reason": candidate.get("stale_reason"),
-                    "summary_id": materialization.get("summary_id"),
-                    "summary_key": materialization.get("summary_key"),
-                    "status": materialization.get("status"),
-                    "reused": materialization.get("reused"),
-                    "mode": (summary or {}).get("mode"),
-                    "generation_policy": trace.get("generation_policy"),
-                    "fallback_reason": materialization.get("fallback_reason"),
-                    "workflow_run_id": (trace.get("workflow_run") or {}).get(
-                        "workflow_run_id"
-                    ),
-                    "workflow_status": (trace.get("workflow_run") or {}).get(
-                        "status"
-                    ),
-                }
-            )
 
-        return {
-            "project_id": project_id,
-            "history_window": history_window,
-            "source": source,
-            "scanned_count": len(items),
-            "materialized_count": sum(1 for item in items if item.get("summary_id")),
-            "created_count": sum(1 for item in items if item.get("summary_id") and not item.get("reused")),
-            "pending_count": sum(1 for item in items if item.get("status") == "pending"),
-            "reused_count": sum(1 for item in items if item.get("reused")),
-            "items": items,
-        }
+                for candidate in candidates:
+                    asset_id = str(candidate.get("asset_id") or "")
+                    if not asset_id:
+                        continue
+                    if candidate.get("source_kind") == "fixture":
+                        packet = self.agent_review_packet(
+                            asset_id,
+                            project_id,
+                            dataset_version_id=candidate.get("dataset_version_id"),
+                            history_window=history_window,
+                        )
+                    else:
+                        packet = self._runtime_agent_review_packet_for_candidate(
+                            candidate,
+                            project_id=project_id,
+                            organization_id=organization_id,
+                            workspace_id=workspace_id,
+                            history_window=history_window,
+                        )
+                    summary, trace = self._materialize_agent_review_packet(
+                        packet=packet,
+                        project_id=project_id,
+                        organization_id=organization_id,
+                        workspace_id=workspace_id,
+                        history_window=history_window,
+                        trigger="ui_manual_regeneration" if explicit_refresh else "polling_watcher",
+                        engine="simple",
+                        generation_policy=generation_policy,
+                        packet_loader=(
+                            (lambda: self.agent_review_packet(
+                                asset_id, project_id,
+                                dataset_version_id=candidate.get("dataset_version_id"),
+                                history_window=history_window,
+                            )) if candidate.get("source_kind") == "fixture" else
+                            (lambda: self._runtime_agent_review_packet_for_candidate(
+                                candidate, project_id=project_id,
+                                organization_id=organization_id, workspace_id=workspace_id,
+                                history_window=history_window,
+                            ))
+                        ),
+                    )
+                    materialization = trace.get("materialization") or {}
+                    items.append(
+                        {
+                            "source_kind": candidate.get("source_kind"),
+                            "asset_id": asset_id,
+                            "event_id": candidate.get("event_id"),
+                            "dataset_version_id": candidate.get("dataset_version_id"),
+                            "source_sha256": candidate.get("source_sha256"),
+                            "lineage_event_id": candidate.get("lineage_event_id"),
+                            "stale_reason": candidate.get("stale_reason"),
+                            "summary_id": materialization.get("summary_id"),
+                            "summary_key": materialization.get("summary_key"),
+                            "status": materialization.get("status"),
+                            "reused": materialization.get("reused"),
+                            "mode": (summary or {}).get("mode"),
+                            "generation_policy": trace.get("generation_policy"),
+                            "fallback_reason": materialization.get("fallback_reason"),
+                            "workflow_run_id": (trace.get("workflow_run") or {}).get(
+                                "workflow_run_id"
+                            ),
+                            "workflow_status": (trace.get("workflow_run") or {}).get(
+                                "status"
+                            ),
+                        }
+                    )
+
+                return {
+                    "project_id": project_id,
+                    "history_window": history_window,
+                    "source": source,
+                    "scanned_count": len(items),
+                    "materialized_count": sum(1 for item in items if item.get("summary_id")),
+                    "created_count": sum(1 for item in items if item.get("summary_id") and not item.get("reused")),
+                    "pending_count": sum(1 for item in items if item.get("status") == "pending"),
+                    "reused_count": sum(1 for item in items if item.get("reused")),
+                    "items": items,
+                }
+            except Exception:
+                if source != "fixture":
+                    self._briefing_scan_offsets[scope] = previous_offset
+                raise
 
     def _agent_review_summary_candidates(
         self,

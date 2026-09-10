@@ -478,6 +478,8 @@ def _evidence_basis_item(
         "source_version": str(item.get("source_version") or ""),
         "domain": str(item.get("domain") or "unresolved"),
         "relation_path": [str(path) for path in item.get("relation_path") or []],
+        "relation_paths": item.get("relation_paths") or [],
+        "display_fields": item.get("display_fields") or [],
         "fact_type": str(item.get("fact_type") or "unknown"),
         "value_summary": str(item.get("value_summary") or ""),
         "required_for_boundary": bool(item.get("required_for_boundary")),

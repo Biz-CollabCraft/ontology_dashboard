@@ -325,6 +325,19 @@ export interface OperationsEvidenceGap {
   ownerDomain: string;
 }
 
+export interface EvidenceRelationStep {
+  edge_id: string;
+  source_type: string;
+  source_id: string;
+  relationship_type: string;
+  target_type: string;
+  target_id: string;
+  source_refs: string[];
+  source_version: string;
+}
+
+export interface EvidenceRelationPath { steps: EvidenceRelationStep[]; }
+
 export interface OperationsEvidenceContextBasis {
   candidateId: string;
   candidateType: "fact" | "relationship" | "limitation";
@@ -332,6 +345,8 @@ export interface OperationsEvidenceContextBasis {
   sourceVersion: string;
   domain: string;
   relationPath: string[];
+  relationPaths?: EvidenceRelationPath[];
+  displayFields?: Array<{ label: string; value: string }>;
   factType: string;
   valueSummary: string;
   requiredForBoundary: boolean;
@@ -703,6 +718,7 @@ export interface OperationsInspectionTarget {
 }
 
 export interface OperationsAgentReviewPacket {
+  evidence_context?: AssetDetailEvidenceContextWire | null;
   schema_version: "agent-review-packet-v1.0";
   project_id: string;
   asset_id: string;
@@ -810,6 +826,7 @@ export interface OperationsAgentReviewPacket {
     source_refs: string[];
   };
   maintenance_history_summary: {
+    workflow_as_of?: string;
     provider: string;
     mutation_allowed: false;
     open_work_order_exists: boolean | null;
@@ -1035,6 +1052,8 @@ export interface AssetDetailEvidenceContextBasisWire {
   source_version: string;
   domain: string;
   relation_path: string[];
+  relation_paths?: EvidenceRelationPath[];
+  display_fields?: Array<{ label: string; value: string }>;
   fact_type: string;
   value_summary: string;
   required_for_boundary: boolean;

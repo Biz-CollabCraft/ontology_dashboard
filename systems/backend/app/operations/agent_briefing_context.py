@@ -92,7 +92,7 @@ def record_context(item: dict[str, Any], *, packet: dict[str, Any]) -> dict[str,
     supplied = [v for v in stamps if v not in (None, "")]
     parsed = [_instant(v) for v in supplied]
     basis = packet.get("snapshot_basis") or {}
-    as_of = basis.get("observed_at") or packet.get("generated_at")
+    as_of = (packet.get("maintenance_history_summary") or {}).get("workflow_as_of") or basis.get("observed_at") or packet.get("generated_at")
     cutoff = _instant(as_of)
     if cutoff is None or not parsed or any(v is None for v in parsed):
         temporal = "unknown"

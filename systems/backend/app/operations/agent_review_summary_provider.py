@@ -621,6 +621,7 @@ def _selected_evidence_context(packet: dict[str, Any]) -> dict[str, Any]:
         "selected_basis": [
             _pick(item, "candidate_id", "candidate_type", "source_ref",
                   "source_snapshot_id", "source_version", "domain", "relation_path",
+                  "relation_paths", "display_fields",
                   "fact_type", "as_of", "value_summary", "freshness_state",
                   "required_for_boundary", "limitation_state")
             for item in context.get("selected_basis") or []
