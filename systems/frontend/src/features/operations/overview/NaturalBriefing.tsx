@@ -93,7 +93,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
     <p className="natural-briefing-status" role="status">{status}{basis.eventId !== props.eventId ? " · 생성 기준 관측을 유지합니다. 최신 관측은 다시 생성 시 반영됩니다." : ""}</p>
     {summary ? <StreamingProse key={JSON.stringify([props.assetId, basis.eventId, props.role, quote])}
       rows={rows} identity={JSON.stringify([props.projectId, props.workspaceId, props.assetId, basis.eventId, props.role, quote])}
-      revealed={props.revealed}/> : null}
+      revealed={props.revealed} evidenceScope={evidenceScope}/> : null}
     {summary ? <div className="natural-briefing-basis">{props.assetId}{basis.observedAt ? <> · 관측 기준 <time dateTime={basis.observedAt}>{relativeRecordTime(basis.observedAt)}</time></> : null}
       {summary.limitations.length ? <details><summary>해석 시 유의사항</summary>{readerLimitations(summary.limitations).map((text, i) => <p key={i}>{text}</p>)}</details> : null}
     </div> : null}
