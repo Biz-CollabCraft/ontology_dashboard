@@ -241,7 +241,7 @@ function RiskChart({ asset, name }: { asset: OperationsAsset | null; detail: Ass
   const current = riskScore(asset);
   const coords = values.map((n,i) => `${values.length === 1 ? 50 : i * 100 / (values.length - 1)},${100 - Math.max(0, Math.min(1,n)) * 100}`);
   return <section className="prb-risk"><header><div><strong>위험 점수 추세 · 최근 관측</strong><span>{name}</span></div><b>{numeric(current) ? Math.round(current * 100) + "%" : "정보 없음"}</b></header>
-    {values.length ? <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={name + " 위험 점수 추세"}><rect width="100" height="38" className="risk-zone"/><rect y="38" width="100" height="20" className="attention-zone"/><rect y="58" width="100" height="42" className="normal-zone"/><line x2="100" y1="38" y2="38"/><line x2="100" y1="58" y2="58"/>{values.length > 1 ? <polyline points={coords.join(" ")}/> : <circle cx="50" cy={100-values[0]*100} r="1"/>}</svg> : <p>연결된 위험 관측 이력이 없습니다.</p>}
+    {values.length ? <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={name + " 위험 점수 추세"}><rect y="0" width="100" height="25" className="risk-zone"/><rect y="25" width="100" height="20" className="warning-zone"/><rect y="45" width="100" height="20" className="attention-zone"/><rect y="65" width="100" height="35" className="normal-zone"/><line x2="100" y1="25" y2="25"/><line x2="100" y1="45" y2="45"/><line x2="100" y1="65" y2="65"/>{values.length > 1 ? <polyline points={coords.join(" ")}/> : <circle cx="50" cy={100-values[0]*100} r="1"/>}</svg> : <p>연결된 위험 관측 이력이 없습니다.</p>}
     <footer><span>이전 관측</span><small>{when(asset?.observedAt)} · 요청 시점과 다를 수 있음</small><span>현재</span></footer>
   </section>;
 }

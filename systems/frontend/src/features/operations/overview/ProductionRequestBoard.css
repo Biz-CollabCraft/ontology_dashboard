@@ -44,7 +44,7 @@
 .prb-risk{display:flex;flex-direction:column;flex:0 0 clamp(180px,29vh,320px);min-height:0;border:1px solid var(--ef-border);padding:10px;background:var(--operations-surface);border-radius:4px;margin-top:10px}
 .prb-risk header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none}.prb-risk header>div{display:flex;flex-direction:column;gap:4px}.prb-risk header strong{font-size:14px}.prb-risk header span{font-size:11px;color:var(--ef-muted)}.prb-risk header>b{font-size:27px}
 .prb-risk svg{display:block;min-height:0;width:100%;flex:1;margin-top:10px;background:var(--operations-panel)}
-.prb-risk .risk-zone{fill:#fbe4e9}.prb-risk .attention-zone{fill:#fcf6df}.prb-risk .normal-zone{fill:#e0f3eb}
+.prb-risk .risk-zone{fill:#fbe4e9}.prb-risk .warning-zone{fill:#fff0d8}.prb-risk .attention-zone{fill:#fcf6df}.prb-risk .normal-zone{fill:#e0f3eb}
 .prb-risk line{stroke:#bacbdc;stroke-width:.5;stroke-dasharray:3 2}.prb-risk polyline{fill:none;stroke:#2468d8;stroke-width:2;vector-effect:non-scaling-stroke}.prb-risk circle{fill:#2468d8}
 .prb-risk footer{display:flex;justify-content:space-between;align-items:center;gap:6px;padding-top:6px;font-size:11px}
 .prb-action-summary{flex:1;padding-top:8px}.prb-action-summary dt{font-size:12px;font-weight:800}.prb-action-summary dd{margin:4px 0 12px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}

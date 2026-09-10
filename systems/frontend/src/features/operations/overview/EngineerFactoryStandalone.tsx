@@ -126,11 +126,13 @@ function cellLabel(value: string) {
 function TrendSvg({ points }: { points: string }) {
   return (
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      <rect y="0" width="100" height="38" className="risk-zone" />
-      <rect y="38" width="100" height="20" className="attention-zone" />
-      <rect y="58" width="100" height="42" className="normal-zone" />
-      <line x1="0" x2="100" y1="38" y2="38" />
-      <line x1="0" x2="100" y1="58" y2="58" />
+      <rect y="0" width="100" height="25" className="risk-zone" />
+      <rect y="25" width="100" height="20" className="warning-zone" />
+      <rect y="45" width="100" height="20" className="attention-zone" />
+      <rect y="65" width="100" height="35" className="normal-zone" />
+      <line x1="0" x2="100" y1="25" y2="25" />
+      <line x1="0" x2="100" y1="45" y2="45" />
+      <line x1="0" x2="100" y1="65" y2="65" />
       <polyline points={points} />
     </svg>
   );
