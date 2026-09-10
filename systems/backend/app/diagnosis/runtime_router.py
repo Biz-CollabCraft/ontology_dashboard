@@ -34,6 +34,7 @@ from app.diagnosis.evidence_projection import (
 )
 from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
 from app.diagnosis.ports import ALLOWED_DERIVED_MEASURES
+from app.operations.sensor_signal_bands import sensor_signal_bands
 from app.diagnosis.contracts import (
     CompleteFileTickNotFound,
     filesystem_event_artifact as _contract_filesystem_event_artifact,
@@ -196,6 +197,7 @@ def _filesystem_overview(project_id: str, workspace_id: str) -> dict[str, Any]:
                     "label": factor["label"],
                     "unit": factor["unit"],
                     "points": points,
+                    "bands": sensor_signal_bands(feature),
                 })
         asset = {
             "assetId": asset_id,

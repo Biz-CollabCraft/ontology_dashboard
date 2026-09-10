@@ -157,6 +157,7 @@ export interface OperationsAsset {
     label: string;
     unit: string | null;
     points: Array<{ observedAt: string; value: number }>;
+    bands?: OperationsSensorBandSpec | null;
   }>;
   riskHistory?: Array<{ observedAt: string; value: number }>;
   provenance: OperationsProvenance;
@@ -235,6 +236,20 @@ export interface OperationsBootstrapModel {
   selectionRestoreError?: string | null;
 }
 
+export type OperationsSensorBandStatus = "normal" | "attention" | "critical";
+
+export interface OperationsSensorBandRange {
+  status: OperationsSensorBandStatus;
+  lower: number | null;
+  upper: number | null;
+}
+
+export interface OperationsSensorBandSpec {
+  source: string;
+  basis: string;
+  ranges: OperationsSensorBandRange[];
+}
+
 export interface OperationsSensorValue {
   id: string;
   label: string;
@@ -246,6 +261,7 @@ export interface OperationsSensorValue {
   historyPointCount?: number;
   historyWindow?: OperationsFeatureHistoryWindow | null;
   historyPoints?: OperationsFeatureHistoryPoint[];
+  bands?: OperationsSensorBandSpec | null;
 }
 
 export interface OperationsFeatureHistoryWindow {
@@ -1124,6 +1140,7 @@ export interface AssetDetailViewModel {
       value: number | null;
       quality_status: "good" | "bad" | "unknown";
     };
+    bands?: OperationsSensorBandSpec | null;
     history: {
       source_ref?: string;
       window?: {

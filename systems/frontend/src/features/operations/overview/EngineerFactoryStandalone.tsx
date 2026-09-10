@@ -14,6 +14,11 @@ import { OperationsAccountBadge } from "./OperationsAccountBadge";
 import { EngineerRequestProgress } from "./EngineerRequestProgress";
 import { orderEngineerSensors } from "./engineerSensorOrder";
 import { GenDataRiskBandBackground } from "./riskBandThresholds";
+import {
+  SensorSignalBandBackground,
+  sensorBandY,
+  sensorChartDomain,
+} from "./sensorSignalBands";
 import type { OpenInspectionWorkOrderReadModel } from "../../../api";
 import { requestInspectionWorkOrder } from "../../../api";
 import {
@@ -29,6 +34,10 @@ const STATUS_LABEL: Record<OperationsRiskStatus, string> = {
   critical: "긴급",
   data_quality_hold: "확인 필요",
 };
+
+type OperationsSensorBands = NonNullable<
+  NonNullable<OperationsAsset["sensorHistory"]>[number]["bands"]
+>;
 
 function formatTimestamp(value: string | null | undefined) {
   if (!value) return "시각 정보 없음";
@@ -83,10 +92,15 @@ function riskFill(asset: OperationsAsset) {
   return `${Math.round(30 + probability * 60)}%`;
 }
 
-function sensorPolyline(points: Array<{ value: number }>) {
+function sensorPolyline(
+  points: Array<{ value: number }>,
+  bands?: OperationsSensorBands | null,
+) {
   if (!points.length) return "";
   const values = points.map((point) => point.value);
-  if (values.every((value) => value >= 0 && value <= 1)) {
+  const domain = sensorChartDomain(values, bands);
+  const span = Math.max(domain.max - domain.min, 1e-6);
+  if (!bands && values.every((value) => value >= 0 && value <= 1)) {
     return points
       .map(
         (point, index) =>
@@ -94,13 +108,10 @@ function sensorPolyline(points: Array<{ value: number }>) {
       )
       .join(" ");
   }
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = Math.max(max - min, 1e-6);
   return points
     .map(
       (point, index) =>
-        `${((index / Math.max(1, points.length - 1)) * 100).toFixed(2)},${(92 - ((point.value - min) / span) * 84).toFixed(2)}`,
+        `${((index / Math.max(1, points.length - 1)) * 100).toFixed(2)},${(92 - ((point.value - domain.min) / span) * 84).toFixed(2)}`,
     )
     .join(" ");
 }
@@ -124,10 +135,23 @@ function cellLabel(value: string) {
   return match ? `${Number(match[1])}셀` : value;
 }
 
-function TrendSvg({ points }: { points: string }) {
+function TrendSvg({
+  points,
+  values,
+  bands,
+}: {
+  points: string;
+  values?: number[];
+  bands?: OperationsSensorBands | null;
+}) {
+  const domain = sensorChartDomain(values ?? [], bands);
   return (
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      <GenDataRiskBandBackground />
+      {bands ? (
+        <SensorSignalBandBackground bands={bands} domain={domain} y={8} height={84} />
+      ) : (
+        <GenDataRiskBandBackground />
+      )}
       <polyline points={points} />
     </svg>
   );
@@ -136,9 +160,11 @@ function TrendSvg({ points }: { points: string }) {
 function DetailedTrendSvg({
   points,
   unit,
+  bands,
 }: {
   points: Array<{ observedAt: string; value: number }>;
   unit: string | null;
+  bands?: OperationsSensorBands | null;
 }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   if (!points.length)
@@ -146,13 +172,11 @@ function DetailedTrendSvg({
       <div className="engineer-expanded-empty">표시할 관측값이 없습니다.</div>
     );
   const values = points.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = Math.max(max - min, Math.abs(max) * 0.05, 1e-6);
+  const domain = sensorChartDomain(values, bands);
   const plotted = points.map((point, index) => ({
     ...point,
     x: 58 + (index / Math.max(1, points.length - 1)) * 714,
-    y: 28 + (1 - (point.value - min) / span) * 270,
+    y: sensorBandY(point.value, domain, 28, 270),
   }));
   const active = activeIndex === null ? null : plotted[activeIndex];
   const tooltipX = active ? Math.max(8, Math.min(622, active.x - 85)) : 0;
@@ -165,6 +189,14 @@ function DetailedTrendSvg({
       role="img"
       aria-label="센서 관측 시각별 상세 추이"
     >
+      <SensorSignalBandBackground
+        bands={bands}
+        domain={domain}
+        x={58}
+        y={28}
+        width={714}
+        height={270}
+      />
       {[0, 1, 2, 3, 4].map((row) => (
         <line
           key={row}
@@ -176,10 +208,10 @@ function DetailedTrendSvg({
         />
       ))}
       <text x="50" y="34" textAnchor="end">
-        {max.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+        {domain.max.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
       </text>
       <text x="50" y="302" textAnchor="end">
-        {min.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+        {domain.min.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
       </text>
       <polyline
         points={plotted.map((point) => `${point.x},${point.y}`).join(" ")}
@@ -1122,7 +1154,11 @@ export function EngineerFactoryStandalone({
                           </span>
                         </header>
                         <div className="engineer-drawer-trend">
-                          <TrendSvg points={sensorPolyline(sensor.points)} />
+                          <TrendSvg
+                            points={sensorPolyline(sensor.points, sensor.bands)}
+                            values={sensor.points.map((point) => point.value)}
+                            bands={sensor.bands}
+                          />
                           <div>
                             <span>이전 관측</span>
                             <span>현재</span>
@@ -1279,6 +1315,7 @@ export function EngineerFactoryStandalone({
                         <DetailedTrendSvg
                           points={sensor.points}
                           unit={sensor.unit}
+                          bands={sensor.bands}
                         />
                         <footer>
                           <span>

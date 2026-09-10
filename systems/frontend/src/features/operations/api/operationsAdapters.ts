@@ -731,6 +731,7 @@ function sensorsFromAssetDetailViewModel(
       value: point.value,
       qualityStatus: point.quality_status,
     })),
+    bands: feature.bands ?? null,
   }));
 }
 

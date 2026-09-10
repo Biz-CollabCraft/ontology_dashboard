@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from typing import Protocol
 
+from .sensor_signal_bands import sensor_signal_bands
+
 DEFAULT_HISTORY_WINDOW = "24h"
 HISTORY_WINDOW_HOURS = {
     "24h": 24,
@@ -662,6 +664,7 @@ def _feature(
                 "quality_status": current_quality,
             },
             "baseline": baseline,
+            "bands": sensor_signal_bands(key),
             "history": checked_history,
             "top_factor": top_factor_summary,
         },

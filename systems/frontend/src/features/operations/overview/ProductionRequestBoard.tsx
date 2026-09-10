@@ -16,6 +16,11 @@ import { displayEquipmentSensorLabel } from "../displayLabels";
 import { OperationsAccountBadge } from "./OperationsAccountBadge";
 import { amount, matchingCostAnalysis, numeric, productionQueue, queueStatus, riskScore, equipmentStatus, sortProductionQueue, type QueueSort, type ProductionQueueItem } from "./productionRequestModel";
 import { GenDataRiskBandBackground } from "./riskBandThresholds";
+import {
+  SensorSignalBandBackground,
+  sensorBandY,
+  sensorChartDomain,
+} from "./sensorSignalBands";
 import "./ProductionRequestBoard.css";
 
 type Props = {
@@ -176,7 +181,7 @@ function LiveEquipmentSensors({ asset, twoRows = false }: { asset: OperationsAss
   if (!asset?.sensorHistory?.length) return <p>연결된 최신 센서 관측이 없습니다.</p>;
   const charts = orderEngineerSensors(asset.assetId, asset.sensorHistory).map(sensor => {
     const latest = sensor.points.at(-1);
-    const feature = { label: sensor.label, history: { points: sensor.points.map(p => ({ observed_at: p.observedAt, value: p.value, quality_status: numeric(p.value) ? "good" : "unavailable" })) } } as AssetDetailViewModel["features"][number];
+    const feature = { label: sensor.label, bands: sensor.bands, history: { points: sensor.points.map(p => ({ observed_at: p.observedAt, value: p.value, quality_status: numeric(p.value) ? "good" : "unknown" })) } } as AssetDetailViewModel["features"][number];
     return <div className="prb-sensor" key={sensor.feature}><strong>{displayEquipmentSensorLabel(asset.assetId, sensor.feature, sensor.label)}</strong><span>{number(latest?.value, " " + (sensor.unit ?? ""))}</span><p>관측: {when(latest?.observedAt)}</p><SensorTrend feature={feature}/></div>;
   });
   if (!twoRows) return <>{charts}</>;
@@ -187,14 +192,15 @@ function SensorTrend({ feature }: { feature: AssetDetailViewModel["features"][nu
   const points = feature.history.points;
   const values = points.filter(p => numeric(p.value) && p.quality_status === "good").map(p => p.value as number);
   if (!values.length) return <p>유효한 센서 추이 없음</p>;
-  const min = Math.min(...values), max = Math.max(...values), range = Math.max(max - min, Math.abs(max) * .08, 1);
+  const bands = feature.bands ?? null;
+  const domain = sensorChartDomain(values, bands);
   let gap = true;
   const path = points.map((p,i) => {
     if (!numeric(p.value) || p.quality_status !== "good") { gap = true; return ""; }
     const command = gap ? "M" : "L"; gap = false;
-    return command + (i * 100 / Math.max(1,points.length - 1)) + "," + (92 - (p.value - min) / range * 84);
+    return command + (i * 100 / Math.max(1,points.length - 1)) + "," + sensorBandY(p.value as number, domain, 8, 84);
   }).join(" ");
-  return <><svg className="prb-sensor-svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={feature.label + " 센서 추이"}><path d={path}/></svg><small>{when(points[0]?.observed_at)} ~ {when(points.at(-1)?.observed_at)}</small></>;
+  return <><svg className="prb-sensor-svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={feature.label + " 센서 추이"}>{bands ? <SensorSignalBandBackground bands={bands} domain={domain} y={8} height={84}/> : <GenDataRiskBandBackground/>}<path d={path}/></svg><small>{when(points[0]?.observed_at)} ~ {when(points.at(-1)?.observed_at)}</small></>;
 }
 function OverallKpi({ label, value, description }: { label: string; value: string; description: string }) {
   return <article className="prb-metric prb-overall-kpi"><div className="prb-kpi-heading"><b>{label}</b><span>{description}</span></div><strong>{value}</strong></article>;
