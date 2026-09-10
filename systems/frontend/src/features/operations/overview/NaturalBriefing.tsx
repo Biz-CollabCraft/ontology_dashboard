@@ -91,7 +91,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
 
   const quote = summary?.role_summaries.find(item => item.role === props.role)?.quote?.trim() || summary?.summary || "";
   const rows = briefRows(quote, summary?.source_refs ?? []);
-  const evidenceScope = { ...props, expectedSummaryKey: summaryKey, onEvidenceChanged: () => {
+  const evidenceScope = { ...props, eventId: basis.eventId, observedAt: basis.observedAt, expectedSummaryKey: summaryKey, onEvidenceChanged: () => {
         setSummary(null); setBusy(true); setStatus("근거가 변경되어 이전 브리핑을 숨겼습니다. 현재 브리핑을 확인하고 있습니다.");
         const controller = controllerRef.current;
         if (controller && !controller.signal.aborted) void read(controller).catch(() => {

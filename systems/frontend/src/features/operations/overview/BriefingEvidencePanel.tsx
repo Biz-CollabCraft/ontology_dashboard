@@ -23,7 +23,7 @@ export function BriefingEvidencePanel(props: Props) {
       if (controller.signal.aborted) return;
       const basis = packet.snapshot_basis;
       if (packet.project_id !== props.projectId || packet.asset_id !== props.assetId || basis?.event_id !== props.eventId
-        || (props.observedAt && Date.parse(packet.generated_at) !== Date.parse(props.observedAt))) {
+        || (props.observedAt && basis?.observed_at && Date.parse(basis.observed_at) !== Date.parse(props.observedAt))) {
         setStatus("근거가 갱신되었습니다. 현재 사건의 브리핑을 다시 확인해 주세요.");
         props.onEvidenceChanged?.();
         return;
