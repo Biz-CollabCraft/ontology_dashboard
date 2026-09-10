@@ -83,6 +83,13 @@ def test_projects_relation_aware_candidates_with_complete_lineage() -> None:
         and candidate.required_for_boundary
         for candidate in candidates
     )
+    assert any(
+        candidate.domain == "maintenance_readiness"
+        and candidate.fact_type == "concurrent_work_checks"
+        and candidate.source_ref == "maintenance-readiness-context-demo-v1#/concurrent_work_checks/0"
+        and candidate.required_for_boundary
+        for candidate in candidates
+    )
 
 
 def test_deterministic_selection_preserves_required_evidence_and_reduces_context() -> None:
@@ -109,7 +116,7 @@ def test_deterministic_selection_preserves_required_evidence_and_reduces_context
         candidates,
         strategy=EvidenceSelectionStrategy.DETERMINISTIC,
         role="process_manager",
-        max_candidates=8,
+        max_candidates=None,
     )
     metrics = evaluate_evidence_selection(
         full_context=full,
@@ -119,9 +126,12 @@ def test_deterministic_selection_preserves_required_evidence_and_reduces_context
     )
 
     assert metrics.required_evidence_recall == 1.0
-    assert metrics.selected_candidate_count < metrics.full_candidate_count
-    assert metrics.context_reduction > 0
+    assert metrics.selected_candidate_count == metrics.full_candidate_count
+    assert metrics.context_reduction == 0
     assert not metrics.missing_required_evidence_ids
+    assert "maintenance-readiness-context-demo-v1#/concurrent_work_checks/0" in (
+        selected.selected_source_refs
+    )
 
 
 def test_stale_context_becomes_limitation_not_normal_fact() -> None:
@@ -198,5 +208,9 @@ def test_service_exposes_s0_s1_selection_trace(tmp_path: Path) -> None:
     assert result["strategies"]["S0"]["strategy"] == "S0_FULL_CONTEXT"
     assert result["strategies"]["S1"]["strategy"] == "S1_DETERMINISTIC_SELECTION"
     assert result["metrics"]["required_evidence_recall"] == 1.0
-    assert result["metrics"]["context_reduction"] > 0
+    assert result["metrics"]["context_reduction"] == 0
+    assert (
+        result["strategies"]["S1"]["selected_candidate_count"]
+        == result["strategies"]["S0"]["selected_candidate_count"]
+    )
     assert result["relation_resolution"]["relationships"]

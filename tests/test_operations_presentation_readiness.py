@@ -115,6 +115,11 @@ def test_runtime_sop_retrieval_returns_grounded_source_for_cnc_result():
     assert guidance[0]["sop_id"] == "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
     assert guidance[0]["source_ref"].endswith("#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001")
     assert "factor_keys" in guidance[0]["matched_fields"]
+    prerequisites = guidance[0]["maintenance_review_prerequisites"]
+    assert "동일 설비의 진행 중 작업과 예정 작업 겹침 여부" in (
+        prerequisites["required_measurements"]
+    )
+    assert any("같은 설비" in item for item in prerequisites["human_review_questions"])
 
 
 def test_runtime_sop_retrieval_normalizes_temporal_model_features_to_sensor_keys():

@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import pytest
 from app.operations.agent_review_summary import compose_deterministic_agent_review_summary
-from app.operations.agent_review_summary_provider import build_agent_review_summary_prompt_payload,build_tool_selected_agent_review_summary_prompt_payload
+from app.operations.agent_review_summary_provider import agent_review_summary_editable_schema,build_agent_review_summary_prompt_payload,build_tool_selected_agent_review_summary_prompt_payload
 ROOT=Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize('builder',[build_agent_review_summary_prompt_payload,build_tool_selected_agent_review_summary_prompt_payload])
 def test_baseline_prose_cannot_leak_to_provider(builder):
@@ -13,3 +13,6 @@ def test_baseline_prose_cannot_leak_to_provider(builder):
  assert 'DO_NOT_COPY' not in json.dumps(payload)
  assert payload['baseline_editable_fields']['summary']==''
  assert len(payload['baseline_editable_fields']['role_summaries'])==3
+ assert all(set(item)=={'role','quote'} for item in payload['baseline_editable_fields']['role_summaries'])
+ schema_roles=agent_review_summary_editable_schema()['properties']['role_summaries']['items']['properties']['role']['enum']
+ assert {item['role'] for item in payload['baseline_editable_fields']['role_summaries']}==set(schema_roles)
