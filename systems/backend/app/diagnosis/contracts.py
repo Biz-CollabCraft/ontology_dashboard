@@ -247,9 +247,9 @@ def risk_from_file_record(record: dict[str, Any]) -> float:
 def risk_status(score: float) -> str:
     if score >= 0.75:
         return "critical"
-    if score >= 0.55:
+    if score >= 0.45:
         return "warning"
-    if score >= 0.35:
+    if score >= 0.20:
         return "attention"
     return "normal"
 
@@ -400,7 +400,7 @@ def filesystem_event_artifact(
         "observed_at": observed_at,
         "generated_at": observed_at,
         "failure_probability": score,
-        "threshold": 0.55,
+        "threshold": 0.20,
         "status_grade": status_grade,
         "confidence": None,
         "confidence_label": "unavailable",

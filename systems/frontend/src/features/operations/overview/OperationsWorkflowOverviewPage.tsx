@@ -71,6 +71,7 @@ import {
   type MaintenanceWorkflowDisplayStatus,
   type PostMaintenancePredictionSummary,
 } from "../maintenance/MaintenanceWorkflowActionPanel";
+import { GenDataRiskBandBackground, statusFromGenDataRisk } from "./riskBandThresholds";
 
 interface WorkOrderCandidate {
   event: OperationsEvent;
@@ -365,10 +366,7 @@ function productionLossLabel(value: number | null): string {
 }
 
 function demoStatusForRisk(risk: number): OperationsRiskStatus {
-  if (risk >= 0.78) return "critical";
-  if (risk >= 0.62) return "warning";
-  if (risk >= 0.42) return "attention";
-  return "normal";
+  return statusFromGenDataRisk(risk) as OperationsRiskStatus;
 }
 
 function isGeneratedResultEvent(eventId: string | null | undefined): boolean {
@@ -1847,7 +1845,7 @@ function EngineerFactoryDashboard({
 
         <section className="engineer-factory-card engineer-risk-trend" aria-label="선택 설비 위험 추세">
           <header><div><strong>위험 점수 추세 · 최근 관측</strong><span>{selected ? `${displayAssetName(selected)} · ${selected.assetId}` : "설비를 선택하세요"}</span></div><b className={`tone-${statusTone}`}>{formatProbability(selected?.failureProbability ?? null)}</b></header>
-          {chartPoints ? <div className="engineer-risk-chart"><svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="위험 점수 추세"><rect y="0" width="100" height="25" className="risk-zone" /><rect y="25" width="100" height="20" className="warning-zone" /><rect y="45" width="100" height="20" className="attention-zone" /><rect y="65" width="100" height="35" className="normal-zone" /><line x1="0" x2="100" y1="25" y2="25" /><line x1="0" x2="100" y1="45" y2="45" /><line x1="0" x2="100" y1="65" y2="65" /><polyline points={chartPoints} /></svg><div><span>이전 관측</span><span>현재</span></div></div> : <OperationsState kind="empty" title="위험 추세 없음" detail="선택 설비의 위험 관측이 아직 연결되지 않았습니다." />}
+          {chartPoints ? <div className="engineer-risk-chart"><svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="위험 점수 추세"><GenDataRiskBandBackground /><polyline points={chartPoints} /></svg><div><span>이전 관측</span><span>현재</span></div></div> : <OperationsState kind="empty" title="위험 추세 없음" detail="선택 설비의 위험 관측이 아직 연결되지 않았습니다." />}
           <footer><span>현재 상태 <b>{operationsMonitorStatusLabel(selected?.status ?? "data_quality_hold")}</b></span><span>{planningBasis.value}</span></footer>
         </section>
 

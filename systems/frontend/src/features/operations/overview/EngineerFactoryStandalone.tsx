@@ -13,6 +13,7 @@ import { LogOut } from "lucide-react";
 import { OperationsAccountBadge } from "./OperationsAccountBadge";
 import { EngineerRequestProgress } from "./EngineerRequestProgress";
 import { orderEngineerSensors } from "./engineerSensorOrder";
+import { GenDataRiskBandBackground } from "./riskBandThresholds";
 import type { OpenInspectionWorkOrderReadModel } from "../../../api";
 import { requestInspectionWorkOrder } from "../../../api";
 import {
@@ -126,13 +127,7 @@ function cellLabel(value: string) {
 function TrendSvg({ points }: { points: string }) {
   return (
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      <rect y="0" width="100" height="25" className="risk-zone" />
-      <rect y="25" width="100" height="20" className="warning-zone" />
-      <rect y="45" width="100" height="20" className="attention-zone" />
-      <rect y="65" width="100" height="35" className="normal-zone" />
-      <line x1="0" x2="100" y1="25" y2="25" />
-      <line x1="0" x2="100" y1="45" y2="45" />
-      <line x1="0" x2="100" y1="65" y2="65" />
+      <GenDataRiskBandBackground />
       <polyline points={points} />
     </svg>
   );
