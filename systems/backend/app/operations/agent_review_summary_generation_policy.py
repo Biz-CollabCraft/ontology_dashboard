@@ -21,6 +21,7 @@ from app.operations.agent_review_summary import validate_agent_review_summary_co
 
 ROLE_POLICY_VERSION = "role-briefing-policy-v2"
 MINOR_PROBABILITY_DELTA = 0.005  # Fixed before temporal v3 evaluation: 0.5 percentage point.
+MAX_MINOR_CHANGE_DEFERRAL_SECONDS = 300  # Never leave a continuously changing briefing pending forever.
 MODEL_POLICY_VERSION = "exact-materialization-model-v1"
 GENERATION_POLICIES = ("click", "always", "hybrid", "demand")
 
@@ -251,6 +252,7 @@ def decide_generation(
     material_change: bool = True,
     input_valid: bool = True,
     background_required: bool = True,
+    minor_change_deferral_expired: bool = False,
 ) -> dict[str, Any]:
     if policy not in GENERATION_POLICIES:
         raise ValueError(f"unknown generation policy: {policy}")
@@ -274,6 +276,12 @@ def decide_generation(
         trigger, decision, reason = "AWAIT_DEMAND", "ON_DEMAND", "ordinary_risk_waits_for_explicit_request"
     elif retry_fallback:
         trigger, decision, reason = "RETRY", "PREGENERATE", "retry_existing_fallback"
+    elif policy == "hybrid" and not material_change and minor_change_deferral_expired:
+        trigger, decision, reason = (
+            "MINOR_CHANGE_MAX_WAIT",
+            "PREGENERATE",
+            "minor_change_max_deferral_elapsed_regenerate",
+        )
     elif policy == "hybrid" and not material_change:
         trigger, decision, reason = "MINOR_CHANGE", "ON_DEMAND", "minor_probability_change_deferred_no_reuse"
     else:
@@ -291,6 +299,7 @@ def decide_generation(
         "reuse_eligibility": reuse_eligibility,
         "decision_reason": reason,
         "background_required": background_required,
+        "minor_change_deferral_expired": minor_change_deferral_expired,
         "previous_fingerprint": previous_fingerprint,
         "current_fingerprint": current_fingerprint,
         "role_policy_version": ROLE_POLICY_VERSION,
