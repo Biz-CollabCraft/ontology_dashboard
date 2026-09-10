@@ -28,6 +28,12 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "reference_economics": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {"status": {"enum": ["illustrative_not_site_quote", "unavailable", "not_applicable"]}},
+      "description": "Versioned UI reference cost table, computed values, units and assumptions; never authoritative planning or realized loss."
+    },
     "evidence_context": {
       "type": "object",
       "description": "Relation schema and deterministic evidence-selection context for this event. This is not a raw producer payload and does not authorize mutations.",
@@ -247,7 +253,29 @@
       "additionalProperties": false,
       "properties": {
         "provider": {"enum": ["local_sop_metadata_retriever", "runtime_product_result"]},
-        "query": {"oneOf": [{"type": "object", "required": ["asset_type", "failure_mode", "factor_keys", "component_ids", "risk_grade", "criticality", "production_impact"], "additionalProperties": false, "properties": {"asset_type": {"type": "string"}, "failure_mode": {"type": "string"}, "factor_keys": {"type": "array", "items": {"type": "string"}}, "component_ids": {"type": "array", "items": {"type": "string"}}, "risk_grade": {"type": "string"}, "criticality": {"type": "string"}, "production_impact": {"type": "string"}}}, {"type": "object", "required": ["asset_id", "event_id", "dataset_version_id"], "additionalProperties": false, "properties": {"asset_id": {"type": "string"}, "event_id": {"type": "string"}, "dataset_version_id": {"type": "string"}}}]},
+        "query": {
+          "oneOf": [{
+          "type": "object",
+          "required": ["asset_type", "failure_mode", "factor_keys", "component_ids", "risk_grade", "criticality", "production_impact"],
+          "additionalProperties": false,
+          "properties": {
+            "asset_type": {"type": "string"},
+            "failure_mode": {"type": "string"},
+            "factor_keys": {"type": "array", "items": {"type": "string"}},
+            "component_ids": {"type": "array", "items": {"type": "string"}},
+            "risk_grade": {"type": "string"},
+            "criticality": {"type": "string"},
+            "production_impact": {"type": "string"}
+          }
+          }, {
+            "type": "object", "additionalProperties": false,
+            "required": ["asset_id", "event_id", "dataset_version_id"],
+            "properties": {
+              "asset_id": {"type": "string"}, "event_id": {"type": "string"},
+              "dataset_version_id": {"type": "string"}
+            }
+          }]
+        },
         "top_k": {"type": "integer"},
         "returned_count": {"type": "integer"},
         "mutation_allowed": {"const": false}
@@ -702,6 +730,23 @@
       "required": ["record_id", "record_type", "status", "activity_type", "recorded_at", "summary", "source_ref"],
       "additionalProperties": false,
       "properties": {
+        "production_coordination": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "request_id": {"type": "string"}, "work_order_id": {"type": "string"},
+            "status": {"type": "string"}, "requested_at": {"type": "string"},
+            "responded_at": {"type": "string"}, "requested_by_name": {"type": "string"},
+            "responded_by_name": {"type": "string"},
+            "request": {"type": "object", "additionalProperties": false, "properties": {
+              "work_summary": {"type": "string"}, "downtime_minutes": {"type": "number"},
+              "affected_items": {"type": "string"}, "note": {"type": "string"}
+            }},
+            "response": {"type": "object", "additionalProperties": false, "properties": {
+              "decision": {"type": "string"}, "scheduled_window": {"type": "string"},
+              "production_response": {"type": "string"}
+            }}
+          }
+        },
         "record_id": {"type": "string"},
         "record_type": {"type": "string"},
         "production_coordination": {"type": "object"},

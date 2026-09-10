@@ -948,7 +948,8 @@ def _selected_agent_review_packet(
         from .filesystem_briefing import BriefingHistoryUnavailable, filesystem_briefing_packet
         try:
             return filesystem_briefing_packet(asset_id=asset_id, event_id=event_id,
-                dataset_version_id=dataset_version_id, project_id=project_id, history_window=history_window, service=service)
+                dataset_version_id=dataset_version_id, project_id=project_id, history_window=history_window,
+                service=service, organization_id=principal.organization_id, workspace_id=MANUFACTURING_WORKSPACE)
         except KeyError:
             raise EventNotFound(event_id)
         except BriefingHistoryUnavailable as exc:

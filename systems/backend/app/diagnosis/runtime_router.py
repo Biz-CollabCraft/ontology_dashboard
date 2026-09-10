@@ -65,10 +65,68 @@ def _measurement_factors(record: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]], list[tuple[str, dict[str, dict[str, Any]]]]]:
-    try:
-        return _contract_latest_complete_file_tick()
-    except CompleteFileTickNotFound as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    from app.diagnosis.demo_scenarios import selected_window
+    scenario = selected_window()
+    if scenario is not None:
+        return scenario
+    configured_root = os.getenv(GEN_DATA_OUTPUT_ROOT_ENV, "").strip()
+    session_roots = sorted(
+        Path("/home/bistell/ontology_dashboard/data_preprocessed/local-realtime/sessions").glob(
+            "*/gen-data-runtime"
+        ),
+        key=lambda path: path.stat().st_mtime_ns,
+        reverse=True,
+    )
+    roots = ([Path(configured_root)] if configured_root else []) + session_roots + [
+        Path("/home/bistell/gen_data/output")
+    ]
+    output_root = next((root for root in roots if any(root.glob("runs/*/source/sensor_records.jsonl"))), roots[-1])
+    streams = sorted(
+        output_root.glob("runs/*/source/sensor_records.jsonl"),
+        key=lambda path: path.stat().st_mtime_ns,
+        reverse=True,
+    )
+    for stream in streams:
+        asset_master = stream.parents[1] / "canonical" / "asset_master.csv"
+        expected_assets: set[str] = set()
+        if asset_master.exists():
+            with asset_master.open("r", encoding="utf-8-sig", newline="") as handle:
+                expected_assets = {
+                    row["asset_id"] for row in csv.DictReader(handle) if row.get("asset_id")
+                }
+        ticks: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+        # A live stream can grow to hundreds of MB. Only inspect its tail; two
+        # MiB contains many complete 100-asset ticks and keeps the 10-second UI
+        # refresh independent of accumulated history size.
+        with stream.open("rb") as handle:
+            end = handle.seek(0, 2)
+            start = max(0, end - 2 * 1024 * 1024)
+            handle.seek(start)
+            if start:
+                handle.readline()
+            for line in handle:
+                try:
+                    record = json.loads(line.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                observed_at = str(record.get("observed_at") or "")
+                asset_id = str(record.get("asset_id") or "")
+                if observed_at and asset_id:
+                    ticks[observed_at][asset_id] = record
+        complete_ticks: list[tuple[str, dict[str, dict[str, Any]]]] = []
+        for tick_at in sorted(ticks):
+            tick_records = ticks[tick_at]
+            if expected_assets and expected_assets.issubset(tick_records):
+                complete_ticks.append((tick_at, tick_records))
+            elif not expected_assets and len(tick_records) >= 100:
+                complete_ticks.append((tick_at, tick_records))
+        for observed_at in sorted(ticks, reverse=True):
+            records = ticks[observed_at]
+            if expected_assets and expected_assets.issubset(records):
+                return stream, observed_at, [records[key] for key in sorted(expected_assets)], complete_ticks[-72:]
+            if not expected_assets and len(records) >= 100:
+                return stream, observed_at, list(records.values()), complete_ticks[-72:]
+    raise HTTPException(status_code=503, detail="완성된 gen_data 관측 틱을 찾지 못했습니다.")
 
 
 def _filesystem_event_artifact(
@@ -592,6 +650,31 @@ def filesystem_overview(
         workspace_id=workspace_id,
     )
     return _filesystem_overview(project_id, workspace_id)
+
+
+@router.get("/demo-scenario")
+def get_demo_scenario(project_id: str, workspace_id: str,
+    principal: Principal = Depends(require_permission("events.read")),
+    identity: IdentityService = Depends(get_identity_service)):
+    require_scope(principal=principal, identity=identity, project_id=project_id, workspace_id=workspace_id)
+    if project_id != "manufacturing-demo-project" or workspace_id != "manufacturing-demo":
+        raise HTTPException(status_code=404, detail="Demo only")
+    from app.diagnosis.demo_scenarios import scenario_status
+    return scenario_status()
+
+
+@router.post("/demo-scenario")
+def set_demo_scenario(project_id: str, workspace_id: str,
+    mode: Literal["live", "normal", "emergency"] = Body(embed=True),
+    principal: Principal = Depends(require_permission("events.read")),
+    _: None = Depends(require_csrf),
+    identity: IdentityService = Depends(get_identity_service)):
+    get_demo_scenario(project_id, workspace_id, principal, identity)
+    from app.diagnosis.demo_scenarios import select_scenario
+    try:
+        return select_scenario(mode, principal.user_id)
+    except (ValueError, FileNotFoundError):
+        raise HTTPException(status_code=409, detail="시연 데이터 준비 상태를 확인해 주세요.")
 
 
 @router.get("/results/post-maintenance")

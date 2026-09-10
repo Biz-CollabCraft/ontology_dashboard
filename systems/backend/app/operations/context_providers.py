@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from app.operations.agent_briefing_context import preserve_inspection_details
+from app.operations.agent_briefing_context import preserve_inspection_details, briefing_activities
 
 
 @dataclass(frozen=True)
@@ -211,7 +211,7 @@ class MaintenanceHistoryContextProvider:
                 "inspection_results": inspection_results,
                 "maintenance_actions": maintenance_actions,
                 "maintenance_events": maintenance_events,
-                "activities": activities[:5],
+                "activities": briefing_activities(activities),
                 "similar_events": [],
                 "recent_equipment_history": recent_equipment_history,
                 "source_refs": source_refs,

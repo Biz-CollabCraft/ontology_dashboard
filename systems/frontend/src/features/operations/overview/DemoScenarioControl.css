@@ -1,0 +1,10 @@
+.demo-scenario-control{grid-column:1/-1;flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:14px;padding:12px 16px;border:1px solid var(--fd-border);border-radius:6px;background:var(--fd-surface-raised);color:var(--fd-text)}
+.demo-scenario-control>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.demo-scenario-control span,.demo-scenario-control small{font-size:12px;color:var(--fd-text-secondary)}
+.demo-scenario-control button{min-height:44px;min-width:72px;padding:8px 14px;border:1px solid var(--fd-border);border-radius:5px;background:var(--fd-surface-raised);color:var(--fd-text);cursor:pointer}
+.demo-scenario-control button[aria-pressed=true]{border-color:var(--fd-accent);box-shadow:inset 0 0 0 1px var(--fd-accent);color:var(--fd-accent);font-weight:700}
+.demo-scenario-control button:focus-visible{outline:2px solid var(--fd-accent);outline-offset:2px}
+.demo-scenario-control button:disabled{opacity:.55;cursor:wait}
+@media print{.demo-scenario-control{display:none}}
+main.role-factory-maintenance .engineer-factory-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:600px){main.role-factory-maintenance .engineer-factory-kpis{grid-template-columns:1fr}}

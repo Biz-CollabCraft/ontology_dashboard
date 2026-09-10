@@ -1,4 +1,5 @@
 import { NaturalBriefing } from "./NaturalBriefing";
+import { DemoScenarioControl } from "./DemoScenarioControl";
 import { LogOut, Printer } from "lucide-react";
 import { printProductionReport } from "./printProductionReport";
 import "./ProductionReportPrint.css";
@@ -133,7 +134,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
         {selected ? <div className="prb-review-content">
           <NaturalBriefing projectId={projectId} workspaceId={workspaceId} assetId={selected.assetId} eventId={selected.eventId}
             datasetVersionId={model.context.datasetVersionId} observedAt={detail?.snapshot_basis?.observed_at}
-            role="process_manager" canGenerate={canGenerateBrief} revision={JSON.stringify([selected, detail?.snapshot_basis, revision])}/>
+            role="process_manager" canGenerate={canGenerateBrief} revision={JSON.stringify([selected.eventId, selected.status])}/>
           <div className="prb-monitoring-stack">
             <RiskChart asset={asset} detail={detail} name={name}/>
           </div>
@@ -163,6 +164,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
         </section></div>
       </div>
     </section></div> : null}
+    <DemoScenarioControl />
   </main>;
 }
 function EquipmentObservation({ asset }: { asset: OperationsAsset | null }) {

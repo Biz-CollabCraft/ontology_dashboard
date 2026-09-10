@@ -1,5 +1,6 @@
 import { relativeRecordTime } from "../../../standalone/briefFormat.js";
 import { NaturalBriefing } from "./NaturalBriefing";
+import { DemoScenarioControl } from "./DemoScenarioControl";
 import type {
   OperationsAsset,
   OperationsAgentReviewSummaryResponse,
@@ -48,6 +49,14 @@ function compactJobId(value: string) {
   const hash = value.split("-").filter(Boolean).at(-1) ?? value;
   const compact = hash.replace(/[^A-Za-z0-9]/g, "").slice(-8);
   return compact ? `#${compact}` : "#-";
+}
+
+function inspectionProgressLabel(item: OpenInspectionWorkOrderReadModel) {
+  if (item.status === "requested") return "접수 전";
+  if (item.inspection_result?.outcome === "maintenance_recommended") {
+    return item.status === "in_progress" ? "정비 진행 중" : "점검 완료 · 정비 절차 진행";
+  }
+  return item.status === "in_progress" ? "점검 진행 중" : "접수 완료 · 점검 대기";
 }
 
 function tone(status: OperationsRiskStatus) {
@@ -269,7 +278,7 @@ export function EngineerFactoryLoading() {
           <p>데이터 로딩 중</p>
         </article>
         <article aria-busy="true">
-          <span>예상 정지 영향</span>
+          <span>점검·정비 진행 설비</span>
           <strong>—</strong>
           <p>데이터 로딩 중</p>
         </article>
@@ -336,6 +345,17 @@ export function EngineerFactoryStandalone({
   const [zoneFilter, setZoneFilter] = useState("all");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [progressOnly, setProgressOnly] = useState(false);
+  const activeAssetIds = new Set(maintenanceDirectives
+    .filter((item) => ["requested", "approved", "in_progress"].includes(item.status))
+    .map((item) => item.asset_id));
+  const progressingCount = model.assets.filter((asset) => activeAssetIds.has(asset.assetId)).length;
+  const toggleProgress = () => {
+    setProgressOnly((value) => !value);
+    setZoneFilter("all");
+    setEquipmentFilter("all");
+    setStatusFilter("all");
+  };
 
   useEffect(() => {
     if (!sensorDetailOpen) return;
@@ -368,6 +388,7 @@ export function EngineerFactoryStandalone({
       asset.assetType.toLowerCase().includes("compress") ||
       asset.assetId.startsWith("CMP-");
     return (
+      (!progressOnly || (!maintenanceDirectiveError && activeAssetIds.has(asset.assetId))) &&
       (zoneFilter === "all" || asset.line === zoneFilter) &&
       (equipmentFilter === "all" ||
         (equipmentFilter === "compressor" ? isCompressor : !isCompressor)) &&
@@ -493,7 +514,7 @@ export function EngineerFactoryStandalone({
             {actionable}
             <small>대</small>
           </strong>
-          <p>긴급·경고 등급으로 현장 확인이 필요합니다.</p>
+          <p>긴급 등급으로 현장 확인이 필요합니다.</p>
         </article>
         <article>
           <span>{readOnly ? "진단값 확인 가능 설비" : "가동 중 설비"}</span>
@@ -503,12 +524,22 @@ export function EngineerFactoryStandalone({
           </strong>
           <p>확인 보류 설비 {held}대는 별도로 구분합니다.</p>
         </article>
-        <article>
-          <span>예상 정지 영향</span>
+        <article role="button" tabIndex={maintenanceDirectiveError ? -1 : 0}
+          aria-label="점검·정비 진행 설비 강조" aria-pressed={progressOnly}
+          aria-disabled={maintenanceDirectiveError}
+          onClick={() => { if (!maintenanceDirectiveError) toggleProgress(); }}
+          onKeyDown={(event) => {
+            if (!maintenanceDirectiveError && (event.key === "Enter" || event.key === " ")) {
+              event.preventDefault(); toggleProgress();
+            }
+          }}
+          style={{ cursor: maintenanceDirectiveError ? "default" : "pointer", outline: progressOnly ? "2px solid var(--fd-accent)" : undefined }}>
+          <span>점검·정비 진행 설비</span>
           <strong>
-            {formatMinutes(model.metrics.estimatedDowntimeMinutes)}
+            {maintenanceDirectiveError ? "확인 필요" : progressingCount}
+            {!maintenanceDirectiveError && <small>대</small>}
           </strong>
-          <p>{readOnly ? "생산 계획의 정지 가정입니다. 실제 정지 시간은 아닙니다." : "현재 위험 설비의 예측 비가동 시간 합계입니다."}</p>
+          <p>{maintenanceDirectiveError ? "점검·정비 요청 연결을 확인해 주세요." : "점검 요청 또는 정비가 진행 중인 설비입니다."}</p>
         </article>
       </section>
 
@@ -519,7 +550,7 @@ export function EngineerFactoryStandalone({
         <div>
           <strong>감시 조건</strong>
           <span>
-            {highlightedAssetCount}대 강조 · 전체 {model.assets.length}대
+            {progressOnly ? "점검·정비 진행 설비 · " : ""}{highlightedAssetCount}대 강조 · 전체 {model.assets.length}대
           </span>
         </div>
         <label>
@@ -568,6 +599,7 @@ export function EngineerFactoryStandalone({
             setZoneFilter("all");
             setEquipmentFilter("all");
             setStatusFilter("all");
+            setProgressOnly(false);
           }}
         >
           초기화
@@ -678,7 +710,7 @@ export function EngineerFactoryStandalone({
         <div className="engineer-status-side-stack">
           <section className="engineer-factory-card engineer-recent-events engineer-approval-events">
             <header>
-              <strong>정비 승인 내역</strong>
+              <strong>점검 진행 현황</strong>
               <span
                 className={`engineer-directive-connection ${maintenanceDirectiveError ? "is-offline" : "is-online"}`}
               >
@@ -704,9 +736,7 @@ export function EngineerFactoryStandalone({
                   >
                     <span>
                       <b>
-                        {directive.status === "in_progress"
-                          ? "점검 중"
-                          : "승인됨"}
+                        {inspectionProgressLabel(directive)}
                       </b>
                       <small title={directive.work_order_id}>
                         {compactJobId(directive.work_order_id)}
@@ -726,8 +756,8 @@ export function EngineerFactoryStandalone({
               ) : (
                 <p className="engineer-directive-empty">
                   {maintenanceDirectiveError
-                    ? "승인 내역을 조회할 수 없습니다"
-                    : "현재 정비 승인 내역이 없습니다"}
+                    ? "점검 진행 현황을 조회할 수 없습니다"
+                    : "현재 진행 중인 점검이 없습니다"}
                 </p>
               )}
             </div>
@@ -735,7 +765,7 @@ export function EngineerFactoryStandalone({
 
           <section className="engineer-factory-card engineer-recent-events">
             <header>
-              <strong>요청 내역</strong>
+              <strong>요청 목록</strong>
               <span
                 className={`engineer-directive-connection ${maintenanceDirectiveError ? "is-offline" : "is-online"}`}
               >
@@ -765,11 +795,7 @@ export function EngineerFactoryStandalone({
                   >
                     <span>
                       <b>
-                        {directive.status === "in_progress"
-                          ? "점검 중"
-                          : directive.status === "approved"
-                            ? "승인됨"
-                            : "요청됨"}
+                        {inspectionProgressLabel(directive)}
                       </b>
                       <small title={directive.work_order_id}>
                         {compactJobId(directive.work_order_id)}
@@ -789,8 +815,8 @@ export function EngineerFactoryStandalone({
               ) : (
                 <p className="engineer-directive-empty">
                   {maintenanceDirectiveError
-                    ? "요청 내역을 조회할 수 없습니다"
-                    : "현재 요청 내역이 없습니다"}
+                    ? "요청 목록을 조회할 수 없습니다"
+                    : "현재 접수 전 요청이 없습니다"}
                 </p>
               )}
             </div>
@@ -822,7 +848,7 @@ export function EngineerFactoryStandalone({
               </div>
               <NaturalBriefing projectId={model.context.projectId} workspaceId={model.context.workspaceId}
                 assetId={selected.assetId} eventId={selected.eventId} datasetVersionId={model.context.datasetVersionId}
-                observedAt={selected.observedAt} role={briefingRole} providedResponse={briefingResponse} canGenerate={canGenerateBrief && !readOnly} revision={JSON.stringify([selected, maintenanceDirectives.filter(item => item.asset_id === selected.assetId)])}/>
+                observedAt={selected.observedAt} role={briefingRole} providedResponse={briefingResponse} canGenerate={canGenerateBrief && !readOnly} revision={JSON.stringify(maintenanceDirectives.filter(item => item.asset_id === selected.assetId))}/>
               <ol>
                 {selected.topFactors.slice(0, 4).map((factor) => (
                   <li key={factor.id}>
@@ -1119,7 +1145,7 @@ export function EngineerFactoryStandalone({
               <section className="engineer-detail-requests">
                 <header>
                   <div>
-                    <strong>정비 승인 목록</strong>
+                    <strong>점검 진행 현황</strong>
                     <span>승인 상태 확인</span>
                   </div>
                   <span
@@ -1151,11 +1177,7 @@ export function EngineerFactoryStandalone({
                       >
                         <span>
                           <b>
-                            {directive.status === "in_progress"
-                              ? "점검 중"
-                              : directive.status === "approved"
-                                ? "승인됨"
-                                : "요청됨"}
+                            {inspectionProgressLabel(directive)}
                           </b>
                           <small title={directive.work_order_id}>
                             {compactJobId(directive.work_order_id)}
@@ -1175,8 +1197,8 @@ export function EngineerFactoryStandalone({
                   ) : (
                     <p className="engineer-directive-empty">
                       {maintenanceDirectiveError
-                        ? "정비 승인 목록을 불러오지 못했습니다"
-                        : "현재 승인 대기 정비가 없습니다"}
+                        ? "점검 진행 현황을 불러오지 못했습니다"
+                        : "현재 진행 중인 요청이 없습니다"}
                     </p>
                   )}
                 </div>
@@ -1285,6 +1307,7 @@ export function EngineerFactoryStandalone({
           </aside>
         </div>
       ) : null}
+      {!readOnly && <DemoScenarioControl />}
     </main>
   );
 }

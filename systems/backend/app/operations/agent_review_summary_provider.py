@@ -41,6 +41,16 @@ Hard contract:
 - decision_facts contains event-matched records at the decision basis. Use these shared
   facts consistently across roles. excluded_records are not current-state evidence.
   Report absence only as no supplied record, not proof that an action never occurred.
+- production_coordination is the production manager's maintenance decision, separate
+  from acceptance of an inspection work order. Its confirmed response means production
+  approval was recorded. Use responded_at for that approval time, scheduled_window
+  verbatim for the approved schedule, and production_response for the response memo.
+  Do not replace requested downtime_minutes with minutes inferred from a free-text
+  scheduled_window; these are separate request and response facts. If they differ,
+  describe the recorded difference rather than silently resolving it.
+  in_progress means execution is underway, not approval pending. A coordination
+  pending/confirmed activity alone is not an execution start. The same workflow facts
+  must agree across all three role summaries even though each role's prose differs.
 - Answer these questions in useful Korean prose:
   Engineer: what was observed, and how does the applicable SOP relate to it?
   Technician: what did inspection find, what is the recorded request/approval state,
@@ -125,9 +135,10 @@ AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\n결정 흐름 사용 규칙: prompt pay
 AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\n표현 점검: maintenance_recommended는 반드시 정비 권고로, requested는 작업요청 등록으로 번역하세요. 데모 계획 가정, 합성 데이터, outcome, 스냅샷 같은 내부 표현을 본문에 넣지 마세요. \"운영 스냅샷\"이나 \"계획 가정\"처럼 시스템 내부 분류로 보이는 말 대신, \"제공 자료에는 실제 재고 수량/작업 가능 시간/담당자 배정이 없어 착수 조건을 확정할 수 없습니다\"처럼 누락된 값과 그 값이 막는 결정을 직접 말하세요. 마지막 줄은 아직 필요한 입력 조건과 그 조건이 결정에 미치는 관계로 마무리하세요. 결정하세요·판단해야 합니다 같은 지시형 문장을 쓰지 마세요. 승인 기록이 있을 때만 그 상태를 첫 줄에 포함하고 재승인을 요구하지 마세요. 승인 기록이 없으면 제공 기록으로 확인되지 않는다고 쓰세요.\n"
 
 AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\n마지막 다음 판단 문장에서는 결정을 좌우하는 대상·조건·판단 근거 1~2개를 반드시 **굵게** 표시하세요. 예: **인서트 교체 여부**, **현재 설비의 점검 결과**, **조치 범위**, **같은 정지 조건**. 해당 입력과 문장에 실제로 있는 표현만 강조하고, 예시 내용을 새 사실로 추가하지 마세요. 접속어·일반 동사·문장 전체는 강조하지 마세요.\n"
-AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\nproduction_coordination이 있는 점검 작업지시의 approved는 점검 접수이며 생산 승인이 아닙니다. production_coordination.status가 pending이면 점검 완료·정비 권고·생산 관리자 승인 대기를 설명하고, request.downtime_minutes를 요청 정지 시간으로 보전·생산 역할 본문에 포함하세요. 점검 접수 시각을 생산 승인 시각으로 부르지 마세요. 각 근거 문장 끝에 반드시 citation_catalog의 [[ref:번호]]를 붙이세요."
-
-AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v3.7-grounded-directive-boundary"
+AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\n비용 참고 근거: decision_facts.reference_economics는 화면과 동일한 버전의 참고 단가표를 계산한 결과입니다. 실제 생산계획 operation_context와 별도입니다. status=illustrative_not_site_quote이면 생산관리 설명에 metrics의 시간당 생산원가(hourly_production_cost), 정지 시간(stop_minutes), 해당 정지 생산원가 환산액(stop_production_cost)을 숫자와 원/시간·분·원 단위로 포함하고 반드시 가정 기반 참고액이라고 밝히세요. 생산원가 환산액을 확정 손실·매출·영업이익으로 부르거나 기회손실과 합산하지 마세요. 정비 노무비와 교체 부품비는 profile.part_scope에 해당하는 작업의 조건부 예시입니다. 실제 생산계획이 없더라도 참고 단가까지 미제공이라고 하지 마세요. reference_lost_units는 실제 예상 손실 수량이 아니므로 본문에서는 생략하고 기존 operation_context의 수량 규칙을 유지하세요. 기본 정지 시간은 승인된 시간이 아니며 승인 일정으로 서술하지 마세요. 제공된 금액을 재계산하거나 위험 점수를 금전 확률로 쓰지 마세요. 참고 비용 출처도 citation_catalog에서 인용하세요.\n"
+AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += '\n승인 일정 인용 규칙: confirmed인 production_coordination의 scheduled_window는 보전팀과 생산 관리자 설명에 반드시 원문 그대로 따옴표로 인용하세요. 예를 들어 원문이 지금이면 승인 일정 기록은 “지금”입니다라고 쓰세요. 이는 기록 인용이며 AI가 현재 작업을 지시하는 뜻이 아닙니다. 상대 시간 계산 금지와 원문 일정 인용을 혼동하지 마세요. 다음 행동은 명령이 아닌 남은 확인 조건으로 서술하세요. “승인하세요”, “정비를 진행하세요”, “일정을 결정해야 합니다” 대신 “남은 확인 사항은 **기록된 착수 조건**입니다”처럼 실제 입력에 있는 조건만 요약하세요.\n'
+AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT += "\nproduction_coordination이 있는 점검 작업지시의 approved는 점검 접수이며 생산 승인이 아닙니다. production_coordination.status가 pending이면 점검 완료·정비 권고·생산 관리자 승인 대기를 설명하고, request.downtime_minutes를 요청 정지 시간으로 보전·생산 역할 본문에 포함하세요. 점검 접수 시각을 생산 승인 시각으로 부르지 마세요. 각 근거 문장 끝에 반드시 citation_catalog의 [[ref:번호]]를 붙이세요.\n"
+AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v3.8-economics-grounded-directive-boundary"
 AGENT_REVIEW_SUMMARY_PAYLOAD_PROFILE = "compact-editable-v1"
 ROLE_PRIORITIES = {
     "process_engineer": ["이상 위치", "모델 근거", "점검 포인트", "유사 이력", "근거 공백"],
@@ -173,6 +184,10 @@ class AgentReviewSummaryProvider:
                     response_schema_name="agent_review_summary_editable",
                 )
                 metadata = {"usage": None, "usage_measurement": "not_reported"}
+            payload = _ensure_reference_economics_in_manager_quote(
+                payload,
+                prompt_payload["decision_facts"],
+            )
             summary = _merge_llm_editable_fields(baseline_summary=baseline_summary, candidate=payload)
             issues = briefing_issues(payload, prompt_payload["decision_facts"])
             issues.extend(_editable_prose_review_issues(payload))
@@ -196,7 +211,7 @@ class AgentReviewSummaryProvider:
             usage = {k: sum(u.get(k, 0) or 0 for u in usages)
                      for k in ("prompt_tokens", "completion_tokens", "total_tokens")}
         allowed_refs = set(packet.get("source_refs") or [])
-        owner_refs = {r.get("source_ref") for kind in ("inspection_results", "work_orders")
+        owner_refs = {r.get("source_ref") for kind in ("inspection_results", "work_orders", "production_coordination")
                       for r in prompt_payload["decision_facts"][kind]}
         verified_refs = sorted(ref for ref in owner_refs if ref and ref in allowed_refs)
         summary["source_refs"] = list(dict.fromkeys([*summary["source_refs"], *verified_refs]))
@@ -287,6 +302,47 @@ def _merge_llm_editable_fields(
     return summary
 
 
+def _ensure_reference_economics_in_manager_quote(
+    payload: dict[str, Any],
+    facts: dict[str, Any],
+) -> dict[str, Any]:
+    """Preserve supplied reference costs when the prose model omits them."""
+
+    economics = facts.get("reference_economics") or {}
+    if economics.get("status") != "illustrative_not_site_quote":
+        return payload
+    metrics = economics.get("metrics") or {}
+    required = {
+        "hourly_production_cost": metrics.get("hourly_production_cost"),
+        "stop_minutes": metrics.get("stop_minutes"),
+        "stop_production_cost": metrics.get("stop_production_cost"),
+    }
+    if any(not isinstance(item, dict) or item.get("value") is None for item in required.values()):
+        return payload
+
+    next_payload = deepcopy(payload)
+    for item in next_payload.get("role_summaries") or []:
+        if not isinstance(item, dict) or item.get("role") != "process_manager":
+            continue
+        quote = str(item.get("quote") or "")
+        plain = re.sub(r"\[\[ref:[^\]\n]+\]\]", "", quote).replace("**", "")
+        numbers = {float(n.replace(",", "")) for n in re.findall(r"\d[\d,]*(?:\.\d+)?", plain)}
+        required_values = {float(item["value"]) for item in required.values()}
+        has_required_values = required_values.issubset(numbers)
+        has_assumption_label = bool(re.search(r"가정|참고", plain))
+        if has_required_values and has_assumption_label:
+            return payload
+        line = (
+            "가정 기반 참고액은 "
+            f"시간당 생산원가 {required['hourly_production_cost']['value']} {required['hourly_production_cost']['unit']}, "
+            f"정지 시간 {required['stop_minutes']['value']} {required['stop_minutes']['unit']}, "
+            f"정지 생산원가 환산액 {required['stop_production_cost']['value']} {required['stop_production_cost']['unit']}입니다."
+        )
+        item["quote"] = (quote.rstrip() + "\n" + line).strip() if quote.strip() else line
+        return next_payload
+    return payload
+
+
 def _expression_policy(packet):
     """Expression rules only; never another owner of facts or operating state."""
     return {
@@ -301,6 +357,8 @@ def _expression_policy(packet):
         },
         "production_claim": "unconfirmed; do not state current impact or losses as known" if decision_facts(packet)["data_quality_hold"] else "preserve supplied classification; estimates are not realized losses",
         "display_units": {"min": "분", "N·m": "뉴턴미터", "N·m·min": "뉴턴미터·분"},
+        "recorded_schedule": "For confirmed production_coordination, BOTH maintenance_technician and process_manager quotes MUST quote response.scheduled_window verbatim, including relative text such as 지금. This is a historical record quotation, not a new execution instruction or an inferred date.",
+        "reference_economics": "When decision_facts.reference_economics.status is illustrative_not_site_quote, the process_manager quote MUST include metrics.hourly_production_cost, metrics.stop_minutes and metrics.stop_production_cost values with their units, in full Arabic digits. Explicitly label them 가정 기반 참고액, not realized losses. Missing actual production plans do not remove these supplied reference costs. Preserve these numbers AND the recorded schedule together during repairs.",
         "wording": {"outcome": "점검 결과", "maintenance_recommended": "정비 권고", "requested": "작업요청 등록"},
         "forbidden_directives": ["결정하세요", "결정해야 합니다", "판단해야 합니다"],
         "closing_form": "입력에 실제로 있는 미확인 조건과 그 조건이 막는 판단의 관계만 설명한다",

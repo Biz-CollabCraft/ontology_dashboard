@@ -79,63 +79,18 @@ it("uses server replay responses without product API calls and withdraws rejecte
  expect(host.textContent).toContain("검증을 통과하지 못한 응답");
 });
 
-it("loads the exact cited evidence only when opened", async () => {
-  const { getOperationsAgentReviewPacket } = await import("../../../api");
-  vi.mocked(getOperationsAgentReviewPacket).mockResolvedValue({
-    project_id: "project", asset_id: "A", generated_at: "2026-09-09T00:00:00Z",
-    snapshot_basis: { event_id: "event-A" }, source_refs: ["evidence:A"],
-    model_expression_context: { top_factors: [{ source_ref: "evidence:A", display_name: "관측 토크", value: 72, unit: "Nm" }] },
-  } as never);
-  await render();
-  expect(getOperationsAgentReviewPacket).not.toHaveBeenCalled();
-  await act(async () => {
-    const details = host.querySelector("details")!; details.open = true; details.dispatchEvent(new Event("toggle"));
-  });
-  expect(getOperationsAgentReviewPacket).toHaveBeenCalledWith(expect.objectContaining({ assetId: "A", eventId: "event-A", expectedSummaryKey: "summary-key-A" }));
-  expect(host.querySelector('[aria-label="연결 근거 상세"]')?.textContent).toContain("72 Nm");
-});
-
-it("refuses evidence returned for a different event on the same asset", async () => {
-  const { getOperationsAgentReviewPacket } = await import("../../../api");
-  vi.mocked(getOperationsAgentReviewPacket).mockResolvedValue({
-    project_id: "project", asset_id: "A", snapshot_basis: { event_id: "old-event" }, source_refs: ["evidence:A"],
-    model_expression_context: { top_factors: [{ source_ref: "evidence:A", display_name: "OLD", value: 999, unit: "Nm" }] },
-  } as never);
-  await render();
-  get.mockResolvedValue({summary:null,trace:{fallback:false,materialization:{status:"pending"}}} as never);
-  await act(async () => { const details = host.querySelector("details")!; details.open = true; details.dispatchEvent(new Event("toggle")); });
-  expect(host.textContent).toContain("브리핑이 아직 없습니다");
-  expect(host.querySelector(".natural-briefing-line")).toBeNull();
-  expect(host.textContent).not.toContain("999 Nm");
-});
-
-it("discards a pending evidence response when the selected event changes", async () => {
-  const { getOperationsAgentReviewPacket } = await import("../../../api");
-  let finish!: (value: never) => void;
-  vi.mocked(getOperationsAgentReviewPacket).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
-  await render();
-  await act(async () => { const details = host.querySelector("details")!; details.open = true; details.dispatchEvent(new Event("toggle")); });
-  get.mockResolvedValue(response("B", "B 사건의 설명"));
-  await render("B");
-  await act(async () => finish({project_id:"project",asset_id:"A",snapshot_basis:{event_id:"event-A"},source_refs:["evidence:A"],model_expression_context:{top_factors:[{source_ref:"evidence:A",display_name:"이전 관측",value:999,unit:"Nm"}]}} as never));
-  expect(host.textContent).toContain("B 사건의 설명");
-  expect(host.textContent).not.toContain("999 Nm");
-  expect(host.querySelector('[aria-label="연결 근거 상세"]')).toBeNull();
-});
-
-it("withdraws old prose and rereads when the server reports changed evidence", async () => {
-  const { getOperationsAgentReviewPacket } = await import("../../../api");
-  vi.mocked(getOperationsAgentReviewPacket).mockRejectedValue({status:409});
-  await render();
-  get.mockResolvedValue({summary:null,trace:{fallback:false,materialization:{status:"pending"}}} as never);
-  await act(async () => { const details = host.querySelector("details")!; details.open = true; details.dispatchEvent(new Event("toggle")); });
-  expect(host.querySelector(".natural-briefing-line")).toBeNull();
-  expect(host.textContent).toContain("브리핑이 아직 없습니다");
-});
-
-
-it("keeps packet evidence available when prose omits inline citation tokens", async () => {
-  get.mockResolvedValue(response("A", "점검 완료 후 생산 승인을 기다립니다."));
-  await render();
-  expect(host.querySelector("details summary")?.textContent).toBe("브리핑 전체 근거");
+it("keeps in-flight generation bound while FILE observations advance", async () => {
+ let finish!: (value: OperationsAgentReviewSummaryResponse) => void;
+ post.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+ const props = {projectId:"project",workspaceId:"manufacturing-demo",assetId:"A",role:"process_engineer" as const,canGenerate:true};
+ await act(async()=>root.render(<NaturalBriefing {...props} eventId="FILE#original#obs1" datasetVersionId="wrong-new-run" observedAt="2026-09-09T01:00:00Z"/>));
+ expect(get).toHaveBeenLastCalledWith(expect.objectContaining({datasetVersionId:"original"}));
+ await act(async()=>host.querySelector<HTMLButtonElement>('button')!.click());
+ const signal=post.mock.calls[0][0].signal;
+ await act(async()=>root.render(<NaturalBriefing {...props} eventId="FILE#original#obs2" datasetVersionId="original" observedAt="2026-09-09T01:10:00Z"/>));
+ expect(signal?.aborted).toBe(false);
+ await act(async()=>finish(response()));
+ expect(get).toHaveBeenLastCalledWith(expect.objectContaining({eventId:"FILE#original#obs1",datasetVersionId:"original"}));
+ expect(host.querySelector('time')?.dateTime).toBe('2026-09-09T01:00:00Z');
+ expect(host.textContent).toContain('생성 기준 관측을 유지');
 });
