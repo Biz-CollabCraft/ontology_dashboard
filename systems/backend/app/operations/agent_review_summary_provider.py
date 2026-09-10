@@ -188,6 +188,10 @@ class AgentReviewSummaryProvider:
                 payload,
                 prompt_payload["decision_facts"],
             )
+            payload = _ensure_recorded_schedule_in_role_quotes(
+                payload,
+                prompt_payload["decision_facts"],
+            )
             summary = _merge_llm_editable_fields(baseline_summary=baseline_summary, candidate=payload)
             issues = briefing_issues(payload, prompt_payload["decision_facts"])
             issues.extend(_editable_prose_review_issues(payload))
@@ -341,6 +345,50 @@ def _ensure_reference_economics_in_manager_quote(
         item["quote"] = (quote.rstrip() + "\n" + line).strip() if quote.strip() else line
         return next_payload
     return payload
+
+
+def _ensure_recorded_schedule_in_role_quotes(
+    payload: dict[str, Any],
+    facts: dict[str, Any],
+) -> dict[str, Any]:
+    """Preserve confirmed production schedule text before content review."""
+
+    confirmed = [
+        record.get("production_coordination") or {}
+        for record in facts.get("production_coordination") or []
+        if isinstance(record, dict)
+        and (record.get("production_coordination") or {}).get("status") == "confirmed"
+    ]
+    schedules = [
+        str(((coordination.get("response") or {}).get("scheduled_window") or "")).strip()
+        for coordination in confirmed
+    ]
+    schedules = [schedule for schedule in schedules if schedule]
+    if not schedules:
+        return payload
+
+    catalog = facts.get("citation_catalog") or {}
+    refs_by_value = {str(value): str(key) for key, value in catalog.items()}
+
+    def normalize(text: str) -> str:
+        compact = re.sub(r"[\s\W_]+", "", text)
+        return re.sub(r"(?<=분)만|(?<=시간)만", "", compact)
+
+    next_payload = deepcopy(payload)
+    for item in next_payload.get("role_summaries") or []:
+        if not isinstance(item, dict) or item.get("role") not in {"maintenance_technician", "process_manager"}:
+            continue
+        quote = str(item.get("quote") or "")
+        additions = []
+        for coordination, schedule in zip(confirmed, schedules):
+            if normalize(schedule) in normalize(quote):
+                continue
+            source_ref = coordination.get("source_ref")
+            citation = f" [[ref:{refs_by_value[source_ref]}]]" if source_ref in refs_by_value else ""
+            additions.append(f"승인 일정 기록은 “{schedule}”입니다.{citation}")
+        if additions:
+            item["quote"] = (quote.rstrip() + "\n" + "\n".join(additions)).strip()
+    return next_payload
 
 
 def _expression_policy(packet):

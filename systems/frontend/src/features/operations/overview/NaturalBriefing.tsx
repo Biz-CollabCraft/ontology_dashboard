@@ -23,8 +23,15 @@ export function NaturalBriefing(props: Props) {
 
 function accepted(response: OperationsAgentReviewSummaryResponse, assetId: string) {
   const summary = response.summary;
-  return summary?.asset_id === assetId && summary.mode === "llm" && !response.trace.fallback
-    && response.trace.materialization?.status === "ready" ? summary : null;
+  const status = response.trace.materialization?.status;
+  return summary?.asset_id === assetId && (status === "ready" || status === "fallback") ? summary : null;
+}
+
+function statusLabel(response: OperationsAgentReviewSummaryResponse, summary: OperationsAgentReviewSummary | null) {
+  if (!summary) return response.trace.fallback ? "검증된 자연어 브리핑이 없습니다. 아래 판단 근거를 확인하세요." : "현재 근거의 브리핑이 아직 없습니다.";
+  return response.trace.materialization?.status === "fallback" || response.trace.fallback || summary.mode !== "llm"
+    ? "저장된 보조 브리핑 · LLM 응답 검증 실패 시 기준 근거로 구성"
+    : "저장된 브리핑";
 }
 
 function Briefing(props: Props & { revealed: Set<string> }) {
@@ -44,7 +51,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
     const next = accepted(response, props.assetId);
     setSummary(next);
     setSummaryKey(next ? response.trace.materialization?.summary_key : undefined);
-    setStatus(next ? "저장된 브리핑" : response.trace.fallback ? "검증된 자연어 브리핑이 없습니다. 아래 판단 근거를 확인하세요." : "현재 근거의 브리핑이 아직 없습니다.");
+    setStatus(statusLabel(response, next));
   }
   useEffect(() => {
     const controller = new AbortController();
@@ -52,7 +59,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
     if (props.providedResponse) {
       const next = accepted(props.providedResponse, props.assetId);
       setSummary(next); setSummaryKey(next ? props.providedResponse.trace.materialization?.summary_key : undefined); setBusy(false);
-      setStatus(next ? "내용 검사 통과 · 기록된 응답" : props.providedResponse.trace.fallback ? "검증을 통과하지 못한 응답입니다. 판단 근거를 직접 확인하세요." : "현재 근거의 브리핑 검증을 기다리고 있습니다.");
+      setStatus(next ? statusLabel(props.providedResponse, next) : props.providedResponse.trace.fallback ? "검증을 통과하지 못한 응답입니다. 판단 근거를 직접 확인하세요." : "현재 근거의 브리핑 검증을 기다리고 있습니다.");
     } else if (supported) void read(controller).catch(() => {
       if (!controller.signal.aborted) setStatus("브리핑을 불러오지 못했습니다. 판단 근거는 계속 확인할 수 있습니다.");
     }).finally(() => { if (!controller.signal.aborted) setBusy(false); });
@@ -69,7 +76,12 @@ function Briefing(props: Props & { revealed: Set<string> }) {
       if (controller.signal.aborted) return;
       if (!accepted(result, props.assetId)) {
         setStatus("자연어 브리핑이 검증을 통과하지 못했습니다. 판단 근거를 확인하세요.");
-      } else await read(controller);
+      } else {
+        const next = accepted(result, props.assetId);
+        setSummary(next);
+        setSummaryKey(next ? result.trace.materialization?.summary_key : undefined);
+        setStatus(statusLabel(result, next));
+      }
     } catch (error) {
       if (!controller.signal.aborted) setStatus(error instanceof Error && /429|rate.limit|잠시 후/.test(error.message)
         ? "생성 요청이 많습니다. 약 1분 후 다시 시도해 주세요."

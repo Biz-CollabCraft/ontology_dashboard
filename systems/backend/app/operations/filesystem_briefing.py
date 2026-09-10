@@ -16,6 +16,10 @@ from functools import lru_cache
 from app.operations.sop_retrieval import retrieve_inspection_sops
 
 
+class BriefingHistoryUnavailable(RuntimeError):
+    """Raised when the exact workflow history needed for a briefing is unavailable."""
+
+
 def _file_sops(view, artifact):
     root = Path(__file__).resolve().parents[4] / 'data/fixtures/inspection_sop'
     procedures = []
@@ -93,7 +97,7 @@ def _bound_ticks(asset_id, event_id, dataset_version_id):
             ticks = complete_ticks or [(latest_at, {str(row['asset_id']): row for row in records})]
             if any(f"FILE#{run_id}#{rows.get(asset_id, {}).get('observation_id', '')}" == event_id for _, rows in ticks):
                 return run_id, ticks
-    except (KeyError, OSError, ValueError):
+    except (KeyError, OSError, RuntimeError, ValueError):
         pass
     for root in _archive_roots():
         stream = root/'runs'/run_id/'source/sensor_records.jsonl'
@@ -119,7 +123,7 @@ def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, projec
         expected = f"FILE#{run_id}#{record.get('observation_id', asset_id)}"
         if expected != event_id:
             continue
-        artifact = filesystem_event_artifact(run_id=run_id, observed_at=observed_at, record=record, event_id=event_id)
+        artifact = _filesystem_event_artifact(run_id=run_id, observed_at=observed_at, record=record, event_id=event_id)
         for rank, factor in enumerate(artifact.get("top_factors", []), 1):
             factor.setdefault("rank", rank)
             factor.setdefault("explanation_method", "filesystem-risk-policy-v1")
