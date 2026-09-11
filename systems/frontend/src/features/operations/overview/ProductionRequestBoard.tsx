@@ -39,6 +39,12 @@ export function productionLineKey(asset: Pick<OperationsAsset, "assetId" | "site
   if (asset.site && asset.cell) return `${asset.site}-${asset.cell}`;
   return asset.line || asset.cell || asset.site || null;
 }
+export function productionImpactLineCount(assetId: string | null | undefined): number | null {
+  const normalized = assetId?.toUpperCase() ?? "";
+  if (normalized.startsWith("CMP-")) return 4;
+  if (normalized.startsWith("CNC-")) return 1;
+  return null;
+}
 
 export function ProductionRequestBoard({ canGenerateBrief = false, projectId, workspaceId, model, workOrders, workOrderError, currentUser, onRefresh, onLogout }: Props) {
   const [consultations, setConsultations] = useState<InspectionCoordination[]>([]);
@@ -111,7 +117,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
   const awaiting = queue.filter(item => item.coordination?.status === "pending" && item.status === "approved").length;
   // Overall KPIs are independent of the selected request and queue filter.
   const impactedAssets = equipmentAssets.filter(asset => asset.status === "critical");
-  const impactedLines = new Set(impactedAssets.map(productionLineKey).filter(Boolean)).size;
+  const impactedLines = productionImpactLineCount(selected?.assetId);
   const stopCost = selected ? referenceEconomics(selected.assetId, c?.request.downtime_minutes) : null;
   const stopCostTotal = stopCost?.stopMinutes != null ? Math.round(stopCost.hourlyProductionCost * stopCost.stopMinutes / 60) : null;
   return <main className="engineer-lite-board production-request-board">
@@ -121,7 +127,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
     </header>
     <section className="prb-kpis" aria-label="전체 생산 영향 현황">
       <OverallKpi label="생산 영향 검토 설비" value={number(impactedAssets.length, "대")} description="긴급 Risk 설비를 생산계획과 대조합니다."/>
-      <OverallKpi label="영향 가능 라인" value={number(impactedLines, "개")} description="압축기-CNC 묶음 기준 영향 라인입니다."/>
+      <OverallKpi label="영향 가능 라인" value={number(impactedLines, "개")} description={selected ? "선택 요청 설비가 영향을 줄 수 있는 압축기-CNC 라인입니다." : "정비 요청을 선택하면 연결 생산 라인을 표시합니다."}/>
       <OverallKpi label="예상 정지 영향 · 생산원가 기준" value={stopCost ? `-${stopCost.hourlyProductionCost.toLocaleString("ko-KR")}원/h` : "요청 선택 필요"} description={stopCost ? `${name} · ${stopCost.usesDefault ? "기본" : "요청"} 정지 ${stopCost.stopMinutes ?? "미확인"}분 · 원가 환산 ${stopCostTotal === null ? "미산정" : "-" + stopCostTotal.toLocaleString("ko-KR") + "원"} (가정·확정 손실 아님)` : "선택 요청의 정지 시간과 설비별 가정 생산원가 기준입니다."}/>
     </section>
     <div className="prb-columns">

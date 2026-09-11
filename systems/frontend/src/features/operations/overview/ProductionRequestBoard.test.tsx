@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 // These workflow fixtures render outside the application preferences provider.
 vi.mock("../../../ui/foundry/displayPreferences", () => ({ useDisplayPreferences: () => ({ preferences: { theme: "light" }, setTheme: vi.fn() }) }));
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ProductionRequestBoard, productionLineKey } from "./ProductionRequestBoard";
+import { ProductionRequestBoard, productionImpactLineCount, productionLineKey } from "./ProductionRequestBoard";
 import { listInspectionCoordinations, getMaintenanceEventLineage, respondInspectionCoordination, type InspectionCoordination, type MaintenanceCostAnalysisReadModel, type OpenInspectionWorkOrderReadModel } from "../../../api";
 import { loadOperationsAssetDetail } from "../api/operationsApi";
 import type { OperationsBootstrapModel, AssetDetailViewModel } from "../api/operationsContracts";
@@ -168,16 +168,17 @@ it("places the status select to the right of time order and filters active, comp
   await act(async () => { filter.value = "all"; filter.dispatchEvent(new Event("change", { bubbles: true })); });
   expect(host.querySelectorAll(".prb-queue-item")).toHaveLength(2);
 });
-it("preserves overall fleet KPIs independently of the selected request and completed filter", async () => {
+it("keeps urgent fleet risk separate while line impact follows the selected request equipment", async () => {
   await render();
   const kpis = host.querySelector('[aria-label="전체 생산 영향 현황"]')!;
   expect(kpis.textContent).toContain("생산 영향 검토 설비");
   expect(kpis.textContent).toContain("1대");
   expect(kpis.textContent).toContain("1개");
   expect(kpis.textContent).toContain("-126,900원/h");
-  const originalFleetRisk = kpis.textContent?.match(/생산 영향 검토 설비.*?1대영향 가능 라인.*?1개/)?.[0];
+  const originalFleetRisk = kpis.textContent?.match(/생산 영향 검토 설비.*?1대/)?.[0];
   await chooseB();
   expect(kpis.textContent).toContain(originalFleetRisk);
+  expect(kpis.textContent).toContain("4개");
   expect(kpis.textContent).toContain("압축기 B");
   await act(async () => {
     const filter = host.querySelector<HTMLSelectElement>('select[aria-label="정비 요청 상태"]')!;
@@ -196,6 +197,8 @@ it("counts only urgent risk equipment and groups compressor-CNC cells as one pro
   const urgent = assets.filter(asset => asset.status === "critical");
   expect(urgent).toHaveLength(3);
   expect(new Set(urgent.map(productionLineKey))).toEqual(new Set(["S03-L04", "S04-L01"]));
+  expect(productionImpactLineCount("CNC-S03-L04-03")).toBe(1);
+  expect(productionImpactLineCount("CMP-S03-L04-01")).toBe(4);
 });
 
 it("sorts by current equipment risk, pins selection, and returns to time order", async () => {
