@@ -3,10 +3,10 @@ import { StrictMode, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NaturalBriefing } from "./NaturalBriefing";
-import { getOperationsAgentReviewSummary, createOperationsAgentReviewSummary } from "../../../api";
+import { getOperationsAgentReviewSummary, createOperationsAgentReviewSummary, getOperationsAgentReviewPacket } from "../../../api";
 import type { OperationsAgentReviewSummaryResponse } from "../api/operationsContracts";
 vi.mock("../../../api", () => ({ getOperationsAgentReviewSummary: vi.fn(), createOperationsAgentReviewSummary: vi.fn(), getOperationsAgentReviewPacket: vi.fn() }));
-const get = vi.mocked(getOperationsAgentReviewSummary), post = vi.mocked(createOperationsAgentReviewSummary);
+const get = vi.mocked(getOperationsAgentReviewSummary), post = vi.mocked(createOperationsAgentReviewSummary), packet = vi.mocked(getOperationsAgentReviewPacket);
 function response(assetId = "A", quote = "**관측된 토크**와 점검 기록을 대조합니다. [[ref:1]]\n작업 시작 기록은 확인되지 않습니다."): OperationsAgentReviewSummaryResponse {
   return { summary: { asset_id: assetId, mode: "llm", summary: "공통 설명", source_refs: ["evidence:A"], limitations: [],
     role_summaries: [{ role: "process_engineer", quote }, { role: "maintenance_technician", quote: "보전 담당자의 자연어 설명" }, { role: "process_manager", quote: "생산 관리자의 자연어 설명" }] },
@@ -66,6 +66,16 @@ it("shows a recoverable failure without retaining old prose", async () => {
   await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
   expect(host.textContent).toContain("생성하지 못했습니다"); expect(host.textContent).not.toContain("관측된 토크");
   expect(host.querySelector<HTMLButtonElement>("button")!.disabled).toBe(false);
+});
+
+it("keeps stored prose visible when expanded evidence no longer matches the current basis", async () => {
+  packet.mockRejectedValue({ status: 409 });
+  await render();
+  expect(host.textContent).toContain("관측된 토크");
+  await act(async () => host.querySelector("summary")!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(host.textContent).toContain("관측된 토크");
+  expect(host.textContent).toContain("저장된 브리핑을 유지");
+  expect(host.textContent).not.toContain("데이터 로딩 중");
 });
 
 it("uses server replay responses without product API calls and withdraws rejected prose", async () => {

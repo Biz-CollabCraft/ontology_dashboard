@@ -120,11 +120,10 @@ function Briefing(props: Props & { revealed: Set<string> }) {
   const rows = briefRows(quote, summary?.source_refs ?? []);
   const workflowBadge = props.workflowRefresh?.state === "pending" ? "갱신 중" : props.workflowRefresh?.state === "failed" ? "갱신 실패" : "";
   const evidenceScope = { ...props, eventId: basis.eventId, observedAt: basis.observedAt, expectedSummaryKey: summaryKey, onEvidenceChanged: () => {
-        setSummary(null); setBusy(true); setStatus("근거가 변경되어 이전 브리핑을 숨겼습니다. 현재 브리핑을 확인하고 있습니다.");
-        const controller = controllerRef.current;
-        if (controller && !controller.signal.aborted) void read(controller).catch(() => {
-          if (!controller.signal.aborted) setStatus("현재 브리핑을 불러오지 못했습니다. 다시 조회해 주세요.");
-        }).finally(() => { if (!controller.signal.aborted) setBusy(false); });
+        setBusy(false);
+        setStatus(summary
+          ? "저장된 브리핑을 유지합니다. 근거 상세는 현재 관측 기준과 달라 다시 조회할 수 없습니다."
+          : "근거 상세 기준이 현재 관측과 달라 저장된 브리핑을 찾을 수 없습니다.");
       } };
   return <section className="natural-briefing" aria-label="AI 자연어 브리핑" aria-busy={busy}>
     <div className="natural-briefing-heading"><strong>AI 브리핑</strong>

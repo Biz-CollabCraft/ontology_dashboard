@@ -24,7 +24,7 @@ export function BriefingEvidencePanel(props: Props) {
       const basis = packet.snapshot_basis;
       if (packet.project_id !== props.projectId || packet.asset_id !== props.assetId || basis?.event_id !== props.eventId
         || (props.observedAt && basis?.observed_at && Date.parse(basis.observed_at) !== Date.parse(props.observedAt))) {
-        setStatus("근거가 갱신되었습니다. 현재 사건의 브리핑을 다시 확인해 주세요.");
+        setStatus("저장된 브리핑은 유지됩니다. 다만 현재 관측 기준과 달라 이 인용의 상세 근거는 다시 조회할 수 없습니다.");
         props.onEvidenceChanged?.();
         return;
       }
@@ -36,7 +36,7 @@ export function BriefingEvidencePanel(props: Props) {
       const changed = error && typeof error === "object" && "status" in error && error.status === 409;
       if (changed) props.onEvidenceChanged?.();
       setStatus(changed
-        ? "근거가 갱신되었습니다. 현재 사건의 브리핑을 다시 확인해 주세요."
+        ? "저장된 브리핑은 유지됩니다. 다만 현재 관측 기준과 달라 이 인용의 상세 근거는 다시 조회할 수 없습니다"
         : "근거를 불러오지 못했습니다. 닫았다가 다시 열어 주세요.");
     });
     return () => controller.abort();
