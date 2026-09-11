@@ -1,6 +1,9 @@
 .natural-briefing { margin: 12px 0; padding: 14px 16px; background: #f4f8fc; border-left: 3px solid #436b91; color: #253d54; font-size: 13px; line-height: 1.75; min-width: 0; }
 .natural-briefing .natural-briefing-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .natural-briefing .natural-briefing-heading > strong { font-size: 12px; color: #365779; }
+.natural-briefing .natural-briefing-refresh { margin-left: auto; border: 1px solid #b4c6d8; border-radius: 999px; padding: 2px 8px; background: #fff; color: #365779; font-size: 11px; font-weight: 700; line-height: 1.4; white-space: nowrap; }
+.natural-briefing .natural-briefing-refresh.is-pending::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: #2f6fed; animation: natural-briefing-pulse 1s ease-in-out infinite; vertical-align: 1px; }
+.natural-briefing .natural-briefing-refresh.is-failed { border-color: #efb4bd; color: #8a2634; background: #fff5f6; }
 .natural-briefing .natural-briefing-heading button { font: inherit; font-size: 12px; color: #304f70; background: white; border: 1px solid #b4c6d8; border-radius: 4px; padding: 3px 9px; cursor: pointer; }
 .natural-briefing button:disabled { opacity: .6; cursor: wait; }
 .natural-briefing button:focus-visible, .natural-briefing summary:focus-visible { outline: 2px solid #356597; outline-offset: 3px; }
@@ -27,6 +30,7 @@
 .natural-briefing-cursor { display: inline-block; position: relative; width: 0; height: 1em; vertical-align: -.12em; }
 .natural-briefing-cursor::after { content: ""; position: absolute; left: 3px; top: 0; width: 2px; height: 100%; border-radius: 1px; background: #436b91; animation: natural-briefing-blink 1s steps(1, end) infinite; }
 @keyframes natural-briefing-blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+@keyframes natural-briefing-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .natural-briefing-cursor { display: none; } }
 
 .natural-briefing-evidence { margin-top: 8px; padding: 12px; border: 1px solid #b4c6d8; border-radius: 4px; background: #fff; overflow-wrap: anywhere; }
@@ -45,3 +49,5 @@ html[data-theme="dark"] .natural-briefing-evidence .natural-briefing-evidence-sc
 html[data-theme="dark"] .natural-briefing-evidence dt { color: #b4c6d8; }
 html[data-theme="dark"] .natural-briefing .natural-briefing-line strong { color: #e0ecff; }
 html[data-theme="dark"] .natural-briefing .natural-briefing-line.is-list::before { background: #80b5ff; }
+html[data-theme="dark"] .natural-briefing .natural-briefing-refresh { background: #182334; color: #dbeafe; border-color: #62768e; }
+html[data-theme="dark"] .natural-briefing .natural-briefing-refresh.is-failed { background: #3a1b22; color: #ffd6dd; border-color: #8a4b56; }

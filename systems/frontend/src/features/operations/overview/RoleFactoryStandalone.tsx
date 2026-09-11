@@ -1,4 +1,4 @@
-import { NaturalBriefing } from "./NaturalBriefing";
+import { NaturalBriefing, type NaturalBriefingRefreshState } from "./NaturalBriefing";
 import { DemoScenarioControl } from "./DemoScenarioControl";
 import { LogOut } from "lucide-react";
 import { MaintenanceApprovalList } from "./MaintenanceApprovalList";
@@ -96,6 +96,7 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
+  const [briefingRefresh, setBriefingRefresh] = useState<NaturalBriefingRefreshState | null>(null);
   const [coordinationConnection, setCoordinationConnection] = useState<{ workOrderId: string; state: "loading" | "online" | "offline" } | null>(null);
   const selectedWorkOrder = workOrders.find((item) => item.work_order_id === selectedWorkOrderId);
   const inspectionOrders = workOrders.filter((item) => !item.inspection_result);
@@ -105,6 +106,8 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
   const impactedLines = new Set(risky.map((asset) => asset.line)).size;
   const title = persona === "maintenance" ? "보전 작업 현황" : "생산 대응 현황";
   const subtitle = persona === "maintenance" ? "점검 요청부터 현장 조치와 결과 회신까지" : "설비 위험을 부족분·납기·정지 일정 판단으로 연결";
+
+  useEffect(() => { setBriefingRefresh(null); }, [selectedWorkOrderId]);
 
   useEffect(() => {
     if (persona !== "production") return;
@@ -176,7 +179,7 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
         })() : null}</div></header>
         {persona === "maintenance" && selectedWorkOrder ? <InspectionWorkOrderEditor briefing={<NaturalBriefing projectId={projectId} workspaceId={workspaceId}
           assetId={selectedWorkOrder.asset_id} eventId={selectedWorkOrder.event_id} datasetVersionId={model.context.datasetVersionId}
-          role="maintenance_technician" canGenerate={canGenerateBrief} revision={JSON.stringify(selectedWorkOrder)}/>} key={selectedWorkOrder.work_order_id} item={selectedWorkOrder} currentUserId={currentUserId} projectId={projectId} workspaceId={workspaceId} onRefresh={onRefresh} onConnectionChange={setCoordinationConnection} /> : persona === "maintenance" ? <div className="role-step-list">
+          role="maintenance_technician" canGenerate={canGenerateBrief} revision={JSON.stringify(selectedWorkOrder)} workflowRefresh={briefingRefresh}/>} key={selectedWorkOrder.work_order_id} item={selectedWorkOrder} currentUserId={currentUserId} projectId={projectId} workspaceId={workspaceId} onRefresh={onRefresh} onConnectionChange={setCoordinationConnection} onBriefingRefreshState={setBriefingRefresh} /> : persona === "maintenance" ? <div className="role-step-list">
           <article><b>1. 요청 접수</b><p>설비, 이상 근거, 요청 시각과 중복 요청 여부를 확인합니다.</p></article>
           <article><b>2. 현장 점검</b><p>안전 절차와 센서·부품 점검 결과를 기록합니다.</p></article>
           <article><b>3. 점검 결과에 따른 처리</b><p>조치 불필요이면 점검을 종결합니다. 정비가 필요하면 정지 시간을 포함하여 생산 관리자에게 정비 승인을 요청합니다.</p></article>

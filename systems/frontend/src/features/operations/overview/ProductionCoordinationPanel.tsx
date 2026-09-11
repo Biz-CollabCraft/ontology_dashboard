@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listInspectionCoordinations, requestInspectionCoordination, respondInspectionCoordination, type InspectionCoordination } from "../../../api";
 import "./ProductionCoordinationPanel.css";
 import "./ProductionReviewLayout.css";
+import type { NaturalBriefingRefreshState } from "./NaturalBriefing";
 
 const labels = { pending: "생산 관리자 확인 대기", confirmed: "생산 관리자 확인 완료", changes_requested: "재협의 필요" };
-export function ProductionCoordinationPanel({ projectId, workspaceId, mode, workOrderId, canRequest = false, onStateChange, onConnectionChange, requestFormId, onRequestBusyChange }: {
+export function ProductionCoordinationPanel({ projectId, workspaceId, mode, workOrderId, canRequest = false, onStateChange, onConnectionChange, requestFormId, onRequestBusyChange, onBriefingRefreshState }: {
   projectId: string; workspaceId: string; mode: "maintenance" | "production";
   workOrderId?: string; canRequest?: boolean; onStateChange?: (value: InspectionCoordination | null) => void;
   onConnectionChange?: (value: { workOrderId: string; state: "loading" | "online" | "offline" }) => void;
   requestFormId?: string; onRequestBusyChange?: (busy: boolean) => void;
+  onBriefingRefreshState?: (state: NaturalBriefingRefreshState) => void;
 }) {
   const [items, setItems] = useState<InspectionCoordination[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -59,13 +61,13 @@ export function ProductionCoordinationPanel({ projectId, workspaceId, mode, work
         {selected.inspection_result ? <div className="coordination-response"><b>점검 결과 반영 완료</b>{selected.inspection_result.findings.map((finding, index) => <p key={index}>{finding}</p>)}<p>{selected.inspection_result.note}</p></div> : null}
         {selected.history && selected.history.length > 1 ? <details><summary>협의 이력 {selected.history.length}건</summary>{selected.history.map((entry, index) => <p key={index}>{labels[entry.status]} · {entry.responded_by_name || entry.requested_by_name} · {entry.response?.production_response || entry.request.work_summary}</p>)}</details> : null}
       </article> : mode === "maintenance" && !loading && !error ? <p>접수 후 생산 관리자와 작업·정지 일정을 협의해 주세요.</p> : null}
-      {mode === "maintenance" && canRequest && !loading && !error && selected?.status !== "pending" ? <CoordinationRequestForm key={workOrderId} projectId={projectId} workspaceId={workspaceId} workOrderId={workOrderId!} onSaved={reload} hasConfirmation={selected?.status === "confirmed"} externalFormId={requestFormId} onBusyChange={onRequestBusyChange} /> : null}
-      {mode === "production" && selected?.status === "pending" && !error ? <CoordinationReplyForm key={selected.request_id} item={selected} projectId={projectId} workspaceId={workspaceId} onSaved={reload} /> : null}
+      {mode === "maintenance" && canRequest && !loading && !error && selected?.status !== "pending" ? <CoordinationRequestForm key={workOrderId} projectId={projectId} workspaceId={workspaceId} workOrderId={workOrderId!} onSaved={reload} hasConfirmation={selected?.status === "confirmed"} externalFormId={requestFormId} onBusyChange={onRequestBusyChange} onBriefingRefreshState={onBriefingRefreshState} /> : null}
+      {mode === "production" && selected?.status === "pending" && !error ? <CoordinationReplyForm key={selected.request_id} item={selected} projectId={projectId} workspaceId={workspaceId} onSaved={reload} onBriefingRefreshState={onBriefingRefreshState} /> : null}
     </div>
   </section>;
 }
 
-function useCommand() {
+function useCommand(onBriefingRefreshState?: (state: NaturalBriefingRefreshState) => void) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const active = useRef(false);
@@ -73,24 +75,30 @@ function useCommand() {
   async function run(payload: unknown, command: (key: string) => Promise<unknown>, saved: () => void) {
     if (active.current) return;
     active.current = true; setBusy(true); setMessage("");
+    onBriefingRefreshState?.({ token: Date.now(), state: "pending" });
     const fingerprint = JSON.stringify(payload);
     if (attempt.current?.fingerprint !== fingerprint) attempt.current = { fingerprint, key: Array.from(crypto.getRandomValues(new Uint32Array(4)), (v) => v.toString(16).padStart(8, "0")).join("") };
-    try { await command(attempt.current.key); setMessage("저장했습니다. 상대 화면에도 반영됩니다."); saved(); }
-    catch { setMessage("저장하지 못했습니다. 입력 내용은 유지됩니다. 최신 협의 상태를 확인한 뒤 다시 시도하세요."); }
+    try {
+      const result = await command(attempt.current.key);
+      onBriefingRefreshState?.({ token: Date.now(), state: briefingRefreshFailed(result) ? "failed" : "completed" });
+      setMessage("저장했습니다. 상대 화면에도 반영됩니다."); saved();
+    }
+    catch { onBriefingRefreshState?.({ token: Date.now(), state: "failed" }); setMessage("저장하지 못했습니다. 입력 내용은 유지됩니다. 최신 협의 상태를 확인한 뒤 다시 시도하세요."); }
     finally { active.current = false; setBusy(false); }
   }
   return { busy, message, run };
 }
 
-function CoordinationRequestForm({ projectId, workspaceId, workOrderId, onSaved, hasConfirmation, externalFormId, onBusyChange }: {
+function CoordinationRequestForm({ projectId, workspaceId, workOrderId, onSaved, hasConfirmation, externalFormId, onBusyChange, onBriefingRefreshState }: {
   projectId: string; workspaceId: string; workOrderId: string; onSaved: () => void; hasConfirmation: boolean;
   externalFormId?: string; onBusyChange?: (busy: boolean) => void;
+  onBriefingRefreshState?: (state: NaturalBriefingRefreshState) => void;
 }) {
   const [summary, setSummary] = useState("");
   const [downtime, setDowntime] = useState("");
   const [affected, setAffected] = useState("");
   const [note, setNote] = useState("");
-  const { busy, message, run } = useCommand();
+  const { busy, message, run } = useCommand(onBriefingRefreshState);
   const [validationMessage, setValidationMessage] = useState("");
   useEffect(() => { onBusyChange?.(busy); return () => onBusyChange?.(false); }, [busy, onBusyChange]);
   const payload = { work_summary: summary.trim(), downtime_minutes: Number(downtime), affected_items: affected.trim(), note: note.trim() };
@@ -113,13 +121,19 @@ function CoordinationRequestForm({ projectId, workspaceId, workOrderId, onSaved,
   </details>;
 }
 
-function CoordinationReplyForm({ item, projectId, workspaceId, onSaved }: {
+function briefingRefreshFailed(value: unknown) {
+  const refresh = (value as { agent_review_summary_refresh?: { status?: string } } | null)?.agent_review_summary_refresh;
+  return Boolean(refresh && refresh.status === "failed");
+}
+
+function CoordinationReplyForm({ item, projectId, workspaceId, onSaved, onBriefingRefreshState }: {
   item: InspectionCoordination; projectId: string; workspaceId: string; onSaved: () => void;
+  onBriefingRefreshState?: (state: NaturalBriefingRefreshState) => void;
 }) {
   const [decision, setDecision] = useState<"confirmed" | "changes_requested" | "">("");
   const [window, setWindow] = useState("");
   const [response, setResponse] = useState("");
-  const { busy, message, run } = useCommand();
+  const { busy, message, run } = useCommand(onBriefingRefreshState);
   return <section className="coordination-reply-form">
     <strong>생산 관리자 회신</strong>
     <label>협의 결과<select value={decision} onChange={(e) => setDecision(e.target.value as typeof decision)} disabled={busy}><option value="">선택하세요</option><option value="confirmed">작업·정지 일정 확인</option><option value="changes_requested">재협의 요청</option></select></label>

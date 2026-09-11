@@ -1,4 +1,4 @@
-import { NaturalBriefing } from "./NaturalBriefing";
+import { NaturalBriefing, type NaturalBriefingRefreshState } from "./NaturalBriefing";
 import { DemoScenarioControl } from "./DemoScenarioControl";
 import { LogOut, Printer } from "lucide-react";
 import { printProductionReport } from "./printProductionReport";
@@ -55,6 +55,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
   const [statusFilter, setStatusFilter] = useState<"active" | "completed" | "all">("active");
   const [sortOrder, setSortOrder] = useState<QueueSort>("time");
   const [detailOpen, setDetailOpen] = useState(false);
+  const [briefingRefresh, setBriefingRefresh] = useState<NaturalBriefingRefreshState | null>(null);
   const [context, setContext] = useState<{ key: string; detail: AssetDetailViewModel | null; costs: MaintenanceCostAnalysisReadModel | null; detailError: boolean; costError: boolean; detailLoading: boolean; costLoading: boolean } | null>(null);
   useEffect(() => {
     let alive = true, inflight = false;
@@ -81,6 +82,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
   useEffect(() => { setSelectedId(selected?.id ?? ""); }, [selected?.id]);
   const asset = equipmentById.get(selected?.assetId ?? "") ?? null;
   const requestKey = selected ? [projectId, workspaceId, selected.id, selected.eventId, selected.coordination?.request_id ?? "", model.context.datasetVersionId].join("|") : "";
+  useEffect(() => { setBriefingRefresh(null); }, [requestKey]);
   useEffect(() => {
     let alive = true;
     setDetailOpen(false);
@@ -152,7 +154,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
         {selected ? <div className="prb-review-content">
           <NaturalBriefing projectId={projectId} workspaceId={workspaceId} assetId={selected.assetId} eventId={selected.eventId}
             datasetVersionId={model.context.datasetVersionId} observedAt={detail?.snapshot_basis?.observed_at}
-            role="process_manager" canGenerate={canGenerateBrief} revision={JSON.stringify([selected.eventId, selected.status])}/>
+            role="process_manager" canGenerate={canGenerateBrief} revision={JSON.stringify([selected.eventId, selected.status])} workflowRefresh={briefingRefresh}/>
           <div className="prb-monitoring-stack">
             <RiskChart asset={asset} detail={detail} name={name}/>
           </div>
@@ -162,7 +164,7 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
         <header><strong>작업 승인 검토</strong><span>생산 영향·일정 확인</span></header>
         {selected ? <ApprovalPanel key={selected.id + ":" + (c?.request_id ?? "")} item={selected} name={name} projectId={projectId} workspaceId={workspaceId}
           requestedLoss={requestedLoss} cost={cost} connected={!queueLoading && !queueError && !workOrderError}
-          onImpact={() => setDetailOpen(true)} onSaved={onSaved}/> : <p>왼쪽에서 정비 요청을 선택해 주세요.</p>}
+          onImpact={() => setDetailOpen(true)} onSaved={onSaved} onBriefingRefreshState={setBriefingRefresh}/> : <p>왼쪽에서 정비 요청을 선택해 주세요.</p>}
       </aside>
     </div>
     {selected && detailOpen ? <div className="prb-overlay" onClick={() => setDetailOpen(false)}><section role="dialog" aria-modal="true" aria-label={name + " 생산 영향 상세"} className="prb-dialog" tabIndex={-1} onKeyDown={e => { if (e.key === "Escape") setDetailOpen(false); }} onClick={e => e.stopPropagation()}>
@@ -264,9 +266,10 @@ function RiskChart({ asset, name }: { asset: OperationsAsset | null; detail: Ass
     <footer><span>이전 관측</span><small>{when(asset?.observedAt)} · 요청 시점과 다를 수 있음</small><span>현재</span></footer>
   </section>;
 }
-function ApprovalPanel({ item, name, projectId, workspaceId, requestedLoss, cost, connected, onImpact, onSaved }: {
+function ApprovalPanel({ item, name, projectId, workspaceId, requestedLoss, cost, connected, onImpact, onSaved, onBriefingRefreshState }: {
   item: ProductionQueueItem; name: string; projectId: string; workspaceId: string; requestedLoss: number | null;
   cost: MaintenanceCostAnalysisReadModel | null; connected: boolean; onImpact: () => void; onSaved: (value: InspectionCoordination) => void;
+  onBriefingRefreshState?: (state: NaturalBriefingRefreshState) => void;
 }) {
   const c = item.coordination;
   const [schedule, setSchedule] = useState("");
@@ -284,10 +287,12 @@ function ApprovalPanel({ item, name, projectId, workspaceId, requestedLoss, cost
     const fingerprint = JSON.stringify(payload);
     if (retry.current?.fingerprint !== fingerprint) retry.current = { fingerprint, key: Array.from(crypto.getRandomValues(new Uint32Array(4)), v => v.toString(16).padStart(8,"0")).join("") };
     locked.current = true; setBusy(true); setMessage("");
+    onBriefingRefreshState?.({ token: Date.now(), state: "pending" });
     try {
       const result = await respondInspectionCoordination({ projectId, workspaceId, workOrderId: item.id, payload, idempotencyKey: retry.current.key });
+      onBriefingRefreshState?.({ token: Date.now(), state: briefingRefreshFailed(result) ? "failed" : "completed" });
       onSaved(result as unknown as InspectionCoordination); setMessage(decision === "confirmed" ? "작업 승인을 저장했습니다. 보전팀에서 착수 조건 확인 후 작업을 시작할 수 있습니다." : "재협의 요청을 저장했습니다.");
-    } catch { setMessage("저장하지 못했습니다. 입력 내용은 유지됩니다. 연결과 최신 요청 상태를 확인해 주세요."); }
+    } catch { onBriefingRefreshState?.({ token: Date.now(), state: "failed" }); setMessage("저장하지 못했습니다. 입력 내용은 유지됩니다. 연결과 최신 요청 상태를 확인해 주세요."); }
     finally { locked.current = false; setBusy(false); }
   }
   return <><div className="prb-scroll prb-action-summary"><h3>{name}</h3><p>#{item.id.slice(-8)} · {queueStatus(item)}</p><p>담당: {item.assignee}</p>
@@ -302,4 +307,9 @@ function ApprovalPanel({ item, name, projectId, workspaceId, requestedLoss, cost
     {canApprove ? <button type="button" disabled={busy || !schedule.trim() || !response.trim()} onClick={() => void submit("changes_requested")}>재협의 요청</button> : null}
     {canApprove && (!schedule.trim() || !response.trim()) ? <small role="status">위 검토 영역의 작업·정지 일정과 생산 대응·승인 근거를 입력하면 작업 승인 및 재협의 요청을 전송할 수 있습니다.</small> : null}
     <small>작업 승인은 생산 일정 확인입니다. 보전팀의 착수 조건 확인을 대체하지 않습니다.</small></div></>;
+}
+
+function briefingRefreshFailed(value: unknown) {
+  const refresh = (value as { agent_review_summary_refresh?: { status?: string } } | null)?.agent_review_summary_refresh;
+  return Boolean(refresh && refresh.status === "failed");
 }

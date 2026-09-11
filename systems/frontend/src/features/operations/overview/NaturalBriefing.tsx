@@ -11,6 +11,12 @@ type Props = {
   role: "process_engineer" | "maintenance_technician" | "process_manager";
   canGenerate?: boolean; revision?: string;
   providedResponse?: OperationsAgentReviewSummaryResponse;
+  workflowRefresh?: NaturalBriefingRefreshState | null;
+};
+
+export type NaturalBriefingRefreshState = {
+  token: string | number;
+  state: "pending" | "failed" | "completed";
 };
 
 // A new selection is a new instance: old prose and pending responses cannot cross it.
@@ -66,6 +72,26 @@ function Briefing(props: Props & { revealed: Set<string> }) {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    if (!props.workflowRefresh) return;
+    if (props.workflowRefresh.state === "pending") {
+      setBusy(true);
+      setStatus(summary
+        ? "최신 작업 기준으로 브리핑을 갱신 중입니다. 이전 저장본을 표시합니다."
+        : "작업은 접수됐고 최신 브리핑을 생성 중입니다.");
+    } else if (props.workflowRefresh.state === "failed") {
+      setBusy(false);
+      setStatus(summary
+        ? "최신 브리핑 생성에 실패했습니다. 이전 저장본을 표시합니다."
+        : "최신 브리핑 생성에 실패했습니다. 저장된 브리핑이 아직 없습니다.");
+    } else {
+      setBusy(false);
+      setStatus(summary
+        ? "최신 작업을 저장했습니다. 저장된 브리핑을 다시 확인합니다."
+        : "최신 작업을 저장했습니다. 브리핑을 다시 조회합니다.");
+    }
+  }, [props.workflowRefresh?.token, props.workflowRefresh?.state]);
+
   async function generate() {
     const controller = controllerRef.current;
     if (busy || !props.canGenerate || !supported || !controller || controller.signal.aborted) return;
@@ -92,6 +118,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
 
   const quote = summary?.role_summaries.find(item => item.role === props.role)?.quote?.trim() || summary?.summary || "";
   const rows = briefRows(quote, summary?.source_refs ?? []);
+  const workflowBadge = props.workflowRefresh?.state === "pending" ? "갱신 중" : props.workflowRefresh?.state === "failed" ? "갱신 실패" : "";
   const evidenceScope = { ...props, eventId: basis.eventId, observedAt: basis.observedAt, expectedSummaryKey: summaryKey, onEvidenceChanged: () => {
         setSummary(null); setBusy(true); setStatus("근거가 변경되어 이전 브리핑을 숨겼습니다. 현재 브리핑을 확인하고 있습니다.");
         const controller = controllerRef.current;
@@ -101,6 +128,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
       } };
   return <section className="natural-briefing" aria-label="AI 자연어 브리핑" aria-busy={busy}>
     <div className="natural-briefing-heading"><strong>AI 브리핑</strong>
+      {workflowBadge ? <span className={`natural-briefing-refresh is-${props.workflowRefresh?.state}`}>{workflowBadge}</span> : null}
       {supported && props.canGenerate ? <button type="button" disabled={busy} onClick={() => void generate()}>{busy ? "처리 중" : summary ? "다시 생성" : "브리핑 생성"}</button> : null}
     </div>
     <p className="natural-briefing-status" role="status">{status}{basis.eventId !== props.eventId ? " · 생성 기준 관측을 유지합니다. 최신 관측은 다시 생성 시 반영됩니다." : ""}</p>

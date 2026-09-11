@@ -3,6 +3,7 @@ import { executeInspectedMaintenance, acceptInspectionWorkOrder, startInspection
 import "./InspectionWorkOrderEditor.css";
 import { ProductionCoordinationPanel } from "./ProductionCoordinationPanel";
 import type { InspectionCoordination } from "../../../api";
+import type { NaturalBriefingRefreshState } from "./NaturalBriefing";
 
 // Retained for future maintenance-method recommendation input; hidden in the current UI.
 const SHOW_RECOMMENDATION_INFO_REQUEST = false;
@@ -13,7 +14,7 @@ const checks = [
   ["parts-condition", "관련 부품 상태"],
 ] as const;
 
-export function InspectionWorkOrderEditor({ briefing, item, currentUserId, projectId, workspaceId, onRefresh, onConnectionChange }: {
+export function InspectionWorkOrderEditor({ briefing, item, currentUserId, projectId, workspaceId, onRefresh, onConnectionChange, onBriefingRefreshState }: {
   briefing?: ReactNode;
   item: OpenInspectionWorkOrderReadModel;
   currentUserId: string;
@@ -21,6 +22,7 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
   workspaceId: string;
   onRefresh: () => void;
   onConnectionChange?: (value: { workOrderId: string; state: "loading" | "online" | "offline" }) => void;
+  onBriefingRefreshState?: (state: NaturalBriefingRefreshState) => void;
 }) {
   const [status, setStatus] = useState<string>(item.status);
   const [inspectionResult, setInspectionResult] = useState(item.inspection_result);
@@ -81,27 +83,31 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
     const fingerprint = JSON.stringify([item.work_order_id, status, status === "in_progress" ? payload : null]);
     if (attempt.current?.fingerprint !== fingerprint) attempt.current = { fingerprint, key: Array.from(crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(16).padStart(8, "0")).join("") };
     const input = { projectId, workspaceId, workOrderId: item.work_order_id, idempotencyKey: attempt.current.key };
+    onBriefingRefreshState?.({ token: Date.now(), state: "pending" });
     try {
+      let result: unknown;
       if (inspected) {
-        await executeInspectedMaintenance({ ...input, payload: { action: status === "approved" ? "start" : "complete", note: note.trim() } });
+        result = await executeInspectedMaintenance({ ...input, payload: { action: status === "approved" ? "start" : "complete", note: note.trim() } });
         setStatus(status === "approved" ? "in_progress" : "completed");
         setMessage(status === "approved" ? "정비를 시작했습니다." : "정비 수행 결과를 저장하고 완료했습니다.");
       } else if (status === "requested") {
-        await acceptInspectionWorkOrder(input);
+        result = await acceptInspectionWorkOrder(input);
         setMessage("요청을 접수했습니다. 목록 갱신 후 담당자와 작업 시작 상태를 확인하세요.");
       } else if (status === "approved") {
-        await startInspectionWorkOrder(input);
+        result = await startInspectionWorkOrder(input);
         setStatus("in_progress");
         setMessage("현장 점검을 시작했습니다. 실제 확인한 결과를 아래에 작성하세요.");
       } else {
-        await completeInspectionWorkOrder({ ...input, payload });
+        result = await completeInspectionWorkOrder({ ...input, payload });
         setInspectionResult({ outcome: payload.outcome, findings: payload.findings, note: payload.note });
         setNote("");
         setStatus(outcome === "maintenance_recommended" ? "approved" : "completed");
         setMessage(outcome === "maintenance_recommended" ? "점검 결과를 저장했습니다. 정비 내용과 예상 정지 시간, 생산 영향을 작성한 뒤 정비 승인 요청을 보내세요." : "점검 결과를 저장했습니다. 조치 불필요로 종결하며 생산 관리자에게 승인 요청을 보내지 않습니다.");
       }
+      onBriefingRefreshState?.({ token: Date.now(), state: briefingRefreshFailed(result) ? "failed" : "completed" });
       onRefresh();
     } catch {
+      onBriefingRefreshState?.({ token: Date.now(), state: "failed" });
       setMessage("처리를 완료하지 못했습니다. 입력 내용은 유지됩니다. 연결 및 최신 담당·진행 상태를 확인한 뒤 다시 시도해 주세요.");
       onRefresh();
     } finally {
@@ -117,7 +123,7 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
     {message ? <p role="status" className="inspection-work-message">{message}</p> : null}
     {!canAct && status !== "completed" ? <p>이 작업은 배정된 보전팀 담당자만 시작하고 결과를 기록할 수 있습니다.</p> : null}
     {inspectionResult ? <section aria-label="점검 결과"><strong>{inspected ? "점검 완료 · 정비 필요" : "점검 종결 · 조치 불필요"}</strong><p>{inspectionResult.findings.join(" / ")}</p></section> : null}
-    {inspected ? <ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="maintenance" workOrderId={item.work_order_id} canRequest={mine && needsApprovalRequest} onStateChange={setCoordination} onConnectionChange={handleConnectionChange} requestFormId={requestFormId} onRequestBusyChange={setRequestBusy} /> : null}
+    {inspected ? <ProductionCoordinationPanel projectId={projectId} workspaceId={workspaceId} mode="maintenance" workOrderId={item.work_order_id} canRequest={mine && needsApprovalRequest} onStateChange={setCoordination} onConnectionChange={handleConnectionChange} requestFormId={requestFormId} onRequestBusyChange={setRequestBusy} onBriefingRefreshState={onBriefingRefreshState} /> : null}
     {approvalStage && !approvalUnavailable && coordination?.status === "confirmed" ? <p>생산 관리자 승인 완료 · 승인 일정과 착수 조건을 확인하고 정비를 시작하세요.</p> : null}
     <form onSubmit={(event) => void submit(event)}>
     {inspected && status === "in_progress" ? <label>정비 수행 결과<textarea required value={note} onChange={e => setNote(e.target.value)} placeholder="실제 수행한 정비와 결과를 작성하세요." /></label> : null}
@@ -144,4 +150,9 @@ export function InspectionWorkOrderEditor({ briefing, item, currentUserId, proje
     </button> : null}
     </form>
   </section>;
+}
+
+function briefingRefreshFailed(value: unknown) {
+  const refresh = (value as { agent_review_summary_refresh?: { status?: string } } | null)?.agent_review_summary_refresh;
+  return Boolean(refresh && refresh.status === "failed");
 }

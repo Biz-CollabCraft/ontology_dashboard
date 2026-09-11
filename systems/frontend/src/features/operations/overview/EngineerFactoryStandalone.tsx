@@ -1,5 +1,5 @@
 import { relativeRecordTime } from "../../../standalone/briefFormat.js";
-import { NaturalBriefing } from "./NaturalBriefing";
+import { NaturalBriefing, type NaturalBriefingRefreshState } from "./NaturalBriefing";
 import { DemoScenarioControl } from "./DemoScenarioControl";
 import type {
   OperationsAsset,
@@ -341,6 +341,7 @@ export function EngineerFactoryStandalone({
     useState(false);
   const [maintenanceRequestSucceeded, setMaintenanceRequestSucceeded] =
     useState(false);
+  const [briefingRefresh, setBriefingRefresh] = useState<NaturalBriefingRefreshState | null>(null);
   const [zoneFilter, setZoneFilter] = useState("all");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -364,6 +365,7 @@ export function EngineerFactoryStandalone({
       document.body.style.overflow = previousOverflow;
     };
   }, [sensorDetailOpen]);
+  useEffect(() => { setBriefingRefresh(null); }, [selectedAssetId]);
   const selected =
     model.assets.find((asset) => asset.assetId === selectedAssetId) ??
     model.assets[0] ??
@@ -433,11 +435,12 @@ export function EngineerFactoryStandalone({
     setMaintenanceRequestBusy(true);
     setMaintenanceRequestFailed(false);
     setMaintenanceRequestSucceeded(false);
+    setBriefingRefresh({ token: Date.now(), state: "pending" });
     try {
       if (!selected.maintenanceSnapshotBasis) {
         throw new Error("maintenance snapshot basis unavailable");
       }
-      await requestInspectionWorkOrder({
+      const result = await requestInspectionWorkOrder({
         projectId: model.context.projectId,
         workspaceId: model.context.workspaceId,
         eventId: selected.eventId,
@@ -453,8 +456,14 @@ export function EngineerFactoryStandalone({
       });
       setDirectiveAssetId(selected.assetId);
       setMaintenanceRequestSucceeded(true);
+      if (briefingRefreshFailed(result)) {
+        setBriefingRefresh({ token: Date.now(), state: "failed" });
+      } else {
+        setBriefingRefresh({ token: Date.now(), state: "completed" });
+      }
       onRefresh();
     } catch {
+      setBriefingRefresh({ token: Date.now(), state: "failed" });
       setMaintenanceRequestFailed(true);
     } finally {
       setMaintenanceRequestBusy(false);
@@ -847,7 +856,7 @@ export function EngineerFactoryStandalone({
               </div>
               <NaturalBriefing projectId={model.context.projectId} workspaceId={model.context.workspaceId}
                 assetId={selected.assetId} eventId={selected.eventId} datasetVersionId={model.context.datasetVersionId}
-                observedAt={selected.observedAt} role={briefingRole} providedResponse={briefingResponse} canGenerate={canGenerateBrief && !readOnly} revision={JSON.stringify(maintenanceDirectives.filter(item => item.asset_id === selected.assetId))}/>
+                observedAt={selected.observedAt} role={briefingRole} providedResponse={briefingResponse} canGenerate={canGenerateBrief && !readOnly} revision={JSON.stringify(maintenanceDirectives.filter(item => item.asset_id === selected.assetId))} workflowRefresh={briefingRefresh}/>
               <ol>
                 {selected.topFactors.slice(0, 4).map((factor) => (
                   <li key={factor.id}>
@@ -1314,4 +1323,9 @@ export function EngineerFactoryStandalone({
       {!readOnly && <DemoScenarioControl />}
     </main>
   );
+}
+
+function briefingRefreshFailed(value: unknown) {
+  const refresh = (value as { agent_review_summary_refresh?: { status?: string } } | null)?.agent_review_summary_refresh;
+  return Boolean(refresh && refresh.status === "failed");
 }
