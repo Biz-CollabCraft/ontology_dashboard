@@ -10,14 +10,17 @@ const PendingPage = lazy(() => import("./features/auth/PendingPage").then(m => (
 const AdminApp = lazy(() => import("./features/admin/AdminApp").then(m => ({default: m.AdminApp})));
 const Factory = lazy(() => import("./features/operations/overview/EngineerFactoryApplication"));
 
+function FullscreenLoading({ message = "화면을 준비하고 있습니다." }: { message?: string }) {
+  return <main className="app-fullscreen-loading" aria-busy="true" role="status"><div><i /><strong>{message}</strong><p>설비 데이터와 업무 절차 화면을 연결하고 있습니다.</p></div></main>;
+}
 function Redirect({ to }: { to: string }) {
   useEffect(() => { const timer = window.setTimeout(() => navigate(to, {replace: true}), 0); return () => window.clearTimeout(timer); }, [to]);
-  return <p role="status">업무 화면으로 이동 중입니다.</p>;
+  return <FullscreenLoading message="업무 화면으로 이동 중입니다." />;
 }
 function Router() {
   const pathname = usePathname();
   const { user, loading, logout } = useAuth();
-  if (loading) return <p role="status">로그인 정보를 확인하고 있습니다.</p>;
+  if (loading) return <FullscreenLoading message="로그인 정보를 확인하고 있습니다." />;
   if (!user) {
     if (pathname === "/register") return <RegisterPage />;
     if (pathname === "/pending") return <PendingPage />;
@@ -43,7 +46,7 @@ function Router() {
 }
 function ScopedRouter() {
   const {user} = useAuth();
-  return <DisplayPreferencesProvider key={user?.user_id ?? "guest"} scope={user?.user_id ?? "guest"}><Suspense fallback={<p role="status">화면을 준비하고 있습니다.</p>}><Router /></Suspense></DisplayPreferencesProvider>;
+  return <DisplayPreferencesProvider key={user?.user_id ?? "guest"} scope={user?.user_id ?? "guest"}><Suspense fallback={<FullscreenLoading />}><Router /></Suspense></DisplayPreferencesProvider>;
 }
 export default function App() {
   return <I18nProvider><AuthProvider><ScopedRouter /></AuthProvider></I18nProvider>;

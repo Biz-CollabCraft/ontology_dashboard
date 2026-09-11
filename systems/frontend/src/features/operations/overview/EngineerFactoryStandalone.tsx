@@ -716,61 +716,6 @@ export function EngineerFactoryStandalone({
 
         {recordPanel ?? (
         <div className="engineer-status-side-stack">
-          <section className="engineer-factory-card engineer-recent-events engineer-approval-events">
-            <header>
-              <strong>점검 진행 현황</strong>
-              <span
-                className={`engineer-directive-connection ${maintenanceDirectiveError ? "is-offline" : "is-online"}`}
-              >
-                <i />
-                {maintenanceDirectiveError
-                  ? "연결 확인 필요"
-                  : "목록 연결 정상"}
-              </span>
-              <span>{approvedMaintenanceDirectives.length}건</span>
-            </header>
-            <div>
-              {!maintenanceDirectiveError &&
-              approvedMaintenanceDirectives.length ? (
-                approvedMaintenanceDirectives.map((directive) => (
-                  <button
-                    type="button"
-                    key={directive.work_order_id}
-                    aria-pressed={directiveAssetId === directive.asset_id}
-                    onClick={() => {
-                      setDirectiveAssetId(directive.asset_id);
-                      onSelectAsset(directive.asset_id, directive.event_id);
-                    }}
-                  >
-                    <span>
-                      <b>
-                        {inspectionProgressLabel(directive)}
-                      </b>
-                      <small title={directive.work_order_id}>
-                        {compactJobId(directive.work_order_id)}
-                      </small>
-                    </span>
-                    <strong>
-                      {directive.equipment_id || directive.asset_id}
-                    </strong>
-                    <small>{directive.asset_id}</small>
-                    <p>
-                      {directive.assigned_to
-                        ? `담당 ${directive.assigned_to_display_name ?? directive.assigned_to}`
-                        : "담당자 배정 대기"}
-                    </p>
-                  </button>
-                ))
-              ) : (
-                <p className="engineer-directive-empty">
-                  {maintenanceDirectiveError
-                    ? "점검 진행 현황을 조회할 수 없습니다"
-                    : "현재 진행 중인 점검이 없습니다"}
-                </p>
-              )}
-            </div>
-          </section>
-
           <section className="engineer-factory-card engineer-recent-events">
             <header>
               <strong>요청 목록</strong>
@@ -825,6 +770,61 @@ export function EngineerFactoryStandalone({
                   {maintenanceDirectiveError
                     ? "요청 목록을 조회할 수 없습니다"
                     : "현재 접수 전 요청이 없습니다"}
+                </p>
+              )}
+            </div>
+          </section>
+
+          <section className="engineer-factory-card engineer-recent-events engineer-approval-events">
+            <header>
+              <strong>점검 진행 현황</strong>
+              <span
+                className={`engineer-directive-connection ${maintenanceDirectiveError ? "is-offline" : "is-online"}`}
+              >
+                <i />
+                {maintenanceDirectiveError
+                  ? "연결 확인 필요"
+                  : "목록 연결 정상"}
+              </span>
+              <span>{approvedMaintenanceDirectives.length}건</span>
+            </header>
+            <div>
+              {!maintenanceDirectiveError &&
+              approvedMaintenanceDirectives.length ? (
+                approvedMaintenanceDirectives.map((directive) => (
+                  <button
+                    type="button"
+                    key={directive.work_order_id}
+                    aria-pressed={directiveAssetId === directive.asset_id}
+                    onClick={() => {
+                      setDirectiveAssetId(directive.asset_id);
+                      onSelectAsset(directive.asset_id, directive.event_id);
+                    }}
+                  >
+                    <span>
+                      <b>
+                        {inspectionProgressLabel(directive)}
+                      </b>
+                      <small title={directive.work_order_id}>
+                        {compactJobId(directive.work_order_id)}
+                      </small>
+                    </span>
+                    <strong>
+                      {directive.equipment_id || directive.asset_id}
+                    </strong>
+                    <small>{directive.asset_id}</small>
+                    <p>
+                      {directive.assigned_to
+                        ? `담당 ${directive.assigned_to_display_name ?? directive.assigned_to}`
+                        : "담당자 배정 대기"}
+                    </p>
+                  </button>
+                ))
+              ) : (
+                <p className="engineer-directive-empty">
+                  {maintenanceDirectiveError
+                    ? "점검 진행 현황을 조회할 수 없습니다"
+                    : "현재 진행 중인 점검이 없습니다"}
                 </p>
               )}
             </div>

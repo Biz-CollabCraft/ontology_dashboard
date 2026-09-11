@@ -3244,8 +3244,8 @@
 .engineer-status-side-stack .engineer-recent-events>header{flex:0 0 auto}
 .engineer-status-side-stack .engineer-recent-events>div{display:flex;flex-direction:column;min-height:0;flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable}
 .engineer-status-side-stack .engineer-recent-events>div>*{flex:0 0 auto;box-sizing:border-box;overflow-wrap:anywhere}
-.engineer-status-side-stack .engineer-approval-events{order:1}
-.engineer-status-side-stack .engineer-approval-events+.engineer-recent-events{order:2}
+.engineer-status-side-stack .engineer-approval-events{order:2}
+.engineer-status-side-stack .engineer-approval-events+.engineer-recent-events{order:1}
 .engineer-current-user{display:flex;min-width:86px;flex-direction:column;align-items:flex-end;justify-content:center;padding-left:10px;border-left:1px solid var(--operations-border-strong);line-height:1.15}
 .engineer-current-user b{font-size:11px;color:var(--operations-text)}
 .engineer-current-user small{margin-top:2px;color:var(--ef-muted);font-size:9px;font-weight:700}
