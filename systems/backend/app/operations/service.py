@@ -26,6 +26,7 @@ from app.operations.agent_review_packet import compose_agent_review_packet
 from app.operations.context_providers import AgentReviewContextRegistry
 from app.operations.agent_review_summary_materialization import (
     AgentReviewSummaryMaterializer,
+    _materialization_trace,
     summary_key,
     summary_key_payload,
 )
@@ -949,12 +950,30 @@ class ManufacturingPredictiveMaintenanceService:
             workspace_id=workspace_id,
             history_window=history_window,
         )
+        reuse_eligibility = "EXACT_VALIDATED" if summary is not None else "INELIGIBLE"
+        if summary is None:
+            latest = self.repository.latest_agent_review_summary(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                asset_id=str(packet.get("asset_id") or ""),
+                event_id=(packet.get("snapshot_basis") or {}).get("event_id"),
+                history_window=history_window,
+            )
+            if latest is not None:
+                summary = latest["summary"]
+                trace = {
+                    **(latest.get("trace") or {}),
+                    "materialization": _materialization_trace(latest, reused=True),
+                    "latest_stored": True,
+                }
+                reuse_eligibility = "LATEST_STORED"
         _record_briefing_event("lookup", (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window),
                                summary_key=materialization_key, hit=summary is not None,
                                status=(trace.get("materialization") or {}).get("status"))
         return summary, {
             **trace,
-            "reuse_eligibility": "EXACT_VALIDATED" if summary is not None else "INELIGIBLE",
+            "reuse_eligibility": reuse_eligibility,
         }
 
     def agent_review_workflow_runs(

@@ -1002,6 +1002,37 @@ def test_agent_review_summary_reuses_materialized_snapshot(
     ]["workflow_run"]["workflow_run_id"]
 
 
+def test_agent_review_summary_lookup_keeps_latest_stored_when_snapshot_moves(
+    service: FactorySignalService,
+) -> None:
+    provider = FakeAgentReviewSummaryProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+            "title": "업무 시점 저장 브리핑",
+        }
+    )
+    service.agent_review_summary_provider = provider
+
+    first_summary, first_trace = service.agent_review_summary("CNC-S04-L04-01")
+    changed_packet = service.agent_review_packet("CNC-S04-L04-01")
+    changed_packet["snapshot_basis"]["observed_at"] = "2026-09-09T00:10:00+09:00"
+
+    summary, trace = service.cached_agent_review_summary_for_packet(
+        packet=changed_packet,
+        project_id="manufacturing-demo-project",
+        organization_id="org-ontology-demo",
+        workspace_id="manufacturing-demo",
+        history_window="24h",
+    )
+
+    assert summary == first_summary
+    assert trace["reuse_eligibility"] == "LATEST_STORED"
+    assert trace["latest_stored"] is True
+    assert trace["materialization"]["summary_key"] == first_trace["materialization"]["summary_key"]
+    assert trace["materialization"]["decision_as_of"] == first_trace["materialization"]["decision_as_of"]
+
+
 def test_agent_review_summary_regeneration_bypasses_cached_fallback(
     service: FactorySignalService,
 ) -> None:

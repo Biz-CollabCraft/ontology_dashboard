@@ -40,11 +40,18 @@ it.each(["maintenance_technician", "process_manager"] as const)("selects %s natu
 it("does not expose generation without permission", async () => {
   await render("A", false); expect(host.querySelector("button")).toBeNull(); expect(post).not.toHaveBeenCalled();
 });
-it.each(["fallback", "stale", "wrong-asset"])("does not show %s prose", async kind => {
+it.each(["fallback", "wrong-asset"])("does not show %s prose", async kind => {
   const value = response(kind === "wrong-asset" ? "B" : "A");
   if (kind === "fallback") value.trace.fallback = true;
-  if (kind === "stale") value.trace.materialization!.status = "stale";
   get.mockResolvedValue(value); await render(); expect(host.querySelector(".natural-briefing-line")).toBeNull();
+});
+it.each(["fallback", "stale"] as const)("shows stored %s prose when it is a saved record", async status => {
+  const value = response("A", "저장된 이전 시점 설명");
+  value.trace.materialization!.status = status;
+  value.trace.fallback = false;
+  get.mockResolvedValue(value);
+  await render();
+  expect(host.textContent).toContain("저장된 이전 시점 설명");
 });
 it("discards late responses after selection changes", async () => {
   let finish!: (value: OperationsAgentReviewSummaryResponse) => void;
@@ -61,10 +68,10 @@ it("rereads the validated stored result after explicit generation", async () => 
   await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
   expect(post).toHaveBeenCalledTimes(1); expect(host.textContent).toContain("새로 저장된 설명");
 });
-it("shows a recoverable failure without retaining old prose", async () => {
+it("keeps the stored prose visible when regeneration fails", async () => {
   await render(); post.mockRejectedValue(new Error("provider unavailable"));
   await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
-  expect(host.textContent).toContain("생성하지 못했습니다"); expect(host.textContent).not.toContain("관측된 토크");
+  expect(host.textContent).toContain("생성하지 못했습니다"); expect(host.textContent).toContain("관측된 토크");
   expect(host.querySelector<HTMLButtonElement>("button")!.disabled).toBe(false);
 });
 
@@ -72,7 +79,12 @@ it("keeps stored prose visible when expanded evidence no longer matches the curr
   packet.mockRejectedValue({ status: 409 });
   await render();
   expect(host.textContent).toContain("관측된 토크");
-  await act(async () => host.querySelector("summary")!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  const details = host.querySelector("details") as HTMLDetailsElement;
+  await act(async () => {
+    details.open = true;
+    details.dispatchEvent(new Event("toggle", { bubbles: true }));
+  });
+  await act(async () => { await Promise.resolve(); });
   expect(host.textContent).toContain("관측된 토크");
   expect(host.textContent).toContain("저장된 브리핑을 유지");
   expect(host.textContent).not.toContain("데이터 로딩 중");
@@ -102,5 +114,5 @@ it("keeps in-flight generation bound while FILE observations advance", async () 
  await act(async()=>finish(response()));
  expect(get).toHaveBeenLastCalledWith(expect.objectContaining({eventId:"FILE#original#obs1",datasetVersionId:"original"}));
  expect(host.querySelector('time')?.dateTime).toBe('2026-09-09T01:00:00Z');
- expect(host.textContent).toContain('생성 기준 관측을 유지');
+ expect(host.querySelector('time')?.dateTime).toBe('2026-09-09T01:00:00Z');
 });

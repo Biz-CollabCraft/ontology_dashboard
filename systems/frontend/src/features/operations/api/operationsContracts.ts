@@ -947,6 +947,8 @@ export interface OperationsAgentReviewSummaryResponse {
     reason: string | null;
     validation_errors: string[];
     fallback_validation_errors?: string[];
+    reuse_eligibility?: "EXACT_VALIDATED" | "LATEST_STORED" | "INELIGIBLE" | string;
+    latest_stored?: boolean;
     materialization?: {
       summary_id: string | null;
       summary_key: string;
@@ -958,6 +960,7 @@ export interface OperationsAgentReviewSummaryResponse {
       prompt_version: string;
       model_version: string;
       generated_at: string | null;
+      decision_as_of?: string | null;
       created_at: string | null;
       updated_at: string | null;
       fallback_reason?: string | null;

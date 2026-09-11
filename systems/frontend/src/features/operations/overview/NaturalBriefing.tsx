@@ -30,14 +30,21 @@ export function NaturalBriefing(props: Props) {
 function accepted(response: OperationsAgentReviewSummaryResponse, assetId: string) {
   const summary = response.summary;
   const status = response.trace.materialization?.status;
-  return summary?.asset_id === assetId && status === "ready" && !response.trace.fallback ? summary : null;
+  const stored = status === "ready" || status === "fallback" || status === "stale";
+  return summary?.asset_id === assetId && stored && !response.trace.fallback ? summary : null;
 }
 
 function statusLabel(response: OperationsAgentReviewSummaryResponse, summary: OperationsAgentReviewSummary | null) {
   if (!summary) return response.trace.fallback ? "검증된 자연어 브리핑이 없습니다. 아래 판단 근거를 확인하세요." : "현재 근거의 브리핑이 아직 없습니다.";
   return response.trace.materialization?.status === "fallback" || response.trace.fallback || summary.mode !== "llm"
     ? "저장된 보조 브리핑 · LLM 응답 검증 실패 시 기준 근거로 구성"
-    : "저장된 브리핑";
+    : response.trace.reuse_eligibility === "LATEST_STORED"
+      ? "저장된 브리핑 · 이전 업무 시점 기준"
+      : "저장된 브리핑";
+}
+
+function responseObservedAt(response: OperationsAgentReviewSummaryResponse, fallback?: string | null) {
+  return response.trace.materialization?.decision_as_of ?? response.trace.materialization?.generated_at ?? fallback ?? null;
 }
 
 function Briefing(props: Props & { revealed: Set<string> }) {
@@ -57,6 +64,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
     const next = accepted(response, props.assetId);
     setSummary(next);
     setSummaryKey(next ? response.trace.materialization?.summary_key : undefined);
+    if (next) setBasis({eventId: props.eventId, observedAt: responseObservedAt(response, props.observedAt)});
     setStatus(statusLabel(response, next));
   }
   useEffect(() => {
@@ -64,7 +72,9 @@ function Briefing(props: Props & { revealed: Set<string> }) {
     controllerRef.current = controller;
     if (props.providedResponse) {
       const next = accepted(props.providedResponse, props.assetId);
-      setSummary(next); setSummaryKey(next ? props.providedResponse.trace.materialization?.summary_key : undefined); setBusy(false);
+      setSummary(next); setSummaryKey(next ? props.providedResponse.trace.materialization?.summary_key : undefined);
+      if (next) setBasis({eventId: props.eventId, observedAt: responseObservedAt(props.providedResponse, props.observedAt)});
+      setBusy(false);
       setStatus(next ? statusLabel(props.providedResponse, next) : props.providedResponse.trace.fallback ? "검증을 통과하지 못한 응답입니다. 판단 근거를 직접 확인하세요." : "현재 근거의 브리핑 검증을 기다리고 있습니다.");
     } else if (supported) void read(controller).catch(() => {
       if (!controller.signal.aborted) setStatus("브리핑을 불러오지 못했습니다. 판단 근거는 계속 확인할 수 있습니다.");
@@ -96,7 +106,10 @@ function Briefing(props: Props & { revealed: Set<string> }) {
     const controller = controllerRef.current;
     if (busy || !props.canGenerate || !supported || !controller || controller.signal.aborted) return;
     setBasis({eventId: props.eventId, observedAt: props.observedAt});
-    setBusy(true); setSummary(null); setStatus("현재 근거로 자연어 브리핑을 작성하고 있습니다.");
+    setBusy(true);
+    setStatus(summary
+      ? "현재 업무 시점으로 브리핑을 갱신 중입니다. 이전 저장본을 표시합니다."
+      : "현재 업무 시점으로 자연어 브리핑을 작성하고 있습니다.");
     try {
       const result = await createOperationsAgentReviewSummary({ ...input, signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -106,6 +119,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
         const next = accepted(result, props.assetId);
         setSummary(next);
         setSummaryKey(next ? result.trace.materialization?.summary_key : undefined);
+        if (next) setBasis({eventId: props.eventId, observedAt: responseObservedAt(result, props.observedAt)});
         setStatus(statusLabel(result, next));
         await read(controller).catch(() => undefined);
       }
@@ -130,7 +144,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
       {workflowBadge ? <span className={`natural-briefing-refresh is-${props.workflowRefresh?.state}`}>{workflowBadge}</span> : null}
       {supported && props.canGenerate ? <button type="button" disabled={busy} onClick={() => void generate()}>{busy ? "처리 중" : summary ? "다시 생성" : "브리핑 생성"}</button> : null}
     </div>
-    <p className="natural-briefing-status" role="status">{status}{basis.eventId !== props.eventId ? " · 생성 기준 관측을 유지합니다. 최신 관측은 다시 생성 시 반영됩니다." : ""}</p>
+    <p className="natural-briefing-status" role="status">{status}</p>
     {summary ? <StreamingProse key={JSON.stringify([props.assetId, basis.eventId, props.role, quote])}
       rows={rows} identity={JSON.stringify([props.projectId, props.workspaceId, props.assetId, basis.eventId, props.role, quote])}
       revealed={props.revealed} evidenceScope={evidenceScope}/> : null}
