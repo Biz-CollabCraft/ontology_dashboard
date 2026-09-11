@@ -6,7 +6,13 @@
 .natural-briefing button:focus-visible, .natural-briefing summary:focus-visible { outline: 2px solid #356597; outline-offset: 3px; }
 .natural-briefing p { margin: 0; }
 .natural-briefing .natural-briefing-status { font-size: 11px; color: #596f83; margin: 4px 0 8px; }
-.natural-briefing .natural-briefing-line { margin-top: 8px; }
+.natural-briefing .natural-briefing-prose { display: grid; gap: 8px; }
+.natural-briefing .natural-briefing-line { margin-top: 0; }
+.natural-briefing .natural-briefing-line p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.natural-briefing .natural-briefing-line.is-paragraph + .natural-briefing-line.is-paragraph { margin-top: 2px; }
+.natural-briefing .natural-briefing-line.is-list { position: relative; padding-left: 16px; }
+.natural-briefing .natural-briefing-line.is-list::before { content: ""; position: absolute; left: 2px; top: .82em; width: 5px; height: 5px; border-radius: 50%; background: #436b91; }
+.natural-briefing .natural-briefing-line strong { color: #17314c; font-weight: 800; }
 .natural-briefing details { font-size: 11px; color: #506980; }
 .natural-briefing summary { cursor: pointer; width: fit-content; }
 .natural-briefing pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; padding: 8px; background: white; }
@@ -37,3 +43,5 @@ html[data-theme="dark"] .natural-briefing-evidence .natural-briefing-evidence-sc
 .natural-briefing-evidence dt { color: #596f83; font-size: 12px; }
 .natural-briefing-evidence dd { margin: 0; }
 html[data-theme="dark"] .natural-briefing-evidence dt { color: #b4c6d8; }
+html[data-theme="dark"] .natural-briefing .natural-briefing-line strong { color: #e0ecff; }
+html[data-theme="dark"] .natural-briefing .natural-briefing-line.is-list::before { background: #80b5ff; }

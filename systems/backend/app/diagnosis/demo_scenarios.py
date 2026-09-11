@@ -5,6 +5,8 @@ import tempfile
 from pathlib import Path
 from functools import lru_cache
 
+from app.diagnosis.contracts import complete_file_tick_window
+
 ROOT = Path('/home/bistell/ontology_dashboard/data/demo-scenarios')
 
 def scenario_status():
@@ -53,34 +55,20 @@ def generated_window(mode):
         if not row:
             return None
         stream = Path(row['stream']).resolve()
-        if not stream.is_relative_to((ROOT/'generated'/mode).resolve()):
+        generated_root = (ROOT/'generated'/mode).resolve()
+        if not stream.is_relative_to(generated_root):
             return None
-        return _generated_tail(str(stream), stream.stat().st_mtime_ns, stream.stat().st_size)
+        streams = [stream, *generated_root.glob('runs/*/source/sensor_records.jsonl')]
+        return _generated_tail(
+            tuple(sorted({str(item.resolve()) for item in streams})),
+            max(item.stat().st_mtime_ns for item in streams if item.exists()),
+            sum(item.stat().st_size for item in streams if item.exists()),
+        )
     except (OSError, ValueError, KeyError):
         return None
 
 
 @lru_cache(maxsize=6)
-def _generated_tail(stream_path, modified_ns, size):
-    import csv
-    stream = Path(stream_path)
-    with (stream.parents[1]/'canonical/asset_master.csv').open(encoding='utf-8-sig', newline='') as handle:
-        expected = {row['asset_id'] for row in csv.DictReader(handle)}
-    if not expected:
-        return None
-    ticks = {}
-    with stream.open('rb') as handle:
-        start = max(0, size - 2*1024*1024)
-        handle.seek(start)
-        if start:
-            handle.readline()
-        for line in handle:
-            try:
-                row = json.loads(line)
-                ticks.setdefault(row['observed_at'], {})[row['asset_id']] = row
-            except (ValueError, KeyError):
-                continue
-    complete = [(at, rows) for at, rows in sorted(ticks.items()) if set(rows) == expected]
-    if not complete:
-        return None
-    return stream, complete[-1][0], list(complete[-1][1].values()), complete
+def _generated_tail(stream_paths, modified_ns, size):
+    streams = [Path(path) for path in stream_paths]
+    return complete_file_tick_window(streams)

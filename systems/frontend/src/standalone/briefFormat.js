@@ -21,19 +21,37 @@ export function readableUnits(text){
 export function briefRows(quote,allowedRefs=[],now=new Date()){
  const catalog=[...new Set(allowedRefs)];
  // Emphasis changes typography only; historical wording and claims stay intact.
- const lines=String(quote||'').replace(/\\n/g,'\n').split(/\n+/).filter(s=>s.trim());
+ const lines=readableBriefLines(quote);
  const last=lines.length-1;
- if(last>=0&&!lines[last].includes('**'))lines[last]=lines[last].replace(/현장 측정과 비교 결과|현장 측정 결과|추가 상태 측정 및 결과 기록|유효한 운전 관측값과 이력|관측값과 정비 기록|관측·정비 자료|현장에서 확인|현장 확인 결과|작업 가능 시간|착수 가능 여부|조치 범위|현장 확인|다음 기술 판단|부품 가용성|승인 검토 결과/,word=>'**'+word+'**');
+ if(last>=0&&!lines[last].text.includes('**'))lines[last].text=lines[last].text.replace(/현장 측정과 비교 결과|현장 측정 결과|추가 상태 측정 및 결과 기록|유효한 운전 관측값과 이력|관측값과 정비 기록|관측·정비 자료|현장에서 확인|현장 확인 결과|작업 가능 시간|착수 가능 여부|조치 범위|현장 확인|다음 기술 판단|부품 가용성|승인 검토 결과/,word=>'**'+word+'**');
  return lines.map(line=>{
-  const refs=[];const text=line.replace(/^\s*-\s+/,'').replace(/\[\[ref:([^\]\n]+)\]\]/g,(_,id)=>{const ref=/^[1-9][0-9]*$/.test(id)?catalog[Number(id)-1]:null;if(ref&&!refs.some(x=>x.text===ref))refs.push({text:ref,label:'근거'});return '';});
+  const refs=[];const text=line.text.replace(/^\s*(?:[-*•]|\d+[.)])\s+/,'').replace(/\[\[ref:([^\]\n]+)\]\]/g,(_,id)=>{const ref=/^[1-9][0-9]*$/.test(id)?catalog[Number(id)-1]:null;if(ref&&!refs.some(x=>x.text===ref))refs.push({text:ref,label:'근거'});return '';});
   const parts=[];
   text.split(/(\*\*[^*\n]+\*\*)/).filter(Boolean).forEach(s=>{
    const bold=s.startsWith('**')&&s.endsWith('**');if(bold)s=s.slice(2,-2);
    let pos=0;for(const m of s.matchAll(isoPattern)){if(m.index>pos)parts.push({text:readableUnits(s.slice(pos,m.index)),weight:bold?'700':'400',title:''});parts.push({text:relativeRecordTime(m[0],now),weight:bold?'700':'400',title:m[0]});pos=m.index+m[0].length;}
    if(pos<s.length)parts.push({text:readableUnits(s.slice(pos)),weight:bold?'700':'400',title:''});
   });
-  return {parts,refs:refs.length?[{text:refs.map(ref=>ref.text).join('\n'),label:'근거'}]:[]};
+  return {kind:line.kind,parts,refs:refs.length?[{text:refs.map(ref=>ref.text).join('\n'),label:'근거'}]:[]};
  });
+}
+
+function readableBriefLines(quote){
+ const blocks=String(quote||'').replace(/\\n/g,'\n').split(/\n+/).map(s=>s.trim()).filter(Boolean);
+ const rows=[];
+ for(const block of blocks){
+  const marker=block.match(/^\s*(?:[-*•]|\d+[.)])\s+/);
+  if(marker){rows.push({kind:'list',text:block});continue;}
+  const chunks=block.split(/(?<=[.!?])\s+|(?<=다\.)\s+|(?<=요\.)\s+|(?<=니다\.)\s+/).filter(Boolean);
+  let current='';
+  for(const chunk of chunks.length?chunks:[block]){
+   const next=current?current+' '+chunk:chunk;
+   if(current&&next.length>135){rows.push({kind:'paragraph',text:current});current=chunk;}
+   else current=next;
+  }
+  if(current)rows.push({kind:'paragraph',text:current});
+ }
+ return rows;
 }
 
 // Keep identifiers available to the formatter; disclose source categories to readers.

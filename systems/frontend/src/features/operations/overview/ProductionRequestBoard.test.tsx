@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 // These workflow fixtures render outside the application preferences provider.
 vi.mock("../../../ui/foundry/displayPreferences", () => ({ useDisplayPreferences: () => ({ preferences: { theme: "light" }, setTheme: vi.fn() }) }));
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ProductionRequestBoard } from "./ProductionRequestBoard";
+import { ProductionRequestBoard, productionLineKey } from "./ProductionRequestBoard";
 import { listInspectionCoordinations, getMaintenanceEventLineage, respondInspectionCoordination, type InspectionCoordination, type MaintenanceCostAnalysisReadModel, type OpenInspectionWorkOrderReadModel } from "../../../api";
 import { loadOperationsAssetDetail } from "../api/operationsApi";
 import type { OperationsBootstrapModel, AssetDetailViewModel } from "../api/operationsContracts";
@@ -81,11 +81,11 @@ it("changes the queue, impact drawer and approval target together without openin
 });
 it("never shows the previous equipment numbers while a new detail request is pending", async () => {
   await render();
-  expect(host.querySelector(".prb-impact-kpis")?.textContent).toContain("111개");
+  expect(host.querySelector(".prb-action-summary")?.textContent).toContain("30개");
   vi.mocked(loadOperationsAssetDetail).mockImplementation(() => new Promise(() => {}));
   await chooseB();
-  expect(host.querySelector(".prb-impact-kpis")?.textContent).not.toContain("111개");
-  expect(host.querySelector(".prb-impact-kpis")?.textContent).toContain("조회 중");
+  expect(host.querySelector(".prb-action-summary")?.textContent).not.toContain("111개");
+  expect(host.querySelector(".prb-action-summary")?.textContent).toContain("미산정");
 });
 it("requires explicit schedule and note, preserves failed input and retries with the same idempotency key", async () => {
   await render(); await chooseB();
@@ -172,18 +172,30 @@ it("preserves overall fleet KPIs independently of the selected request and compl
   await render();
   const kpis = host.querySelector('[aria-label="전체 생산 영향 현황"]')!;
   expect(kpis.textContent).toContain("생산 영향 검토 설비");
-  expect(kpis.textContent).toContain("2대");
+  expect(kpis.textContent).toContain("1대");
   expect(kpis.textContent).toContain("1개");
-  expect(kpis.textContent).toContain("1시간 45분");
-  const original = kpis.textContent;
+  expect(kpis.textContent).toContain("-126,900원/h");
+  const originalFleetRisk = kpis.textContent?.match(/생산 영향 검토 설비.*?1대영향 가능 라인.*?1개/)?.[0];
   await chooseB();
-  expect(kpis.textContent).toBe(original);
+  expect(kpis.textContent).toContain(originalFleetRisk);
+  expect(kpis.textContent).toContain("압축기 B");
   await act(async () => {
     const filter = host.querySelector<HTMLSelectElement>('select[aria-label="정비 요청 상태"]')!;
     filter.value = "completed"; filter.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  expect(kpis.textContent).toBe(original);
+  expect(kpis.textContent).toContain(originalFleetRisk);
   expect(host.textContent).toContain("현재 정비 요청이 없습니다");
+});
+it("counts only urgent risk equipment and groups compressor-CNC cells as one production line", () => {
+  const assets = [
+    { assetId: "CMP-S03-L04-01", site: "S03", line: "L04", cell: "L04", status: "critical" },
+    { assetId: "CNC-S03-L04-03", site: "S03", line: "L04", cell: "L04", status: "critical" },
+    { assetId: "CNC-S03-L05-01", site: "S03", line: "L05", cell: "L05", status: "warning" },
+    { assetId: "CNC-S04-L01-01", site: "S04", line: "L01", cell: "L01", status: "critical" },
+  ] as OperationsBootstrapModel["assets"];
+  const urgent = assets.filter(asset => asset.status === "critical");
+  expect(urgent).toHaveLength(3);
+  expect(new Set(urgent.map(productionLineKey))).toEqual(new Set(["S03-L04", "S04-L01"]));
 });
 
 it("sorts by current equipment risk, pins selection, and returns to time order", async () => {
@@ -198,19 +210,14 @@ it("sorts by current equipment risk, pins selection, and returns to time order",
   await act(async () => { sort.value = "time"; sort.dispatchEvent(new Event("change", { bubbles: true })); });
   expect(host.querySelector(".prb-queue-item")?.textContent).toContain("정상 CNC");
 });
-it("places the four selected impact metrics directly below overall KPIs without duplicating them in the central review", async () => {
+it("keeps selected impact metrics out of the main board and only shows them in the impact dialog", async () => {
   await render();
-  const row = host.querySelector(".prb-impact-kpis")!;
-  expect(host.querySelector(".prb-kpis")?.nextElementSibling).toBe(row);
-  expect(row.querySelectorAll(".prb-metric")).toHaveLength(4);
-  expect(row.textContent).toContain("111개");
+  expect(host.querySelector(".prb-impact-kpis")).toBeNull();
   expect(host.querySelector(".prb-review .prb-metric-grid")).toBeNull();
   await chooseB();
-  expect(row.textContent).toContain("압축기 B");
-  expect(row.textContent).toContain("222개");
-  expect(row.textContent).not.toContain("111개");
   await click("선택 설비 영향 확인");
   expect(host.querySelectorAll('[role="dialog"] .prb-metric-grid .prb-metric')).toHaveLength(4);
+  expect(host.querySelector('[role="dialog"]')?.textContent).toContain("222개");
 });
 it("orders by original request time, not later assignment or consultation time", () => {
   const orders = [{ work_order_id: first.work_order_id, asset_id: first.asset_id, event_id: first.event_id, status: "requested", created_at: "2026-09-06T00:00:00Z", assigned_at: null }] as OpenInspectionWorkOrderReadModel[];

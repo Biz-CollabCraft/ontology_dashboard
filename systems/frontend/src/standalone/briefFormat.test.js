@@ -30,6 +30,11 @@ it('renders archived escaped line breaks and emphasizes the final decision condi
  expect(rows).toHaveLength(2);
  expect(rows[1].parts.find(p=>p.weight==='700').text).toBe('현장 측정과 비교 결과');
 });
+it('splits long prose on sentence boundaries and marks list items for readable rendering',()=>{
+ const rows=briefRows('첫 문장은 짧습니다. 두 번째 문장은 설비 상태와 생산 영향과 승인 대기 조건을 한 번에 설명하기 때문에 화면에서 너무 길게 이어지지 않도록 문장 단위로 나누어 보여야 합니다. 세 번째 문장도 길이가 누적된 경우 별도 줄로 나뉘어 읽기 흐름을 유지해야 합니다.\\n- 현장 확인 필요');
+ expect(rows.map(row=>row.kind)).toEqual(['paragraph','paragraph','list']);
+ expect(rows[2].parts.map(part=>part.text).join('')).toBe('현장 확인 필요');
+});
 it('discloses reader source categories and preserves missing-data cautions without raw internals',()=>{
  expect(referenceLabels('closed-loop://work-order/WO-1\nRESULT#A#factor')).toEqual(['작업요청 기록','선택 설비의 진단 근거']);
  const text=readerLimitations(['demo SOP fixture',"{'owner_domain':'maintenance_readiness','status':'not_connected'}",'No matching scoped operational snapshot at the selected as-of; values withheld.']).join(' ');

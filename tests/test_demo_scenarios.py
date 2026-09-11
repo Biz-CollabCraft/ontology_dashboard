@@ -49,3 +49,33 @@ def test_generated_tick_refreshes_without_partial_frames(isolated, mode):
     with stream.open('a') as handle:
         handle.write(json.dumps({'asset_id':'B','observed_at':'2026-09-09T00:10:00Z'})+'\n')
     assert scenarios.selected_window()[1] == '2026-09-09T00:10:00Z'
+
+def test_generated_window_stitches_previous_run_ticks(isolated):
+    previous = isolated/'generated'/'emergency'/'runs'/'previous-day'
+    current = isolated/'generated'/'emergency'/'runs'/'current-day'
+    for run in (previous, current):
+        (run/'source').mkdir(parents=True)
+        (run/'canonical').mkdir()
+        (run/'canonical'/'asset_master.csv').write_text('asset_id\nA\nB\n')
+    previous_stream = previous/'source'/'sensor_records.jsonl'
+    current_stream = current/'source'/'sensor_records.jsonl'
+    previous_stream.write_text(''.join(json.dumps({
+        'asset_id': asset,
+        'observed_at': '2026-09-08T23:59:50Z',
+    })+'\n' for asset in ('A','B')))
+    current_stream.write_text(''.join(json.dumps({
+        'asset_id': asset,
+        'observed_at': '2026-09-09T00:00:00Z',
+    })+'\n' for asset in ('A','B')))
+    (isolated/'live-state.json').write_text(json.dumps({'emergency':{'stream':str(current_stream)}}))
+    scenarios.select_scenario('emergency', 'tester')
+
+    stream, observed_at, rows, ticks = scenarios.selected_window()
+
+    assert stream == current_stream.resolve()
+    assert observed_at == '2026-09-09T00:00:00Z'
+    assert len(rows) == 2
+    assert [tick[0] for tick in ticks] == [
+        '2026-09-08T23:59:50Z',
+        '2026-09-09T00:00:00Z',
+    ]

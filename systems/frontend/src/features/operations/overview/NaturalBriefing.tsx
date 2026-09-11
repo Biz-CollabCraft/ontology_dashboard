@@ -24,7 +24,7 @@ export function NaturalBriefing(props: Props) {
 function accepted(response: OperationsAgentReviewSummaryResponse, assetId: string) {
   const summary = response.summary;
   const status = response.trace.materialization?.status;
-  return summary?.asset_id === assetId && (status === "ready" || status === "fallback") ? summary : null;
+  return summary?.asset_id === assetId && status === "ready" && !response.trace.fallback ? summary : null;
 }
 
 function statusLabel(response: OperationsAgentReviewSummaryResponse, summary: OperationsAgentReviewSummary | null) {
@@ -81,6 +81,7 @@ function Briefing(props: Props & { revealed: Set<string> }) {
         setSummary(next);
         setSummaryKey(next ? result.trace.materialization?.summary_key : undefined);
         setStatus(statusLabel(result, next));
+        await read(controller).catch(() => undefined);
       }
     } catch (error) {
       if (!controller.signal.aborted) setStatus(error instanceof Error && /429|rate.limit|잠시 후/.test(error.message)
@@ -145,7 +146,7 @@ function StreamingProse({ rows, identity, revealed, evidenceScope }: {
       const length = row.parts.reduce((n, part) => n + Array.from(part.text).length, 0);
       const end = beginning + length;
       const cursorHere = count >= beginning && (count < end || (index === rows.length - 1 && count === total));
-      return <div className="natural-briefing-line" key={index}>
+      return <div className={`natural-briefing-line is-${row.kind ?? "paragraph"}`} key={index}>
         <p aria-hidden="true">{row.parts.map((part, i) => {
           const letters = Array.from(part.text);
           const visible = Math.max(0, Math.min(letters.length, count - offset));

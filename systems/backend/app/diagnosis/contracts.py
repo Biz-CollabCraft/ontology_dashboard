@@ -290,25 +290,23 @@ def measurement_factors(record: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted(factors, key=lambda item: abs(item["contribution"]), reverse=True)
 
 
-def latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]], list[tuple[str, dict[str, dict[str, Any]]]]]:
-    configured_root = os.getenv(GEN_DATA_OUTPUT_ROOT_ENV, "").strip()
-    session_roots = sorted(
-        Path("/home/bistell/ontology_dashboard/data_preprocessed/local-realtime/sessions").glob(
-            "*/gen-data-runtime"
-        ),
+CompleteTickWindow = tuple[Path, str, list[dict[str, Any]], list[tuple[str, dict[str, dict[str, Any]]]]]
+
+
+def complete_file_tick_window(
+    streams: Iterable[Path],
+    *,
+    history_limit: int = 72,
+    read_tail_bytes: int = 2 * 1024 * 1024,
+) -> CompleteTickWindow:
+    complete_ticks: dict[str, tuple[Path, dict[str, dict[str, Any]]]] = {}
+    latest: tuple[str, Path, dict[str, dict[str, Any]]] | None = None
+
+    for stream in sorted(
+        [Path(stream) for stream in streams],
         key=lambda path: path.stat().st_mtime_ns,
         reverse=True,
-    )
-    roots = ([Path(configured_root)] if configured_root else []) + session_roots + [
-        Path("/home/bistell/gen_data/output")
-    ]
-    output_root = next((root for root in roots if any(root.glob("runs/*/source/sensor_records.jsonl"))), roots[-1])
-    streams = sorted(
-        output_root.glob("runs/*/source/sensor_records.jsonl"),
-        key=lambda path: path.stat().st_mtime_ns,
-        reverse=True,
-    )
-    for stream in streams:
+    ):
         asset_master = stream.parents[1] / "canonical" / "asset_master.csv"
         expected_assets: set[str] = set()
         if asset_master.exists():
@@ -319,7 +317,7 @@ def latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]], list[t
         ticks: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         with stream.open("rb") as handle:
             end = handle.seek(0, 2)
-            start = max(0, end - 2 * 1024 * 1024)
+            start = max(0, end - read_tail_bytes)
             handle.seek(start)
             if start:
                 handle.readline()
@@ -332,19 +330,53 @@ def latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]], list[t
                 asset_id = str(record.get("asset_id") or "")
                 if observed_at and asset_id:
                     ticks[observed_at][asset_id] = record
-        complete_ticks: list[tuple[str, dict[str, dict[str, Any]]]] = []
+
         for tick_at in sorted(ticks):
             tick_records = ticks[tick_at]
             if expected_assets and expected_assets.issubset(tick_records):
-                complete_ticks.append((tick_at, tick_records))
+                complete_ticks.setdefault(tick_at, (stream, tick_records))
             elif not expected_assets and len(tick_records) >= 100:
-                complete_ticks.append((tick_at, tick_records))
-        for observed_at in sorted(ticks, reverse=True):
-            records = ticks[observed_at]
-            if expected_assets and expected_assets.issubset(records):
-                return stream, observed_at, [records[key] for key in sorted(expected_assets)], complete_ticks[-72:]
-            if not expected_assets and len(records) >= 100:
-                return stream, observed_at, list(records.values()), complete_ticks[-72:]
+                complete_ticks.setdefault(tick_at, (stream, tick_records))
+
+        for tick_at, tick_records in ticks.items():
+            is_complete = (
+                expected_assets and expected_assets.issubset(tick_records)
+            ) or (not expected_assets and len(tick_records) >= 100)
+            if not is_complete:
+                continue
+            if latest is None or tick_at > latest[0]:
+                latest = (tick_at, stream, tick_records)
+
+    if latest is None:
+        raise CompleteFileTickNotFound("완성된 gen_data 관측 틱을 찾지 못했습니다.")
+
+    latest_at, latest_stream, latest_records = latest
+    history = [
+        (tick_at, rows)
+        for tick_at, (_, rows) in sorted(complete_ticks.items())
+        if tick_at <= latest_at
+    ][-history_limit:]
+
+    return latest_stream, latest_at, list(latest_records.values()), history
+
+
+def latest_complete_file_tick() -> CompleteTickWindow:
+    configured_root = os.getenv(GEN_DATA_OUTPUT_ROOT_ENV, "").strip()
+    session_roots = sorted(
+        Path("/home/bistell/ontology_dashboard/data_preprocessed/local-realtime/sessions").glob(
+            "*/gen-data-runtime"
+        ),
+        key=lambda path: path.stat().st_mtime_ns,
+        reverse=True,
+    )
+    roots = ([Path(configured_root)] if configured_root else []) + session_roots + [
+        Path("/home/bistell/gen_data/output")
+    ]
+    output_root = next((root for root in roots if any(root.glob("runs/*/source/sensor_records.jsonl"))), roots[-1])
+    try:
+        return complete_file_tick_window(output_root.glob("runs/*/source/sensor_records.jsonl"))
+    except CompleteFileTickNotFound:
+        pass
     raise CompleteFileTickNotFound("완성된 gen_data 관측 틱을 찾지 못했습니다.")
 
 

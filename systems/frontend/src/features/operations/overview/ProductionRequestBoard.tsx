@@ -33,6 +33,12 @@ const number = (n: number | null | undefined, unit: string) => numeric(n) ? n.to
 const when = (value: string | null | undefined) => value ? new Date(value).toLocaleString("ko-KR") : "시각 정보 없음";
 const outcome = { no_action_required: "추가 조치 불필요", maintenance_recommended: "정비 필요", data_check_required: "추천 정보 확인 대기" };
 const timing = { immediate: "즉시 정비", planned_window: "계획 시간 정비", reinspect_after: "후속 점검", no_action_baseline: "조치하지 않음" };
+export function productionLineKey(asset: Pick<OperationsAsset, "assetId" | "site" | "line" | "cell">): string | null {
+  const runtime = asset.assetId.match(/^[A-Z]+-(S\d+)-(L\d+)-/i);
+  if (runtime) return `${runtime[1].toUpperCase()}-${runtime[2].toUpperCase()}`;
+  if (asset.site && asset.cell) return `${asset.site}-${asset.cell}`;
+  return asset.line || asset.cell || asset.site || null;
+}
 
 export function ProductionRequestBoard({ canGenerateBrief = false, projectId, workspaceId, model, workOrders, workOrderError, currentUser, onRefresh, onLogout }: Props) {
   const [consultations, setConsultations] = useState<InspectionCoordination[]>([]);
@@ -104,8 +110,8 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
   const requestedLoss = c && numeric(rate) && rate >= 0 ? Math.ceil(rate * c.request.downtime_minutes / 60) : null;
   const awaiting = queue.filter(item => item.coordination?.status === "pending" && item.status === "approved").length;
   // Overall KPIs are independent of the selected request and queue filter.
-  const impactedAssets = model.assets.filter(asset => asset.status !== "normal");
-  const impactedLines = new Set(impactedAssets.map(asset => asset.line).filter(Boolean)).size;
+  const impactedAssets = equipmentAssets.filter(asset => asset.status === "critical");
+  const impactedLines = new Set(impactedAssets.map(productionLineKey).filter(Boolean)).size;
   const stopCost = selected ? referenceEconomics(selected.assetId, c?.request.downtime_minutes) : null;
   const stopCostTotal = stopCost?.stopMinutes != null ? Math.round(stopCost.hourlyProductionCost * stopCost.stopMinutes / 60) : null;
   return <main className="engineer-lite-board production-request-board">
@@ -114,8 +120,8 @@ export function ProductionRequestBoard({ canGenerateBrief = false, projectId, wo
       <div className="engineer-factory-live"><b>{queueLoading ? "연결 확인 중" : queueError || workOrderError ? "요청 연결 확인 필요" : "요청 연결 정상"}</b><span>{model.assets.length}대 기준</span><button type="button" onClick={refresh}>↻ 새로고침</button><OperationsAccountBadge {...currentUser}/><button type="button" onClick={() => void onLogout()}><LogOut size={14}/> 로그아웃</button></div>
     </header>
     <section className="prb-kpis" aria-label="전체 생산 영향 현황">
-      <OverallKpi label="생산 영향 검토 설비" value={number(impactedAssets.length, "대")} description="주의 이상 설비를 생산계획과 대조합니다."/>
-      <OverallKpi label="영향 가능 라인" value={number(impactedLines, "개")} description="현재 위험 설비가 포함된 라인입니다."/>
+      <OverallKpi label="생산 영향 검토 설비" value={number(impactedAssets.length, "대")} description="긴급 Risk 설비를 생산계획과 대조합니다."/>
+      <OverallKpi label="영향 가능 라인" value={number(impactedLines, "개")} description="압축기-CNC 묶음 기준 영향 라인입니다."/>
       <OverallKpi label="예상 정지 영향 · 생산원가 기준" value={stopCost ? `-${stopCost.hourlyProductionCost.toLocaleString("ko-KR")}원/h` : "요청 선택 필요"} description={stopCost ? `${name} · ${stopCost.usesDefault ? "기본" : "요청"} 정지 ${stopCost.stopMinutes ?? "미확인"}분 · 원가 환산 ${stopCostTotal === null ? "미산정" : "-" + stopCostTotal.toLocaleString("ko-KR") + "원"} (가정·확정 손실 아님)` : "선택 요청의 정지 시간과 설비별 가정 생산원가 기준입니다."}/>
     </section>
     <div className="prb-columns">
