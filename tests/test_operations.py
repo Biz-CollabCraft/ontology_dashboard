@@ -1985,6 +1985,7 @@ def test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context(
             return None
 
     query = ReplayAwareEvidenceQuery(service)
+    summary_refresh_calls = []
     maintenance_service = MaintenanceLoopService(
         MaintenanceRepository(
             database_path,
@@ -1992,6 +1993,10 @@ def test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context(
         ),
         event_evidence_query=query,
         replay_session_query=query,
+        agent_review_summary_refresher=lambda **values: (
+            summary_refresh_calls.append(values)
+            or {"status": "ready", "trigger": values["trigger"], "summary_id": values["trigger"]}
+        ),
     )
     app.dependency_overrides[get_maintenance_loop_service] = lambda: maintenance_service
 
@@ -2143,6 +2148,21 @@ def test_api_closed_loop_feedback_flow_reaches_replay_and_agent_review_context(
     assert replayed.status_code == 200, replayed.text
     assert replay.json()["status"] == "replay_requested"
     assert replayed.json()["replayed"] is True
+    assert [
+        call["trigger"] for call in summary_refresh_calls
+    ] == [
+        "inspection_requested",
+        "inspection_approved",
+        "inspection_in_progress",
+        "inspection_completed",
+        "maintenance_recommendation_created",
+        "maintenance_recommendation_decided",
+        "maintenance_work_order_approved",
+        "maintenance_started",
+        "maintenance_completed",
+    ]
+    assert {call["event_id"] for call in summary_refresh_calls} == {event_id}
+    assert {call["asset_id"] for call in summary_refresh_calls} == {asset_id}
 
     login_as(client, "manager@ontology.local", "Manager!2026")
     detail_after_response = client.get(f"/api/objects/{asset_id}/detail-view")

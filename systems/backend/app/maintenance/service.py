@@ -7,7 +7,7 @@ import json
 import uuid
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from app.diagnosis.ports import EventEvidenceProjectionQueryPort
 
@@ -79,11 +79,84 @@ class MaintenanceLoopService:
         event_evidence_query: EventEvidenceProjectionQueryPort,
         replay_session_query: MaintenanceReplaySessionValidationPort | None = None,
         cost_basis_provider: MaintenanceCostBasisProvider | None = None,
+        agent_review_summary_refresher: Callable[..., dict[str, Any] | None] | None = None,
     ) -> None:
         self.repository = repository
         self.event_evidence_query = event_evidence_query
         self.replay_session_query = replay_session_query
         self.cost_basis_provider = cost_basis_provider
+        self.agent_review_summary_refresher = agent_review_summary_refresher
+
+    def _refresh_agent_review_summary(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str | None,
+        event_id: str | None,
+        trigger: str,
+        dataset_version_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Best-effort refresh of the stored role briefing after workflow changes."""
+
+        if self.agent_review_summary_refresher is None or not asset_id or not event_id:
+            return None
+        try:
+            return self.agent_review_summary_refresher(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                asset_id=asset_id,
+                event_id=event_id,
+                dataset_version_id=dataset_version_id,
+                trigger=trigger,
+            )
+        except Exception as exc:
+            return {
+                "status": "failed",
+                "trigger": trigger,
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            }
+
+    def _attach_agent_review_refresh(
+        self,
+        result: dict[str, Any],
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str | None,
+        event_id: str | None,
+        trigger: str,
+        dataset_version_id: str | None = None,
+    ) -> dict[str, Any]:
+        refresh = self._refresh_agent_review_summary(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            event_id=event_id,
+            dataset_version_id=dataset_version_id,
+            trigger=trigger,
+        )
+        if refresh is not None:
+            result = {**result, "agent_review_summary_refresh": refresh}
+        return result
+
+    def _work_order_for_refresh(
+        self,
+        *,
+        workspace_id: str,
+        work_order_id: str | None,
+    ) -> Any | None:
+        if not work_order_id:
+            return None
+        return self.repository.get_work_order(
+            workspace_id=workspace_id,
+            work_order_id=work_order_id,
+        )
 
     @staticmethod
     def _stable_id(prefix: str, *parts: str) -> str:
@@ -456,7 +529,7 @@ class MaintenanceLoopService:
             source_policy_version=source["source_policy_version"],
             idempotency_key=idempotency_key,
         )
-        return self.repository.create_inspection_work_order(
+        result = self.repository.create_inspection_work_order(
             work_order=work_order,
             actor_id=actor_id,
             actor_display_name=actor_display_name,
@@ -465,6 +538,15 @@ class MaintenanceLoopService:
                 "inspection.request",
                 {"payload": payload.model_dump(mode="json"), "actor_id": actor_id},
             ),
+        )
+        return self._attach_agent_review_refresh(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=work_order.asset_id,
+            event_id=work_order.event_id,
+            trigger="inspection_requested",
         )
 
     def transition_inspection(
@@ -506,7 +588,7 @@ class MaintenanceLoopService:
         transitioned = work_order.model_copy(
             update=updates
         )
-        return self.repository.transition_inspection_work_order(
+        result = self.repository.transition_inspection_work_order(
             work_order=transitioned,
             actor_id=actor_id,
             actor_display_name=actor_display_name,
@@ -522,6 +604,15 @@ class MaintenanceLoopService:
                 },
             ),
         )
+        return self._attach_agent_review_refresh(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=transitioned.asset_id,
+            event_id=transitioned.event_id,
+            trigger=f"inspection_{target.value}",
+        )
 
     def coordinate_inspection(self, *, organization_id, project_id, workspace_id,
                               work_order_id, phase, payload, actor_id,
@@ -530,12 +621,21 @@ class MaintenanceLoopService:
         if order is None:
             raise KeyError(work_order_id)
         self._require_scope(order, organization_id=organization_id, project_id=project_id, workspace_id=workspace_id)
-        return self.repository.record_inspection_coordination(
+        result = self.repository.record_inspection_coordination(
             work_order=order, phase=phase, payload=payload.model_dump(mode="json"),
             actor_id=actor_id, actor_display_name=actor_display_name,
             request_idempotency_key=idempotency_key,
             request_fingerprint=self._fingerprint(f"inspection.coordination.{phase}", {
                 "work_order_id": work_order_id, "payload": payload.model_dump(mode="json"), "actor_id": actor_id}),
+        )
+        return self._attach_agent_review_refresh(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=order.asset_id,
+            event_id=order.event_id,
+            trigger=f"inspection_coordination_{phase}",
         )
 
     def list_inspection_coordination(self, *, organization_id, project_id, workspace_id):
@@ -622,7 +722,7 @@ class MaintenanceLoopService:
             recorded_by=actor_id,
             recorded_at=completed_at,
         )
-        return self.repository.complete_inspection(
+        result = self.repository.complete_inspection(
             work_order=completed,
             inspection_result=inspection_result,
             actor_display_name=actor_display_name,
@@ -635,6 +735,15 @@ class MaintenanceLoopService:
                     "actor_id": actor_id,
                 },
             ),
+        )
+        return self._attach_agent_review_refresh(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=completed.asset_id,
+            event_id=completed.event_id,
+            trigger="inspection_completed",
         )
 
     def create_manual_recommendation(
@@ -743,7 +852,7 @@ class MaintenanceLoopService:
             source_cost_option_id=source_cost_option_id,
             source_action_candidate_id=source_action_candidate_id,
         )
-        return self.repository.create_manual_recommendation(
+        result = self.repository.create_manual_recommendation(
             recommendation=recommendation,
             actor_display_name=actor_display_name,
             request_idempotency_key=idempotency_key,
@@ -758,6 +867,15 @@ class MaintenanceLoopService:
                     "source_action_candidate_id": source_action_candidate_id,
                 },
             ),
+        )
+        return self._attach_agent_review_refresh(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=inspection_result.asset_id,
+            event_id=inspection_result.event_id,
+            trigger="maintenance_recommendation_created",
         )
 
     @staticmethod
@@ -931,7 +1049,7 @@ class MaintenanceLoopService:
                 calculation_policy_version=cost_basis.calculation_policy_version,
             )
         )
-        return self.repository.create_cost_analysis(
+        result = self.repository.create_cost_analysis(
             result=result,
             event_id=inspection_result.event_id,
             actor_id=actor_id,
@@ -944,6 +1062,15 @@ class MaintenanceLoopService:
                     "actor_id": actor_id,
                 },
             ),
+        )
+        return self._attach_agent_review_refresh(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=inspection_result.asset_id,
+            event_id=inspection_result.event_id,
+            trigger="maintenance_cost_analysis_created",
         )
 
     def calculate_tool_replacement_cost(
@@ -1091,7 +1218,7 @@ class MaintenanceLoopService:
                 decision=decision,
                 idempotency_key=idempotency_key,
             )
-        return self.repository.decide_recommendation(
+        result = self.repository.decide_recommendation(
             recommendation=decided,
             decision=decision,
             work_order=work_order,
@@ -1105,6 +1232,15 @@ class MaintenanceLoopService:
                 },
             ),
             actor_display_name=actor_display_name,
+        )
+        return self._attach_agent_review_refresh(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=recommendation.asset_id,
+            event_id=recommendation.event_id,
+            trigger="maintenance_recommendation_decided",
         )
 
     def approve_maintenance_work_order(
@@ -1207,7 +1343,7 @@ class MaintenanceLoopService:
             ),
             idempotency_key=idempotency_key,
         )
-        return self.repository.approve_work_order(
+        result = self.repository.approve_work_order(
             work_order=approved,
             action=action,
             simulation_session_id=simulation_session_id,
@@ -1224,6 +1360,15 @@ class MaintenanceLoopService:
                 },
             ),
             action_code=action_code.value,
+        )
+        return self._attach_agent_review_refresh(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=approved.asset_id,
+            event_id=approved.event_id,
+            trigger="maintenance_work_order_approved",
         )
 
     def start_maintenance(
@@ -1267,7 +1412,7 @@ class MaintenanceLoopService:
             action_code=self._required_text(action, "action_code"),
             caused_by=self._maintenance_cause(action),
         )
-        return self.repository.start_maintenance(
+        result = self.repository.start_maintenance(
             event,
             workspace_id=workspace_id,
             actor_id=actor_id,
@@ -1281,6 +1426,19 @@ class MaintenanceLoopService:
                     "actor_id": actor_id,
                 },
             ),
+        )
+        work_order = self._work_order_for_refresh(
+            workspace_id=workspace_id,
+            work_order_id=event.work_order_id,
+        )
+        return self._attach_agent_review_refresh(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=getattr(work_order, "asset_id", event.equipment_id),
+            event_id=getattr(work_order, "event_id", None),
+            trigger="maintenance_started",
         )
 
     def complete_maintenance(
@@ -1334,7 +1492,7 @@ class MaintenanceLoopService:
             state_patch=self._state_patch_for_action(action_code),
             caused_by=self._maintenance_cause(action),
         )
-        return self.repository.complete_maintenance(
+        result = self.repository.complete_maintenance(
             event,
             workspace_id=workspace_id,
             actor_id=actor_id,
@@ -1349,6 +1507,19 @@ class MaintenanceLoopService:
                     "actor_id": actor_id,
                 },
             ),
+        )
+        work_order = self._work_order_for_refresh(
+            workspace_id=workspace_id,
+            work_order_id=self._required_text(action, "work_order_id"),
+        )
+        return self._attach_agent_review_refresh(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=getattr(work_order, "asset_id", event.equipment_id),
+            event_id=getattr(work_order, "event_id", None),
+            trigger="maintenance_completed",
         )
 
     def request_maintenance_replay(

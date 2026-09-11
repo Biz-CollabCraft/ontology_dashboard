@@ -598,6 +598,77 @@ class _FilesystemThenDemoEvidenceProjection:
             return None
 
 
+def _refresh_agent_review_summary_for_workflow_change(
+    *,
+    organization_id: str,
+    project_id: str,
+    workspace_id: str,
+    asset_id: str,
+    event_id: str,
+    dataset_version_id: str | None = None,
+    trigger: str,
+) -> dict[str, Any]:
+    """Materialize the stored AI briefing after a maintenance workflow change."""
+
+    service = get_service()
+    history_window = "24h"
+    if event_id.startswith("FILE#"):
+        from app.operations.filesystem_briefing import filesystem_briefing_packet
+
+        packet = filesystem_briefing_packet(
+            asset_id=asset_id,
+            event_id=event_id,
+            dataset_version_id=dataset_version_id,
+            project_id=project_id,
+            history_window=history_window,
+            service=service,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+        )
+    else:
+        try:
+            packet = service.runtime_agent_review_packet(
+                asset_id,
+                project_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                dataset_version_id=dataset_version_id,
+                event_id=event_id,
+                history_window=history_window,
+            )
+        except (KeyError, RuntimeError):
+            packet = service.agent_review_packet(
+                asset_id,
+                project_id,
+                dataset_version_id=dataset_version_id,
+                history_window=history_window,
+            )
+            basis = packet.get("snapshot_basis") or {}
+            if event_id not in {basis.get("event_id"), basis.get("artifact_id")}:
+                raise
+    summary, trace = service._materialize_agent_review_packet(
+        packet=packet,
+        project_id=project_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+        history_window=history_window,
+        trigger=trigger,
+        engine="simple",
+        generation_policy="always",
+    )
+    materialization = trace.get("materialization") or {}
+    workflow_run = trace.get("workflow_run") or {}
+    return {
+        "status": "ready" if summary and not trace.get("fallback") else "fallback",
+        "trigger": trigger,
+        "summary_id": materialization.get("summary_id"),
+        "summary_key": materialization.get("summary_key"),
+        "workflow_run_id": workflow_run.get("workflow_run_id"),
+        "fallback": bool(trace.get("fallback")),
+        "reason": trace.get("reason"),
+    }
+
+
 @lru_cache(maxsize=1)
 def get_maintenance_loop_service() -> MaintenanceLoopService:
     """Compose the canonical Maintenance command/read boundary."""
@@ -644,6 +715,7 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
             / "maintenance_cost"
             / "cooling-system-restore-cost-basis-v1.json",
         ),
+        agent_review_summary_refresher=_refresh_agent_review_summary_for_workflow_change,
     )
 
 
