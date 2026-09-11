@@ -295,40 +295,10 @@ export function EngineerFactoryLoading() {
           <b>연결 확인 중</b>
         </div>
       </header>
-      <section className="engineer-factory-kpis">
-        <article aria-busy="true">
-          <span>즉시 조치 필요 설비</span>
-          <strong>—</strong>
-          <p>데이터 로딩 중</p>
-        </article>
-        <article aria-busy="true">
-          <span>가동 중 설비</span>
-          <strong>—</strong>
-          <p>데이터 로딩 중</p>
-        </article>
-        <article aria-busy="true">
-          <span>점검·정비 진행 설비</span>
-          <strong>—</strong>
-          <p>데이터 로딩 중</p>
-        </article>
-      </section>
-      <section className="engineer-lite-main">
-        <LoadingPanel
-          title="라인 · 셀 · 설비 상태"
-          className="engineer-equipment-list"
-        />
-        <LoadingPanel
-          title="위험 점수 추세 · 최근 12시간"
-          className="engineer-risk-trend"
-        />
-        <LoadingPanel
-          title="정비 지시 내역"
-          className="engineer-recent-events"
-        />
-      </section>
-      <section className="engineer-factory-bottom-grid">
-        <LoadingPanel title="선택 설비 근거 요약" />
-        <LoadingPanel title="실시간 상태 신호" />
+      <section className="engineer-loading-status" aria-busy="true" role="status">
+        <i />
+        <strong>설비 현황을 불러오고 있습니다</strong>
+        <p>최신 관측 데이터와 점검·정비 요청 목록을 연결하는 중입니다. 완료되면 공장 현황판으로 전환됩니다.</p>
       </section>
     </main>
   );
