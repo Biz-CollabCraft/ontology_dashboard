@@ -1,7 +1,8 @@
 import {mapRoleData} from './roleData.js';
 import {roleContext} from './roleContext.js';
 import {contextStatus} from './contextStatus.js';
-import {briefPresentation} from './aiBrief.js';
+import {briefPresentation,roleBrief} from './aiBrief.js';
+import {briefRows,referenceLabels} from './briefFormat.js';
 import {equipmentName,locationName,supplyTargetLabel,selectedBrief,briefContext,eventBrief} from './fieldBrief.js';
 // Display-only mappings. API identifiers, command payloads and permissions stay unchanged.
 const names = {
@@ -87,7 +88,14 @@ export function mapPresentation(values,state){
  const tileCount=v.lines.reduce((sum,line)=>sum+line.cells.reduce((n,c)=>n+c.assets.length,0),0);
  v.siteLabel=`${state.model?.context?.workspaceName||'작업장 확인 필요'} · ${v.lines.length}개 라인 · ${v.lines.reduce((n,l)=>n+l.cells.length,0)}개 셀 · 설비 ${tileCount}대`;
 
- if(!d)return displayTree(v);
+ if(!d){
+  Object.assign(v,briefPresentation(state));
+  v.sourceLabel=state.error?message(state.error):'설비 정보 조회 중';
+  v.aiBriefVisible=true;v.aiBriefRows=[];v.aiBriefHasRows=false;v.aiBriefEmpty=true;
+  v.priorityHead=state.error?message(state.error):'설비 정보를 조회한 뒤 AI 브리핑을 확인할 수 있습니다.';
+  v.aiBasis='설비 상세 정보 조회 필요';
+  return displayTree(v);
+ }
  const oc=d.operationContext||{},planning=ctx?.domains?.planning?.context;
  const plan=planning?.status==='available'?planning.data.production_plan:null;
  const currentPlan=plan?{plannedUnits:plan.planned_units,productMix:plan.product_mix?.map(x=>({variant:x.variant,plannedUnits:x.planned_units})),planDate:plan.plan_date}:oc.productionPlan;
@@ -175,10 +183,15 @@ export function mapPresentation(values,state){
  Object.assign(v,briefPresentation(state));
  v.aiBriefVisible=true;
  if(state.aiBrief){
-   v.priorityHead=(v.isPlan?state.aiBrief.role_summaries?.find(r=>r.role==='process_manager')?.quote:null)||state.aiBrief.summary;
+   const displayRole=v.isMaint?'maintenance_technician':v.isPlan?'process_manager':v.isShift?'process_engineer':state.role;
+   v.priorityHead=roleBrief(state.aiBrief,displayRole);
  }else{
-   v.priorityHead=state.aiError?message(state.aiError):state.aiFallback?'생성 결과 검증 실패':state.canGenerateAi?'생성 대기':'생성 권한 없음';
+   v.priorityHead=state.aiGenerating?'AI 설명을 생성하고 있습니다.':state.aiFallback?'AI 설명 대신 현재 판단 근거를 확인하세요.':state.aiError?'AI 설명을 불러오지 못했습니다.':state.canGenerateAi?'필요할 때 AI 설명을 요청할 수 있습니다.':'AI 설명 생성은 권한이 있는 담당자에게 요청하세요.';
  }
+ v.aiBriefRows=state.aiBrief?briefRows(v.priorityHead,state.aiBrief.source_refs||[]).map(row=>({...row,refs:row.refs.map(ref=>({...ref,text:referenceLabels(ref.text).join(" · ")}))})):[];
+ v.aiBriefHasRows=v.aiBriefRows.length>0;
+ v.aiBriefEmpty=!v.aiBriefHasRows;
+ v.aiBasis='판단 기준 '+date(state.detail?.snapshotBasis?.observedAt)+' · 기록 시각은 조회 시점 기준';
  v.onAiSummary=e=>{e?.stopPropagation();window.dispatchEvent(new CustomEvent('factory:request',{detail:{type:'operations:ai-summary',assetId:state.selectedAssetId,eventId:state.selectedEventId}}));};
  const maintenanceWork=(state.lineage?.work_orders||[]).filter(w=>w.work_type==='maintenance');
  v.opCtx.push(row('정비 작업 상태',maintenanceWork.length?maintenanceWork.map(w=>label(w.status)).join(' · '):'정비 작업지시 없음'));

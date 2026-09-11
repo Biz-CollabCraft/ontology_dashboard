@@ -731,6 +731,7 @@ function sensorsFromAssetDetailViewModel(
       value: point.value,
       qualityStatus: point.quality_status,
     })),
+    bands: feature.bands ?? null,
   }));
 }
 
@@ -777,6 +778,8 @@ function evidenceBasisFromAssetDetailViewModel(
     sourceVersion: item.source_version,
     domain: item.domain,
     relationPath: item.relation_path,
+    relationPaths: item.relation_paths ?? [],
+    displayFields: item.display_fields ?? [],
     factType: item.fact_type,
     valueSummary: item.value_summary,
     requiredForBoundary: item.required_for_boundary,

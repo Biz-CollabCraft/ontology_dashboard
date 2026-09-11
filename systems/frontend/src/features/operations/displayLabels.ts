@@ -193,6 +193,53 @@ export function displaySensorLabel(key: string, fallback?: string | null): strin
     ?? humanizeOperationalText(normalized);
 }
 
+const COMPRESSOR_SENSOR_LABELS: Record<string, string> = {
+  rotation_raw: "압축기 모터 회전수",
+  vibration_raw: "압축기 본체 진동",
+  pressure_raw: "토출 압력",
+  voltage_raw: "모터 입력 전압",
+  current_raw: "모터 운전 전류",
+  relative_vibration_z: "진동 이상 지수",
+  air_pressure: "압축 공기 압력",
+  flow_rate: "토출 유량",
+  air_temperature_k: "흡입 공기 온도",
+  mechanical_power_w: "압축기 모터 부하",
+  power_w: "압축기 소비 전력",
+};
+
+const CNC_SENSOR_LABELS: Record<string, string> = {
+  rotation_raw: "주축 회전 상태",
+  vibration_raw: "주축 진동",
+  pressure_raw: "가공 유압",
+  voltage_raw: "설비 입력 전압",
+  current_raw: "주축 모터 전류",
+  relative_vibration_z: "주축 진동 이상 지수",
+  spindle_vibration: "주축 진동",
+  air_pressure: "공압 공급 압력",
+  flow_rate: "절삭유 유량",
+  air_temperature_k: "설비 주변 온도",
+  process_temperature_k: "가공부 온도",
+  rotational_speed_rpm: "주축 회전수",
+  torque_nm: "주축 토크",
+  tool_wear_min: "공구 누적 사용 시간",
+  mechanical_power_w: "주축 모터 부하",
+  power_w: "설비 소비 전력",
+  temperature_difference_k: "가공부-주변 온도차",
+  temperature_gap_k: "가공 온도 편차",
+};
+
+export function displayEquipmentSensorLabel(assetId: string | null | undefined, key: string, fallback?: string | null): string {
+  const normalized = normalizedFeatureKey(key);
+  const equipmentLabels = assetId?.toUpperCase().startsWith("CMP-")
+    ? COMPRESSOR_SENSOR_LABELS
+    : assetId?.toUpperCase().startsWith("CNC-")
+      ? CNC_SENSOR_LABELS
+      : null;
+  return equipmentLabels?.[key]
+    ?? equipmentLabels?.[normalized]
+    ?? displaySensorLabel(key, fallback);
+}
+
 export function displaySensorFactorLabel(key: string, fallback?: string | null): string {
   const base = displaySensorLabel(key, fallback);
   const windowLabel = FEATURE_WINDOW_LABELS.find(([pattern]) => pattern.test(key))?.[1] ?? null;

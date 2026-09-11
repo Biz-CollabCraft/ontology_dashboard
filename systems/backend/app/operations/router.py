@@ -303,8 +303,10 @@ def _summary_text(summary: dict[str, Any] | None, audience: str | None = None) -
         target_role = (
             "process_manager"
             if audience == "operations"
-            else "field_operator"
-            if audience in {"engineering", "maintenance"}
+            else "process_engineer"
+            if audience == "engineering"
+            else "maintenance_technician"
+            if audience == "maintenance"
             else None
         )
         if target_role:
@@ -942,6 +944,19 @@ def _selected_agent_review_packet(
     asset_id: str, project_id: str, dataset_version_id: str | None,
     event_id: str, history_window: str,
 ) -> dict[str, Any]:
+    if event_id.startswith("FILE#"):
+        from .filesystem_briefing import BriefingHistoryUnavailable, filesystem_briefing_packet
+        try:
+            return filesystem_briefing_packet(asset_id=asset_id, event_id=event_id,
+                dataset_version_id=dataset_version_id, project_id=project_id, history_window=history_window,
+                service=service, organization_id=principal.organization_id, workspace_id=MANUFACTURING_WORKSPACE)
+        except KeyError:
+            raise EventNotFound(event_id)
+        except BriefingHistoryUnavailable as exc:
+            raise HTTPException(status_code=503, detail={
+                "code": "briefing_history_unavailable",
+                "message": str(exc),
+            }) from exc
     try:
         return service.runtime_agent_review_packet(
             asset_id, project_id, organization_id=principal.organization_id,
@@ -976,36 +991,44 @@ def get_agent_review_packet(
     dataset_version_id: str | None = Query(default=None, max_length=160),
     event_id: str | None = Query(default=None, max_length=240),
     history_window: Literal["24h", "7d", "30d"] = Query(default="24h"),
+    expected_summary_key: str | None = Query(default=None, min_length=1, max_length=240),
     principal: Principal = Depends(require_permission("events.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
-    if not principal.is_admin and project_id not in principal.project_scopes:
-        raise AuthError(403, "project_scope_denied", "허용된 Object 범위를 벗어난 Agent Review Packet입니다.")
-    if principal.active_project_id != project_id:
-        raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
+    _authorize_agent_review_summary(principal=principal, project_id=project_id)
     if event_id:
-        return _selected_agent_review_packet(
+        packet = _selected_agent_review_packet(
             service=service, principal=principal, asset_id=asset_id,
             project_id=project_id, dataset_version_id=dataset_version_id,
             event_id=event_id, history_window=history_window,
         )
-    try:
-        return service.agent_review_packet(
-            asset_id,
-            project_id,
-            dataset_version_id=dataset_version_id,
-            history_window=history_window,
-        )
-    except EventNotFound:
-        return _runtime_agent_review_packet(
-            asset_id=asset_id,
-            project_id=project_id,
-            workspace_id=MANUFACTURING_WORKSPACE,
-            dataset_version_id=dataset_version_id,
-            principal=principal,
-            runtime_service=get_predictive_maintenance_runtime_service(),
-            context_service=service,
-        )
+    else:
+        try:
+            packet = service.agent_review_packet(
+                asset_id, project_id, dataset_version_id=dataset_version_id,
+                history_window=history_window,
+            )
+        except EventNotFound:
+            packet = _runtime_agent_review_packet(
+                asset_id=asset_id, project_id=project_id,
+                workspace_id=MANUFACTURING_WORKSPACE,
+                dataset_version_id=dataset_version_id, principal=principal,
+                runtime_service=get_predictive_maintenance_runtime_service(),
+                context_service=service,
+            )
+    if expected_summary_key is not None:
+        from .agent_review_summary_materialization import summary_key, summary_key_payload
+        actual_key = summary_key(summary_key_payload(
+            packet=packet, organization_id=principal.organization_id,
+            project_id=project_id, workspace_id=MANUFACTURING_WORKSPACE,
+            history_window=history_window, provider=service.agent_review_summary_provider,
+        ))
+        if actual_key != expected_summary_key:
+            raise HTTPException(status_code=409, detail={
+                "code": "briefing_evidence_changed",
+                "message": "브리핑 작성 이후 근거가 변경되었습니다. 현재 브리핑을 다시 조회하세요.",
+            })
+    return packet
 
 
 def _authorize_agent_review_summary(

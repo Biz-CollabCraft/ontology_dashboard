@@ -6,7 +6,9 @@ import asyncio
 import hmac
 import json
 import os
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
@@ -26,8 +28,21 @@ from app.diagnosis.runtime_schema import (
     ReplayControlRequest,
     ReplayStartRequest,
 )
+from app.diagnosis.evidence_projection import (
+    evidence_snapshot_basis_from_artifact,
+    product_result_artifact_to_event_evidence_projection,
+)
 from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
 from app.diagnosis.ports import ALLOWED_DERIVED_MEASURES
+from app.operations.sensor_signal_bands import sensor_signal_bands
+from app.diagnosis.contracts import (
+    CompleteFileTickNotFound,
+    filesystem_event_artifact as _contract_filesystem_event_artifact,
+    latest_complete_file_tick as _contract_latest_complete_file_tick,
+    measurement_factors as _contract_measurement_factors,
+    risk_from_file_record as _contract_risk_from_file_record,
+    risk_status as _contract_risk_status,
+)
 
 router = APIRouter(
     prefix="/api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance",
@@ -36,6 +51,206 @@ router = APIRouter(
 internal_router = APIRouter(prefix="/internal", tags=["prediction-result-inbox"])
 PREDICTION_RESULT_INGEST_TOKEN_ENV = "PREDICTION_RESULT_INGEST_TOKEN"
 PREDICTION_RESULT_INGEST_ORG_ENV = "PREDICTION_RESULT_INGEST_ORGANIZATION_ID"
+
+
+def _risk_from_file_record(record: dict[str, Any]) -> float:
+    return _contract_risk_from_file_record(record)
+
+
+def _risk_status(score: float) -> str:
+    return _contract_risk_status(score)
+
+
+def _measurement_factors(record: dict[str, Any]) -> list[dict[str, Any]]:
+    return _contract_measurement_factors(record)
+
+
+def _latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]], list[tuple[str, dict[str, dict[str, Any]]]]]:
+    from app.diagnosis.demo_scenarios import selected_window
+    scenario = selected_window()
+    if scenario is not None:
+        return scenario
+    try:
+        return _contract_latest_complete_file_tick()
+    except CompleteFileTickNotFound as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _filesystem_event_artifact(
+    *, run_id: str, observed_at: str, record: dict[str, Any], event_id: str
+) -> dict[str, Any]:
+    return _contract_filesystem_event_artifact(
+        run_id=run_id,
+        observed_at=observed_at,
+        record=record,
+        event_id=event_id,
+    )
+
+
+def filesystem_event_evidence_projection(event_id: str) -> dict[str, Any] | None:
+    if not event_id.startswith("FILE#"):
+        return None
+    stream, latest_observed_at, records, complete_ticks = _latest_complete_file_tick()
+    run_id = stream.parents[1].name
+    ticks = complete_ticks or [(latest_observed_at, {str(item["asset_id"]): item for item in records})]
+    for observed_at, tick_records in reversed(ticks):
+        for record in tick_records.values():
+            candidate = f"FILE#{run_id}#{record.get('observation_id', record.get('asset_id'))}"
+            if candidate != event_id:
+                continue
+            artifact = _filesystem_event_artifact(
+                run_id=run_id, observed_at=observed_at, record=record, event_id=event_id
+            )
+            projection = product_result_artifact_to_event_evidence_projection(artifact)
+            projection["event_id"] = event_id
+            projection["evidence_id"] = f"EVD-{artifact['artifact_id']}"
+            projection["artifact_reference"]["event_id"] = event_id
+            return projection
+    return None
+
+
+def _filesystem_overview(project_id: str, workspace_id: str) -> dict[str, Any]:
+    stream, observed_at, records, complete_ticks = _latest_complete_file_tick()
+    run_id = stream.parents[1].name
+    assets: list[dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
+    line_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        asset_id = str(record["asset_id"])
+        asset_type = str(record.get("asset_type") or "equipment")
+        score = _risk_from_file_record(record)
+        risk_status = _risk_status(score)
+        cell = str(record.get("cell_id") or "미분류")
+        site = str(record.get("site_id") or "미분류")
+        line = cell.split("-")[0] if "-" in cell else cell
+        display_type = "CNC 가공기" if asset_type == "cnc" else "공기압축기"
+        display_name = f"{cell} · {display_type} {asset_id.rsplit('-', 1)[-1]}"
+        event_id = f"FILE#{run_id}#{record.get('observation_id', asset_id)}"
+        event_artifact = _filesystem_event_artifact(
+            run_id=run_id, observed_at=observed_at, record=record, event_id=event_id
+        )
+        factor_definitions = {item["feature"]: item for item in _measurement_factors(record)}
+        sensor_history = []
+        for feature, factor in factor_definitions.items():
+            points = []
+            for tick_at, tick_records in complete_ticks:
+                value = (tick_records.get(asset_id, {}).get("measurements") or {}).get(feature)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    points.append({"observedAt": tick_at, "value": float(value)})
+            if points:
+                sensor_history.append({
+                    "feature": feature,
+                    "label": factor["label"],
+                    "unit": factor["unit"],
+                    "points": points,
+                    "bands": sensor_signal_bands(feature),
+                })
+        asset = {
+            "assetId": asset_id,
+            "displayName": display_name,
+            "assetType": asset_type,
+            "site": site,
+            "line": line,
+            "cell": cell,
+            "status": risk_status,
+            "failureProbability": score,
+            "confidence": "unavailable",
+            "confidenceScore": None,
+            "criticality": None,
+            "assignedEngineer": None,
+            "estimatedDowntimeMinutes": None,
+            "sparePartAvailable": None,
+            "predictedFailureType": "실시간 센서 이상 징후" if risk_status != "normal" else "이상 징후 없음",
+            "recommendedDecision": "request_inspection" if risk_status in {"critical", "warning"} else "continue_monitoring",
+            "observedAt": observed_at,
+            "eventId": event_id,
+            "maintenanceSnapshotBasis": evidence_snapshot_basis_from_artifact(
+                event_artifact, event_id=event_id
+            ),
+            "topFactors": _measurement_factors(record),
+            "sensorHistory": sensor_history,
+            "riskHistory": [{"observedAt": tick_at, "value": _risk_from_file_record(tick_records[asset_id])} for tick_at, tick_records in complete_ticks if asset_id in tick_records],
+            "provenance": {
+                "datasetId": None,
+                "datasetVersionId": run_id,
+                "datasetLabel": "gen_data 파일 관측",
+                "sourceVersion": str(record.get("generator_version") or "gen_data"),
+                "modelVersion": None,
+                "policyVersion": None,
+                "schemaVersion": str(record.get("schema_version") or ""),
+                "promptVersion": None,
+                "sourceRefs": [f"gen_data://runs/{run_id}/source/sensor_records.jsonl"],
+            },
+        }
+        assets.append(asset)
+        line_groups[line].append(asset)
+        if risk_status != "normal":
+            events.append({
+                "eventId": event_id,
+                "scenarioId": str(record.get("branch_kind") or "live-file"),
+                "assetId": asset_id,
+                "assetName": display_name,
+                "line": line,
+                "status": risk_status,
+                "failureProbability": score,
+                "confidence": "unavailable",
+                "predictedFailureType": asset["predictedFailureType"],
+                "recommendedDecision": asset["recommendedDecision"],
+                "criticality": None,
+                "assignedEngineer": None,
+                "estimatedDowntimeMinutes": None,
+                "sparePartAvailable": None,
+                "observedAt": observed_at,
+                "datasetVersionId": run_id,
+                "ontologyObjectId": None,
+            })
+    counts = {key: sum(item["status"] == key for item in assets) for key in ("normal", "attention", "warning", "critical", "data_quality_hold")}
+    line_risk = []
+    for line, items in sorted(line_groups.items()):
+        line_risk.append({
+            "line": line,
+            "total": len(items),
+            "normal": sum(item["status"] == "normal" for item in items),
+            "critical": sum(item["status"] == "critical" for item in items),
+            "warning": sum(item["status"] == "warning" for item in items),
+            "attention": sum(item["status"] == "attention" for item in items),
+            "dataQualityHold": 0,
+            "averageRisk": round(sum(item["failureProbability"] for item in items) / len(items), 4),
+        })
+    return {
+        "context": {
+            "projectId": project_id,
+            "projectName": "Smart Factory A",
+            "workspaceId": workspace_id,
+            "workspaceName": "Production Reliability",
+            "datasetVersionId": run_id,
+            "datasetLabel": "gen_data 실시간 파일 관측",
+            "sourceVersion": "filesystem",
+            "modelVersion": None,
+            "schemaVersion": str(records[0].get("schema_version") or ""),
+            "sourceMode": "canonical-runtime",
+            "sourceStatus": "파일 시스템 연결됨 · 마지막 완성 틱",
+            "refreshedAt": datetime.now(timezone.utc).isoformat(),
+            "observedAt": observed_at,
+            "stale": False,
+            "warnings": [],
+        },
+        "assets": assets,
+        "events": sorted(events, key=lambda item: item["failureProbability"], reverse=True),
+        "metrics": {
+            "totalAssets": len(assets),
+            "normal": counts["normal"],
+            "attention": counts["attention"],
+            "warning": counts["warning"],
+            "critical": counts["critical"],
+            "dataQualityHold": counts["data_quality_hold"],
+            "averageRisk": round(sum(item["failureProbability"] for item in assets) / len(assets), 4) if assets else None,
+            "estimatedDowntimeMinutes": None,
+            "pendingDecisions": len(events),
+        },
+        "lineRisk": line_risk,
+        "selectionRestoreError": None,
+    }
 def require_scope(
     *,
     principal: Principal,
@@ -366,6 +581,48 @@ def latest_product_results(
         offset=offset,
         limit=limit,
     ).model_dump(mode="json")
+
+
+@router.get("/filesystem-overview")
+def filesystem_overview(
+    project_id: str,
+    workspace_id: str,
+    principal: Principal = Depends(require_permission("events.read")),
+    identity: IdentityService = Depends(get_identity_service),
+):
+    """Serve the engineer overview from the latest complete gen_data file tick."""
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    return _filesystem_overview(project_id, workspace_id)
+
+
+@router.get("/demo-scenario")
+def get_demo_scenario(project_id: str, workspace_id: str,
+    principal: Principal = Depends(require_permission("events.read")),
+    identity: IdentityService = Depends(get_identity_service)):
+    require_scope(principal=principal, identity=identity, project_id=project_id, workspace_id=workspace_id)
+    if project_id != "manufacturing-demo-project" or workspace_id != "manufacturing-demo":
+        raise HTTPException(status_code=404, detail="Demo only")
+    from app.diagnosis.demo_scenarios import scenario_status
+    return scenario_status()
+
+
+@router.post("/demo-scenario")
+def set_demo_scenario(project_id: str, workspace_id: str,
+    mode: Literal["live", "normal", "emergency"] = Body(embed=True),
+    principal: Principal = Depends(require_permission("events.read")),
+    _: None = Depends(require_csrf),
+    identity: IdentityService = Depends(get_identity_service)):
+    get_demo_scenario(project_id, workspace_id, principal, identity)
+    from app.diagnosis.demo_scenarios import select_scenario
+    try:
+        return select_scenario(mode, principal.user_id)
+    except (ValueError, FileNotFoundError):
+        raise HTTPException(status_code=409, detail="시연 데이터 준비 상태를 확인해 주세요.")
 
 
 @router.get("/results/post-maintenance")

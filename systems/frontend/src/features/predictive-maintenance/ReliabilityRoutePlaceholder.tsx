@@ -25,6 +25,28 @@ export function ReliabilityRoutePlaceholder() {
     document.documentElement.lang = locale;
   }, [locale, theme]);
 
+  const params = new URLSearchParams(window.location.search);
+  const engineerFactory = /^\/app\/projects\/[^/]+\/operations/.test(window.location.pathname)
+    && params.get("role") === "field_operator"
+    && (params.get("view") === "overview" || params.get("view") === null);
+
+  if (engineerFactory) {
+    return (
+      <main className={`engineer-route-loading is-${theme}`} aria-busy="true" aria-label="공장 현황 데이터 로딩 중">
+        <header><div><strong>공장 현황</strong><span>설비 데이터를 연결하고 있습니다</span></div><b>연결 확인 중</b></header>
+        <section className="engineer-route-loading__kpis">
+          {["즉시 조치 필요 설비", "가동 중 설비", "예상 정지 영향"].map((label) => <article key={label}><span>{label}</span><strong>—</strong><small>데이터 로딩 중</small></article>)}
+        </section>
+        <section className="engineer-route-loading__main">
+          <article><strong>라인 · 셀 · 설비 상태</strong><span>데이터 로딩 중</span></article>
+          <article><strong>위험 점수 추세 · 최근 12시간</strong><span>데이터 로딩 중</span></article>
+          <article><strong>최근 이벤트</strong><span>데이터 로딩 중</span></article>
+        </section>
+        <section className="engineer-route-loading__bottom"><article><strong>선택 설비 근거 요약</strong><span>데이터 로딩 중</span></article><article><strong>실시간 상태 신호</strong><span>데이터 로딩 중</span></article></section>
+      </main>
+    );
+  }
+
   return (
     <main className={`reliability-route-placeholder is-${theme}`} aria-busy="true" aria-label="Reliability workspace 준비 중">
       <header className="reliability-route-placeholder__topbar">

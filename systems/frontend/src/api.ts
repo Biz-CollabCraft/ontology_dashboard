@@ -8,7 +8,11 @@ import type {
   SemanticVisualizationPlanResponse,
   VisualizationPlannerResponse,
 } from "./features/planner/types";
-import type { AgentQueryInput, AgentRunPage, AgentRunResponse } from "./features/agent/types";
+import type {
+  AgentQueryInput,
+  AgentRunPage,
+  AgentRunResponse,
+} from "./features/agent/types";
 import type {
   EvidenceSnapshotBasisWire,
   OperationsDecisionBriefRole,
@@ -117,12 +121,12 @@ export class ApiError extends Error {
   }
 }
 
-
 function cookieValue(name: string): string | null {
   const prefix = `${encodeURIComponent(name)}=`;
   for (const item of document.cookie.split(";")) {
     const value = item.trim();
-    if (value.startsWith(prefix)) return decodeURIComponent(value.slice(prefix.length));
+    if (value.startsWith(prefix))
+      return decodeURIComponent(value.slice(prefix.length));
   }
   return null;
 }
@@ -130,7 +134,8 @@ function cookieValue(name: string): string | null {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const headers = new Headers(init?.headers);
-  if (init?.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (init?.body && !headers.has("Content-Type"))
+    headers.set("Content-Type", "application/json");
   if (STATE_CHANGING_METHODS.has(method)) {
     const csrfToken = csrfTokenCache ?? cookieValue("ontology_csrf");
     if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
@@ -142,19 +147,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers,
     credentials: "include",
   });
-  const payload = response.status === 204 ? undefined : await response.json().catch(() => ({}));
+  const payload =
+    response.status === 204
+      ? undefined
+      : await response.json().catch(() => ({}));
   if (!response.ok) {
     const code = payload?.error?.code ?? "api_request_failed";
-    const message = payload?.error?.message ?? `API request failed: ${response.status}`;
+    const message =
+      payload?.error?.message ?? `API request failed: ${response.status}`;
     throw new ApiError(response.status, code, message);
   }
   return payload as T;
 }
 
-async function requestArtifact(path: string, init: RequestInit): Promise<ExportArtifact> {
+async function requestArtifact(
+  path: string,
+  init: RequestInit,
+): Promise<ExportArtifact> {
   const method = (init.method ?? "POST").toUpperCase();
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (init.body && !headers.has("Content-Type"))
+    headers.set("Content-Type", "application/json");
   if (STATE_CHANGING_METHODS.has(method)) {
     const csrfToken = csrfTokenCache ?? cookieValue("ontology_csrf");
     if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
@@ -184,16 +197,24 @@ async function requestArtifact(path: string, init: RequestInit): Promise<ExportA
   };
 }
 
-export async function login(email: string, password: string): Promise<AuthUser> {
-  const payload = await request<{ user: AuthUser; csrf_token: string }>("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
+export async function login(
+  email: string,
+  password: string,
+): Promise<AuthUser> {
+  const payload = await request<{ user: AuthUser; csrf_token: string }>(
+    "/api/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    },
+  );
   csrfTokenCache = payload.csrf_token;
   return payload.user;
 }
 
-export async function openPublicBlueprintComparison(signal?: AbortSignal): Promise<AuthUser> {
+export async function openPublicBlueprintComparison(
+  signal?: AbortSignal,
+): Promise<AuthUser> {
   const payload = await request<{ user: AuthUser; csrf_token: string }>(
     "/api/auth/public-blueprint-comparison",
     { method: "POST", signal },
@@ -224,7 +245,10 @@ export function register(input: {
 }
 
 export async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {
-  const payload = await request<{ user: AuthUser; csrf_token: string | null }>("/api/auth/me", { signal });
+  const payload = await request<{ user: AuthUser; csrf_token: string | null }>(
+    "/api/auth/me",
+    { signal },
+  );
   csrfTokenCache = payload.csrf_token;
   return payload.user;
 }
@@ -239,10 +263,16 @@ export interface ServerDisplayPreferences {
 }
 
 export async function getDisplayPreferences(): Promise<ServerDisplayPreferences | null> {
-  return (await request<{ preferences: ServerDisplayPreferences | null }>("/api/auth/display-preferences")).preferences;
+  return (
+    await request<{ preferences: ServerDisplayPreferences | null }>(
+      "/api/auth/display-preferences",
+    )
+  ).preferences;
 }
 
-export function saveDisplayPreferences(input: Omit<ServerDisplayPreferences, "updated_at">): Promise<ServerDisplayPreferences> {
+export function saveDisplayPreferences(
+  input: Omit<ServerDisplayPreferences, "updated_at">,
+): Promise<ServerDisplayPreferences> {
   return request<ServerDisplayPreferences>("/api/auth/display-preferences", {
     method: "PUT",
     body: JSON.stringify(input),
@@ -255,10 +285,13 @@ export async function logout(): Promise<void> {
 }
 
 export async function setActiveProject(projectId: string): Promise<AuthUser> {
-  const payload = await request<{ user: AuthUser }>("/api/auth/active-project", {
-    method: "PATCH",
-    body: JSON.stringify({ project_id: projectId }),
-  });
+  const payload = await request<{ user: AuthUser }>(
+    "/api/auth/active-project",
+    {
+      method: "PATCH",
+      body: JSON.stringify({ project_id: projectId }),
+    },
+  );
   return payload.user;
 }
 
@@ -270,17 +303,24 @@ export function getProject(projectId: string): Promise<Project> {
   return request<Project>(`/api/projects/${encodeURIComponent(projectId)}`);
 }
 
-
-export async function getProjectWorkspaces(projectId: string): Promise<Workspace[]> {
-  return (await request<{ items: Workspace[] }>(
-    `/api/projects/${encodeURIComponent(projectId)}/workspaces`,
-  )).items;
+export async function getProjectWorkspaces(
+  projectId: string,
+): Promise<Workspace[]> {
+  return (
+    await request<{ items: Workspace[] }>(
+      `/api/projects/${encodeURIComponent(projectId)}/workspaces`,
+    )
+  ).items;
 }
 
-export async function getProjectMembers(projectId: string): Promise<ProjectMembership[]> {
-  return (await request<{ items: ProjectMembership[] }>(
-    `/api/admin/projects/${encodeURIComponent(projectId)}/members`,
-  )).items;
+export async function getProjectMembers(
+  projectId: string,
+): Promise<ProjectMembership[]> {
+  return (
+    await request<{ items: ProjectMembership[] }>(
+      `/api/admin/projects/${encodeURIComponent(projectId)}/members`,
+    )
+  ).items;
 }
 
 export async function updateProjectMembership(
@@ -297,8 +337,16 @@ export async function updateProjectMembership(
   );
 }
 
-export async function getDatasetCatalog(projectId: string): Promise<DatasetCatalogItem[]> {
-  return (await getDatasetCatalogPage({ project_id: projectId, offset: 0, limit: 200 })).items;
+export async function getDatasetCatalog(
+  projectId: string,
+): Promise<DatasetCatalogItem[]> {
+  return (
+    await getDatasetCatalogPage({
+      project_id: projectId,
+      offset: 0,
+      limit: 200,
+    })
+  ).items;
 }
 
 export function getDatasetCatalogPage(input: {
@@ -332,10 +380,14 @@ export function getDatasetCatalogDetail(
   );
 }
 
-export async function getProjectEvents(projectId: string): Promise<EventSummary[]> {
-  return (await request<{ items: EventSummary[] }>(
-    `/api/projects/${encodeURIComponent(projectId)}/events`,
-  )).items;
+export async function getProjectEvents(
+  projectId: string,
+): Promise<EventSummary[]> {
+  return (
+    await request<{ items: EventSummary[] }>(
+      `/api/projects/${encodeURIComponent(projectId)}/events`,
+    )
+  ).items;
 }
 
 export async function getWorkspaces(): Promise<Workspace[]> {
@@ -358,7 +410,9 @@ export function queryOntologyObjects(input: {
   if (input.search) params.set("q", input.search);
   params.set("offset", String(input.offset ?? 0));
   params.set("limit", String(input.limit ?? 100));
-  return request<OntologyObjectQueryResult>(`/api/ontology/objects?${params.toString()}`);
+  return request<OntologyObjectQueryResult>(
+    `/api/ontology/objects?${params.toString()}`,
+  );
 }
 
 export function aggregateOntologyObjects(input: {
@@ -368,11 +422,16 @@ export function aggregateOntologyObjects(input: {
   metrics?: string[];
   search?: string;
 }): Promise<OntologyAggregateResult> {
-  const params = new URLSearchParams({ workspace_id: input.workspace_id, object_type: input.object_type });
+  const params = new URLSearchParams({
+    workspace_id: input.workspace_id,
+    object_type: input.object_type,
+  });
   for (const field of input.group_by ?? []) params.append("group_by", field);
   for (const metric of input.metrics ?? []) params.append("metrics", metric);
   if (input.search) params.set("q", input.search);
-  return request<OntologyAggregateResult>(`/api/ontology/objects/aggregate?${params.toString()}`);
+  return request<OntologyAggregateResult>(
+    `/api/ontology/objects/aggregate?${params.toString()}`,
+  );
 }
 
 export function traverseOntologyObject(
@@ -395,29 +454,30 @@ export function traverseOntologyObject(
   );
 }
 
-export function getProject3Status(projectId: string): Promise<Project3IntegrationSnapshot> {
+export function getProject3Status(
+  projectId: string,
+): Promise<Project3IntegrationSnapshot> {
   const params = new URLSearchParams({ project_id: projectId });
-  return request<Project3IntegrationSnapshot>(`/api/integrations/project3/status?${params.toString()}`);
+  return request<Project3IntegrationSnapshot>(
+    `/api/integrations/project3/status?${params.toString()}`,
+  );
 }
 
-function predictiveMaintenanceBase(projectId: string, workspaceId: string): string {
+function predictiveMaintenanceBase(
+  projectId: string,
+  workspaceId: string,
+): string {
   return `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/predictive-maintenance`;
 }
 
 export type MaintenanceExecutionTiming =
-  | "immediate"
-  | "planned_window"
-  | "reinspect_after"
-  | "no_action_baseline";
+  "immediate" | "planned_window" | "reinspect_after" | "no_action_baseline";
 
 export type MaintenanceActionCode =
-  | "TOOL_REPLACEMENT"
-  | "COOLING_SYSTEM_RESTORE";
+  "TOOL_REPLACEMENT" | "COOLING_SYSTEM_RESTORE";
 
 export type InspectionOutcome =
-  | "no_action_required"
-  | "maintenance_recommended"
-  | "data_check_required";
+  "no_action_required" | "maintenance_recommended" | "data_check_required";
 
 export type InspectionChecklistStatus = "pass" | "fail" | "not_checked";
 
@@ -473,7 +533,11 @@ export function buildInspectionCompletionPayload(
   ) => {
     if (status) checklist.push({ item_id: itemId, status, note });
   };
-  appendCostBasis("cost-basis-in-house", facts.inHouseStatus, "사내 정비 수행 가능 여부");
+  appendCostBasis(
+    "cost-basis-in-house",
+    facts.inHouseStatus,
+    "사내 정비 수행 가능 여부",
+  );
   appendCostBasis(
     "cost-basis-spare-part-available",
     facts.sparePartAvailableStatus,
@@ -492,7 +556,11 @@ export function buildInspectionCompletionPayload(
 
   const measurements: InspectionCompletionPayload["measurements"] = [];
   if (facts.toolWearMin !== null) {
-    measurements.push({ name: "tool_wear_min", value: facts.toolWearMin, unit: "min" });
+    measurements.push({
+      name: "tool_wear_min",
+      value: facts.toolWearMin,
+      unit: "min",
+    });
   }
   if (facts.coolantTemperatureC !== null) {
     measurements.push({
@@ -527,7 +595,8 @@ export interface MaintenanceInspectionResultReadModel {
   event_id: string;
   asset_id: string;
   equipment_id: string;
-  outcome: "no_action_required" | "maintenance_recommended" | "data_check_required";
+  outcome:
+    "no_action_required" | "maintenance_recommended" | "data_check_required";
   recorded_at: string;
 }
 
@@ -544,6 +613,11 @@ export interface MaintenanceDurationBand {
 }
 
 export interface MaintenanceCostOptionReadModel {
+  parts_cost?: MaintenanceCostBand | null;
+  labor_cost?: MaintenanceCostBand | null;
+  external_service_cost?: MaintenanceCostBand | null;
+  production_loss?: MaintenanceCostBand | null;
+  expected_failure_loss?: MaintenanceCostBand | null;
   option_id: string;
   action_candidate_id: string;
   action_code: MaintenanceActionCode;
@@ -629,7 +703,36 @@ export interface MaintenanceEventLineageReadModel {
   activities?: Array<Record<string, unknown>>;
 }
 
+export interface InspectionCoordinationRequest {
+  work_summary: string; downtime_minutes: number; affected_items: string; note: string;
+}
+export interface InspectionCoordinationResponse {
+  request_id: string; decision: "confirmed" | "changes_requested"; scheduled_window: string; production_response: string;
+}
+export interface InspectionCoordination {
+  work_order_id: string; asset_id: string; event_id: string; request_id: string;
+  status: "pending" | "confirmed" | "changes_requested"; work_order_status?: string;
+  work_order_created_at?: string | null;
+  request: InspectionCoordinationRequest; requested_by: string; requested_by_name: string; requested_at: string;
+  response: InspectionCoordinationResponse | null; responded_by: string | null; responded_by_name: string | null; responded_at: string | null;
+  history?: InspectionCoordination[];
+  inspection_result?: { outcome: InspectionOutcome; findings: string[]; note: string } | null;
+}
+export function listInspectionCoordinations(input: { projectId: string; workspaceId: string }) {
+  return request<{ items: InspectionCoordination[] }>(`${maintenanceBase(input.projectId, input.workspaceId)}/inspection-coordinations`);
+}
+export function requestInspectionCoordination(input: { projectId: string; workspaceId: string; workOrderId: string; payload: InspectionCoordinationRequest; idempotencyKey: string }) {
+  return maintenanceCommand(`${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/production-consultation`, input.payload as unknown as Record<string, unknown>, input.idempotencyKey);
+}
+export function respondInspectionCoordination(input: { projectId: string; workspaceId: string; workOrderId: string; payload: InspectionCoordinationResponse; idempotencyKey: string }) {
+  return maintenanceCommand(`${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/production-response`, input.payload as unknown as Record<string, unknown>, input.idempotencyKey);
+}
+
+export function executeInspectedMaintenance(input: { projectId: string; workspaceId: string; workOrderId: string; idempotencyKey: string; payload: { action: "start" | "complete"; note: string } }) {
+  return maintenanceCommand(maintenanceBase(input.projectId, input.workspaceId) + "/inspection-work-orders/" + encodeURIComponent(input.workOrderId) + "/maintenance-execution", input.payload, input.idempotencyKey);
+}
 export interface OpenInspectionWorkOrderReadModel {
+  inspection_result?: { outcome: string; findings: string[]; note: string } | null;
   work_order_id: string;
   event_id: string;
   asset_id: string;
@@ -638,7 +741,9 @@ export interface OpenInspectionWorkOrderReadModel {
   work_type: "inspection";
   status: "requested" | "approved" | "in_progress";
   assigned_to?: string | null;
+  assigned_to_display_name?: string | null;
   assigned_at?: string | null;
+  created_at?: string | null;
 }
 
 export interface MaintenanceCostAnalysisRequest {
@@ -748,7 +853,10 @@ export function selectPredictiveMaintenanceVersion(
 ): Promise<PredictiveMaintenanceDatasetVersions> {
   return request<PredictiveMaintenanceDatasetVersions>(
     `${predictiveMaintenanceBase(projectId, workspaceId)}/selection`,
-    { method: "PUT", body: JSON.stringify({ dataset_version_id: datasetVersionId }) },
+    {
+      method: "PUT",
+      body: JSON.stringify({ dataset_version_id: datasetVersionId }),
+    },
   );
 }
 
@@ -766,8 +874,10 @@ export function getPredictiveMaintenanceDashboard(
   signal?: AbortSignal,
 ): Promise<PredictiveMaintenanceDashboardResponse> {
   const params = new URLSearchParams();
-  if (input.dataset_version_id) params.set("dataset_version_id", input.dataset_version_id);
-  if (input.selected_event_id) params.set("selected_event_id", input.selected_event_id);
+  if (input.dataset_version_id)
+    params.set("dataset_version_id", input.dataset_version_id);
+  if (input.selected_event_id)
+    params.set("selected_event_id", input.selected_event_id);
   if (input.role) params.set("role", input.role);
   if (input.report_type) params.set("report_type", input.report_type);
   if (input.intent) params.set("intent", input.intent);
@@ -835,7 +945,9 @@ export function getPredictiveMaintenanceObservations(
     start: string;
     end: string;
     grain?: "raw" | "10m" | "1h";
-    derived_measures?: Array<"power_w" | "temperature_gap_k" | "overstrain_load">;
+    derived_measures?: Array<
+      "power_w" | "temperature_gap_k" | "overstrain_load"
+    >;
     limit?: number;
   },
   signal?: AbortSignal,
@@ -846,9 +958,11 @@ export function getPredictiveMaintenanceObservations(
     grain: input.grain ?? "10m",
     limit: String(input.limit ?? 200),
   });
-  if (input.dataset_version_id) params.set("dataset_version_id", input.dataset_version_id);
+  if (input.dataset_version_id)
+    params.set("dataset_version_id", input.dataset_version_id);
   if (input.asset_id) params.set("asset_id", input.asset_id);
-  for (const measure of input.derived_measures ?? []) params.append("derived_measure", measure);
+  for (const measure of input.derived_measures ?? [])
+    params.append("derived_measure", measure);
   return request<PredictiveMaintenanceObservationResponse>(
     `${predictiveMaintenanceBase(projectId, workspaceId)}/observations?${params.toString()}`,
     { signal },
@@ -919,7 +1033,9 @@ export function getProject3Subgraph(input: {
   );
 }
 
-export function runAgentQuery(input: AgentQueryInput): Promise<AgentRunResponse> {
+export function runAgentQuery(
+  input: AgentQueryInput,
+): Promise<AgentRunResponse> {
   return request<AgentRunResponse>("/api/agent/query", {
     method: "POST",
     body: JSON.stringify({ route: "auto", top_k: 8, ...input }),
@@ -947,9 +1063,18 @@ export function listAgentRuns(input: {
   return request<AgentRunPage>(`/api/agent/runs?${params.toString()}`);
 }
 
-export function getAgentRun(projectId: string, workspaceId: string, runId: string): Promise<AgentRunResponse> {
-  const params = new URLSearchParams({ project_id: projectId, workspace_id: workspaceId });
-  return request<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}?${params.toString()}`);
+export function getAgentRun(
+  projectId: string,
+  workspaceId: string,
+  runId: string,
+): Promise<AgentRunResponse> {
+  const params = new URLSearchParams({
+    project_id: projectId,
+    workspace_id: workspaceId,
+  });
+  return request<AgentRunResponse>(
+    `/api/agent/runs/${encodeURIComponent(runId)}?${params.toString()}`,
+  );
 }
 
 export function getOperationsAgentReviewPacket(input: {
@@ -958,15 +1083,20 @@ export function getOperationsAgentReviewPacket(input: {
   datasetVersionId?: string | null;
   eventId?: string | null;
   historyWindow?: string;
+  signal?: AbortSignal;
+  expectedSummaryKey?: string;
 }): Promise<OperationsAgentReviewPacket> {
   const params = new URLSearchParams({
     project_id: input.projectId ?? "manufacturing-demo-project",
     history_window: input.historyWindow ?? "24h",
   });
-  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.datasetVersionId)
+    params.set("dataset_version_id", input.datasetVersionId);
   if (input.eventId) params.set("event_id", input.eventId);
+  if (input.expectedSummaryKey) params.set("expected_summary_key", input.expectedSummaryKey);
   return request<OperationsAgentReviewPacket>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-packet?${params.toString()}`,
+    { signal: input.signal },
   );
 }
 
@@ -976,16 +1106,31 @@ export function getOperationsAgentReviewSummary(input: {
   datasetVersionId?: string | null;
   eventId?: string | null;
   historyWindow?: string;
+  signal?: AbortSignal;
 }): Promise<OperationsAgentReviewSummaryResponse> {
   const params = new URLSearchParams({
     project_id: input.projectId ?? "manufacturing-demo-project",
     history_window: input.historyWindow ?? "24h",
   });
-  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.datasetVersionId)
+    params.set("dataset_version_id", input.datasetVersionId);
   if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
+    { signal: input.signal },
   );
+}
+
+function briefingRequestId(): string {
+  // randomUUID requires a secure context; getRandomValues also works on HTTP.
+  if (typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export function createOperationsAgentReviewSummary(input: {
@@ -994,6 +1139,7 @@ export function createOperationsAgentReviewSummary(input: {
   datasetVersionId?: string | null;
   eventId?: string | null;
   historyWindow?: string;
+  signal?: AbortSignal;
   trigger?: "manual_materialization" | "ui_manual_regeneration";
 }): Promise<OperationsAgentReviewSummaryResponse> {
   const params = new URLSearchParams({
@@ -1001,11 +1147,12 @@ export function createOperationsAgentReviewSummary(input: {
     history_window: input.historyWindow ?? "24h",
     trigger: input.trigger ?? "ui_manual_regeneration",
   });
-  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.datasetVersionId)
+    params.set("dataset_version_id", input.datasetVersionId);
   if (input.eventId) params.set("event_id", input.eventId);
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
-    { method: "POST" },
+    { method: "POST", signal: input.signal, headers: { "Idempotency-Key": briefingRequestId() } },
   );
 }
 
@@ -1067,7 +1214,8 @@ export function getOperationsAgentReviewWorkflowRuns(input: {
   });
   if (input.assetId) params.set("asset_id", input.assetId);
   if (input.eventId) params.set("event_id", input.eventId);
-  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.datasetVersionId)
+    params.set("dataset_version_id", input.datasetVersionId);
   if (input.status) params.set("status", input.status);
   return request<OperationsAgentReviewWorkflowRunsResponse>(
     `/api/projects/${encodeURIComponent(projectId)}/agent-review-workflow-runs?${params.toString()}`,
@@ -1115,7 +1263,9 @@ export function getAnalysis(
 ): Promise<AnalysisServerSnapshot> {
   const params = new URLSearchParams({ workspace_id: workspaceId });
   if (version) params.set("version", String(version));
-  return request<AnalysisServerSnapshot>(`/api/analyses/${encodeURIComponent(analysisId)}?${params.toString()}`);
+  return request<AnalysisServerSnapshot>(
+    `/api/analyses/${encodeURIComponent(analysisId)}?${params.toString()}`,
+  );
 }
 
 export function updateAnalysis(
@@ -1129,10 +1279,13 @@ export function updateAnalysis(
     publish?: boolean;
   },
 ): Promise<AnalysisServerSnapshot> {
-  return request<AnalysisServerSnapshot>(`/api/analyses/${encodeURIComponent(analysisId)}`, {
-    method: "PUT",
-    body: JSON.stringify(input),
-  });
+  return request<AnalysisServerSnapshot>(
+    `/api/analyses/${encodeURIComponent(analysisId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function queueAnalysisRun(
@@ -1145,22 +1298,36 @@ export function queueAnalysisRun(
     preview_limit?: number;
   },
 ): Promise<AnalysisRunResponse> {
-  return request<AnalysisRunResponse>(`/api/analyses/${encodeURIComponent(analysisId)}/jobs`, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return request<AnalysisRunResponse>(
+    `/api/analyses/${encodeURIComponent(analysisId)}/jobs`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
-export function getAnalysisRun(runId: string, workspaceId: string): Promise<AnalysisRunResponse> {
+export function getAnalysisRun(
+  runId: string,
+  workspaceId: string,
+): Promise<AnalysisRunResponse> {
   const params = new URLSearchParams({ workspace_id: workspaceId });
-  return request<AnalysisRunResponse>(`/api/analysis-runs/${encodeURIComponent(runId)}?${params.toString()}`);
+  return request<AnalysisRunResponse>(
+    `/api/analysis-runs/${encodeURIComponent(runId)}?${params.toString()}`,
+  );
 }
 
-export function cancelAnalysisRun(runId: string, workspaceId: string): Promise<AnalysisRunResponse> {
+export function cancelAnalysisRun(
+  runId: string,
+  workspaceId: string,
+): Promise<AnalysisRunResponse> {
   const params = new URLSearchParams({ workspace_id: workspaceId });
-  return request<AnalysisRunResponse>(`/api/analysis-runs/${encodeURIComponent(runId)}/cancel?${params.toString()}`, {
-    method: "POST",
-  });
+  return request<AnalysisRunResponse>(
+    `/api/analysis-runs/${encodeURIComponent(runId)}/cancel?${params.toString()}`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export function getAnalysisNodeRows(input: {
@@ -1190,10 +1357,13 @@ export function runAnalysis(
     preview_limit?: number;
   },
 ): Promise<AnalysisRunResponse> {
-  return request<AnalysisRunResponse>(`/api/analyses/${encodeURIComponent(analysisId)}/run`, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return request<AnalysisRunResponse>(
+    `/api/analyses/${encodeURIComponent(analysisId)}/run`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function materializeAnalysisResult(
@@ -1280,7 +1450,9 @@ export async function getEvents(): Promise<EventSummary[]> {
 }
 
 export function getEvidence(eventId: string): Promise<Evidence> {
-  return request<Evidence>(`/api/events/${encodeURIComponent(eventId)}/evidence`);
+  return request<Evidence>(
+    `/api/events/${encodeURIComponent(eventId)}/evidence`,
+  );
 }
 
 export async function getReport(
@@ -1290,10 +1462,18 @@ export async function getReport(
   locale: "ko-KR" | "en-US" = "ko-KR",
   reportType?: import("./types").ReportType,
 ): Promise<Report> {
-  const payload = await request<{ report: Report }>(`/api/events/${encodeURIComponent(eventId)}/report`, {
-    method: "POST",
-    body: JSON.stringify({ role, report_type: reportType, locale, use_llm: useLlm }),
-  });
+  const payload = await request<{ report: Report }>(
+    `/api/events/${encodeURIComponent(eventId)}/report`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        role,
+        report_type: reportType,
+        locale,
+        use_llm: useLlm,
+      }),
+    },
+  );
   return payload.report;
 }
 
@@ -1304,14 +1484,22 @@ export async function getLayout(
   useLlm = true,
   locale: "ko-KR" | "en-US" = "ko-KR",
 ): Promise<Layout> {
-  const payload = await request<{ layout: Layout }>(`/api/events/${encodeURIComponent(eventId)}/layout`, {
-    method: "POST",
-    body: JSON.stringify({ role, locale, intent, use_llm: useLlm }),
-  });
+  const payload = await request<{ layout: Layout }>(
+    `/api/events/${encodeURIComponent(eventId)}/layout`,
+    {
+      method: "POST",
+      body: JSON.stringify({ role, locale, intent, use_llm: useLlm }),
+    },
+  );
   return payload.layout;
 }
 
-export function recordDecision(eventId: string, actor: string, decision: string, note: string) {
+export function recordDecision(
+  eventId: string,
+  actor: string,
+  decision: string,
+  note: string,
+) {
   return request(`/api/events/${encodeURIComponent(eventId)}/decision`, {
     method: "POST",
     body: JSON.stringify({ actor, decision, note }),
@@ -1387,12 +1575,11 @@ export function completeInspectionWorkOrder(input: {
   projectId: string;
   workspaceId: string;
   workOrderId: string;
-  facts: InspectionCompletionFacts;
   idempotencyKey: string;
-}) {
+} & ({ facts: InspectionCompletionFacts } | { payload: InspectionCompletionPayload })) {
   return maintenanceCommand(
     `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/complete`,
-    buildInspectionCompletionPayload(input.facts),
+    "payload" in input ? input.payload : buildInspectionCompletionPayload(input.facts),
     input.idempotencyKey,
   );
 }
@@ -1457,16 +1644,23 @@ export async function approveMaintenanceWorkOrder(input: {
   try {
     return await maintenanceCommand(endpoint, {}, input.idempotencyKey);
   } catch (reason) {
-    if (!(reason instanceof ApiError) || reason.code !== "source_simulation_session_unavailable") {
+    if (
+      !(reason instanceof ApiError) ||
+      reason.code !== "source_simulation_session_unavailable"
+    ) {
       throw reason;
     }
     // Historical Product Results can predate source-session provenance. Only
     // in that compatibility case do we create a replay selector; current live
     // Results stay bound to the immutable source session resolved server-side.
-    const replay = await startPredictiveMaintenanceReplay(input.projectId, input.workspaceId, {
-      dataset_version_id: input.datasetVersionId,
-      speed_minutes_per_second: 60,
-    });
+    const replay = await startPredictiveMaintenanceReplay(
+      input.projectId,
+      input.workspaceId,
+      {
+        dataset_version_id: input.datasetVersionId,
+        speed_minutes_per_second: 60,
+      },
+    );
     return maintenanceCommand(
       endpoint,
       { simulation_session_id: replay.cursor.session_id },
@@ -1498,9 +1692,10 @@ export function completeMaintenanceAction(input: {
   return maintenanceCommand(
     `${maintenanceBase(input.projectId, input.workspaceId)}/maintenance-actions/${encodeURIComponent(input.maintenanceActionId)}/complete`,
     {
-      outcome: input.actionCode === "COOLING_SYSTEM_RESTORE"
-        ? "냉각 계통을 복구하고 정상 상태를 확인했습니다."
-        : "공구 인서트 1개를 교체하고 정상 체결을 확인했습니다.",
+      outcome:
+        input.actionCode === "COOLING_SYSTEM_RESTORE"
+          ? "냉각 계통을 복구하고 정상 상태를 확인했습니다."
+          : "공구 인서트 1개를 교체하고 정상 체결을 확인했습니다.",
     },
     input.idempotencyKey,
   );
@@ -1525,10 +1720,13 @@ export function followUp(
   question: string,
   locale: "ko-KR" | "en-US" = "ko-KR",
 ): Promise<FollowUp> {
-  return request<FollowUp>(`/api/events/${encodeURIComponent(eventId)}/follow-up`, {
-    method: "POST",
-    body: JSON.stringify({ role, locale, question }),
-  });
+  return request<FollowUp>(
+    `/api/events/${encodeURIComponent(eventId)}/follow-up`,
+    {
+      method: "POST",
+      body: JSON.stringify({ role, locale, question }),
+    },
+  );
 }
 
 export interface AdminOverview {
@@ -1557,17 +1755,29 @@ export async function getAdminWorkspaces(): Promise<Workspace[]> {
 }
 
 export async function getAdminAudit(): Promise<AdminAuditEntry[]> {
-  return (await request<{ items: AdminAuditEntry[] }>("/api/admin/audit")).items;
+  return (await request<{ items: AdminAuditEntry[] }>("/api/admin/audit"))
+    .items;
 }
 
-export async function getAdminNotifications(unreadOnly = false): Promise<AdminNotification[]> {
-  return (await request<{ items: AdminNotification[] }>(`/api/admin/notifications?unread_only=${unreadOnly ? "true" : "false"}`)).items;
+export async function getAdminNotifications(
+  unreadOnly = false,
+): Promise<AdminNotification[]> {
+  return (
+    await request<{ items: AdminNotification[] }>(
+      `/api/admin/notifications?unread_only=${unreadOnly ? "true" : "false"}`,
+    )
+  ).items;
 }
 
-export function markAdminNotificationRead(notificationId: string): Promise<AdminNotification> {
-  return request<AdminNotification>(`/api/admin/notifications/${encodeURIComponent(notificationId)}/read`, {
-    method: "POST",
-  });
+export function markAdminNotificationRead(
+  notificationId: string,
+): Promise<AdminNotification> {
+  return request<AdminNotification>(
+    `/api/admin/notifications/${encodeURIComponent(notificationId)}/read`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export function updateAdminUser(
@@ -1585,8 +1795,12 @@ export function updateAdminUser(
   });
 }
 
-export function getResolvedDashboard(workspaceId: string): Promise<ResolvedDashboard> {
-  return request<ResolvedDashboard>(`/api/dashboards/resolved?workspace_id=${encodeURIComponent(workspaceId)}`);
+export function getResolvedDashboard(
+  workspaceId: string,
+): Promise<ResolvedDashboard> {
+  return request<ResolvedDashboard>(
+    `/api/dashboards/resolved?workspace_id=${encodeURIComponent(workspaceId)}`,
+  );
 }
 
 export async function getBoardCatalog(
@@ -1597,7 +1811,11 @@ export async function getBoardCatalog(
   if (options?.q) params.set("q", options.q);
   if (options?.category) params.set("category", options.category);
   if (options?.role_code) params.set("role_code", options.role_code);
-  return (await request<{ items: BoardCatalogDefinition[] }>(`/api/boards/catalog?${params.toString()}`)).items;
+  return (
+    await request<{ items: BoardCatalogDefinition[] }>(
+      `/api/boards/catalog?${params.toString()}`,
+    )
+  ).items;
 }
 
 export function saveDashboardPreferences(input: {
@@ -1613,7 +1831,9 @@ export function saveDashboardPreferences(input: {
   });
 }
 
-export function restoreDashboardDefaults(workspaceId: string): Promise<ResolvedDashboard> {
+export function restoreDashboardDefaults(
+  workspaceId: string,
+): Promise<ResolvedDashboard> {
   return request<ResolvedDashboard>("/api/dashboards/preferences/restore", {
     method: "POST",
     body: JSON.stringify({ workspace_id: workspaceId }),
@@ -1626,8 +1846,15 @@ export async function getReportDraft(
   role: Role,
   locale: "ko-KR" | "en-US",
 ): Promise<ReportDraftRecord | null> {
-  const params = new URLSearchParams({ workspace_id: workspaceId, event_id: eventId, role, locale });
-  const payload = await request<{ draft: ReportDraftRecord | null }>(`/api/reports/draft?${params.toString()}`);
+  const params = new URLSearchParams({
+    workspace_id: workspaceId,
+    event_id: eventId,
+    role,
+    locale,
+  });
+  const payload = await request<{ draft: ReportDraftRecord | null }>(
+    `/api/reports/draft?${params.toString()}`,
+  );
   return payload.draft;
 }
 
@@ -1651,7 +1878,11 @@ export function saveReportDraft(input: {
 }
 
 export async function getSavedViews(workspaceId: string): Promise<SavedView[]> {
-  return (await request<{ items: SavedView[] }>(`/api/dashboards/saved-views?workspace_id=${encodeURIComponent(workspaceId)}`)).items;
+  return (
+    await request<{ items: SavedView[] }>(
+      `/api/dashboards/saved-views?workspace_id=${encodeURIComponent(workspaceId)}`,
+    )
+  ).items;
 }
 
 export function createSavedView(input: {
@@ -1668,11 +1899,16 @@ export function createSavedView(input: {
 }
 
 export function getSavedView(viewId: string): Promise<SavedView> {
-  return request<SavedView>(`/api/dashboards/saved-views/${encodeURIComponent(viewId)}`);
+  return request<SavedView>(
+    `/api/dashboards/saved-views/${encodeURIComponent(viewId)}`,
+  );
 }
 
 export function deleteSavedView(viewId: string): Promise<void> {
-  return request<void>(`/api/dashboards/saved-views/${encodeURIComponent(viewId)}`, { method: "DELETE" });
+  return request<void>(
+    `/api/dashboards/saved-views/${encodeURIComponent(viewId)}`,
+    { method: "DELETE" },
+  );
 }
 
 export function createDashboardShare(input: {
@@ -1687,8 +1923,12 @@ export function createDashboardShare(input: {
   });
 }
 
-export function resolveDashboardShare(token: string): Promise<DashboardSharePayload> {
-  return request<DashboardSharePayload>(`/api/dashboards/shares/${encodeURIComponent(token)}`);
+export function resolveDashboardShare(
+  token: string,
+): Promise<DashboardSharePayload> {
+  return request<DashboardSharePayload>(
+    `/api/dashboards/shares/${encodeURIComponent(token)}`,
+  );
 }
 
 export function getDashboardTemplatePreview(
@@ -1698,16 +1938,20 @@ export function getDashboardTemplatePreview(
 ): Promise<ResolvedDashboard> {
   const params = new URLSearchParams({ workspace_id: workspaceId });
   if (version) params.set("version", String(version));
-  return request<ResolvedDashboard>(`/api/dashboard-templates/${roleCode}/preview?${params.toString()}`);
+  return request<ResolvedDashboard>(
+    `/api/dashboard-templates/${roleCode}/preview?${params.toString()}`,
+  );
 }
 
 export async function getDashboardTemplateVersions(
   workspaceId: string,
   roleCode: AppRole,
 ): Promise<DashboardTemplateVersion[]> {
-  return (await request<{ items: DashboardTemplateVersion[] }>(
-    `/api/dashboard-templates/${roleCode}/versions?workspace_id=${encodeURIComponent(workspaceId)}`,
-  )).items;
+  return (
+    await request<{ items: DashboardTemplateVersion[] }>(
+      `/api/dashboard-templates/${roleCode}/versions?workspace_id=${encodeURIComponent(workspaceId)}`,
+    )
+  ).items;
 }
 
 export function publishDashboardTemplate(
@@ -1736,19 +1980,34 @@ export function requestDashboardTemplatePublish(
     change_summary: string;
   },
 ): Promise<WorkflowRequest> {
-  return request<WorkflowRequest>(`/api/dashboard-templates/${roleCode}/publish-requests`, {
-    method: "POST",
-    body: JSON.stringify(input),
+  return request<WorkflowRequest>(
+    `/api/dashboard-templates/${roleCode}/publish-requests`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function getExecutiveWorkspace(
+  workspaceId: string,
+): Promise<ExecutiveOverview> {
+  return request<ExecutiveOverview>(
+    `/api/role-workspaces/executive?workspace_id=${encodeURIComponent(workspaceId)}`,
+  );
+}
+
+export function getAuditWorkspace(
+  workspaceId: string,
+  eventId: string,
+): Promise<AuditReconstruction> {
+  const params = new URLSearchParams({
+    workspace_id: workspaceId,
+    event_id: eventId,
   });
-}
-
-export function getExecutiveWorkspace(workspaceId: string): Promise<ExecutiveOverview> {
-  return request<ExecutiveOverview>(`/api/role-workspaces/executive?workspace_id=${encodeURIComponent(workspaceId)}`);
-}
-
-export function getAuditWorkspace(workspaceId: string, eventId: string): Promise<AuditReconstruction> {
-  const params = new URLSearchParams({ workspace_id: workspaceId, event_id: eventId });
-  return request<AuditReconstruction>(`/api/role-workspaces/audit?${params.toString()}`);
+  return request<AuditReconstruction>(
+    `/api/role-workspaces/audit?${params.toString()}`,
+  );
 }
 
 export function createAuditExportCheckpoint(input: {
@@ -1757,14 +2016,21 @@ export function createAuditExportCheckpoint(input: {
   export_format: "json" | "csv" | "pdf";
   reason: string;
 }): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>("/api/role-workspaces/audit/export-checkpoints", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return request<Record<string, unknown>>(
+    "/api/role-workspaces/audit/export-checkpoints",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
-export function getFieldWorkspace(workspaceId: string): Promise<FieldTaskWorkspace> {
-  return request<FieldTaskWorkspace>(`/api/role-workspaces/field?workspace_id=${encodeURIComponent(workspaceId)}`);
+export function getFieldWorkspace(
+  workspaceId: string,
+): Promise<FieldTaskWorkspace> {
+  return request<FieldTaskWorkspace>(
+    `/api/role-workspaces/field?workspace_id=${encodeURIComponent(workspaceId)}`,
+  );
 }
 
 export function invokeOntologyAction(input: {
@@ -1781,11 +2047,15 @@ export function invokeOntologyAction(input: {
 }
 
 export function getFDEWorkspace(workspaceId: string): Promise<FDEWorkbench> {
-  return request<FDEWorkbench>(`/api/role-workspaces/fde?workspace_id=${encodeURIComponent(workspaceId)}`);
+  return request<FDEWorkbench>(
+    `/api/role-workspaces/fde?workspace_id=${encodeURIComponent(workspaceId)}`,
+  );
 }
 
 export function getModelConsole(workspaceId: string): Promise<ModelConsole> {
-  return request<ModelConsole>(`/api/role-workspaces/ml?workspace_id=${encodeURIComponent(workspaceId)}`);
+  return request<ModelConsole>(
+    `/api/role-workspaces/ml?workspace_id=${encodeURIComponent(workspaceId)}`,
+  );
 }
 
 export function createModelReleaseRequest(input: {
@@ -1821,10 +2091,13 @@ export function recommendBoards(input: {
   use_llm?: boolean;
   limit?: number;
 }): Promise<BoardRecommendationResponse> {
-  return request<BoardRecommendationResponse>("/api/planner/board-recommendations", {
-    method: "POST",
-    body: JSON.stringify({ use_llm: true, limit: 5, ...input }),
-  });
+  return request<BoardRecommendationResponse>(
+    "/api/planner/board-recommendations",
+    {
+      method: "POST",
+      body: JSON.stringify({ use_llm: true, limit: 5, ...input }),
+    },
+  );
 }
 
 export function generateDashboardDraft(input: {
@@ -1849,30 +2122,36 @@ export function recommendVisualization(input: {
   deterministic_candidates: VisualizationCandidate[];
   use_llm?: boolean;
 }): Promise<VisualizationPlannerResponse> {
-  return request<VisualizationPlannerResponse>("/api/planner/visualizations/recommend", {
-    method: "POST",
-    body: JSON.stringify({ use_llm: true, ...input }),
-  });
+  return request<VisualizationPlannerResponse>(
+    "/api/planner/visualizations/recommend",
+    {
+      method: "POST",
+      body: JSON.stringify({ use_llm: true, ...input }),
+    },
+  );
 }
 
 export function planSemanticVisualization(
   input: SemanticVisualizationPlanInput,
 ): Promise<SemanticVisualizationPlanResponse> {
-  return request<SemanticVisualizationPlanResponse>("/api/planner/visualizations/semantic-plan", {
-    method: "POST",
-    body: JSON.stringify({
-      dimensions: [],
-      measures: [],
-      filters: [],
-      order: [],
-      limit: 500,
-      field_cardinalities: {},
-      result_profile: [],
-      clamp_limits: true,
-      use_llm: true,
-      ...input,
-    }),
-  });
+  return request<SemanticVisualizationPlanResponse>(
+    "/api/planner/visualizations/semantic-plan",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        dimensions: [],
+        measures: [],
+        filters: [],
+        order: [],
+        limit: 500,
+        field_cardinalities: {},
+        result_profile: [],
+        clamp_limits: true,
+        use_llm: true,
+        ...input,
+      }),
+    },
+  );
 }
 
 export function generateGroundedNarrative(input: {
@@ -1909,10 +2188,13 @@ export function decideTemplatePublishRequest(
   decision: "approve" | "reject",
   note: string,
 ): Promise<WorkflowRequest> {
-  return request<WorkflowRequest>(`/api/admin/template-publish-requests/${requestId}/decision`, {
-    method: "POST",
-    body: JSON.stringify({ decision, note }),
-  });
+  return request<WorkflowRequest>(
+    `/api/admin/template-publish-requests/${requestId}/decision`,
+    {
+      method: "POST",
+      body: JSON.stringify({ decision, note }),
+    },
+  );
 }
 
 export function decideModelReleaseRequest(
@@ -1920,8 +2202,11 @@ export function decideModelReleaseRequest(
   decision: "approve" | "reject",
   note: string,
 ): Promise<WorkflowRequest> {
-  return request<WorkflowRequest>(`/api/admin/model-release-requests/${requestId}/decision`, {
-    method: "POST",
-    body: JSON.stringify({ decision, note }),
-  });
+  return request<WorkflowRequest>(
+    `/api/admin/model-release-requests/${requestId}/decision`,
+    {
+      method: "POST",
+      body: JSON.stringify({ decision, note }),
+    },
+  );
 }

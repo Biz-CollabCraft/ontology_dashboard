@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from copy import deepcopy
 import os
 import time
 import uuid
@@ -24,10 +26,16 @@ from app.operations.agent_review_packet import compose_agent_review_packet
 from app.operations.context_providers import AgentReviewContextRegistry
 from app.operations.agent_review_summary_materialization import (
     AgentReviewSummaryMaterializer,
+    _materialization_trace,
     summary_key,
     summary_key_payload,
 )
 from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider
+from app.operations.agent_review_summary_generation_policy import (
+    MAX_MINOR_CHANGE_DEFERRAL_SECONDS,
+    SnapshotGuardedRepository, cached_record_is_valid, decide_generation,
+    packet_is_current, policy_fingerprint, material_change_required, background_generation_required,
+)
 from app.operations.asset_detail_view_model import (
     AssetDetailViewModelService,
     compose_asset_detail_view_model,
@@ -127,6 +135,11 @@ class ManufacturingPredictiveMaintenanceService:
         self.layout_planner = layout_planner
         self.context_provider_factory = context_provider_factory
         self.agent_review_summary_provider = agent_review_summary_provider
+        # Scheduling baseline only; never a source for GET or cached prose.
+        self._briefing_generation_baselines = {}
+        self._briefing_observation_baselines = {}
+        self._briefing_minor_change_deferred_since = {}
+        self._briefing_scan_offsets = {}
         self.agent_answer_provider = agent_answer_provider
         self.agent_review_context_registry = agent_review_context_registry
         self.maintenance_lineage_query = maintenance_lineage_query
@@ -373,11 +386,15 @@ class ManufacturingPredictiveMaintenanceService:
         project_id: str,
         event_id: str | None,
         role: str = "process_manager",
-        max_candidates: int = 8,
+        max_candidates: int | None = None,
         organization_id: str = "org-ontology-demo",
         workspace_id: str = "manufacturing-demo",
         context_repository: Any | None = None,
+        retrieved_at: datetime | None = None,
     ) -> dict[str, Any]:
+        retrieved_at = retrieved_at or datetime.now(timezone.utc)
+        if retrieved_at.tzinfo is None:
+            raise ValueError("retrieved_at must include a timezone")
         observed_at = _timestamp_instant(str(artifact["observed_at"]))
         identity = OperationalRequestIdentity(
             organization_id=organization_id,
@@ -388,7 +405,7 @@ class ManufacturingPredictiveMaintenanceService:
             decision_as_of=observed_at,
         )
         contexts = (context_repository or self.operational_context_repository).contexts(
-            identity=identity, retrieved_at=observed_at,
+            identity=identity, retrieved_at=retrieved_at,
         )
         relations = resolve_operational_relations(identity=identity, contexts=contexts)
         candidates = project_evidence_candidates(
@@ -439,7 +456,7 @@ class ManufacturingPredictiveMaintenanceService:
             "relation_resolution_version": relations.schema_version,
             "selection_policy_version": selected.policy_version,
             "decision_as_of": observed_at.isoformat(),
-            "relation_retrieved_at": observed_at.isoformat(),
+            "relation_retrieved_at": retrieved_at.isoformat(),
             "source_observed_at_min": (
                 min(source_observed_ats).isoformat()
                 if source_observed_ats
@@ -538,7 +555,7 @@ class ManufacturingPredictiveMaintenanceService:
         decision_as_of: datetime | None = None,
         retrieved_at: datetime | None = None,
         role: str = "process_manager",
-        max_candidates: int = 8,
+        max_candidates: int | None = None,
         required_evidence_ids: set[str] | None = None,
         required_limitation_ids: set[str] | None = None,
     ) -> dict[str, Any]:
@@ -623,6 +640,10 @@ class ManufacturingPredictiveMaintenanceService:
             history_window=history_window,
             trigger=trigger,
             engine=engine,
+            packet_loader=lambda: self.agent_review_packet(
+                asset_id, project_id, dataset_version_id=dataset_version_id,
+                history_window=history_window,
+            ),
         )
 
     def _materialize_agent_review_packet(
@@ -635,7 +656,69 @@ class ManufacturingPredictiveMaintenanceService:
         history_window: str,
         trigger: str,
         engine: str,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        generation_policy: str = "always",
+        packet_loader=None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        # Coalesce only background work. Explicit event-bound requests retain their
+        # own snapshot; never return a newer event's prose under an older identity.
+        scope = (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window)
+        queue_scope = (id(self), *scope)
+        token = object()
+        try:
+            observed_at = datetime.fromisoformat(str((packet.get("snapshot_basis") or {}).get("observed_at")).replace("Z", "+00:00"))
+            if observed_at.tzinfo is None:
+                observed_at = observed_at.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            observed_at = datetime.min.replace(tzinfo=timezone.utc)
+        background = trigger == "polling_watcher"
+        if background:
+            with _AGENT_REVIEW_SUMMARY_LOCKS_GUARD:
+                pending = _AGENT_REVIEW_PENDING.get(queue_scope)
+                if pending is None or observed_at >= pending[0]:
+                    _AGENT_REVIEW_PENDING[queue_scope] = (observed_at, token)
+        def run():
+            return self._materialize_agent_review_packet_now(
+                packet=packet, project_id=project_id, organization_id=organization_id,
+                workspace_id=workspace_id, history_window=history_window, trigger=trigger,
+                engine=engine, generation_policy=generation_policy, packet_loader=packet_loader,
+            )
+        if not background:
+            return run()
+        with _agent_review_summary_lock("scope:" + json.dumps(queue_scope)):
+            with _AGENT_REVIEW_SUMMARY_LOCKS_GUARD:
+                pending = _AGENT_REVIEW_PENDING.get(queue_scope)
+                superseded = pending is None or pending[1] is not token
+            if superseded:
+                summary, trace = self.cached_agent_review_summary_for_packet(
+                    packet=packet, project_id=project_id, organization_id=organization_id,
+                    workspace_id=workspace_id, history_window=history_window,
+                )
+                decision = {"policy": generation_policy, "generation_action": "DEFER",
+                            "decision_reason": "superseded_before_generation",
+                            "reuse_eligibility": trace["reuse_eligibility"]}
+                _record_briefing_event("decision", scope, **decision)
+                return summary, {**trace, "generation_policy": decision}
+            try:
+                return run()
+            finally:
+                with _AGENT_REVIEW_SUMMARY_LOCKS_GUARD:
+                    pending = _AGENT_REVIEW_PENDING.get(queue_scope)
+                    if pending is not None and pending[1] is token:
+                        _AGENT_REVIEW_PENDING.pop(queue_scope, None)
+
+    def _materialize_agent_review_packet_now(
+        self,
+        *,
+        packet: dict[str, Any],
+        project_id: str,
+        organization_id: str,
+        workspace_id: str,
+        history_window: str,
+        trigger: str,
+        engine: str,
+        generation_policy: str = "always",
+        packet_loader=None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         materializer = AgentReviewSummaryMaterializer(
             self.repository,
             self.agent_review_summary_provider,
@@ -650,20 +733,83 @@ class ManufacturingPredictiveMaintenanceService:
             provider=self.agent_review_summary_provider,
         )
         materialization_key = summary_key(key_payload)
+
+        def validate_binding():
+            for current_packet in (packet, packet_loader() if packet_loader else packet):
+                # Preserve the existing generation contract; full packet schema
+                # validation is required for cache eligibility above all else.
+                if not packet_is_current(current_packet, require_schema=False):
+                    raise RuntimeError("agent_review_packet_invalid_or_expired")
+                current_key = summary_key(summary_key_payload(
+                    packet=current_packet, organization_id=organization_id,
+                    project_id=project_id, workspace_id=workspace_id,
+                    history_window=history_window, provider=self.agent_review_summary_provider,
+                ))
+                if current_key != materialization_key:
+                    raise RuntimeError("agent_review_context_changed_during_generation")
+
+        materializer.repository = SnapshotGuardedRepository(
+            self.repository, validate_binding,
+            lambda record: cached_record_is_valid(
+                record, packet=packet, key_payload=key_payload,
+                materialization_key=materialization_key,
+            ),
+        )
         with _agent_review_summary_lock(materialization_key):
-            if not force:
-                cached_summary, cached_trace = materializer.lookup(
-                    packet=packet,
-                    organization_id=organization_id,
-                    project_id=project_id,
-                    workspace_id=workspace_id,
-                    history_window=history_window,
-                )
-                cached_status = (cached_trace.get("materialization") or {}).get("status")
-                if cached_summary is not None and (
-                    cached_status != "fallback" or self.agent_review_summary_provider is None
-                ):
-                    return cached_summary, cached_trace
+            cached_summary, cached_trace = materializer.lookup(
+                packet=packet,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                history_window=history_window,
+            )
+            retry_fallback = (
+                (cached_trace.get("materialization") or {}).get("status") == "fallback"
+                and self.agent_review_summary_provider is not None
+            )
+            scope = (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window)
+            previous_packet, previous_identity = self._briefing_generation_baselines.get(scope, (None, None))
+            input_valid = packet_is_current(packet)
+            material_change = material_change_required(
+                packet, previous_packet, current_identity=key_payload,
+                previous_identity=previous_identity,
+            )
+            minor_change_deferral_expired = False
+            if generation_policy == "hybrid":
+                if cached_summary is not None or force or material_change or not input_valid:
+                    self._briefing_minor_change_deferred_since.pop(scope, None)
+                elif previous_packet is not None:
+                    now_monotonic = time.monotonic()
+                    deferred_since = self._briefing_minor_change_deferred_since.setdefault(
+                        scope, now_monotonic
+                    )
+                    minor_change_deferral_expired = (
+                        now_monotonic - deferred_since >= MAX_MINOR_CHANGE_DEFERRAL_SECONDS
+                    )
+            demand_previous = previous_packet
+            if generation_policy == "demand" and trigger == "polling_watcher":
+                if demand_previous is None:
+                    demand_previous = self._briefing_observation_baselines.get(scope)
+                if input_valid and demand_previous is None:
+                    # Keep the first valid observation until generation succeeds.
+                    # Updating on every poll would erase cumulative small changes.
+                    self._briefing_observation_baselines[scope] = deepcopy(packet)
+            policy_trace = decide_generation(
+                policy=generation_policy,
+                current_fingerprint=policy_fingerprint(materialization_key),
+                previous_fingerprint=policy_fingerprint(summary_key(previous_identity)) if previous_identity is not None else None,
+                reuse_eligibility="EXACT_VALIDATED" if cached_summary is not None else "INELIGIBLE",
+                explicit_refresh=force,
+                retry_fallback=retry_fallback,
+                model_id=key_payload["model_version"],
+                input_valid=input_valid,
+                background_required=background_generation_required(packet, demand_previous),
+                material_change=material_change,
+                minor_change_deferral_expired=minor_change_deferral_expired,
+            )
+            _record_briefing_event("decision", scope, **policy_trace)
+            if policy_trace["generation_action"] == "DEFER":
+                return cached_summary, {**cached_trace, "generation_policy": policy_trace}
 
             try:
                 run = self._start_agent_review_workflow_run(
@@ -679,7 +825,16 @@ class ManufacturingPredictiveMaintenanceService:
                     history_window=history_window,
                 )
             except _AgentReviewSummaryMaterializedWhileWaiting as cached:
-                return cached.result
+                summary, trace = cached.result
+                policy_trace = {
+                    **policy_trace,
+                    "generation_decision": "REUSE",
+                    "generation_action": "DEFER",
+                    "reuse_eligibility": "EXACT_VALIDATED",
+                    "decision_reason": "concurrent_materialization_completed_for_exact_key",
+                }
+                self._briefing_minor_change_deferred_since.pop(scope, None)
+                return summary, {**trace, "generation_policy": policy_trace}
             try:
                 summary, trace = materializer.materialize(
                     packet=packet,
@@ -691,30 +846,41 @@ class ManufacturingPredictiveMaintenanceService:
                     force=force,
                     refresh_fallback=self.agent_review_summary_provider is not None,
                 )
+                if not trace.get("fallback"):
+                    self._briefing_generation_baselines[scope] = (deepcopy(packet), deepcopy(key_payload))
+                    self._briefing_observation_baselines.pop(scope, None)
+                    self._briefing_minor_change_deferred_since.pop(scope, None)
+                _record_briefing_event("completion", scope, fallback=trace.get("fallback"),
+                                       reason=trace.get("reason"), generation_metrics=trace.get("generation_metrics"))
                 status = _workflow_run_status(trace)
                 finished = self.repository.finish_agent_review_workflow_run(
                     run["workflow_run_id"],
                     status=status,
                     trace={
                         "stage": "finished",
+                        "generation_policy": policy_trace,
                         "materialization": trace.get("materialization") or {},
                         "provider": trace.get("provider"),
                         "fallback": trace.get("fallback"),
                         "reason": trace.get("reason"),
                         "validation_errors": trace.get("validation_errors") or [],
+                        "generation_metrics": trace.get("generation_metrics"),
                     },
                 )
                 return summary, {
                     **trace,
+                    "generation_policy": policy_trace,
                     "workflow_run": _workflow_run_trace(finished),
                 }
             except Exception as exc:
+                _record_briefing_event("failure", scope, error_type=type(exc).__name__,
+                                       summary_key=materialization_key)
                 finished = self.repository.finish_agent_review_workflow_run(
                     run["workflow_run_id"],
                     status="failed",
                     error_type=type(exc).__name__,
                     error_message=str(exc),
-                    trace={"stage": "failed", "error_type": type(exc).__name__},
+                    trace={"stage": "failed", "error_type": type(exc).__name__, "generation_policy": policy_trace},
                 )
                 raise RuntimeError(
                     f"agent_review_summary_workflow_failed:{finished['workflow_run_id']}"
@@ -738,10 +904,7 @@ class ManufacturingPredictiveMaintenanceService:
             dataset_version_id=dataset_version_id,
             history_window=history_window,
         )
-        summary, trace = AgentReviewSummaryMaterializer(
-            self.repository,
-            self.agent_review_summary_provider,
-        ).lookup(
+        summary, trace = self.cached_agent_review_summary_for_packet(
             packet=packet,
             organization_id=organization_id,
             project_id=project_id,
@@ -764,8 +927,21 @@ class ManufacturingPredictiveMaintenanceService:
         workspace_id: str = "manufacturing-demo",
         history_window: str = "24h",
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-        return AgentReviewSummaryMaterializer(
-            self.repository,
+        key_payload = summary_key_payload(
+            packet=packet, organization_id=organization_id, project_id=project_id,
+            workspace_id=workspace_id, history_window=history_window,
+            provider=self.agent_review_summary_provider,
+        )
+        materialization_key = summary_key(key_payload)
+        repository = SnapshotGuardedRepository(
+            self.repository, lambda: None,
+            lambda record: cached_record_is_valid(
+                record, packet=packet, key_payload=key_payload,
+                materialization_key=materialization_key,
+            ),
+        )
+        summary, trace = AgentReviewSummaryMaterializer(
+            repository,
             self.agent_review_summary_provider,
         ).lookup(
             packet=packet,
@@ -774,6 +950,31 @@ class ManufacturingPredictiveMaintenanceService:
             workspace_id=workspace_id,
             history_window=history_window,
         )
+        reuse_eligibility = "EXACT_VALIDATED" if summary is not None else "INELIGIBLE"
+        if summary is None:
+            latest = self.repository.latest_agent_review_summary(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                asset_id=str(packet.get("asset_id") or ""),
+                event_id=(packet.get("snapshot_basis") or {}).get("event_id"),
+                history_window=history_window,
+            )
+            if latest is not None:
+                summary = latest["summary"]
+                trace = {
+                    **(latest.get("trace") or {}),
+                    "materialization": _materialization_trace(latest, reused=True),
+                    "latest_stored": True,
+                }
+                reuse_eligibility = "LATEST_STORED"
+        _record_briefing_event("lookup", (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window),
+                               summary_key=materialization_key, hit=summary is not None,
+                               status=(trace.get("materialization") or {}).get("status"))
+        return summary, {
+            **trace,
+            "reuse_eligibility": reuse_eligibility,
+        }
 
     def agent_review_workflow_runs(
         self,
@@ -812,83 +1013,108 @@ class ManufacturingPredictiveMaintenanceService:
         history_window: str = "24h",
         limit: int | None = None,
         source: str = "fixture",
+        generation_policy: str = "always",
+        explicit_refresh: bool = False,
     ) -> dict[str, Any]:
         """Materialize missing Agent Review Summaries from explicit candidates."""
 
-        items: list[dict[str, Any]] = []
-        candidates = self._agent_review_summary_candidates(
-            project_id=project_id,
-            organization_id=organization_id,
-            workspace_id=workspace_id,
-            limit=limit,
-            source=source,
-        )
+        # Keep failed pages eligible for workflow retries. Serialize cursor rollback
+        # with other materializations in the same service/scope.
+        scope = (organization_id, project_id, workspace_id)
+        with _agent_review_summary_lock("batch:" + json.dumps((id(self), *scope))):
+            previous_offset = self._briefing_scan_offsets.get(scope, 0)
+            try:
+                items: list[dict[str, Any]] = []
+                candidates = self._agent_review_summary_candidates(
+                    project_id=project_id,
+                    organization_id=organization_id,
+                    workspace_id=workspace_id,
+                    limit=limit,
+                    source=source,
+                )
 
-        for candidate in candidates:
-            asset_id = str(candidate.get("asset_id") or "")
-            if not asset_id:
-                continue
-            if candidate.get("source_kind") == "fixture":
-                summary, trace = self.agent_review_summary(
-                    asset_id,
-                    project_id,
-                    organization_id=organization_id,
-                    workspace_id=workspace_id,
-                    dataset_version_id=candidate.get("dataset_version_id"),
-                    history_window=history_window,
-                    trigger="polling_watcher",
-                )
-            else:
-                packet = self._runtime_agent_review_packet_for_candidate(
-                    candidate,
-                    project_id=project_id,
-                    organization_id=organization_id,
-                    workspace_id=workspace_id,
-                    history_window=history_window,
-                )
-                summary, trace = self._materialize_agent_review_packet(
-                    packet=packet,
-                    project_id=project_id,
-                    organization_id=organization_id,
-                    workspace_id=workspace_id,
-                    history_window=history_window,
-                    trigger="polling_watcher",
-                    engine="simple",
-                )
-            materialization = trace.get("materialization") or {}
-            items.append(
-                {
-                    "source_kind": candidate.get("source_kind"),
-                    "asset_id": asset_id,
-                    "event_id": candidate.get("event_id"),
-                    "dataset_version_id": candidate.get("dataset_version_id"),
-                    "source_sha256": candidate.get("source_sha256"),
-                    "lineage_event_id": candidate.get("lineage_event_id"),
-                    "stale_reason": candidate.get("stale_reason"),
-                    "summary_id": materialization.get("summary_id"),
-                    "summary_key": materialization.get("summary_key"),
-                    "status": materialization.get("status"),
-                    "reused": materialization.get("reused"),
-                    "mode": summary.get("mode"),
-                    "fallback_reason": materialization.get("fallback_reason"),
-                    "workflow_run_id": (trace.get("workflow_run") or {}).get(
-                        "workflow_run_id"
-                    ),
-                    "workflow_status": (trace.get("workflow_run") or {}).get(
-                        "status"
-                    ),
+                for candidate in candidates:
+                    asset_id = str(candidate.get("asset_id") or "")
+                    if not asset_id:
+                        continue
+                    if candidate.get("source_kind") == "fixture":
+                        packet = self.agent_review_packet(
+                            asset_id,
+                            project_id,
+                            dataset_version_id=candidate.get("dataset_version_id"),
+                            history_window=history_window,
+                        )
+                    else:
+                        packet = self._runtime_agent_review_packet_for_candidate(
+                            candidate,
+                            project_id=project_id,
+                            organization_id=organization_id,
+                            workspace_id=workspace_id,
+                            history_window=history_window,
+                        )
+                    summary, trace = self._materialize_agent_review_packet(
+                        packet=packet,
+                        project_id=project_id,
+                        organization_id=organization_id,
+                        workspace_id=workspace_id,
+                        history_window=history_window,
+                        trigger="ui_manual_regeneration" if explicit_refresh else "polling_watcher",
+                        engine="simple",
+                        generation_policy=generation_policy,
+                        packet_loader=(
+                            (lambda: self.agent_review_packet(
+                                asset_id, project_id,
+                                dataset_version_id=candidate.get("dataset_version_id"),
+                                history_window=history_window,
+                            )) if candidate.get("source_kind") == "fixture" else
+                            (lambda: self._runtime_agent_review_packet_for_candidate(
+                                candidate, project_id=project_id,
+                                organization_id=organization_id, workspace_id=workspace_id,
+                                history_window=history_window,
+                            ))
+                        ),
+                    )
+                    materialization = trace.get("materialization") or {}
+                    items.append(
+                        {
+                            "source_kind": candidate.get("source_kind"),
+                            "asset_id": asset_id,
+                            "event_id": candidate.get("event_id"),
+                            "dataset_version_id": candidate.get("dataset_version_id"),
+                            "source_sha256": candidate.get("source_sha256"),
+                            "lineage_event_id": candidate.get("lineage_event_id"),
+                            "stale_reason": candidate.get("stale_reason"),
+                            "summary_id": materialization.get("summary_id"),
+                            "summary_key": materialization.get("summary_key"),
+                            "status": materialization.get("status"),
+                            "reused": materialization.get("reused"),
+                            "mode": (summary or {}).get("mode"),
+                            "generation_policy": trace.get("generation_policy"),
+                            "fallback_reason": materialization.get("fallback_reason"),
+                            "workflow_run_id": (trace.get("workflow_run") or {}).get(
+                                "workflow_run_id"
+                            ),
+                            "workflow_status": (trace.get("workflow_run") or {}).get(
+                                "status"
+                            ),
+                        }
+                    )
+
+                return {
+                    "project_id": project_id,
+                    "history_window": history_window,
+                    "source": source,
+                    "scanned_count": len(items),
+                    "materialized_count": sum(1 for item in items if item.get("summary_id")),
+                    "created_count": sum(1 for item in items if item.get("summary_id") and not item.get("reused")),
+                    "pending_count": sum(1 for item in items if item.get("status") == "pending"),
+                    "reused_count": sum(1 for item in items if item.get("reused")),
+                    "items": items,
                 }
-            )
-
-        return {
-            "project_id": project_id,
-            "history_window": history_window,
-            "source": source,
-            "materialized_count": len(items),
-            "created_count": sum(1 for item in items if not item.get("reused")),
-            "reused_count": sum(1 for item in items if item.get("reused")),
-            "items": items,
-        }
+            except Exception:
+                if source != "fixture":
+                    self._briefing_scan_offsets[scope] = previous_offset
+                raise
 
     def _agent_review_summary_candidates(
         self,
@@ -910,7 +1136,7 @@ class ManufacturingPredictiveMaintenanceService:
                 workspace_id=workspace_id,
                 limit=limit,
             )
-            if self.runtime_asset_detail_service is not None
+            if self.runtime_asset_detail_service is not None and normalized_source != "fixture"
             else []
         )
         if normalized_source == "post-maintenance":
@@ -967,13 +1193,29 @@ class ManufacturingPredictiveMaintenanceService:
         limit: int | None,
     ) -> list[dict[str, Any]]:
         assert self.runtime_asset_detail_service is not None
-        return self.runtime_asset_detail_service.latest_result_artifact_references(
-            organization_id=organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-            dataset_version_id=None,
-            limit=limit or 20,
-        )
+        scope = (organization_id, project_id, workspace_id)
+        page_size = limit or 20
+        # Advance bounded scans instead of polling the same first page forever.
+        # This cursor is process-local; a restarted watcher begins at page zero.
+        with _agent_review_summary_lock("scan:" + json.dumps((id(self), *scope))):
+            offset = self._briefing_scan_offsets.get(scope, 0)
+            def read_page(start):
+                return self.runtime_asset_detail_service.latest_result_artifact_references(
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    dataset_version_id=None,
+                    limit=page_size,
+                    offset=start,
+                )
+            candidates = read_page(offset)
+            if not candidates and offset:
+                offset = 0
+                candidates = read_page(0)
+            self._briefing_scan_offsets[scope] = (
+                offset + len(candidates) if len(candidates) == page_size else 0
+            )
+            return candidates
 
     def _runtime_agent_review_packet_for_candidate(
         self,
@@ -1610,6 +1852,7 @@ def _has_closed_loop_records(context: dict[str, Any]) -> bool:
 
 def _work_order_context(item: dict[str, Any]) -> dict[str, Any]:
     return {
+        **{key: item[key] for key in ("asset_id", "equipment_id", "event_id", "approved_at", "started_at", "completed_at") if key in item},
         "work_order_id": str(item.get("work_order_id") or ""),
         "work_type": str(item.get("work_type") or ""),
         "status": str(item.get("status") or ""),
@@ -1643,3 +1886,14 @@ def _available_closed_loop_actions(work_orders: list[dict[str, Any]]) -> list[di
 # Temporary compatibility alias for integrations that still import the historical
 # service name. New code should use ManufacturingPredictiveMaintenanceService.
 FactorySignalService = ManufacturingPredictiveMaintenanceService
+
+
+_AGENT_REVIEW_PENDING: dict[tuple, tuple] = {}
+
+
+def _record_briefing_event(event, scope, **fields):
+    # No prose or packets in logs. Aggregate by scope and exact key, never assume
+    # that one workflow invocation equals one provider/model request.
+    logging.getLogger("app.operations.briefing").info(
+        "briefing_efficiency %s", json.dumps({"event": event, "scope": scope, **fields}, default=str)
+    )

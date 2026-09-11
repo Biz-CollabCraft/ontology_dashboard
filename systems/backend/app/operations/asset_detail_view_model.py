@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from typing import Protocol
 
+from .sensor_signal_bands import sensor_signal_bands
+
 DEFAULT_HISTORY_WINDOW = "24h"
 HISTORY_WINDOW_HOURS = {
     "24h": 24,
@@ -64,6 +66,7 @@ class AssetDetailReadPort(Protocol):
         workspace_id: str,
         dataset_version_id: str | None,
         limit: int,
+        offset: int = 0,
     ) -> list[dict[str, Any]]: ...
 
     def feature_series(
@@ -196,6 +199,7 @@ class AssetDetailViewModelService:
         workspace_id: str,
         dataset_version_id: str | None = None,
         limit: int = 20,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         return self.read_port.latest_result_artifact_references(
             organization_id=organization_id,
@@ -203,6 +207,7 @@ class AssetDetailViewModelService:
             workspace_id=workspace_id,
             dataset_version_id=dataset_version_id,
             limit=limit,
+            offset=offset,
         )
 
     def _detail_view(
@@ -475,6 +480,8 @@ def _evidence_basis_item(
         "source_version": str(item.get("source_version") or ""),
         "domain": str(item.get("domain") or "unresolved"),
         "relation_path": [str(path) for path in item.get("relation_path") or []],
+        "relation_paths": item.get("relation_paths") or [],
+        "display_fields": item.get("display_fields") or [],
         "fact_type": str(item.get("fact_type") or "unknown"),
         "value_summary": str(item.get("value_summary") or ""),
         "required_for_boundary": bool(item.get("required_for_boundary")),
@@ -657,6 +664,7 @@ def _feature(
                 "quality_status": current_quality,
             },
             "baseline": baseline,
+            "bands": sensor_signal_bands(key),
             "history": checked_history,
             "top_factor": top_factor_summary,
         },
@@ -1039,27 +1047,27 @@ _NEXT_STEP_BY_CURRENT = {
 }
 
 _ACTION_OWNER_BY_ID = {
-    "create_inspection_work_order": ("process_manager", "생산 운영 의사결정자"),
-    "request_inspection_work_order": ("process_manager", "생산 운영 의사결정자"),
-    "request_inspection": ("process_manager", "생산 운영 의사결정자"),
-    "accept_inspection_work_order": ("process_engineer", "현장 관리자"),
-    "start_inspection_work_order": ("process_engineer", "현장 엔지니어"),
-    "start_inspection": ("process_engineer", "현장 엔지니어"),
-    "complete_inspection_work_order": ("process_engineer", "현장 엔지니어"),
-    "complete_inspection": ("process_engineer", "현장 엔지니어"),
-    "calculate_maintenance_cost": ("process_manager", "생산 운영 의사결정자"),
+    "create_inspection_work_order": ("process_engineer", "설비 엔지니어"),
+    "request_inspection_work_order": ("process_engineer", "설비 엔지니어"),
+    "request_inspection": ("process_engineer", "설비 엔지니어"),
+    "accept_inspection_work_order": ("maintenance_technician", "보전팀"),
+    "start_inspection_work_order": ("maintenance_technician", "보전팀"),
+    "start_inspection": ("maintenance_technician", "보전팀"),
+    "complete_inspection_work_order": ("maintenance_technician", "보전팀"),
+    "complete_inspection": ("maintenance_technician", "보전팀"),
+    "calculate_maintenance_cost": ("maintenance_technician", "보전팀"),
     "create_operations_manual_recommendation": (
-        "process_manager",
-        "생산 운영 의사결정자",
+        "maintenance_technician",
+        "보전팀",
     ),
     "decide_operations_manual_recommendation": (
-        "process_manager",
-        "생산 운영 의사결정자",
+        "maintenance_technician",
+        "보전팀",
     ),
-    "approve_maintenance_work_order": ("process_manager", "생산 운영 의사결정자"),
+    "approve_maintenance_work_order": ("maintenance_technician", "보전팀"),
     "start_maintenance_action": ("maintenance_technician", "정비 작업자"),
     "complete_maintenance_action": ("maintenance_technician", "정비 작업자"),
-    "request_maintenance_replay": ("maintenance_technician", "정비 작업자"),
+    "request_maintenance_replay": ("process_engineer", "설비 엔지니어"),
 }
 
 _ACTIONS_REQUIRING_INPUT = {

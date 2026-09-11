@@ -1,0 +1,7 @@
+.engineer-detail-actions:has(.engineer-request-progress){align-items:center}
+.engineer-request-progress{--progress-color:#66768a;display:flex;flex-direction:column;gap:3px;min-width:0;padding:5px 8px;border-left:3px solid var(--progress-color);background:color-mix(in srgb,var(--progress-color) 7%,var(--operations-panel));color:var(--operations-text);cursor:default}
+.engineer-request-progress.tone-waiting{--progress-color:#2468d8}.engineer-request-progress.tone-attention{--progress-color:#a36600}.engineer-request-progress.tone-ready{--progress-color:#008653}.engineer-request-progress.tone-active{--progress-color:#7040bb}
+.engineer-request-progress .engineer-progress-caption{font-size:9px;font-weight:700;color:var(--ef-muted)}
+.engineer-request-progress strong{display:flex;align-items:center;gap:5px;font-size:12px;line-height:1.4}
+.engineer-request-progress strong i{width:7px;height:7px;flex:none;border-radius:50%;background:var(--progress-color)}
+.engineer-request-progress small{font-size:10px;line-height:1.4;overflow-wrap:anywhere;color:var(--ef-muted)}

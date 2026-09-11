@@ -115,6 +115,11 @@ def test_runtime_sop_retrieval_returns_grounded_source_for_cnc_result():
     assert guidance[0]["sop_id"] == "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
     assert guidance[0]["source_ref"].endswith("#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001")
     assert "factor_keys" in guidance[0]["matched_fields"]
+    prerequisites = guidance[0]["maintenance_review_prerequisites"]
+    assert "동일 설비의 진행 중 작업과 예정 작업 겹침 여부" in (
+        prerequisites["required_measurements"]
+    )
+    assert any("같은 설비" in item for item in prerequisites["human_review_questions"])
 
 
 def test_runtime_sop_retrieval_normalizes_temporal_model_features_to_sensor_keys():
@@ -168,7 +173,12 @@ def test_exact_runtime_event_connects_sop_inspection_target_and_assistant_eviden
     )
 
     from app.operations.asset_detail_view_model import _evidence_context
-    assert _evidence_context(packet["evidence_context"]) == detail["evidence_context"]
+    packet_context = _evidence_context(packet["evidence_context"])
+    detail_context = dict(detail["evidence_context"])
+    packet_read_at = datetime.fromisoformat(packet_context.pop("relation_retrieved_at"))
+    detail_read_at = datetime.fromisoformat(detail_context.pop("relation_retrieved_at"))
+    assert packet_read_at <= detail_read_at  # Separate reads have separate audit timestamps.
+    assert packet_context == detail_context
     import json
     from jsonschema import Draft202012Validator
     for name, payload in (("agent-review-packet", packet), ("asset-detail-view-model", detail)):
@@ -190,12 +200,14 @@ def test_agent_query_audience_selects_distinct_role_summary():
     summary = {
         "summary": "경영진용 전체 운영 요약",
         "role_summaries": [
-            {"role": "field_operator", "quote": "엔지니어 기술 근거 요약"},
+            {"role": "process_engineer", "quote": "엔지니어 기술 근거 요약"},
+            {"role": "maintenance_technician", "quote": "정비 준비 근거 요약"},
             {"role": "process_manager", "quote": "관리자 Decision Packet 요약"},
         ],
     }
 
     assert _summary_text(summary, "engineering") == "엔지니어 기술 근거 요약"
+    assert _summary_text(summary, "maintenance") == "정비 준비 근거 요약"
     assert _summary_text(summary, "operations") == "관리자 Decision Packet 요약"
     assert _summary_text(summary, "executive") == "경영진용 전체 운영 요약"
 

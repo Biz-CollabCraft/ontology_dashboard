@@ -239,6 +239,45 @@ class AuditRepository:
             return None
         return self._summary_record_from_row(dict(row))
 
+    def latest_agent_review_summary(self, **filters: Any) -> dict[str, Any] | None:
+        base_values = [
+            str(filters.get("organization_id") or "org-ontology-demo"),
+            str(filters["project_id"]),
+            str(filters.get("workspace_id") or "manufacturing-demo"),
+            str(filters["asset_id"]),
+            str(filters.get("history_window") or "24h"),
+        ]
+        event_id = filters.get("event_id")
+        with self._connect() as connection:
+            row = None
+            if event_id:
+                row = connection.execute(
+                    """
+                    SELECT * FROM agent_review_summaries
+                    WHERE organization_id=? AND project_id=? AND workspace_id=?
+                      AND asset_id=? AND history_window=? AND event_id=?
+                      AND status IN ('ready','fallback','stale')
+                    ORDER BY updated_at DESC, generated_at DESC
+                    LIMIT 1
+                    """,
+                    (*base_values, str(event_id)),
+                ).fetchone()
+            if row is None:
+                row = connection.execute(
+                    """
+                    SELECT * FROM agent_review_summaries
+                    WHERE organization_id=? AND project_id=? AND workspace_id=?
+                      AND asset_id=? AND history_window=?
+                      AND status IN ('ready','fallback','stale')
+                    ORDER BY updated_at DESC, generated_at DESC
+                    LIMIT 1
+                    """,
+                    tuple(base_values),
+                ).fetchone()
+        if row is None:
+            return None
+        return self._summary_record_from_row(dict(row))
+
     def create_agent_review_workflow_run(self, **record: Any) -> dict[str, Any]:
         now = self._now()
         payload = {

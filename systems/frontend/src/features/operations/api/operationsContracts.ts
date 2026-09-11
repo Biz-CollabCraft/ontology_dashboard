@@ -81,7 +81,8 @@ export type OperationsDecision =
 
 export type OperationsSourceMode =
   "canonical-runtime" | "gold-fixture-fallback";
-export type OperationsSensorWindowId = "1h" | "3h" | "6h" | "12h" | "24h" | "7d" | "30d";
+export type OperationsSensorWindowId =
+  "1h" | "3h" | "6h" | "12h" | "24h" | "7d" | "30d";
 export type OperationsSensorWindowCoverage =
   "complete" | "partial" | "empty" | "unknown";
 
@@ -149,7 +150,16 @@ export interface OperationsAsset {
   recommendedDecision: OperationsDecision;
   observedAt: string | null;
   eventId: string | null;
+  maintenanceSnapshotBasis?: EvidenceSnapshotBasisWire | null;
   topFactors: OperationsFactor[];
+  sensorHistory?: Array<{
+    feature: string;
+    label: string;
+    unit: string | null;
+    points: Array<{ observedAt: string; value: number }>;
+    bands?: OperationsSensorBandSpec | null;
+  }>;
+  riskHistory?: Array<{ observedAt: string; value: number }>;
   provenance: OperationsProvenance;
 }
 
@@ -215,12 +225,29 @@ export interface OperationsContextModel {
 }
 
 export interface OperationsBootstrapModel {
+  // Production planning and live equipment observations are separate sources.
+  // null means the live API failed; never substitute fixture risk in that case.
+  equipmentOverview?: { context: OperationsContextModel; assets: OperationsAsset[] } | null;
   context: OperationsContextModel;
   assets: OperationsAsset[];
   events: OperationsEvent[];
   metrics: OperationsMetrics;
   lineRisk: OperationsLineRisk[];
   selectionRestoreError?: string | null;
+}
+
+export type OperationsSensorBandStatus = "normal" | "attention" | "critical";
+
+export interface OperationsSensorBandRange {
+  status: OperationsSensorBandStatus;
+  lower: number | null;
+  upper: number | null;
+}
+
+export interface OperationsSensorBandSpec {
+  source: string;
+  basis: string;
+  ranges: OperationsSensorBandRange[];
 }
 
 export interface OperationsSensorValue {
@@ -234,6 +261,7 @@ export interface OperationsSensorValue {
   historyPointCount?: number;
   historyWindow?: OperationsFeatureHistoryWindow | null;
   historyPoints?: OperationsFeatureHistoryPoint[];
+  bands?: OperationsSensorBandSpec | null;
 }
 
 export interface OperationsFeatureHistoryWindow {
@@ -313,6 +341,19 @@ export interface OperationsEvidenceGap {
   ownerDomain: string;
 }
 
+export interface EvidenceRelationStep {
+  edge_id: string;
+  source_type: string;
+  source_id: string;
+  relationship_type: string;
+  target_type: string;
+  target_id: string;
+  source_refs: string[];
+  source_version: string;
+}
+
+export interface EvidenceRelationPath { steps: EvidenceRelationStep[]; }
+
 export interface OperationsEvidenceContextBasis {
   candidateId: string;
   candidateType: "fact" | "relationship" | "limitation";
@@ -320,6 +361,8 @@ export interface OperationsEvidenceContextBasis {
   sourceVersion: string;
   domain: string;
   relationPath: string[];
+  relationPaths?: EvidenceRelationPath[];
+  displayFields?: Array<{ label: string; value: string }>;
   factType: string;
   valueSummary: string;
   requiredForBoundary: boolean;
@@ -405,7 +448,7 @@ export interface OperationsEventImpact {
   impactStatus: OperationsImpactStatus;
   estimatedLostUnits: number | null;
   basis: {
-    estimatedDowntimeMinutes: number;
+    estimatedDowntimeMinutes: number | null;
     assetUnitsPerHour: number;
     formula: string;
   };
@@ -691,6 +734,7 @@ export interface OperationsInspectionTarget {
 }
 
 export interface OperationsAgentReviewPacket {
+  evidence_context?: AssetDetailEvidenceContextWire | null;
   schema_version: "agent-review-packet-v1.0";
   project_id: string;
   asset_id: string;
@@ -798,6 +842,7 @@ export interface OperationsAgentReviewPacket {
     source_refs: string[];
   };
   maintenance_history_summary: {
+    workflow_as_of?: string;
     provider: string;
     mutation_allowed: false;
     open_work_order_exists: boolean | null;
@@ -860,7 +905,7 @@ export interface OperationsAgentReviewPacket {
 }
 
 export interface OperationsAgentReviewSummary {
-  schema_version: "agent-review-summary-v1.0";
+  schema_version: "agent-review-summary-v1.0" | "agent-review-summary-v1.1";
   packet_schema_version: "agent-review-packet-v1.0";
   asset_id: string;
   generated_at: string;
@@ -868,7 +913,7 @@ export interface OperationsAgentReviewSummary {
   title: string;
   summary: string;
   role_summaries: Array<{
-    role: "field_operator" | "process_manager";
+    role: "field_operator" | "process_engineer" | "maintenance_technician" | "process_manager";
     label: string;
     quote: string;
     source_refs: string[];
@@ -902,6 +947,8 @@ export interface OperationsAgentReviewSummaryResponse {
     reason: string | null;
     validation_errors: string[];
     fallback_validation_errors?: string[];
+    reuse_eligibility?: "EXACT_VALIDATED" | "LATEST_STORED" | "INELIGIBLE" | string;
+    latest_stored?: boolean;
     materialization?: {
       summary_id: string | null;
       summary_key: string;
@@ -913,6 +960,7 @@ export interface OperationsAgentReviewSummaryResponse {
       prompt_version: string;
       model_version: string;
       generated_at: string | null;
+      decision_as_of?: string | null;
       created_at: string | null;
       updated_at: string | null;
       fallback_reason?: string | null;
@@ -1016,7 +1064,6 @@ export interface OperationsEventDetailModel {
   warnings: string[];
 }
 
-
 export interface AssetDetailEvidenceContextBasisWire {
   candidate_id: string;
   candidate_type: "fact" | "relationship" | "limitation";
@@ -1024,6 +1071,8 @@ export interface AssetDetailEvidenceContextBasisWire {
   source_version: string;
   domain: string;
   relation_path: string[];
+  relation_paths?: EvidenceRelationPath[];
+  display_fields?: Array<{ label: string; value: string }>;
   fact_type: string;
   value_summary: string;
   required_for_boundary: boolean;
@@ -1094,6 +1143,7 @@ export interface AssetDetailViewModel {
       value: number | null;
       quality_status: "good" | "bad" | "unknown";
     };
+    bands?: OperationsSensorBandSpec | null;
     history: {
       source_ref?: string;
       window?: {

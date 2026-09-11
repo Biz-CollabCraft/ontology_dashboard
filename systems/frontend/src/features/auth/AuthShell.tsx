@@ -1,7 +1,7 @@
 import { navigate } from "../../routing";
 import { useEffect, useState } from "react";
-import { Activity, ArrowLeft, ArrowRight, BarChart3, ClipboardCheck, FileText, Gauge, LockKeyhole, MapPinned, ShieldCheck, Wrench } from "lucide-react";
-import { DisplayMenu } from "../../ui/foundry/DisplayMenu";
+import { Activity, ArrowLeft, ArrowRight, BarChart3, ClipboardCheck, FileText, Gauge, LockKeyhole, MapPinned, ShieldCheck, Wrench, Sun, Moon } from "lucide-react";
+import { useDisplayPreferences } from "../../ui/foundry/displayPreferences";
 import { useI18n } from "../../ui/i18n/I18nProvider";
 import { CollabCraftLogo } from "../../ui/foundry/CollabCraftLogo";
 
@@ -19,7 +19,7 @@ const PRODUCT_STORIES = [
     eyebrow: "ONE CASE · ROLE COMPOSED",
     title: { ko: "같은 사건을 역할마다 필요한 깊이로 봅니다.", en: "See the same case at the depth each role needs." },
     detail: {
-      ko: "엔지니어는 센서와 점검 근거, 운영 관리자는 생산 영향과 승인, 경영진은 KPI와 의사결정 병목을 같은 Case에서 확인합니다.",
+      ko: "엔지니어는 설비 이상과 근거, 보전팀은 점검과 정비, 생산 관리자는 생산 영향과 작업 승인을 확인합니다.",
       en: "Engineers review sensor and inspection evidence, operations managers review impact and approvals, and executives review KPI and decision bottlenecks from the same case.",
     },
     visual: "roles" as const,
@@ -37,7 +37,7 @@ const PRODUCT_STORIES = [
     eyebrow: "GROUNDED REPORTING",
     title: { ko: "보고서는 별도 문서가 아니라 업무 흐름의 산출물입니다.", en: "Reports are workflow artifacts, not detached documents." },
     detail: {
-      ko: "현재 Case의 검증된 근거와 조치 결과를 바탕으로 역할별 보고 언어를 만들고, snapshot 기준을 유지한 채 경영 보고로 전환합니다.",
+      ko: "현재 Case의 검증된 근거와 조치 결과를 바탕으로 역할별 보고 언어를 만들고, snapshot 기준을 유지한 채 정비 결과 보고로 정리합니다.",
       en: "Turn verified case evidence and outcomes into role-specific reporting while preserving the evidence snapshot used for the decision.",
     },
     visual: "report" as const,
@@ -49,14 +49,14 @@ function ProductStoryVisual({ kind, english }: { kind: (typeof PRODUCT_STORIES)[
     {[0, 1, 2, 3].map((zone) => <section key={zone}><header><strong>{english ? `Zone ${zone + 1}` : `${zone + 1}구역`}</strong><b>{zone === 1 ? "3" : zone === 3 ? "1" : ""}</b></header><div>{[0, 1, 2, 3, 4].map((cell) => <span key={cell} className={zone === 1 && cell === 2 ? "critical" : zone === 3 && cell === 1 ? "warning" : "normal"}>{cell === 2 && zone === 1 ? "!" : ""}</span>)}</div></section>)}
   </div>;
   if (kind === "roles") return <div className="auth-story-roles" aria-hidden="true">
-    <article><MapPinned size={17} /><strong>Engineer</strong><span>Sensor · Evidence</span></article>
-    <article><ClipboardCheck size={17} /><strong>Operations</strong><span>Impact · Decision</span></article>
-    <article><BarChart3 size={17} /><strong>Executive</strong><span>KPI · Bottleneck</span></article>
+    <article><MapPinned size={17} /><strong>엔지니어</strong><span>Sensor · Evidence</span></article>
+    <article><ClipboardCheck size={17} /><strong>보전팀</strong><span>점검 · 정비</span></article>
+    <article><BarChart3 size={17} /><strong>생산 관리자</strong><span>생산 영향 · 작업 승인</span></article>
   </div>;
   if (kind === "lineage") return <div className="auth-story-lineage" aria-hidden="true">
     {["Event", "Evidence", "Decision", "Action", "Outcome"].map((item, index) => <span key={item}><i>{index + 1}</i><strong>{item}</strong></span>)}
   </div>;
-  return <div className="auth-story-report" aria-hidden="true"><FileText size={30} /><div><strong>Executive Brief</strong><span>Risk 72% · 4 Decision Cases</span><span>Production exposure · Maintenance outcome</span></div><em>AS-OF</em></div>;
+  return <div className="auth-story-report" aria-hidden="true"><FileText size={30} /><div><strong>Maintenance Report</strong><span>Risk 72% · 4 Decision Cases</span><span>Production exposure · Maintenance outcome</span></div><em>AS-OF</em></div>;
 }
 
 export function AuthShell({
@@ -72,6 +72,11 @@ export function AuthShell({
 }) {
   const { locale } = useI18n();
   const english = locale === "en-US";
+  const { preferences, setTheme } = useDisplayPreferences();
+  const isDark = preferences.theme === "dark" || (preferences.theme === "system" && document.documentElement.dataset.theme === "dark");
+  const themeLabel = english
+    ? (isDark ? "Switch to light mode" : "Switch to dark mode")
+    : (isDark ? "라이트 모드로 전환" : "다크 모드로 전환");
   const [storyIndex, setStoryIndex] = useState(0);
 
   useEffect(() => {
@@ -87,7 +92,12 @@ export function AuthShell({
     <main className="auth-page">
       <header className="auth-platform-bar">
         <button className="auth-brand" onClick={() => navigate("/login")}><span className="brand-mark collabcraft-brand-mark"><CollabCraftLogo /></span><span><strong>CollabCraft</strong><small>Reliability Operations</small></span></button>
-        <div><DisplayMenu className="auth-display-menu" /><span><Activity size={13} /> {english ? "Monitoring live" : "실시간 모니터링"}</span><span><ShieldCheck size={13} /> {english ? "Decision traceable" : "판단 근거 추적"}</span><span>Asia/Seoul</span></div>
+        <div><span><Activity size={13} /> {english ? "Monitoring live" : "실시간 모니터링"}</span><span><ShieldCheck size={13} /> {english ? "Decision traceable" : "판단 근거 추적"}</span>
+          <button className="auth-theme-toggle" type="button" aria-label={themeLabel} title={themeLabel}
+            onClick={() => setTheme(isDark ? "light" : "dark")}>
+            {isDark ? <Moon size={20} aria-hidden="true" /> : <Sun size={20} aria-hidden="true" />}
+          </button>
+        </div>
       </header>
       <div className="auth-control-plane">
         <aside className="auth-resource-context">
@@ -116,8 +126,8 @@ export function AuthShell({
             <p className="auth-description">{description}</p>
             {children}
             <footer><ShieldCheck size={12} /><span>{english
-              ? "Monitoring follows the latest observation, while Decision Cases and Executive Briefs stay tied to the evidence snapshot used for the decision."
-              : "Monitoring은 최신 관측을 따르고, Decision Case와 Executive Brief는 선택한 근거 snapshot을 기준으로 추적합니다."}</span></footer>
+              ? "Monitoring follows the latest observation, while Decision Cases and Maintenance Reports stay tied to the evidence snapshot used for the decision."
+              : "Monitoring은 최신 관측을 따르고, Decision Case와 Maintenance Report는 선택한 근거 snapshot을 기준으로 추적합니다."}</span></footer>
           </div>
         </section>
       </div>

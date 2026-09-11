@@ -113,7 +113,7 @@ async function ensureObservationConnection(): Promise<void> {
   }
 }
 
-async function getAssetDetailViewModel(
+export async function loadOperationsAssetDetail(
   projectId: string,
   workspaceId: string,
   assetId: string,
@@ -281,6 +281,29 @@ export async function loadOperationsBootstrap(
   };
 }
 
+export async function loadEngineerFilesystemOverview(
+  projectId: string,
+  workspaceId: string,
+): Promise<OperationsBootstrapModel> {
+  const response = await fetch(
+    `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/predictive-maintenance/filesystem-overview`,
+    {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      payload?.error?.code ?? "filesystem_overview_failed",
+      payload?.error?.message ?? payload?.detail ?? `파일 관측 요청 실패: ${response.status}`,
+    );
+  }
+  return payload as OperationsBootstrapModel;
+}
+
 async function loadLegacyReport(eventId: string, role: Role, reportType?: ReportType): Promise<{ report: Report | null; warning: string | null }> {
   try {
     return { report: await getReport(eventId, role, true, "ko-KR", reportType), warning: null };
@@ -330,7 +353,7 @@ export async function loadOperationsEventDetail(input: {
   const activityPromise: Promise<unknown | null> = usesRuntimeProductResult
     ? Promise.resolve(null)
     : getEventActivity(input.event.eventId);
-  const assetDetailPromise = getAssetDetailViewModel(
+  const assetDetailPromise = loadOperationsAssetDetail(
     input.projectId,
     input.workspaceId,
     input.event.assetId,

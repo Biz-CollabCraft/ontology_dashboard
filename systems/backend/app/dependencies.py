@@ -560,6 +560,12 @@ class _RuntimeThenDemoEvidenceProjection:
         projection = self.runtime.event_evidence_projection(**scope)
         if projection is not None:
             return projection
+        event_id = str(scope.get("event_id") or "")
+        if event_id.startswith("FILE#"):
+            from app.diagnosis.runtime_router import filesystem_event_evidence_projection
+            projection = filesystem_event_evidence_projection(event_id)
+            if projection is not None:
+                return projection
         if app_environment() not in {"development", "demo", "test"}:
             return None
         if (
@@ -567,13 +573,100 @@ class _RuntimeThenDemoEvidenceProjection:
             or scope.get("workspace_id") != MANUFACTURING_WORKSPACE
         ):
             return None
-        event_id = str(scope.get("event_id") or "")
         try:
             if self.demo.project_id_for_event(event_id) != scope.get("project_id"):
                 return None
             return self.demo.event_evidence_projection(event_id)
         except KeyError:
             return None
+
+
+class _FilesystemThenDemoEvidenceProjection:
+    def __init__(self, demo: ManufacturingPredictiveMaintenanceService) -> None:
+        self.demo = demo
+
+    def event_evidence_projection(self, **scope: Any) -> dict[str, Any] | None:
+        event_id = str(scope.get("event_id") or "")
+        if event_id.startswith("FILE#") and scope.get("project_id") == "manufacturing-demo-project" and scope.get("workspace_id") == MANUFACTURING_WORKSPACE:
+            from app.diagnosis.runtime_router import filesystem_event_evidence_projection
+            projection = filesystem_event_evidence_projection(event_id)
+            if projection is not None:
+                return projection
+        try:
+            return self.demo.event_evidence_projection(event_id)
+        except KeyError:
+            return None
+
+
+def _refresh_agent_review_summary_for_workflow_change(
+    *,
+    organization_id: str,
+    project_id: str,
+    workspace_id: str,
+    asset_id: str,
+    event_id: str,
+    dataset_version_id: str | None = None,
+    trigger: str,
+) -> dict[str, Any]:
+    """Materialize the stored AI briefing after a maintenance workflow change."""
+
+    service = get_service()
+    history_window = "24h"
+    if event_id.startswith("FILE#"):
+        from app.operations.filesystem_briefing import filesystem_briefing_packet
+
+        packet = filesystem_briefing_packet(
+            asset_id=asset_id,
+            event_id=event_id,
+            dataset_version_id=dataset_version_id,
+            project_id=project_id,
+            history_window=history_window,
+            service=service,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+        )
+    else:
+        try:
+            packet = service.runtime_agent_review_packet(
+                asset_id,
+                project_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                dataset_version_id=dataset_version_id,
+                event_id=event_id,
+                history_window=history_window,
+            )
+        except (KeyError, RuntimeError):
+            packet = service.agent_review_packet(
+                asset_id,
+                project_id,
+                dataset_version_id=dataset_version_id,
+                history_window=history_window,
+            )
+            basis = packet.get("snapshot_basis") or {}
+            if event_id not in {basis.get("event_id"), basis.get("artifact_id")}:
+                raise
+    summary, trace = service._materialize_agent_review_packet(
+        packet=packet,
+        project_id=project_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+        history_window=history_window,
+        trigger=trigger,
+        engine="simple",
+        generation_policy="always",
+    )
+    materialization = trace.get("materialization") or {}
+    workflow_run = trace.get("workflow_run") or {}
+    return {
+        "status": "ready" if summary and not trace.get("fallback") else "fallback",
+        "trigger": trigger,
+        "summary_id": materialization.get("summary_id"),
+        "summary_key": materialization.get("summary_key"),
+        "workflow_run_id": workflow_run.get("workflow_run_id"),
+        "fallback": bool(trace.get("fallback")),
+        "reason": trace.get("reason"),
+    }
 
 
 @lru_cache(maxsize=1)
@@ -589,19 +682,27 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
             project_context=context,
             connection_factory=postgres_repository_connection,
         )
+        diagnosis_runtime = get_predictive_maintenance_runtime_service()
+        event_evidence_query = _RuntimeThenDemoEvidenceProjection(
+            diagnosis_runtime,
+            get_service(),
+        )
+        replay_session_query = diagnosis_runtime
     else:
         repository = MaintenanceRepository(
             target,
             project_context=RuntimeProjectContextResolver(target),
         )
-    diagnosis_runtime = get_predictive_maintenance_runtime_service()
+        # The demo server intentionally uses the local SQLite/file contract.
+        # Do not initialize the PostgreSQL-only live runtime merely to list or
+        # advance inspection work orders. The manufacturing service already
+        # exposes the same evidence projection boundary for this scope.
+        event_evidence_query = _FilesystemThenDemoEvidenceProjection(get_service())
+        replay_session_query = None
     return MaintenanceLoopService(
         repository,
-        event_evidence_query=_RuntimeThenDemoEvidenceProjection(
-            diagnosis_runtime,
-            get_service(),
-        ),
-        replay_session_query=diagnosis_runtime,
+        event_evidence_query=event_evidence_query,
+        replay_session_query=replay_session_query,
         cost_basis_provider=JsonMaintenanceCostBasisProvider(
             ROOT
             / "data"
@@ -614,6 +715,7 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
             / "maintenance_cost"
             / "cooling-system-restore-cost-basis-v1.json",
         ),
+        agent_review_summary_refresher=_refresh_agent_review_summary_for_workflow_change,
     )
 
 

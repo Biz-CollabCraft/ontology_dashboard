@@ -74,8 +74,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     "tenant_admin": set(PERMISSION_DEFINITIONS),
     "executive_viewer": {"app.access", "events.read", "ontology.registry.read", "ontology.objects.read", "dashboards.read", "dashboards.personalize", "dashboards.share", "executive.overview.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "process_manager": {"app.access", "events.read", "events.decision", "agent.review.materialize", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "datasets.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
-    "process_engineer": {"app.access", "events.read", "events.note", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "field.tasks.read", "field.tasks.update", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
-    "maintenance_technician": {"app.access", "events.read", "events.note", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "field.tasks.read", "field.tasks.update", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
+    "process_engineer": {"app.access", "events.read", "events.note", "agent.review.materialize", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "field.tasks.read", "field.tasks.update", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
+    "maintenance_technician": {"app.access", "events.read", "events.note", "agent.review.materialize", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "field.tasks.read", "field.tasks.update", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "quality_auditor": {"app.access", "events.read", "ontology.registry.read", "ontology.objects.read", "dashboards.read", "dashboards.personalize", "dashboards.share", "audit.reconstruction.read", "audit.export.checkpoint", "governance.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "ml_validator": {"app.access", "events.read", "agent.review.materialize", "ontology.registry.read", "ontology.objects.read", "dashboards.read", "dashboards.personalize", "dashboards.share", "ml.console.read", "ml.release.request", "datasets.read", "datasets.ingest", "predictions.ingest", "governance.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "fde": {"app.access", "events.read", "events.note", "agent.review.materialize", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "dashboards.templates.manage", "dashboards.templates.request", "fde.workbench.read", "field.tasks.read", "datasets.read", "datasets.ingest", "predictions.ingest", "governance.read", "governance.projection.retry", "planner.object_query", "planner.board_recommend", "planner.dashboard_draft", "planner.narrative", "exports.create", "exports.read_own"},
@@ -115,45 +115,7 @@ DEMO_ACCOUNTS: tuple[dict[str, Any], ...] = (
         # carry an inspection from field verification through maintenance.
         "roles": ["process_engineer", "maintenance_technician"],
     },
-    {
-        "email": "quality@ontology.local",
-        "password": "Quality!2026",
-        "display_name": "품질 감사 담당",
-        "roles": ["quality_auditor"],
-    },
-    {
-        "email": "datascientist@ontology.local",
-        "password": "DataScience!2026",
-        "display_name": "데이터 사이언티스트",
-        "roles": ["ml_validator"],
-    },
-    {
-        "email": "fde@ontology.local",
-        "password": "FDE!2026",
-        "display_name": "Forward Deployed Engineer",
-        "roles": ["fde"],
-    },
-    {
-        "email": PUBLIC_COMPARISON_EMAIL,
-        "password": PUBLIC_COMPARISON_PASSWORD,
-        "display_name": "공개 비교 Viewer",
-        "roles": ["process_manager"],
-        "fixture_scopes": (
-            (PUBLIC_COMPARISON_WORKSPACE_ID, PUBLIC_COMPARISON_PROJECT_ID),
-        ),
-        "permission_overrides": {
-            permission: permission
-            in {
-                "app.access",
-                "events.read",
-                "ontology.registry.read",
-                "ontology.objects.read",
-                "dashboards.read",
-                "datasets.read",
-            }
-            for permission in ROLE_PERMISSIONS["process_manager"]
-        },
-    },
+
 )
 
 

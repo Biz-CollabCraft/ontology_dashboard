@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.operations.agent_briefing_context import preserve_inspection_details, briefing_activities
+
 from app.operations.asset_detail_view_model import _evidence_context
 
 from app.operations.context_providers import (
@@ -87,6 +89,9 @@ def compose_agent_review_packet(
                 "inspection_method": target.get("inspection_method"),
                 "location_source_ref": target.get("location_source_ref"),
                 "sop_id": sop_id,
+                **({"sop_version": procedure["version"]} if "version" in procedure else {}),
+                **({"schema_version": procedure["schema_version"]} if "schema_version" in procedure else {}),
+                **({"procedure_title": procedure["title"]} if "title" in procedure else {}),
                 "source_type": str(guidance.get("source_type") or ""),
                 "maturity": str(procedure.get("maturity") or "fixture"),
                 "checklist_draft": [str(item) for item in guidance.get("checklist_draft") or []],
@@ -103,6 +108,13 @@ def compose_agent_review_packet(
     if ontology_context:
         source_refs.extend(str(ref) for ref in ontology_context.get("source_refs") or [])
 
+    evidence_context = _evidence_context(view_model.get("evidence_context"))
+    source_refs.extend(
+        str(item["source_ref"])
+        for item in evidence_context.get("selected_basis") or []
+        if isinstance(item, dict) and item.get("source_ref")
+    )
+    limitations.extend(str(item) for item in evidence_context.get("limitations") or [])
     closed_loop = view_model.get("closed_loop") or {}
     model_expression_context = _model_expression_context(view_model)
     maintenance_history_summary = (
@@ -137,7 +149,7 @@ def compose_agent_review_packet(
         ontology_context=ontology_context,
         evidence_gaps=evidence_gaps,
     )
-    return {
+    packet = {
         "schema_version": "agent-review-packet-v1.0",
         "project_id": project_id,
         "asset_id": str((view_model.get("asset") or {}).get("asset_id") or ""),
@@ -176,7 +188,7 @@ def compose_agent_review_packet(
         "inspection_targets": inspection_targets,
         "sop_guidance": sop_guidance,
         "operation_context_summary": agent_context.operation_context_summary,
-        "evidence_context": _evidence_context(view_model.get("evidence_context")),
+        "evidence_context": evidence_context,
         "ontology_context": _agent_ontology_context(ontology_context),
         "maintenance_history_summary": maintenance_history_summary,
         "history_review_items": list(dict.fromkeys(history_review_items)),
@@ -192,6 +204,8 @@ def compose_agent_review_packet(
         },
         "limitations": list(dict.fromkeys(limitations)),
     }
+    from app.operations.briefing_economics import attach_economics
+    return attach_economics(packet)
 
 
 def _operation_context_source_refs(context: AgentReviewContext) -> list[str]:
@@ -469,7 +483,7 @@ def _maintenance_history_summary(
         {
             "description": str(item.get("description") or ""),
             "occurred_at": str(item.get("occurred_at") or ""),
-            "source_ref": f"equipment-history://{index + 1}",
+            "source_ref": str(item.get("source_ref") or item.get("source") or f"equipment-history://{index + 1}"),
         }
         for index, item in enumerate(equipment_history[:3])
         if isinstance(item, dict)
@@ -500,7 +514,7 @@ def _maintenance_history_summary(
         "inspection_results": inspection_results,
         "maintenance_actions": maintenance_actions,
         "maintenance_events": maintenance_events,
-        "activities": activities[:5],
+        "activities": briefing_activities(activities),
         "similar_events": similar_events[:5],
         "recent_equipment_history": recent_equipment_history,
         "source_refs": source_refs,
@@ -540,6 +554,7 @@ def _closed_loop_record(item: dict[str, Any], *, source_prefix: str) -> dict[str
         "summary": str(item.get("label") or item.get("note") or item.get("outcome") or ""),
         "source_ref": f"{source_prefix}/{record_id}" if record_id else source_prefix,
     }
+    preserve_inspection_details(item, record)
     return preserve_owner_record_provenance(item, record)
 
 

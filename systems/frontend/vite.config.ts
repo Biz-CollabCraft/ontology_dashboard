@@ -26,11 +26,6 @@ function interactiveTeamShareRoute(): Plugin {
     const url = request.url ?? "";
     const suffixIndex = url.search(/[?#]/);
     const pathname = suffixIndex === -1 ? url : url.slice(0, suffixIndex);
-    if (pathname === appBase || pathname === `${appBase}index.html`) {
-      response.writeHead(302, { Location: `${appBase}factory-status-original/index.html${suffixIndex === -1 ? "" : url.slice(suffixIndex)}` });
-      response.end();
-      return;
-    }
     if (pathname === "/team-share-adaptive") {
       request.url = `/index.html${suffixIndex === -1 ? "" : url.slice(suffixIndex)}`;
     }
@@ -49,7 +44,7 @@ function interactiveTeamShareRoute(): Plugin {
 
 export default defineConfig({
   base: appBase,
-  build: { rollupOptions: { input: { app: "index.html", factory: "factory-status-original/index.html" } } },
+  build: { rollupOptions: { input: { app: "index.html", briefingDemo: "demo-briefing.html", factory: "factory-status-original/index.html" } } },
   plugins: [interactiveTeamShareRoute(), react()],
   // ManufacturingApp is route-lazy, so Vite's initial source scan does not
   // always discover its heavy UI dependencies before the first browser load.

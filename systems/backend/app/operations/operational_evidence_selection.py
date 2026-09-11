@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections import deque
+import hashlib
+import json
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Iterable, Mapping
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.operations.operational_context_contract import (
     FreshnessState,
@@ -14,11 +17,12 @@ from app.operations.operational_context_contract import (
     OperationalContextStatus,
     OperationalRequestIdentity,
     require_matching_scope,
+    context_version_set,
 )
 from app.operations.operational_relation_resolver import RelationResolutionResult
 
 
-SELECTION_POLICY_VERSION = "operational-evidence-selection-v0.1"
+SELECTION_POLICY_VERSION = "operational-evidence-selection-v0.2"
 
 
 class FrozenModel(BaseModel):
@@ -30,6 +34,33 @@ class EvidenceSelectionStrategy(StrEnum):
     DETERMINISTIC = "S1_DETERMINISTIC_SELECTION"
 
 
+class EvidenceRelationStep(FrozenModel):
+    edge_id: str
+    source_type: str
+    source_id: str
+    relationship_type: str
+    target_type: str
+    target_id: str
+    source_refs: tuple[str, ...]
+    source_version: str
+
+
+class EvidenceRelationPath(FrozenModel):
+    steps: tuple[EvidenceRelationStep, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_continuity(self) -> EvidenceRelationPath:
+        for left, right in zip(self.steps, self.steps[1:]):
+            if (left.target_type, left.target_id) != (right.source_type, right.source_id):
+                raise ValueError("evidence relation path is disconnected")
+        return self
+
+
+class EvidenceDisplayField(FrozenModel):
+    label: str
+    value: str
+
+
 class EvidenceCandidate(FrozenModel):
     candidate_id: str = Field(min_length=1)
     candidate_type: str = Field(pattern="^(fact|relationship|limitation)$")
@@ -38,6 +69,10 @@ class EvidenceCandidate(FrozenModel):
     source_version: str
     domain: str = Field(min_length=1)
     relation_path: tuple[str, ...] = ()
+    relation_paths: tuple[EvidenceRelationPath, ...] = ()
+    display_fields: tuple[EvidenceDisplayField, ...] = ()
+    subject_type: str | None = None
+    subject_id: str | None = None
     fact_type: str = Field(min_length=1)
     role_relevance: tuple[str, ...] = ()
     priority_hint: int = 0
@@ -80,6 +115,14 @@ def project_evidence_candidates(
     """Project resolved operational context into traceable selection candidates."""
 
     candidates: list[EvidenceCandidate] = []
+    if relation_resolution.focus != {
+        "evidence_snapshot_id": identity.evidence_snapshot_id,
+        "asset_id": identity.asset_id,
+        "decision_as_of": identity.decision_as_of.isoformat(),
+    }:
+        raise ValueError("relation resolution does not match evidence identity")
+    if relation_resolution.context_version_set != context_version_set(contexts):
+        raise ValueError("relation resolution does not match context versions")
     relation_paths = _relation_paths_by_ref(relation_resolution)
     for envelope in contexts.values():
         require_matching_scope(identity, envelope)
@@ -96,7 +139,11 @@ def project_evidence_candidates(
 
     candidates.extend(_relationship_candidates(relation_resolution))
     candidates.extend(_gap_candidates(relation_resolution, contexts=contexts))
-    return tuple(_dedupe_candidates(candidates))
+    paths = _connected_paths_by_ref(relation_resolution)
+    return tuple(
+        candidate.model_copy(update={"relation_paths": _candidate_paths(candidate, paths)})
+        for candidate in _dedupe_candidates(candidates)
+    )
 
 
 def select_evidence_candidates(
@@ -194,7 +241,7 @@ def _fact_candidates(
         for ref in refs:
             candidates.append(
                 EvidenceCandidate(
-                    candidate_id=f"fact:{ref}",
+                    candidate_id=f"fact:{envelope.owner_domain}:{ref}:{'/'.join(path)}",
                     candidate_type="fact",
                     source_ref=ref,
                     source_snapshot_id=identity.evidence_snapshot_id,
@@ -207,6 +254,8 @@ def _fact_candidates(
                     freshness_state=envelope.freshness.state,
                     as_of=envelope.as_of,
                     value_summary=_value_summary(fact_type, value),
+                    display_fields=_display_fields(value),
+                    **_subject(fact_type, value),
                     required_for_boundary=_required_for_boundary(
                         envelope.owner_domain,
                         fact_type,
@@ -366,6 +415,7 @@ def _quality_gate_candidate(
         freshness_state=envelope.freshness.state,
         as_of=envelope.as_of,
         value_summary=_value_summary("quality_gate", gate),
+        display_fields=_display_fields(gate),
         required_for_boundary=gate.get("state") == "blocked",
         limitation_state="quality_blocked" if gate.get("state") == "blocked" else None,
         eligible=_is_eligible_fact(envelope),
@@ -395,6 +445,7 @@ def _readiness_candidate(
         freshness_state=envelope.freshness.state,
         as_of=envelope.as_of,
         value_summary=_value_summary("readiness", readiness),
+        display_fields=_display_fields(readiness),
         required_for_boundary=blocked,
         limitation_state="maintenance_blocked" if blocked else None,
         eligible=_is_eligible_fact(envelope),
@@ -438,10 +489,13 @@ def _deterministic_subset(
     role: str | None,
     max_candidates: int | None,
 ) -> tuple[EvidenceCandidate, ...]:
-    must_include = _dedupe_by_source_ref(
-        [candidate for candidate in candidates if candidate.required_for_boundary],
-        role=role,
-    )
+    # A document may support multiple independent blocking conditions.
+    # Preserve identities, not just one candidate per document.
+    must_include = list({
+        candidate.candidate_id: candidate
+        for candidate in sorted(candidates, key=lambda item: _selection_sort_key(item, role=role))
+        if candidate.required_for_boundary
+    }.values())
     remaining = [
         candidate
         for candidate in candidates
@@ -454,22 +508,11 @@ def _deterministic_subset(
     if max_candidates is None:
         limit = max(1, len(candidates))
     else:
-        limit = max(max_candidates, len(must_include))
+        # Extra mandatory conditions from the same source must not evict
+        # other source documents that fitted the original selection budget.
+        extra_conditions = len(must_include) - len({item.source_ref for item in must_include})
+        limit = max(max_candidates + extra_conditions, len(must_include))
     return tuple([*must_include, *ordered[: max(0, limit - len(must_include))]])
-
-
-def _dedupe_by_source_ref(
-    candidates: list[EvidenceCandidate],
-    *,
-    role: str | None,
-) -> list[EvidenceCandidate]:
-    by_ref: dict[str, EvidenceCandidate] = {}
-    for candidate in sorted(
-        candidates,
-        key=lambda item: _selection_sort_key(item, role=role),
-    ):
-        by_ref.setdefault(candidate.source_ref, candidate)
-    return list(by_ref.values())
 
 
 def _selection_sort_key(
@@ -495,7 +538,11 @@ def _priority_hint(domain: str, fact_type: str, value: Mapping[str, Any]) -> int
         return 880
     if fact_type in {"production_orders", "wip", "delivery_commitments"}:
         return 840
-    if fact_type in {"part_requirements", "inventory_snapshots"}:
+    if fact_type in {
+        "concurrent_work_checks",
+        "part_requirements",
+        "inventory_snapshots",
+    }:
         return 820
     if fact_type in {"maintenance_windows", "technician_candidates"}:
         return 760
@@ -555,6 +602,7 @@ def _required_for_boundary(
         value.get("release_required")
         or value.get("quality_state") == "hold"
         or value.get("active_work_order_conflict")
+        or value.get("prohibited_by_sop")
         or value.get("relationship_state") in {"not_connected", "conflicting"}
     )
 
@@ -586,6 +634,7 @@ def _value_summary(fact_type: str, value: Mapping[str, Any]) -> str:
             "lot_id",
             "delivery_id",
             "window_id",
+            "check_id",
             "part_requirement_id",
             "part_id",
             "technician_id",
@@ -622,6 +671,7 @@ def _trace_item(candidate: EvidenceCandidate) -> dict[str, Any]:
         "domain": candidate.domain,
         "fact_type": candidate.fact_type,
         "relation_path": list(candidate.relation_path),
+        "relation_paths": [path.model_dump(mode="json") for path in candidate.relation_paths],
         "freshness_state": candidate.freshness_state.value,
         "as_of": candidate.as_of.isoformat(),
         "required_for_boundary": candidate.required_for_boundary,
@@ -633,3 +683,98 @@ def _ratio(numerator: int, denominator: int) -> float:
     if denominator == 0:
         return 1.0
     return numerator / denominator
+
+
+def _connected_paths_by_ref(resolution: RelationResolutionResult) -> dict[str, tuple[EvidenceRelationPath, ...]]:
+    """Shortest directed paths from the selected asset, never from unrelated roots."""
+    edges = sorted(resolution.relationships, key=lambda edge: (
+        edge.source_type, edge.source_id, edge.relationship_type, edge.target_type, edge.target_id
+    ))
+    adjacency: dict[tuple[str, str], list[EvidenceRelationStep]] = {}
+    for edge in edges:
+        if edge.state.value in {"conflicting", "not_connected", "unknown"}:
+            continue
+        payload = edge.model_dump(mode="json")
+        digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
+        step = EvidenceRelationStep(
+            edge_id=f"relation:{digest}", source_type=edge.source_type, source_id=edge.source_id,
+            relationship_type=edge.relationship_type, target_type=edge.target_type, target_id=edge.target_id,
+            source_refs=edge.source_refs, source_version=edge.source_version,
+        )
+        adjacency.setdefault((step.source_type, step.source_id), []).append(step)
+    root = ("asset", resolution.focus["asset_id"])
+    prefixes: dict[tuple[str, str], tuple[EvidenceRelationStep, ...]] = {root: ()}
+    queue = deque([root])
+    paths: dict[str, list[EvidenceRelationPath]] = {}
+    while queue:
+        node = queue.popleft()
+        for step in adjacency.get(node, []):
+            target = (step.target_type, step.target_id)
+            prefix = prefixes[node]
+            visited = {root, *((item.target_type, item.target_id) for item in prefix)}
+            if target in visited:
+                continue
+            path = EvidenceRelationPath(steps=(*prefix, step))
+            for ref in step.source_refs:
+                paths.setdefault(ref, []).append(path)
+            if target not in prefixes:
+                prefixes[target] = path.steps
+                queue.append(target)
+    return {ref: tuple(items) for ref, items in paths.items()}
+
+
+_DISPLAY_FIELDS = {
+    "order_id": "생산오더", "operation_id": "공정", "product_label": "제품",
+    "required_quantity": "필요 수량", "completed_quantity": "완료 수량",
+    "quantity": "수량", "due_at": "납기", "priority": "우선순위",
+    "wip_id": "재공품", "lot_id": "로트", "quality_state": "품질 상태",
+    "committed_quantity": "납품 약정 수량", "part_id": "부품",
+    "required_part_spec": "부품 규격", "available_quantity": "가용 수량",
+    "on_hand_quantity": "보유 수량", "reserved_quantity": "예약 수량",
+    "expected_replenishment_at": "입고 예정", "resource_id": "대체 설비",
+    "available_from": "시작 가능", "available_to": "종료 한도",
+    "expected_duration_minutes": "예상 작업 시간(분)", "setup_minutes": "준비 시간(분)",
+    "net_transferable_units": "전환 가능 수량", "technician_id": "작업자",
+    "assignment_state": "배정 상태", "status": "상태",
+    "approval_required": "승인 필요", "active_work_order_conflict": "기존 작업과 일정 충돌",
+    "release_required": "품질 해제 필요", "state": "판정", "overall_state": "준비 상태",
+}
+
+
+def _display_fields(record: Mapping[str, Any]) -> tuple[EvidenceDisplayField, ...]:
+    return tuple(
+        EvidenceDisplayField(label=label, value=("예" if record[key] else "아니요") if isinstance(record[key], bool) else str(record[key]))
+        for key, label in _DISPLAY_FIELDS.items()
+        if record.get(key) is not None and isinstance(record[key], (str, int, float))
+    )
+
+
+_SUBJECTS = {
+    "production_orders": ("production_order", "order_id"),
+    "wip": ("wip", "wip_id"), "quality_lots": ("quality_lot", "lot_id"),
+    "delivery_commitments": ("delivery_commitment", "delivery_id"),
+    "part_requirements": ("part_requirement", "part_requirement_id"),
+    "alternative_resources": ("asset", "resource_id"),
+    "maintenance_windows": ("maintenance_window", "window_id"),
+    "technician_candidates": ("technician_candidate", "technician_id"),
+}
+
+
+def _subject(fact_type: str, record: Mapping[str, Any]) -> dict[str, str]:
+    entity = _SUBJECTS.get(fact_type)
+    if entity and record.get(entity[1]):
+        return {"subject_type": entity[0], "subject_id": str(record[entity[1]])}
+    return {}
+
+
+def _candidate_paths(candidate: EvidenceCandidate, paths: Mapping[str, tuple[EvidenceRelationPath, ...]]) -> tuple[EvidenceRelationPath, ...]:
+    matched = []
+    for path in paths.get(candidate.source_ref, ()):
+        last = path.steps[-1]
+        if candidate.candidate_type == "relationship":
+            expected = f"relationship:{last.relationship_type}:{last.source_id}->{last.target_id}"
+            if candidate.candidate_id == expected:
+                matched.append(path)
+        elif candidate.subject_id and (last.target_type, last.target_id) == (candidate.subject_type, candidate.subject_id):
+            matched.append(path)
+    return tuple(matched)

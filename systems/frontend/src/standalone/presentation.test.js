@@ -3,6 +3,7 @@ import {mapPresentation,feature,date,label,text,message} from './presentation.js
 const base=()=>({reqQueue:[],isPlan:true,kpis:[],artifactLine:'RESULT#keep',shaLine:'sha256:keep'});
 const state=()=>({detail:{event:{status:'critical',failureProbability:0.78},snapshotBasis:{observedAt:'2026-08-29T14:00:00Z'},sensors:[],topFactors:[],warnings:[],operationContext:{},maintenanceContext:{}},model:{context:{}},lineage:{work_orders:[]}});
 describe('field mappings and Korean field labels',()=>{
+ it.each(['process_engineer','maintenance_technician','process_manager'])('renders the selected role prose through presentation: %s',role=>{const s=state();s.role='maintenance_technician';s.canGenerateAi=false;s.aiBrief={summary:'공통 요약',role_summaries:[{role,quote:'선택 역할 근거'}]};const v=mapPresentation({...base(),isPlan:role==='process_manager',isMaint:role==='maintenance_technician',isShift:role==='process_engineer'},s);expect(v.priorityHead).toBe('선택 역할 근거');expect(v.aiDisabled).toBe(true);expect(s.role).toBe('maintenance_technician');});
  it('translates display labels without rewriting source IDs',()=>{expect(feature('rotation_raw_6h_std')).toBe('회전 신호 · 6시간 변동폭(표준편차)');expect(label('process_manager')).toBe('생산관리자');expect(text('Production Reliability')).toBe('생산 설비 관리');expect(text('CNC-S01-L01-01')).toBe('CNC-S01-L01-01');expect(date('2026-08-29T14:00:00Z')).toContain('23:00');const v=mapPresentation(base(),state());expect(v.artifactLine).toBe('RESULT#keep');expect(v.selGrade).toBe('긴급 확인');});
  it('shows actual history with timestamp and does not invent current samples or units',()=>{const s=state();s.detail.sensors=[{id:'voltage_raw',value:null,unit:null,historyPoints:[{value:10,observedAt:'2026-08-29T13:50:00Z'},{value:20,observedAt:'2026-08-29T14:00:00Z'}]}];const v=mapPresentation(base(),s);expect(v.signals[0]).toMatchObject({label:'전압',value:'20',unit:'단위 미제공'});expect(v.signals[0].bars).toHaveLength(2);expect(v.signals[0].state).toContain('최근 관측');expect(s.detail.sensors[0].value).toBeNull();});
  it('binds available scoped production plans and zero values',()=>{const s=state();s.contextRead={domains:{planning:{context:{status:'available',data:{production_plan:{planned_units:0,product_mix:[{variant:'A',planned_units:0}]}}}}}};const v=mapPresentation(base(),s);expect(v.kpis[0].value).toBe('0');expect(v.variants[0].plan).toBe('0');expect(v.shifts[0].made).toBe('실적 자료 없음');});
@@ -14,3 +15,24 @@ describe('field mappings and Korean field labels',()=>{
 
 it('reports only the missing maintenance field',()=>{expect(message('maintenance: maintenance_context.similar_events_30d - maintenance_context_missing_or_unresolved')).toBe('최근 30일 유사 사례 집계가 연결되지 않았습니다.');expect(message('operations: operation_context.runtime_hours_7d - operation_context_missing_or_unresolved')).toBe('최근 7일 가동시간 집계가 연결되지 않았습니다.');});
 it('shows server state totals and policy without deriving grades',()=>{const s=state();s.factoryRecords={status:'available',total:100,counts:{running:92,stopped:5,maintenance:3,unknown:0},policy:{action_threshold:0.6,attention_threshold:0.3,version:'v1'}};const v=mapPresentation({...base(),isPlan:false,isShift:true,kpis:[{},{},{}]},s);expect(v.kpis[1].value).toBe('92');expect(v.warnValLabel).toBe('0.6');expect(v.attnValLabel).toBe('0.3');expect(v.selGrade).toBe('긴급 확인');});
+it('preserves deterministic reasons while AI is pending or unavailable',()=>{
+ const s=state();s.canGenerateAi=true;
+ const pending=mapPresentation(base(),s);
+ s.aiGenerating=true;
+ const generating=mapPresentation(base(),s);
+ s.aiGenerating=false;s.aiFallback={reason:'TimeoutError'};
+ const fallback=mapPresentation(base(),s);
+ expect(pending.reasons.length).toBeGreaterThan(0);
+ expect(generating.reasons).toEqual(pending.reasons);
+ expect(fallback.reasons).toEqual(pending.reasons);
+ expect(fallback.priorityHead).toContain('현재 판단 근거');
+});
+
+it('shows the lookup error and briefing controls before detail is available',()=>{
+ const v=mapPresentation({lines:[]},{detail:null,error:'설비 조회 실패',canGenerateAi:true});
+ expect(v.sourceLabel).toBe('설비 조회 실패');
+ expect(v.aiButtonLabel).toBe('생성');
+ expect(v.aiDisabled).toBe(true);
+ expect(v.aiBriefEmpty).toBe(true);
+ expect(v.priorityHead).toBe('설비 조회 실패');
+});

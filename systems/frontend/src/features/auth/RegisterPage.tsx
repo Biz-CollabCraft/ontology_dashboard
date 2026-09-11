@@ -9,9 +9,6 @@ const REQUESTABLE_ROLES: Array<{ value: Exclude<AppRole, "tenant_admin">; label:
   { value: "process_manager", label: "운영 매니저", detail: "운영 보고서, 우선순위와 의사결정" },
   { value: "process_engineer", label: "도메인 엔지니어", detail: "Dashboard 분석과 보고서 작성" },
   { value: "maintenance_technician", label: "현장 작업자", detail: "점검 작업, 체크리스트와 현장 기록" },
-  { value: "quality_auditor", label: "품질·감사 Viewer", detail: "보고서, Evidence와 감사 이력 검토" },
-  { value: "ml_validator", label: "데이터 사이언티스트", detail: "Dataset, 모델과 예측 결과 검증" },
-  { value: "fde", label: "FDE", detail: "Ontology·Dashboard template 구축" },
 ];
 
 export function RegisterPage() {

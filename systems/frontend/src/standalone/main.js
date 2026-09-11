@@ -1,7 +1,7 @@
-import {acceptedBrief} from './aiBrief.js';
+import {acceptedBrief, briefingGenerationTrigger} from './aiBrief.js';
 import {mapPresentation, label} from './presentation.js';
 window.factoryDisplay=mapPresentation;
-import { API_BASE, getCurrentUser, getProjects, getProjectWorkspaces, setActiveProject, logout, getMaintenanceEventLineage, getMaintenanceActionCandidates, getPostMaintenanceProductResults } from '../api';
+import { API_BASE, createOperationsAgentReviewSummary, getCurrentUser, getProjects, getProjectWorkspaces, setActiveProject, logout, getMaintenanceEventLineage, getMaintenanceActionCandidates, getPostMaintenanceProductResults } from '../api';
 import { loadOperationsBootstrap } from '../features/operations/api/operationsApi';
 import { composeEventDetail, applyAssetDetailViewModel } from '../features/operations/api/operationsAdapters';
 
@@ -12,6 +12,8 @@ let user, generation=0, controller, projectId=params.get('project'), workspaceId
 const idempotency = new Map();
 const emit=()=>{window.factoryState={...state};window.dispatchEvent(new CustomEvent('factory:state',{detail:window.factoryState}));};
 const errorText=e=>e instanceof Error?e.message:String(e);
+// Refresh display time without fetching data or regenerating stored prose.
+setInterval(()=>{if(state.aiBrief)emit();},60_000);
 function login(){location.replace(`${base}login?returnTo=${encodeURIComponent(location.pathname+location.search+location.hash)}`);}
 async function request(path, options={}) {
   const headers = new Headers(options.headers);
@@ -101,10 +103,10 @@ async function loadAiBrief(token,signal){
 async function generateAi(data){
  if(!state.canGenerateAi||state.aiGenerating||state.aiLoading||!state.detail||state.error||data.assetId!==state.selectedAssetId||data.eventId!==state.selectedEventId)return;
  const token=generation,signal=controller.signal;state.aiGenerating=true;state.aiError=null;emit();
- try{const response=await request(aiPath()+'&trigger=ui_manual_regeneration',{method:'POST',body:'{}',headers:{'Idempotency-Key':crypto.randomUUID()},signal});if(token!==generation)return;
+ try{const response=await createOperationsAgentReviewSummary({assetId:state.selectedAssetId,projectId,eventId:state.selectedEventId,datasetVersionId:state.model?.context.datasetVersionId,historyWindow:'24h',trigger:briefingGenerationTrigger(state),signal});if(token!==generation)return;
  const generated=acceptedBrief(response,state.selectedAssetId);
  state.aiFallback=response.trace?.fallback?response.trace:null;
- if(!generated){state.aiBrief=null;state.aiError='AI 생성 결과가 검증을 통과하지 못했습니다. 기존 판단 근거를 확인하세요.';return;}
+ if(!generated){state.aiBrief=null;state.aiError='AI 설명을 제공하지 못했습니다. 현재 판단 근거를 확인하세요.';return;}
  await loadAiBrief(token,signal);
  }catch(e){if(token!==generation||signal.aborted)return;state.aiError=errorText(e);}
  finally{if(token===generation){state.aiGenerating=false;emit();}}

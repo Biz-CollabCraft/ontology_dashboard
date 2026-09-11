@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
 from app.infra.db.migrations import migrate
+from app.infra.db.inspection_coordination_repository import InspectionCoordinationRepositoryMixin
 from app.maintenance.maintenance_domain import (
     IdempotencyConflict,
     InvalidTransition,
@@ -61,7 +62,7 @@ class ProjectContextResolverPort(Protocol):
 ConnectionFactory = Callable[..., Any]
 
 
-class MaintenanceRepository:
+class MaintenanceRepository(InspectionCoordinationRepositoryMixin):
     """SQLite adapter; PostgreSQL uses the same conservative SQL through compat."""
 
     def __init__(
@@ -574,6 +575,7 @@ class MaintenanceRepository:
         transitioned_at: datetime,
         request_idempotency_key: str,
         request_fingerprint: str,
+        require_production_confirmation: bool = False,
     ) -> dict[str, Any]:
         if work_order.work_type is not WorkOrderType.INSPECTION:
             raise ValueError("inspection transition requires an inspection work order")
@@ -603,7 +605,15 @@ class MaintenanceRepository:
             )
             if row is None:
                 raise ValueError("inspection work order not found")
+            self._lock_coordination_order(connection, scope=scope, work_order_id=work_order.work_order_id)
+            row = self._work_order_row(connection, scope=scope, work_order_id=work_order.work_order_id)
             current = self._work_order_from_row(row)
+            if work_order.status is WorkOrderStatus.IN_PROGRESS and self._inspection_summary(connection, scope=scope, work_order_id=work_order.work_order_id):
+                raise InvalidTransition("점검이 끝난 요청은 정비 시작 명령을 사용해야 합니다.")
+            if require_production_confirmation and work_order.status is WorkOrderStatus.IN_PROGRESS:
+                coordination = self._coordination_history(connection, scope=scope, work_order_id=work_order.work_order_id)
+                if not coordination or coordination[-1]["status"] != "confirmed":
+                    raise InvalidTransition("생산관리자의 작업·정지 일정 확인 후 시작할 수 있습니다.")
             if current.work_type is not WorkOrderType.INSPECTION:
                 raise ValueError("work order is not an inspection")
             transition_work_order(current.status, work_order.status)
@@ -745,6 +755,10 @@ class MaintenanceRepository:
                 raise PermissionError(
                     "only the assigned field operator can complete this inspection"
                 )
+            if self._inspection_summary(connection, scope=scope, work_order_id=work_order.work_order_id):
+                raise InvalidTransition("점검 결과가 이미 기록되었습니다.")
+            # Keep the request open for approval/execution, without overwriting its inspection result.
+            next_status = WorkOrderStatus.APPROVED if inspection_result.outcome.value == "maintenance_recommended" else WorkOrderStatus.COMPLETED
             transition_work_order(current.status, WorkOrderStatus.COMPLETED)
             if current.model_copy(update={"status": work_order.status}) != work_order:
                 raise ValueError("persisted work order does not match inspection completion")
@@ -769,7 +783,7 @@ class MaintenanceRepository:
                   AND work_order_id=? AND status=? AND assigned_to=?
                 """,
                 (
-                    WorkOrderStatus.COMPLETED.value,
+                    next_status.value,
                     now,
                     scope.organization_id,
                     scope.project_id,
@@ -845,18 +859,18 @@ class MaintenanceRepository:
                 work_order_id=work_order.work_order_id,
                 aggregate_type="work_order",
                 aggregate_id=work_order.work_order_id,
-                activity_type="work_order.completed",
+                activity_type="inspection.finished",
                 actor_user_id=inspection_result.recorded_by,
                 actor_display_name=actor_display_name,
                 before_status=current.status.value,
-                after_status=work_order.status.value,
+                after_status=next_status.value,
                 payload={"work_type": WorkOrderType.INSPECTION.value},
                 created_at=inspection_result.recorded_at.isoformat(),
             )
             result = {
                 "work_order_id": work_order.work_order_id,
                 "work_type": work_order.work_type.value,
-                "work_order_status": work_order.status.value,
+                "work_order_status": next_status.value,
                 "inspection_result_id": inspection_result.inspection_result_id,
                 "inspection_outcome": inspection_result.outcome.value,
                 "maintenance_event_id": None,
@@ -1799,7 +1813,7 @@ class MaintenanceRepository:
                 WHERE organization_id=? AND project_id=? AND workspace_id=?
                   AND work_type=?
                   AND status IN (?,?,?)
-                ORDER BY created_at DESC,work_order_id DESC
+                ORDER BY created_at ASC,work_order_id ASC
                 """,
                 (
                     scope.organization_id,
@@ -2218,6 +2232,7 @@ class MaintenanceRepository:
             status=row["status"],
             assigned_to=row["assigned_to"],
             assigned_at=row["assigned_at"],
+            created_at=row["created_at"],
             idempotency_key=row["idempotency_key"],
             authorization=WorkOrderAuthorization.model_validate(cls._decoded(row["authorization_json"])),
         )

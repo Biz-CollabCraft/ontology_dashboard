@@ -7,6 +7,7 @@ from jsonschema import Draft202012Validator
 
 from app.operations.agent_review_summary import (
     compose_deterministic_agent_review_summary,
+    summary_schema,
     validate_agent_review_summary,
     validate_agent_review_summary_contract,
     validated_agent_review_summary,
@@ -95,7 +96,7 @@ def test_agent_review_summary_schema_accepts_read_only_grounded_summary() -> Non
 
 
 def test_deterministic_agent_review_summary_validates_all_gold_packets() -> None:
-    validator = Draft202012Validator(SUMMARY_SCHEMA)
+    validator = Draft202012Validator(summary_schema())
 
     for scenario in ("GS-002", "GS-004", "GS-007"):
         packet = json.loads((GOLD_ROOT / f"{scenario}.json").read_text(encoding="utf-8"))

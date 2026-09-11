@@ -28,6 +28,12 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "reference_economics": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {"status": {"enum": ["illustrative_not_site_quote", "unavailable", "not_applicable"]}},
+      "description": "Versioned UI reference cost table, computed values, units and assumptions; never authoritative planning or realized loss."
+    },
     "evidence_context": {
       "type": "object",
       "description": "Relation schema and deterministic evidence-selection context for this event. This is not a raw producer payload and does not authorize mutations.",
@@ -246,8 +252,9 @@
       "required": ["provider", "query", "top_k", "returned_count", "mutation_allowed"],
       "additionalProperties": false,
       "properties": {
-        "provider": {"enum": ["local_sop_metadata_retriever"]},
+        "provider": {"enum": ["local_sop_metadata_retriever", "runtime_product_result"]},
         "query": {
+          "oneOf": [{
           "type": "object",
           "required": ["asset_type", "failure_mode", "factor_keys", "component_ids", "risk_grade", "criticality", "production_impact"],
           "additionalProperties": false,
@@ -260,6 +267,14 @@
             "criticality": {"type": "string"},
             "production_impact": {"type": "string"}
           }
+          }, {
+            "type": "object", "additionalProperties": false,
+            "required": ["asset_id", "event_id", "dataset_version_id"],
+            "properties": {
+              "asset_id": {"type": "string"}, "event_id": {"type": "string"},
+              "dataset_version_id": {"type": "string"}
+            }
+          }]
         },
         "top_k": {"type": "integer"},
         "returned_count": {"type": "integer"},
@@ -297,6 +312,9 @@
           "inspection_method": {"type": ["string", "null"]},
           "location_source_ref": {"type": ["string", "null"]},
           "sop_id": {"type": "string"},
+          "sop_version": {"type": "string"},
+          "schema_version": {"type": "string"},
+          "procedure_title": {"type": "string"},
           "source_type": {"enum": ["demo_sop_fixture", "site_sop"]},
           "maturity": {"enum": ["fixture", "draft", "approved", "retired"]},
           "checklist_draft": {"type": "array", "items": {"type": "string"}},
@@ -397,6 +415,7 @@
       "properties": {
         "provider": {"type": "string"},
         "mutation_allowed": {"const": false},
+        "workflow_as_of": {"type": "string", "format": "date-time"},
         "last_maintenance_days_ago": {"type": ["integer", "null"]},
         "similar_events_30d": {"type": ["integer", "null"]},
         "open_work_order_exists": {"type": ["boolean", "null"]},
@@ -516,6 +535,8 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "display_fields": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["label","value"],"properties":{"label":{"type":"string"},"value":{"type":"string"}}}},
+        "relation_paths": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["steps"],"properties":{"steps":{"type":"array","minItems":1,"items":{"type":"object","additionalProperties":false,"required":["edge_id","source_type","source_id","relationship_type","target_type","target_id","source_version","source_refs"],"properties":{"edge_id":{"type":"string","minLength":1},"source_type":{"type":"string","minLength":1},"source_id":{"type":"string","minLength":1},"relationship_type":{"type":"string","minLength":1},"target_type":{"type":"string","minLength":1},"target_id":{"type":"string","minLength":1},"source_version":{"type":"string","minLength":1},"source_refs":{"type":"array","minItems":1,"items":{"type":"string"}}}}}}}},
         "candidate_id": {
           "type": "string"
         },
@@ -587,6 +608,8 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "display_fields": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["label","value"],"properties":{"label":{"type":"string"},"value":{"type":"string"}}}},
+        "relation_paths": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["steps"],"properties":{"steps":{"type":"array","minItems":1,"items":{"type":"object","additionalProperties":false,"required":["edge_id","source_type","source_id","relationship_type","target_type","target_id","source_version","source_refs"],"properties":{"edge_id":{"type":"string","minLength":1},"source_type":{"type":"string","minLength":1},"source_id":{"type":"string","minLength":1},"relationship_type":{"type":"string","minLength":1},"target_type":{"type":"string","minLength":1},"target_id":{"type":"string","minLength":1},"source_version":{"type":"string","minLength":1},"source_refs":{"type":"array","minItems":1,"items":{"type":"string"}}}}}}}},
         "candidate_id": {
           "type": "string"
         },
@@ -707,14 +730,38 @@
       "required": ["record_id", "record_type", "status", "activity_type", "recorded_at", "summary", "source_ref"],
       "additionalProperties": false,
       "properties": {
+        "production_coordination": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "request_id": {"type": "string"}, "work_order_id": {"type": "string"},
+            "status": {"type": "string"}, "requested_at": {"type": "string"},
+            "responded_at": {"type": "string"}, "requested_by_name": {"type": "string"},
+            "responded_by_name": {"type": "string"},
+            "request": {"type": "object", "additionalProperties": false, "properties": {
+              "work_summary": {"type": "string"}, "downtime_minutes": {"type": "number"},
+              "affected_items": {"type": "string"}, "note": {"type": "string"}
+            }},
+            "response": {"type": "object", "additionalProperties": false, "properties": {
+              "decision": {"type": "string"}, "scheduled_window": {"type": "string"},
+              "production_response": {"type": "string"}
+            }}
+          }
+        },
         "record_id": {"type": "string"},
         "record_type": {"type": "string"},
+        "production_coordination": {"type": "object"},
         "status": {"type": "string"},
         "activity_type": {"type": "string"},
         "recorded_at": {"type": "string"},
         "summary": {"type": "string"},
         "source_ref": {"type": "string"},
-        "owner_record_provenance": {"type": "object", "additionalProperties": false, "properties": {"actor_user_id": {"type": "string"}, "actor_display_name": {"type": "string"}, "actor_id": {"type": "string"}, "recorded_by": {"type": "string"}, "assigned_to": {"type": "string"}, "assigned_at": {"type": "string"}, "created_at": {"type": "string"}, "updated_at": {"type": "string"}, "completed_at": {"type": "string"}, "recorded_at": {"type": "string"}, "work_order_id": {"type": "string"}, "event_id": {"type": "string"}, "asset_id": {"type": "string"}, "equipment_id": {"type": "string"}, "maintenance_action_id": {"type": "string"}, "maintenance_event_id": {"type": "string"}, "recommendation_id": {"type": "string"}, "recommendation_decision_id": {"type": "string"}}}
+        "outcome": {"type": "string"},
+        "inspection_result_id": {"type": "string"},
+        "work_order_id": {"type": "string"},
+        "findings": {"type": "array", "items": {"type": "string"}},
+        "measurements": {"type": "array", "items": {"type": "object", "additionalProperties": false, "properties": {"name": {"type": "string"}, "value": {"type": ["number", "string", "boolean", "null"]}, "unit": {"type": "string"}}}},
+        "checklist": {"type": "array", "items": {"type": "object", "additionalProperties": false, "properties": {"item_id": {"type": "string"}, "status": {"enum": ["pass", "fail", "not_checked"]}, "note": {"type": "string"}}}},
+        "owner_record_provenance": {"type": "object", "additionalProperties": false, "properties": {"actor_user_id": {"type": "string"}, "actor_display_name": {"type": "string"}, "actor_id": {"type": "string"}, "recorded_by": {"type": "string"}, "assigned_to": {"type": "string"}, "assigned_at": {"type": "string"}, "created_at": {"type": "string"}, "updated_at": {"type": "string"}, "completed_at": {"type": "string"}, "recorded_at": {"type": "string"}, "work_order_id": {"type": "string"}, "event_id": {"type": "string"}, "asset_id": {"type": "string"}, "equipment_id": {"type": "string"}, "maintenance_action_id": {"type": "string"}, "maintenance_event_id": {"type": "string"}, "recommendation_id": {"type": "string"}, "recommendation_decision_id": {"type": "string"}, "approved_at": {"type": "string"}, "started_at": {"type": "string"}}}
       }
     },
     "domainSection": {
