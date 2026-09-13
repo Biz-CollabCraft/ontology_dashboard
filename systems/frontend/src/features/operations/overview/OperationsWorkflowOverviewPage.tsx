@@ -2140,18 +2140,6 @@ export function OperationsWorkflowOverviewPage({
 
   return (
     <div className="operations-page operations-overview-page" data-testid="operations-overview" data-role={role}>
-      {role === "field_operator" ? (
-        <EngineerFactoryDashboard
-          model={model}
-          selectedAsset={selectedAsset}
-          factoryCells={factoryCells}
-          planningBasis={planningBasis}
-          liveDemo={liveDemo}
-          onPreviewAssetSlot={previewFactoryAssetSlot}
-          onPreviewAsset={previewInDrawer}
-          onRefresh={onRefresh}
-        />
-      ) : <>
       <section className="operations-monitoring-hero" aria-label="실시간 공장 모니터링 현황">
         <div>
           <span>실시간 공장 모니터링</span>
@@ -2420,7 +2408,6 @@ export function OperationsWorkflowOverviewPage({
         selectedAssetId={selectedAsset?.assetId ?? null}
         onPreview={previewInDrawer}
       />
-      </>}
 
       {(drawerAsset || factorySlotPreview) && detailDrawerOpen ? (
         <div className="operations-detail-drawer-layer" role="presentation">
