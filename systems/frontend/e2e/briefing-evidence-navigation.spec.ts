@@ -49,5 +49,5 @@ test("withdraws an old briefing when evidence changes without a new observation"
   await page.goto("/e2e/fixtures/evidence-navigation-preview.html");
   await page.getByText("근거",{exact:true}).click();
   await expect(page.locator(".natural-briefing-accessible")).toHaveCount(0);
-  await expect(page.getByRole("status")).toContainText("브리핑이 아직 없습니다");
+  await expect(page.getByRole("status")).toContainText("근거가 변경되어 이전 브리핑을 숨겼습니다");
 });

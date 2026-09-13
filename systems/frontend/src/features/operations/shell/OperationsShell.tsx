@@ -84,7 +84,6 @@ export function OperationsShell({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const workflowMode = dashboard === "workflow";
-  const engineerOverview = workflowMode && role === "field_operator" && activeView === "overview";
   const navItems = operationsNavigationItems(dashboard);
   const roleMeta = ROLE_LABELS[role];
   const active = workflowMode && activeView === "overview" ? roleMeta : VIEW_LABELS[activeView];
@@ -101,9 +100,6 @@ export function OperationsShell({
     : role === "process_manager"
       ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다."
       : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다.";
-  if (engineerOverview) {
-    return <main className="operations-app engineer-standalone-app">{children}</main>;
-  }
   return (
     <main className="operations-app">
       <header className="operations-global-header">
@@ -117,15 +113,13 @@ export function OperationsShell({
           <div className="is-dataset"><span>Dataset</span><strong title={context.datasetLabel}>{context.sourceVersion ?? "Dataset"} · {context.datasetVersionId}</strong></div>
         </div>
         <div className="operations-header-actions">
-          {!workflowMode ? (
-            <label>
-              <span>역할</span>
-              <select value={role} onChange={(event) => onRoleChange(event.target.value as OperationsRoleLens)}>
-                <option value="process_manager">생산 관리자</option>
-                <option value="field_operator">현장 담당자</option>
-              </select>
-            </label>
-          ) : null}
+          <label>
+            <span>역할</span>
+            <select value={role} onChange={(event) => onRoleChange(event.target.value as OperationsRoleLens)}>
+              <option value="process_manager">생산 관리자</option>
+              <option value="field_operator">현장/보전 담당자</option>
+            </select>
+          </label>
           <button type="button" className="operations-icon-button" onClick={onRefresh} aria-label="데이터 새로고침" disabled={refreshing}><RefreshCw size={17} className={refreshing ? "is-spinning" : ""} /></button>
           <button type="button" className="operations-icon-button" onClick={() => void onLogout()} aria-label="로그아웃" title="로그아웃"><LogOut size={17} /></button>
           <button type="button" className="operations-icon-button operations-mobile-menu" onClick={() => setMobileOpen((current) => !current)} aria-label="메뉴 열기">{mobileOpen ? <X size={19} /> : <Menu size={19} />}</button>

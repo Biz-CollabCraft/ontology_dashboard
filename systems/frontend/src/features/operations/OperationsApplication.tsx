@@ -111,13 +111,6 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       : "operations";
 
   useEffect(() => {
-    // URL query parameters are navigation hints, not authority. A copied
-    // manager URL must never force an engineer into the manager workflow lens.
-    if (!user || selection.role === authorizedRole) return;
-    updateSelection({ role: authorizedRole }, { replace: true });
-  }, [authorizedRole, selection.role, updateSelection, user]);
-
-  useEffect(() => {
     const surfaces = reliabilitySurfaces(experienceKind, backupMode);
     const currentSurface = selection.surface
       ? surfaces.find((item) => item.id === selection.surface) ?? null
@@ -470,7 +463,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   } else if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
     content = experienceKind === "engineering"
       ? <EngineerFactoryStandalone model={model} selectedAssetId={selection.assetId} onSelectAsset={previewAsset} onRefresh={refresh} />
-      : <Suspense fallback={<ReliabilityWorkspaceLoadingPlaceholder />}><OperationsOverviewPage model={model} role={authorizedRole} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} /></Suspense>;
+      : <Suspense fallback={<ReliabilityWorkspaceLoadingPlaceholder />}><OperationsOverviewPage model={model} role={selection.role} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} /></Suspense>;
   } else if (useReliabilityPreview && selection.view !== "system") {
     content = <RoleComposedWorkspace
       experienceKind={experienceKind}
@@ -502,7 +495,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       ? <OperationsSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />
       : <OperationsState kind="error" title="시스템 관리자 권한 필요" detail="AI 요약 처리 로그는 관리자 감사 권한이 있는 사용자만 조회할 수 있습니다." />;
   } else {
-    content = <Suspense fallback={<ReliabilityWorkspaceLoadingPlaceholder />}><OperationsOverviewPage model={model} role={authorizedRole} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} /></Suspense>;
+    content = <Suspense fallback={<ReliabilityWorkspaceLoadingPlaceholder />}><OperationsOverviewPage model={model} role={selection.role} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} /></Suspense>;
   }
 
   const body = <>
@@ -564,7 +557,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
     context={model.context}
     activeView={selection.view}
     dashboard={selection.dashboard}
-    role={authorizedRole}
+    role={selection.role}
     onNavigate={openView}
     onRoleChange={(role: OperationsRoleLens) => updateSelection({ role, view: "overview" })}
     onRefresh={refresh}

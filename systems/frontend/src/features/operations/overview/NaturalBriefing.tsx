@@ -135,9 +135,10 @@ function Briefing(props: Props & { revealed: Set<string> }) {
   const workflowBadge = props.workflowRefresh?.state === "pending" ? "갱신 중" : props.workflowRefresh?.state === "failed" ? "갱신 실패" : "";
   const evidenceScope = { ...props, eventId: basis.eventId, observedAt: basis.observedAt, expectedSummaryKey: summaryKey, onEvidenceChanged: () => {
         setBusy(false);
-        setStatus(summary
-          ? "저장된 브리핑을 유지합니다. 근거 상세는 현재 관측 기준과 달라 다시 조회할 수 없습니다."
-          : "근거 상세 기준이 현재 관측과 달라 저장된 브리핑을 찾을 수 없습니다.");
+        setSummary(null);
+        setSummaryKey(undefined);
+        setBasis({ eventId: props.eventId, observedAt: props.observedAt });
+        setStatus("근거가 변경되어 이전 브리핑을 숨겼습니다. 현재 근거 기준 브리핑을 다시 조회해 주세요.");
       } };
   return <section className="natural-briefing" aria-label="AI 자연어 브리핑" aria-busy={busy}>
     <div className="natural-briefing-heading"><strong>AI 브리핑</strong>

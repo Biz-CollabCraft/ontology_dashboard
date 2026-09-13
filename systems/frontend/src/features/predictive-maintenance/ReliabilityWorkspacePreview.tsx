@@ -209,9 +209,6 @@ export function reliabilityWorkspacePreviewEnabled() {
   if (queryEnabled) return true;
   const basePath = import.meta.env.BASE_URL.replace(/\/+$/, "");
   const pathname = window.location.pathname;
-  if (basePath === "") {
-    return /^\/app\/projects\/[^/]+\/operations/.test(pathname);
-  }
   const previewBaseEnabled = basePath === "/reliability-preview"
     && (pathname === basePath || pathname.startsWith(`${basePath}/`));
   return previewBaseEnabled;
