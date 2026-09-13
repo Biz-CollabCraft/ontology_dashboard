@@ -22,6 +22,7 @@ from .asset_detail_view_model import AssetDetailViewModelService, compose_asset_
 from app.dependencies import (
     MANUFACTURING_WORKSPACE,
     get_identity_service,
+    get_decision_session_service,
     get_ontology_service,
     get_operational_decision_support_service,
     get_operational_context_repository,
@@ -44,6 +45,7 @@ from .operational_context_contract import OperationalRequestIdentity
 from .operational_planning_context import planning_context
 from .operational_context_read import OperationalContextRead
 from .operational_decision_brief import DecisionBriefRole
+from .decision_session_service import DecisionSessionApplicationService
 from .operational_decision_support_port import (
     DecisionSupportMaterializationInProgress,
     OperationalDecisionSupportService,
@@ -53,6 +55,7 @@ from .sop_retrieval import retrieve_inspection_sops
 router = APIRouter(prefix="/api", tags=["manufacturing-domain-pack"])
 AGENT_REVIEW_SUMMARY_MATERIALIZE_RATE = RateLimitRule(limit=12, window_seconds=60)
 DECISION_SUPPORT_MATERIALIZE_RATE = RateLimitRule(limit=12, window_seconds=60)
+DECISION_SESSION_CREATE_RATE = RateLimitRule(limit=20, window_seconds=60)
 register_equipment_routes(
     router,
     service_dependency=get_service,
@@ -1275,6 +1278,86 @@ def get_operational_context(
     )
     risk = _trusted_decision_support_risk(identity, service)
     return repository.read_view(identity=identity, retrieved_at=datetime.now(timezone.utc), risk_status=risk)
+
+
+@router.post("/objects/{asset_id}/decision-sessions")
+def create_decision_session(
+    asset_id: str,
+    project_id: str = Query(default="manufacturing-demo-project"),
+    workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
+    evidence_snapshot_id: str = Query(min_length=1, max_length=240),
+    decision_as_of: datetime = Query(),
+    role: DecisionBriefRole = Query(default=DecisionBriefRole.PROCESS_MANAGER),
+    principal: Principal = Depends(require_permission("events.read")),
+    _: None = Depends(require_csrf),
+    session_service: DecisionSessionApplicationService = Depends(get_decision_session_service),
+    limiter: RateLimiter = Depends(get_rate_limiter),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+):
+    identity = _decision_support_identity(
+        principal=principal,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        asset_id=asset_id,
+        evidence_snapshot_id=evidence_snapshot_id,
+        decision_as_of=decision_as_of,
+    )
+    _trusted_decision_support_risk(identity, service)
+    limiter.check(
+        bucket="decision-session.create",
+        subject=rate_limit_subject(
+            principal.user_id,
+            project_id,
+            workspace_id,
+            asset_id,
+            evidence_snapshot_id,
+            role.value,
+        ),
+        rule=DECISION_SESSION_CREATE_RATE,
+    )
+    try:
+        result = session_service.create(identity=identity, actor_role=role.value)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "engine": result.engine,
+        "session": result.session.model_dump(mode="json"),
+        "policy": result.policy.model_dump(mode="json"),
+        "tool_results": {
+            name: tool.model_dump(mode="json")
+            for name, tool in result.tool_results.items()
+        },
+    }
+
+
+@router.get("/objects/{asset_id}/decision-sessions/{decision_session_id}")
+def get_decision_session(
+    asset_id: str,
+    decision_session_id: str,
+    project_id: str = Query(default="manufacturing-demo-project"),
+    workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
+    evidence_snapshot_id: str = Query(min_length=1, max_length=240),
+    decision_as_of: datetime = Query(),
+    principal: Principal = Depends(require_permission("events.read")),
+    session_service: DecisionSessionApplicationService = Depends(get_decision_session_service),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+):
+    identity = _decision_support_identity(
+        principal=principal,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        asset_id=asset_id,
+        evidence_snapshot_id=evidence_snapshot_id,
+        decision_as_of=decision_as_of,
+    )
+    _trusted_decision_support_risk(identity, service)
+    session = session_service.get(
+        decision_session_id=decision_session_id,
+        identity=identity,
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="decision_session_not_found")
+    return {"session": session.model_dump(mode="json")}
 
 
 @router.get("/objects/{asset_id}/decision-support-brief")

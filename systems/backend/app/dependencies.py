@@ -120,6 +120,9 @@ from app.operations.context_providers import default_agent_review_context_regist
 from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.operations.service import ManufacturingPredictiveMaintenanceService
 from app.operations.operational_decision_support_port import OperationalDecisionSupportService
+from app.operations.decision_session_service import DecisionSessionApplicationService
+from app.operations.decision_support_agent import ManufacturingDecisionAgent
+from app.operations.decision_tools import ManufacturingDecisionTools
 
 
 ROOT = project_root()
@@ -265,6 +268,28 @@ def get_operational_decision_support_service() -> OperationalDecisionSupportServ
     if is_postgresql(target):
         return PersistedOperationalDecisionSupportService(ROOT, database_url=str(target))
     return PersistedOperationalDecisionSupportService(ROOT, Path(target))
+
+
+@lru_cache(maxsize=1)
+def get_decision_session_service() -> DecisionSessionApplicationService:
+    service = get_service()
+    target = database_target()
+
+    def packet_loader(identity):
+        return service.agent_review_packet(identity.asset_id, identity.project_id)
+
+    def agent_factory(identity):
+        repository = OperationalContextRepository(str(target)).capture(identity)
+        tools = ManufacturingDecisionTools(
+            packet_loader=packet_loader,
+            operational_ports=repository.ports(),
+        )
+        return ManufacturingDecisionAgent(tools=tools)
+
+    return DecisionSessionApplicationService(
+        packet_loader=packet_loader,
+        agent_factory=agent_factory,
+    )
 
 
 def _password_hasher() -> PasswordHasher:
