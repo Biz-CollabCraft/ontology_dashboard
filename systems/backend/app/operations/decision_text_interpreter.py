@@ -4,10 +4,9 @@ from __future__ import annotations
 from hashlib import sha256
 from typing import Any
 
-from httpx import HTTPError
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.infra.llm.provider import LLMProvider
+from app.common.llm_contract import LLMProvider
 from app.operations.decision_support_contract import DecisionTextInterpretation
 from app.operations.decision_tools import DecisionToolResult
 
@@ -94,7 +93,7 @@ class StructuredTextEvidenceInterpreter:
                     response_schema=TextBatch.model_json_schema(), response_schema_name="decision_text_interpretation",
                 )
                 batch = TextBatch.model_validate(response)
-            except (ValidationError, ValueError, TypeError, KeyError, RuntimeError, HTTPError) as exc:
+            except Exception as exc:
                 raise TextInterpretationError(f"text_interpretation_failed:{type(exc).__name__}") from exc
             ids = [item.evidence_id for item in batch.assessments]
             if len(ids) != len(set(ids)) or set(ids) != set(unique):
