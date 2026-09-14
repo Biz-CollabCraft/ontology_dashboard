@@ -7,7 +7,7 @@ from tests.test_decision_text_interpreter import Classifier
 
 
 @pytest.mark.parametrize('enabled',[False,True])
-def test_dependency_wiring_and_session_readback(monkeypatch,enabled):
+def test_dependency_wiring_and_session_readback(monkeypatch,tmp_path,enabled):
     import app.dependencies as deps
     source=packet();source['limitations']=['A repeat measurement is required before assessment.']
     source['snapshot_basis']['event_id'] = IDENTITY.evidence_snapshot_id
@@ -25,7 +25,7 @@ def test_dependency_wiring_and_session_readback(monkeypatch,enabled):
         def capture(self,identity):return self
         def ports(self):return tools().operational_ports
     monkeypatch.setattr(deps,'get_service',lambda:SimpleNamespace(runtime_agent_review_packet=lambda *args, **kwargs:source))
-    monkeypatch.setattr(deps,'database_target',lambda:'synthetic-test-db')
+    monkeypatch.setattr(deps,'database_target',lambda:tmp_path/'decision-text-di.db')
     monkeypatch.setattr(deps,'OperationalContextRepository',Repository)
     monkeypatch.setattr(deps,'configured_provider',lambda:classifier)
     monkeypatch.setenv('LLM_PROVIDER','openai-compatible' if enabled else 'deterministic')

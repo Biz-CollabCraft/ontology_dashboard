@@ -47,6 +47,7 @@ from .operational_context_contract import OperationalRequestIdentity
 from .operational_planning_context import planning_context
 from .operational_context_read import OperationalContextRead
 from .operational_decision_brief import DecisionBriefRole
+from .decision_run_store import DecisionRunBusy, DecisionRunLeaseLost
 from .decision_session_service import DecisionSessionApplicationService
 from .operational_decision_support_port import (
     DecisionSupportMaterializationInProgress,
@@ -1357,6 +1358,7 @@ def create_decision_session(
     workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
     evidence_snapshot_id: str = Query(min_length=1, max_length=240),
     decision_as_of: datetime = Query(),
+    request_id: str | None = Query(default=None, min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_-]+$"),
     role: DecisionBriefRole = Query(default=DecisionBriefRole.PROCESS_MANAGER),
     principal: Principal = Depends(require_permission("events.read")),
     _: None = Depends(require_csrf),
@@ -1388,8 +1390,15 @@ def create_decision_session(
         rule=DECISION_SESSION_CREATE_RATE,
     )
     try:
-        result = session_service.create(identity=identity, actor_role=role.value)
+        result = session_service.create(
+            identity=identity,
+            actor_role=role.value,
+            request_id=request_id,
+            actor_id=principal.user_id,
+        )
     except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (DecisionRunBusy, DecisionRunLeaseLost) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (KeyError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail="decision_evidence_unavailable") from exc

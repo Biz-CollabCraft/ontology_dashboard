@@ -1,0 +1,17 @@
+"""Durable run storage boundary; stores agent state, never manufacturing commands."""
+from typing import Protocol, Any
+from app.operations.operational_context_contract import OperationalRequestIdentity
+
+class DecisionRunBusy(RuntimeError):
+    pass
+
+class DecisionRunLeaseLost(RuntimeError):
+    pass
+
+class DecisionRunStore(Protocol):
+    lease_seconds: float
+    def load(self, session_id: str, identity: OperationalRequestIdentity) -> dict[str, Any] | None: ...
+    def claim(self, session_id: str, identity: OperationalRequestIdentity, binding: str, initial: dict) -> tuple[dict, str | None]: ...
+    def save(self, session_id: str, identity: OperationalRequestIdentity, token: str, state: dict) -> None: ...
+    def heartbeat(self, session_id: str, identity: OperationalRequestIdentity, token: str) -> None: ...
+    def release(self, session_id: str, identity: OperationalRequestIdentity, token: str) -> None: ...

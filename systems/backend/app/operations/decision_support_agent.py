@@ -136,6 +136,7 @@ class ManufacturingDecisionAgent:
     retry_policy: DecisionRetryPolicy = DecisionRetryPolicy()
     sleep: Callable[[float], None] = time.sleep
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
+    context_fingerprint: str | None = None
 
     def run(self, request: DecisionAgentRequest) -> DecisionAgentRunResult:
         policy = self.policy_guard.evaluate(request.policy_facts)

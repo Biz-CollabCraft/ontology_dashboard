@@ -4,35 +4,13 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Protocol
+from typing import Any
 
 import httpx
 
 
-class LLMProvider(Protocol):
-    name: str
-
-    def generate_json(
-        self,
-        system_prompt: str,
-        payload: dict[str, Any],
-        *,
-        response_schema: dict[str, Any] | None = None,
-        response_schema_name: str = "structured_response",
-    ) -> dict[str, Any]: ...
-
-    def generate_json_with_metadata(
-        self,
-        system_prompt: str,
-        payload: dict[str, Any],
-        *,
-        response_schema: dict[str, Any] | None = None,
-        response_schema_name: str = "structured_response",
-    ) -> dict[str, Any]: ...
-
-
-class ProviderUnavailable(RuntimeError):
-    pass
+# Re-export the public contract for existing adapter consumers.
+from app.common.llm_contract import LLMProvider, ProviderUnavailable
 
 
 class VertexAIProvider:
@@ -106,6 +84,13 @@ class OpenAICompatibleProvider:
         self.model = os.getenv("LLM_MODEL", "")
         self.base_url = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
         self.timeout_seconds = float(os.getenv("LLM_TIMEOUT_SECONDS", "20"))
+        self.reasoning_effort = os.getenv("LLM_REASONING_EFFORT", "").strip() or None
+        if self.reasoning_effort not in {None, "low", "medium", "high"}:
+            raise ValueError("LLM_REASONING_EFFORT must be empty, low, medium, or high")
+        token_limit = os.getenv("LLM_MAX_COMPLETION_TOKENS", "").strip()
+        self.max_completion_tokens = int(token_limit) if token_limit else None
+        if self.max_completion_tokens is not None and self.max_completion_tokens < 1:
+            raise ValueError("LLM_MAX_COMPLETION_TOKENS must be positive")
 
     def generate_json(
         self,
@@ -154,6 +139,10 @@ class OpenAICompatibleProvider:
         }
         if not self._uses_default_temperature_only():
             request_body["temperature"] = 0
+        if self.reasoning_effort is not None:
+            request_body["reasoning_effort"] = self.reasoning_effort
+        if self.max_completion_tokens is not None:
+            request_body["max_completion_tokens"] = self.max_completion_tokens
         response = self._post_chat_completion(request_body)
         if response_schema and response.status_code == 400:
             request_body["response_format"] = {"type": "json_object"}
@@ -174,17 +163,20 @@ class OpenAICompatibleProvider:
         }
 
     def _post_chat_completion(self, request_body: dict[str, Any]) -> httpx.Response:
-        response = httpx.post(
-            f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-            json=request_body,
-            timeout=self.timeout_seconds,
-        )
-        if response.status_code >= 400:
-            if response.status_code == 400:
-                return response
-            response.raise_for_status()
-        return response
+        try:
+            response = httpx.post(
+                f"{self.base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                json=request_body,
+                timeout=self.timeout_seconds,
+            )
+            if response.status_code >= 400:
+                if response.status_code == 400:
+                    return response
+                response.raise_for_status()
+            return response
+        except httpx.HTTPError as exc:
+            raise ProviderUnavailable("OpenAI transport request failed") from exc
 
     def _uses_default_temperature_only(self) -> bool:
         return self.model.startswith("gpt-5")

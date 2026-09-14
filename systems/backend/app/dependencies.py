@@ -276,6 +276,7 @@ def get_operational_decision_support_service() -> OperationalDecisionSupportServ
 def get_decision_session_service() -> DecisionSessionApplicationService:
     service = get_service()
     target = database_target()
+    migrate(str(target))
 
     def packet_loader(identity):
         # Resolve the selected runtime event; never substitute the fixture packet.
@@ -293,12 +294,18 @@ def get_decision_session_service() -> DecisionSessionApplicationService:
         return with_decision_workflow(packet, lineage, identity)
 
     provider_name = os.getenv("LLM_PROVIDER", "deterministic").strip().lower()
+    planner_mode = os.getenv("DECISION_AGENT_PLANNER", "deterministic").strip().lower()
+    if planner_mode not in {"deterministic", "llm"}:
+        raise ValueError("DECISION_AGENT_PLANNER must be deterministic or llm")
     planner = None
     text_interpreter = None
     if provider_name not in {"", "none", "deterministic", "offline"}:
         provider = configured_provider()
-        planner = StructuredLLMDecisionPlanner(provider)
+        if planner_mode == "llm":
+            planner = StructuredLLMDecisionPlanner(provider)
         text_interpreter = StructuredTextEvidenceInterpreter(provider)
+    elif planner_mode == "llm":
+        raise ValueError("LLM planner requires an enabled LLM_PROVIDER")
 
     def agent_factory(identity):
         repository = OperationalContextRepository(str(target)).capture(identity)
@@ -306,11 +313,22 @@ def get_decision_session_service() -> DecisionSessionApplicationService:
             packet_loader=packet_loader,
             operational_ports=repository.ports(),
         )
-        return ManufacturingDecisionAgent(tools=tools, planner=planner, text_interpreter=text_interpreter)
+        return ManufacturingDecisionAgent(
+            tools=tools,
+            planner=planner,
+            text_interpreter=text_interpreter,
+            context_fingerprint=(
+                repository.version_fingerprint(identity)
+                if hasattr(repository, "version_fingerprint")
+                else None
+            ),
+        )
 
+    from app.infra.db.decision_run_repository import DecisionRunRepository
     return DecisionSessionApplicationService(
         packet_loader=packet_loader,
         agent_factory=agent_factory,
+        run_store=DecisionRunRepository(target),
     )
 
 

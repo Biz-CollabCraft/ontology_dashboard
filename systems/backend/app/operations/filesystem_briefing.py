@@ -84,7 +84,7 @@ def _recorded_tick(stream_name, asset_id, event_id, run_id):
 
 
 def _bound_ticks(asset_id, event_id, dataset_version_id):
-    from app.diagnosis.runtime_router import _latest_complete_file_tick
+    from app.diagnosis.contracts import selected_complete_file_tick as _latest_complete_file_tick
     parts = event_id.split('#', 2)
     if len(parts) != 3 or not re.fullmatch(r'[A-Za-z0-9_-]+', parts[1]):
         raise KeyError(event_id)
@@ -112,7 +112,7 @@ def _bound_ticks(asset_id, event_id, dataset_version_id):
 
 def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, project_id, history_window,
     service=None, organization_id="org-ontology-demo", workspace_id="manufacturing-demo"):
-    from app.diagnosis.runtime_router import _latest_complete_file_tick, _filesystem_event_artifact
+    from app.diagnosis.contracts import filesystem_event_artifact as _filesystem_event_artifact
     if project_id != "manufacturing-demo-project" or not event_id.startswith("FILE#"):
         raise KeyError(event_id)
     run_id, ticks = _bound_ticks(asset_id, event_id, dataset_version_id)
@@ -133,7 +133,7 @@ def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, projec
         view = compose_asset_detail_view_model(
             asset={"asset_id": asset_id, "asset_type": artifact["asset_type"], "display_name": asset_id},
             result_artifact=artifact, event_id=event_id, history_window=history_window,
-            closed_loop=service._closed_loop_context_for_fixture({"event_id":event_id}) if service is not None else None,
+            closed_loop=closed_loop,
         )
         if service is not None:
             identity = OperationalRequestIdentity(
@@ -149,10 +149,12 @@ def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, projec
                 workspace_id=workspace_id, context_repository=repository,
             )
         retrieval = _file_sops(view, artifact)
-        return compose_agent_review_packet(project_id=project_id, view_model=view,
+        packet = compose_agent_review_packet(project_id=project_id, view_model=view,
             sop_retrieval=retrieval,
             context=service.agent_review_context_registry.context_for_packet(view_model=view)
                 if service is not None and service.agent_review_context_registry else None)
+        packet["maintenance_history_summary"]["workflow_as_of"] = workflow_as_of
+        return packet
     raise KeyError(event_id)
 
 
