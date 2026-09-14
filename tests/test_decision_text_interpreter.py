@@ -25,7 +25,8 @@ class Classifier:
         if self.damage == 'timeout':
             raise ReadTimeout('synthetic')
         rows = [{'evidence_id': e['evidence_id'], 'unresolved_conflict': self.flags[0],
-            'measurement_required': self.flags[1], 'uncertain': self.flags[2],
+            'information_missing': False, 'measurement_status': 'required' if self.flags[1] else 'not_stated',
+            'measurement_evidence': e['text'] if self.flags[1] else None, 'meaning': 'ambiguous_other' if self.flags[2] else 'new_measurement' if self.flags[1] else 'clear_other',
             'rationale': 'Test interpretation'} for e in payload['excerpts']]
         if self.damage == 'quote': rows[0]['quote'] = 'fabricated source'
         if self.damage == 'partial': rows[0]['quote'] = payload['excerpts'][0]['text'].split('.')[0]
@@ -139,3 +140,18 @@ def test_text_wire_schema_requires_every_field(model):
     schema=model.model_json_schema()
     assert set(schema['required'])==set(schema['properties'])
     assert schema['additionalProperties'] is False
+
+
+def test_provider_aliases_are_bounded_and_never_replace_source_hashes():
+    from hashlib import sha256
+    p = Classifier()
+    source = result().model_copy(update={'limitations': ('Document A is absent.', 'No additional readings required.')})
+    cache = {}
+    parsed = StructuredTextEvidenceInterpreter(p).interpret(collect_excerpts({source.tool_name: source}), cache=cache)
+    payload, schema = p.calls[0][1], p.calls[0][2]['response_schema']
+    assert [e['evidence_id'] for e in payload['excerpts']] == ['e0', 'e1']
+    assert schema['$defs']['TextClassification']['properties']['evidence_id']['enum'] == ['e0', 'e1']
+    assert schema['properties']['assessments']['minItems'] == schema['properties']['assessments']['maxItems'] == 2
+    hashes = {sha256(text.encode()).hexdigest() for text in source.limitations}
+    assert set(cache) == hashes == {p.evidence_id for p in parsed}
+    assert all(p.source_refs == source.source_refs for p in parsed)

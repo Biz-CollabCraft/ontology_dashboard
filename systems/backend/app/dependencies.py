@@ -281,12 +281,18 @@ def get_decision_session_service() -> DecisionSessionApplicationService:
         return service.agent_review_packet(identity.asset_id, identity.project_id)
 
     provider_name = os.getenv("LLM_PROVIDER", "deterministic").strip().lower()
+    planner_mode = os.getenv("DECISION_AGENT_PLANNER", "deterministic").strip().lower()
+    if planner_mode not in {"deterministic", "llm"}:
+        raise ValueError("DECISION_AGENT_PLANNER must be deterministic or llm")
     planner = None
     text_interpreter = None
     if provider_name not in {"", "none", "deterministic", "offline"}:
         provider = configured_provider()
-        planner = StructuredLLMDecisionPlanner(provider)
+        if planner_mode == "llm":
+            planner = StructuredLLMDecisionPlanner(provider)
         text_interpreter = StructuredTextEvidenceInterpreter(provider)
+    elif planner_mode == "llm":
+        raise ValueError("LLM planner requires an enabled LLM_PROVIDER")
 
     def agent_factory(identity):
         repository = OperationalContextRepository(str(target)).capture(identity)

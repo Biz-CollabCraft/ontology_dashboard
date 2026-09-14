@@ -104,6 +104,10 @@ class DecisionTextInterpretation(FrozenModel):
     origin: Literal["llm_interpretation"] = "llm_interpretation"
     evidence_id: str
     source_text: str
+    meaning: Literal["record_review", "new_measurement", "ambiguous_request", "ambiguous_other", "clear_other"] | None = None
+    information_missing: bool = False
+    measurement_status: Literal["required", "not_required", "optional", "not_stated", "unclear"] | None = None
+    measurement_evidence: str | None = None
     tool_name: str
     field_path: str
     source_refs: tuple[str, ...]
