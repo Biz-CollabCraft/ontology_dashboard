@@ -37,7 +37,7 @@ export interface DecisionSession {
   scope: DecisionScope;
   snapshot_basis: OperationsEvidenceSnapshotBasis;
   expires_at: string;
-  status: "investigating" | "completed" | "abstained" | "failed";
+  status: "investigating" | "ready_for_review" | "abstained" | "failed";
   steps: { id: string; label: string; status: "pending" | "running" | "completed" | "failed" }[];
   proposal: DecisionProposal | null;
   // Server Policy Guard owns eligibility and concrete execution binding.
@@ -61,6 +61,7 @@ export const loadDecisionProposal: DecisionProposalAdapter = async (context, sig
   const query = new URLSearchParams({ project_id: context.projectId, workspace_id: context.workspaceId,
     evidence_snapshot_id: context.snapshotBasis.artifactId!, decision_as_of: context.snapshotBasis.observedAt!,
     role: context.role ?? "process_manager" });
+  if (!context.sessionId) query.set("request_id", decisionRequestId(context));
   try {
     const payload = await requestManufacturingDecisionSession(context.assetId, query, signal, context.sessionId);
     return adaptDecisionSession(payload);
@@ -88,7 +89,7 @@ export function validateDecisionState(state: DecisionProposalState, scope: Decis
   return state;
 }
 export function proposalActions(state: DecisionProposalState, roles: string[], permissions: string[]) {
-  if (state.status !== "ready" || state.session.status !== "completed" || !state.session.proposal?.recommended_action) return [];
+  if (state.status !== "ready" || state.session.status !== "ready_for_review" || !state.session.proposal?.recommended_action) return [];
   const p = state.session.proposal;
   const expiresAt = Date.parse(state.session.expires_at);
   if (p.human_approval_required !== true || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return [];
@@ -149,6 +150,17 @@ function conflict(value: unknown): DecisionConflict {
 }
 const toolLabels: Record<string,string> = { get_asset_condition: "설비 상태 확인", get_inspection_context: "점검 기록 확인",
   get_maintenance_context: "정비 기록 확인", get_production_context: "생산 영향 확인", get_resource_readiness: "정비 준비 상태 확인" };
+function decisionRequestId(context: DecisionScope & { snapshotBasis: OperationsEvidenceSnapshotBasis | null; role?: string }): string {
+  const raw = [context.projectId, context.workspaceId, context.eventId, context.assetId,
+    context.snapshotBasis?.artifactId ?? "", context.snapshotBasis?.observedAt ?? "", context.role ?? "process_manager"].join("|");
+  let hash = 0x811c9dc5, hash2 = 0x9e3779b9;
+  for (let i = 0; i < raw.length; i += 1) {
+    const code = raw.charCodeAt(i);
+    hash = Math.imul(hash ^ code, 0x01000193) >>> 0;
+    hash2 = Math.imul(hash2 + code + (hash2 << 6) + (hash2 >>> 2), 0x85ebca6b) >>> 0;
+  }
+  return `decision-${hash.toString(36).padStart(7, "0")}-${hash2.toString(36).padStart(7, "0")}`;
+}
 export function adaptDecisionSession(payload: unknown): DecisionProposalState {
   const response = object(payload), s = object(response.session), identity = object(s.identity);
   if (s.schema_version !== "manufacturing-decision-session-v1.0" || s.mutation_attempted !== false)
@@ -156,7 +168,7 @@ export function adaptDecisionSession(payload: unknown): DecisionProposalState {
   const status = string(s.status);
   if (status === "stale" || status === "closed") return { status: "stale", reason: "판단 유효기간이 끝났거나 근거가 변경되었습니다." };
   const statuses: Record<string,DecisionSession["status"]> = { created: "investigating", assessing: "investigating", waiting_for_tool: "investigating",
-    ready_for_review: "completed", abstained: "abstained", failed: "failed" };
+    ready_for_review: "ready_for_review", abstained: "abstained", failed: "failed" };
   if (!statuses[status]) throw new Error("unknown decision session status");
   const b = object(s.snapshot_basis);
   const snapshot: OperationsEvidenceSnapshotBasis = {

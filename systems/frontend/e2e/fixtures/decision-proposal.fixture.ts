@@ -6,7 +6,7 @@ export function decisionProposalFixture(context: DecisionScope & { snapshotBasis
   const { snapshotBasis, ...scope } = context;
   return { status: "ready", session: {
     session_id: "fixture-session", scope, snapshot_basis: snapshotBasis,
-    expires_at: new Date(Date.now() + 60000).toISOString(), status: "completed",
+    expires_at: new Date(Date.now() + 60000).toISOString(), status: "ready_for_review",
     steps: [{ id: "asset", label: "설비 상태 확인", status: "completed" }],
     policy_guard: [
       { action: "REQUEST_INSPECTION", allowed: true, reason: null, execution: { actionId: "request_inspection_work_order", targetType: "event", targetId: scope.eventId } },

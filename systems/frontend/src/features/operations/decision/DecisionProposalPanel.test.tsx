@@ -140,6 +140,8 @@ describe("backend DecisionSession contract", () => {
   it("adapts recommendation, alternative, provenance and execution binding", () => {
     const {detail} = setup();
     const state = adaptDecisionSession(decisionSessionWireFixture({...scope,snapshotBasis:detail.snapshotBasis}));
+    if (state.status !== "ready") throw new Error("fixture");
+    expect(state.session.status).toBe("ready_for_review");
     expect(proposalActions(state,roles,permissions).map(a => a.action)).toEqual(["REQUEST_INSPECTION","REVIEW_PLANNED_MAINTENANCE"]);
     expect(proposalExecution(state,"REQUEST_INSPECTION",detail,roles,permissions)?.actionId).toBe("request_inspection_work_order");
   });
@@ -166,6 +168,17 @@ describe("backend DecisionSession contract", () => {
     await loadDecisionProposal({...scope,snapshotBasis:detail.snapshotBasis},new AbortController().signal);
     await loadDecisionProposal({...scope,snapshotBasis:detail.snapshotBasis,sessionId:"fixture-session"},new AbortController().signal);
     expect(fetcher.mock.calls.map(c=>c[1].method)).toEqual(["POST","GET"]);
+    const firstUrl = String(fetcher.mock.calls[0][0]);
+    const firstRequestId = new URLSearchParams(firstUrl.split("?")[1]).get("request_id");
+    expect(firstRequestId).toMatch(/^decision-[a-z0-9]{7,}-[a-z0-9]{7,}$/);
     expect(fetcher.mock.calls[1][0]).toContain("/decision-sessions/fixture-session?");
+  });
+  it("uses the same request id for the same decision scope", async () => {
+    const {detail}=setup(); const wire=decisionSessionWireFixture({...scope,snapshotBasis:detail.snapshotBasis});
+    const fetcher=vi.fn().mockResolvedValue({ok:true,status:200,json:async()=>wire});vi.stubGlobal("fetch",fetcher);
+    await loadDecisionProposal({...scope,snapshotBasis:detail.snapshotBasis},new AbortController().signal);
+    await loadDecisionProposal({...scope,snapshotBasis:detail.snapshotBasis},new AbortController().signal);
+    const requestIds = fetcher.mock.calls.map(call => new URLSearchParams(String(call[0]).split("?")[1]).get("request_id"));
+    expect(requestIds[0]).toBe(requestIds[1]);
   });
 });

@@ -61,7 +61,7 @@ function FactGroup({ title, items, empty }: { title: string; items: DecisionConf
   })}</ul> : <p className="dw-muted">{empty}</p>}</section>;
 }
 export function DecisionConditions({ state, detail }: { state: DecisionProposalState; detail: OperationsEventDetailModel }) {
-  const p = state.status === "ready" && ["completed", "abstained"].includes(state.session.status) ? state.session.proposal : null;
+  const p = state.status === "ready" && ["ready_for_review", "abstained"].includes(state.session.status) ? state.session.proposal : null;
   const boundary = (f: DecisionFact) => f.text.startsWith("Agent Review Packet is read-only") || f.text.startsWith("SOP grounding supports");
   const uncertainties = p ? [...p.uncertainties, ...p.additional_information_needed] : detail.evidenceGaps.map(g => ({ text: g.reason, evidence_refs: [] }));
   return <div className="dw-decision-conditions" aria-label="구조화된 판단 조건">
@@ -85,16 +85,16 @@ export function DecisionProposalPanel({ state, detail, roles, permissions, refre
   const selected = selection?.revision === revision ? selection.action : null;
   const options = proposalActions(state, roles, permissions);
   const session = state.status === "ready" ? state.session : null;
-  const p = session && ["completed", "abstained"].includes(session.status) ? session.proposal : null;
+  const p = session && ["ready_for_review", "abstained"].includes(session.status) ? session.proposal : null;
   const execution = selected ? proposalExecution(state, selected, detail, roles, permissions) : null;
   return <section className="dw-proposal" aria-label="Decision Proposal">
     <h2>다음 판단</h2>
     {state.status === "loading" && <p role="status">판단 후보 연결을 확인하고 있습니다.</p>}
     {(state.status === "unavailable" || state.status === "stale") && <p role="status">{state.reason}</p>}
     {onRetry && (state.status === "unavailable" || state.status === "stale") && <button disabled={refreshing} onClick={onRetry}>다시 판단</button>}
-    {session && <section aria-label="AI 판단 준비"><h3>{session.status === "completed" ? "조사 완료" : session.status === "abstained" ? "판단 보류" : session.status === "failed" ? "조사 확인 필요" : "AI 판단 준비"}</h3>
+    {session && <section aria-label="AI 판단 준비"><h3>{session.status === "ready_for_review" ? "조사 완료" : session.status === "abstained" ? "판단 보류" : session.status === "failed" ? "조사 확인 필요" : "AI 판단 준비"}</h3>
       <ul>{session.steps.map(step => <li key={step.id}>{({ completed: "✓", running: "→", pending: "○", failed: "!" })[step.status]} {step.label}</li>)}</ul>
-      {session.status === "completed" && <p className="dw-muted">{session.steps.filter(s => s.status === "completed").length}개 운영 정보를 확인했습니다.</p>}
+      {session.status === "ready_for_review" && <p className="dw-muted">{session.steps.filter(s => s.status === "completed").length}개 운영 정보를 확인했습니다.</p>}
     </section>}
     {p && <>{p.abstain_reason && <p role="status">{fieldText(p.abstain_reason)}</p>}<p>{p.reasoning_summary}</p>{p.recommended_action && <p className="dw-muted">추천 신뢰도 · {({ low: "낮음", medium: "보통", high: "높음" })[p.confidence]}</p>}
       {options.map(o => <div key={o.action}><h3>{o.recommended ? "추천" : "대안"}</h3><button className={o.recommended ? "dw-primary" : ""} disabled={Boolean(o.reason) || refreshing} onClick={() => setSelection({ action: o.action, revision })}>{o.label}</button>{o.reason && <p className="dw-muted">{o.reason}</p>}</div>)}
