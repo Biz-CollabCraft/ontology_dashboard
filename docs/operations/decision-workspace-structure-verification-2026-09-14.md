@@ -99,6 +99,8 @@ git diff --check
 
 따라서 현재 PR에서 말할 수 있는 주장은 “Decision Agent를 기존 Operations 계약에 맞춰 안전하게 붙였다”이다. “LLM이 deterministic보다 낫다”, “현장 업무 시간이 줄었다”, “실제 공장 성과가 개선됐다”는 아직 말하면 안 된다.
 
+별도 [유용성 비교 평가](../eval/decision-workspace-usefulness-comparison-2026-09-14.md)에서는 같은 7개 ambiguous 케이스를 기존 브리핑, rule-only Agent, durable DecisionSession으로 비교했다. 정의한 10개 workflow check 기준으로 briefing-only는 20.0%, rule-only는 60.0%, durable DecisionSession은 100.0%를 충족했다. 이는 현장 KPI가 아니라 판단 workflow 준비도 비교다.
+
 ## 모델 평가 문서 주의
 
 `docs/eval/decision-agent-planner-evaluation-2026-09-14.md`와 일부 과거 ambiguous 평가 문서의 `gpt-4o-mini` 표기는 당시 평가 조건이다. 현재 구조 검증의 모델 조건이나 기본 운영 모델을 뜻하지 않는다. 최신 판단은 `decision-agent-correction-evaluation-2026-09-14.md`의 한계와 동일하게, deterministic 기준 경로를 유지하고 LLM/LangGraph 우위는 Not Proven으로 둔다.
