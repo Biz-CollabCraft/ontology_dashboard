@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -100,6 +100,21 @@ class DecisionToolCall(FrozenModel):
     error_code: str | None = Field(default=None, max_length=160)
 
 
+class DecisionTextInterpretation(FrozenModel):
+    origin: Literal["llm_interpretation"] = "llm_interpretation"
+    evidence_id: str
+    source_text: str
+    tool_name: str
+    field_path: str
+    source_refs: tuple[str, ...]
+    as_of: datetime
+    unresolved_conflict: bool
+    measurement_required: bool
+    uncertain: bool
+    quote: str
+    rationale: str
+
+
 class DecisionSession(FrozenModel):
     schema_version: str = "manufacturing-decision-session-v1.0"
     decision_session_id: str = Field(min_length=1, max_length=240)
@@ -113,6 +128,10 @@ class DecisionSession(FrozenModel):
     updated_at: datetime
     retry_budget_remaining: int = Field(ge=0, le=20)
     mutation_attempted: bool = False
+    planner_errors: tuple[str, ...] = ()
+    recommendation_gate_reason: str | None = None
+    text_interpretations: tuple[DecisionTextInterpretation, ...] = ()
+    text_interpretation_errors: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def validate_session_boundary(self) -> "DecisionSession":

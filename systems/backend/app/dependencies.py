@@ -123,6 +123,8 @@ from app.operations.operational_decision_support_port import OperationalDecision
 from app.operations.decision_session_service import DecisionSessionApplicationService
 from app.operations.decision_support_agent import ManufacturingDecisionAgent
 from app.operations.decision_tools import ManufacturingDecisionTools
+from app.operations.decision_llm_planner import StructuredLLMDecisionPlanner
+from app.operations.decision_text_interpreter import StructuredTextEvidenceInterpreter
 
 
 ROOT = project_root()
@@ -278,13 +280,21 @@ def get_decision_session_service() -> DecisionSessionApplicationService:
     def packet_loader(identity):
         return service.agent_review_packet(identity.asset_id, identity.project_id)
 
+    provider_name = os.getenv("LLM_PROVIDER", "deterministic").strip().lower()
+    planner = None
+    text_interpreter = None
+    if provider_name not in {"", "none", "deterministic", "offline"}:
+        provider = configured_provider()
+        planner = StructuredLLMDecisionPlanner(provider)
+        text_interpreter = StructuredTextEvidenceInterpreter(provider)
+
     def agent_factory(identity):
         repository = OperationalContextRepository(str(target)).capture(identity)
         tools = ManufacturingDecisionTools(
             packet_loader=packet_loader,
             operational_ports=repository.ports(),
         )
-        return ManufacturingDecisionAgent(tools=tools)
+        return ManufacturingDecisionAgent(tools=tools, planner=planner, text_interpreter=text_interpreter)
 
     return DecisionSessionApplicationService(
         packet_loader=packet_loader,
