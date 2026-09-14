@@ -148,8 +148,8 @@ function conflict(value: unknown): DecisionConflict {
   }
   return result;
 }
-const toolLabels: Record<string,string> = { get_asset_condition: "설비 상태 확인", get_inspection_context: "점검 기록 확인",
-  get_maintenance_context: "정비 기록 확인", get_production_context: "생산 영향 확인", get_resource_readiness: "정비 준비 상태 확인" };
+const toolLabels: Record<string,string> = { get_asset_condition: "설비 위험 상태 확인", get_inspection_context: "점검 기록 확인",
+  get_maintenance_context: "정비 이력 확인", get_production_context: "생산 영향 확인", get_resource_readiness: "정비 가능 시간·부품·인력 확인" };
 function decisionRequestId(context: DecisionScope & { snapshotBasis: OperationsEvidenceSnapshotBasis | null; role?: string }): string {
   const raw = [context.projectId, context.workspaceId, context.eventId, context.assetId,
     context.snapshotBasis?.artifactId ?? "", context.snapshotBasis?.observedAt ?? "", context.role ?? "process_manager"].join("|");

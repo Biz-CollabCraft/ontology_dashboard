@@ -77,6 +77,12 @@ describe("Decision Proposal boundary (fixture-backed)", () => {
     await act(async () => root.render(<><DecisionConditions state={state} detail={detail}/><DecisionProposalPanel state={state} detail={detail} roles={roles} permissions={permissions} refreshing={false} onReview={vi.fn()}/></>));
     for (const t of ["확인됨","미확인","충돌","생산 영향: 높음","실제 부품 예약 상태","120분","추천","대안","점검 요청","계획 정비 검토"]) expect(host.textContent).toContain(t);
   });
+  it("uses operator-facing wording instead of system implementation terms", async () => {
+    const {state,detail} = setup();
+    await act(async () => root.render(<><DecisionConditions state={state} detail={detail}/><DecisionProposalPanel state={state} detail={detail} roles={roles} permissions={permissions} refreshing={false} onReview={vi.fn()}/></>));
+    for (const t of ["검토 준비","선택한 관측 시점","작업 생성 없이 운영 정보만 확인했습니다","판단에 사용한 데이터","데이터 출처"]) expect(host.textContent).toContain(t);
+    for (const t of ["근거 고정","AI 판단 준비","조사 완료","구조화된 판단 조건","추천 근거","근거 출처","세션 재사용"]) expect(host.textContent).not.toContain(t);
+  });
   it.each(["loading","unavailable","stale"] as const)("renders %s without proposal buttons", async status => {
     const {detail} = setup();
     const state: DecisionProposalState = status === "loading" ? {status} : {status,reason:"판단 확인 필요"};
@@ -87,11 +93,11 @@ describe("Decision Proposal boundary (fixture-backed)", () => {
     const {state,detail} = setup(); const onReview = vi.fn();
     const render = (s: DecisionProposalState) => <DecisionProposalPanel state={s} detail={detail} roles={roles} permissions={permissions} refreshing={false} onReview={onReview}/>;
     await act(async () => root.render(render(state)));
-    await click("점검 요청"); expect(onReview).not.toHaveBeenCalled(); expect(host.textContent).toContain("사용자 검토");
+    await click("점검 요청"); expect(onReview).not.toHaveBeenCalled(); expect(host.textContent).toContain("담당자 검토");
     await click("검토 후 요청 내용 확인"); expect(onReview).toHaveBeenCalledWith("request_inspection_work_order");
     await click("점검 요청");
     await act(async () => root.render(render({status:"stale",reason:"근거 변경"})));
-    expect(host.querySelector('[aria-label="사용자 검토"]')).toBeNull();
+    expect(host.querySelector('[aria-label="담당자 검토"]')).toBeNull();
   });
   it("withdraws expired proposals and refuses approval-free proposals", () => {
     const {state} = setup();
