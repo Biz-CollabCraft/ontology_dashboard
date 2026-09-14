@@ -41,6 +41,29 @@ LLM 응답 schema에도 남은 도구 enum을 반영한다. 남은 필수 조회
 
 명시적 source blocker가 우선하며, 해석된 충돌/불확실성은 사람 확인을 위해 보류한다. 해석된 추가 측정 요구는 기존 policy가 허용할 때 낮은 신뢰도의 추가 진단 제안으로 연결한다. 해석 오류는 `text_interpretation_errors`에 기록하고 보류한다. 결과를 confirmed_facts로 승격하지 않는다.
 
-현재 LLM 설정이 활성화된 service는 planner와 text interpreter를 모두 연결한다. `ManufacturingDecisionAgent(planner=None, text_interpreter=...)`는 텍스트 해석만 LLM에 맡기는 별도 구성이며 순수 deterministic이 아니다. 평가의 `text-comparison`은 이 구성을 구분하고 텍스트 API/추천 API/전체 token을 분리 기록한다.
+LLM 설정이 활성화된 service의 기본 구성은 `ManufacturingDecisionAgent(planner=None, text_interpreter=...)`이다. LangGraph가 조회와 종료를 관리하고, LLM은 문구를 해석하며, deterministic 규칙이 추천을 선택한다. 순수 deterministic은 아니다. `DECISION_AGENT_PLANNER=llm`을 명시하면 기존 LLM 도구 선택·액션 ranking 실험 구성을 사용한다. 기본값은 `deterministic`이고 알 수 없는 설정이나 offline provider와 llm planner의 조합은 오류로 거부한다. 평가의 `text-comparison`은 이 구성을 구분하고 텍스트 API/추천 API/전체 token을 분리 기록한다.
 
 [기존 입력 재평가 및 오탐 기록](../eval/decision-text-interpretation-evaluation-2026-09-14.md)을 참고한다. 이 구현은 제공된 문구의 명시적 의미를 추출하며, 여러 독립 원천을 통합해 새로운 충돌을 발견하는 시스템은 아니다.
+
+
+## 정보 누락과 측정 요구 분리 (2026-09-14 후속)
+
+원문 해석은 `information_missing`와 `measurement_status`를 별도로 출력한다. status는 `required`, `not_required`, `optional`, `not_stated`, `unclear` 중 하나다. 서버는 `required`에서만 기존 `measurement_required=true`를 산출한다. `unclear`는 불확실성으로 보류하며 정보 누락만으로 진단을 요청하지 않는다.
+
+`required` 응답은 `measurement_evidence`에 원문에 실제 존재하는 구절을 포함해야 한다. 필수 측정의 인용 누락·빈 문자열·원문 밖 구절은 전체 batch를 거부하고 캐시에 게시하지 않는다. 선택적 측정이나 불필요한 측정의 정확한 원문 인용도 보존할 수 있지만, 인용의 존재만으로 측정 요구를 만들지 않는다. 이 검사는 출처 연결만 확인하며, 부정어나 조건을 잘못 해석하는 문제까지 증명하지 않는다. 전체 원문도 계속 보존한다. 기존 session의 추가 필드는 기본값으로 역호환한다.
+
+[후속 평가와 PostgreSQL 재검증](../eval/decision-text-boundary-evaluation-2026-09-14.md)에 개선과 남은 불확실성 누락을 함께 기록했다. 실제 배포·현장 검증 완료를 뜻하지 않는다.
+
+
+## 모호 표현 분류 후속 (2026-09-14)
+
+`meaning`은 record_review/new_measurement/ambiguous_request/ambiguous_other/clear_other를 구분한다. 의미가 모호하면 기존 사람 검토 보류 경로를 사용한다. `measurement_required`는 status=required이면서 meaning=new_measurement일 때만 true다. 기록 조회만으로 측정 요구를 만들지 않는다. 의미나 충돌 분류는 여전히 모델의 해석이며 확정 사실이 아니다.
+
+API에는 배치 내부의 짧은 ID(e0 등)와 그 enum/개수 제약을 제공한다. 서버는 응답의 중복·누락을 검증한 뒤 원본 SHA256 ID로 복원하므로 cache와 source locator는 바뀌지 않는다. 모델이 해시 한 글자를 빠뜨려 전체 batch가 실패하는 문제를 줄인다.
+
+[모호 표현 평가 결과](../eval/decision-text-ambiguity-evaluation-2026-09-14.md)는 검토 경로 정확도와 세부 분류 오류를 분리한다. 모호 표현을 충돌로도 표시하는 오탐과 기존 정보 누락 문구의 불필요 보류가 남아 있어 배포 완료나 전체 의미 해석 해결을 주장하지 않는다.
+
+
+## 모델별 품질 근거
+
+[4o-mini/Luna 비교](../eval/decision-model-comparison-2026-09-14.md)에서 주요 세 flag는 4o-mini 87/105, Luna low 105/105였다. 기존의 특정 충돌 오탐/불필요 보류는 4o-mini 관찰이며 Luna에서는 미재현이다. 정보 누락/측정 상태 세부 분류는 Luna에서도 완벽하지 않다. 평가 결과와 실제 runtime 설정은 별개이며 이번 비교는 .env나 배포 설정을 변경하지 않았다. 모델 비교는 명시적 모델과 응답 모델 검증이 있는 evaluate_decision_model_comparison.py를 사용한다.

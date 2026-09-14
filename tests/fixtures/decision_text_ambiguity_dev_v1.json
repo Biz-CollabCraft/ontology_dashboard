@@ -1,0 +1,198 @@
+{
+  "version": "decision-ambiguity-v3-dev",
+  "scope": "Synthetic semantic ambiguity evaluation. Gold frozen before inference. Dev includes previously failed U1; holdout uses newly authored wording, not independent field validation. Unspecified confirmation requests require clarification; mere unavailable records do not.",
+  "cases": [
+    {
+      "id": "dev-01",
+      "category": "ambiguous",
+      "text": "메모에는 추가 확인이라고만 쓰여 있어 서류 확인인지 재측정 요구인지 의미를 판단할 수 없다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": true,
+        "information_missing": false,
+        "measurement_status": "unclear"
+      }
+    },
+    {
+      "id": "dev-02",
+      "category": "ambiguous",
+      "text": "추가 확인 필요.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": true,
+        "information_missing": false,
+        "measurement_status": "unclear"
+      }
+    },
+    {
+      "id": "dev-03",
+      "category": "ambiguous",
+      "text": "확인 후 진행이라고 적혀 있지만 무엇을 확인해야 하는지는 제시되지 않았다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": true,
+        "information_missing": false,
+        "measurement_status": "unclear"
+      }
+    },
+    {
+      "id": "dev-04",
+      "category": "ambiguous",
+      "text": "다시 봐 주세요라는 요청이 서류 검토인지 현장 점검인지 구별되지 않는다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": true,
+        "information_missing": false,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "dev-05",
+      "category": "ambiguous",
+      "text": "The note says check again, but the intended check cannot be identified.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": true,
+        "information_missing": false,
+        "measurement_status": "unclear"
+      }
+    },
+    {
+      "id": "dev-06",
+      "category": "ambiguous",
+      "text": "Follow up is requested, with no indication of what should be checked.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": true,
+        "information_missing": false,
+        "measurement_status": "unclear"
+      }
+    },
+    {
+      "id": "dev-07",
+      "category": "ambiguous",
+      "text": "The phrase verify it could mean checking the log or testing the sensor; the author has not clarified.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": true,
+        "information_missing": false,
+        "measurement_status": "unclear"
+      }
+    },
+    {
+      "id": "dev-08",
+      "category": "ambiguous",
+      "text": "측정 기록도 없고 추가 확인 지시가 어떤 작업을 뜻하는지도 불명확하다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": true,
+        "information_missing": true,
+        "measurement_status": "unclear"
+      }
+    },
+    {
+      "id": "dev-09",
+      "category": "clear",
+      "text": "교정 기록을 확인해야 한다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "dev-10",
+      "category": "clear",
+      "text": "진동을 다시 측정해야 한다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": true,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "required"
+      }
+    },
+    {
+      "id": "dev-11",
+      "category": "clear",
+      "text": "추가 확인은 필요 없다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "not_required"
+      }
+    },
+    {
+      "id": "dev-12",
+      "category": "clear",
+      "text": "압력 측정값이 보고서에서 누락됐다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": true,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "dev-13",
+      "category": "clear",
+      "text": "Please verify the sensor serial number against the equipment register.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "dev-14",
+      "category": "clear",
+      "text": "Repeat the temperature measurement before assessment.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": true,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "required"
+      }
+    },
+    {
+      "id": "dev-15",
+      "category": "clear",
+      "text": "The certificate is missing; retrieve the archived certificate for review.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": true,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "dev-16",
+      "category": "clear",
+      "text": "추가 확인의 뜻을 담당자에게 물었고 교정 기록 대조를 뜻한다는 답변을 받았다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "not_stated"
+      }
+    }
+  ]
+}

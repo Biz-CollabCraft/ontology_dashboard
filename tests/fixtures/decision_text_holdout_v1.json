@@ -1,0 +1,294 @@
+{
+  "version": "decision-text-holdout-v1",
+  "scope": "Authored synthetic paired Korean/English excerpts; gold frozen before API runs; not independent field validation",
+  "cases": [
+    {
+      "id": "M1",
+      "category": "missing",
+      "text": "압력계 점검표에 교정 일자가 비어 있다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": true,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "M2",
+      "category": "missing",
+      "text": "The archive does not contain the torque sensor certificate.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": true,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "M3",
+      "category": "missing",
+      "text": "현재 보고서에는 온도 채널의 단위가 기재되지 않았다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": true,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "M4",
+      "category": "missing",
+      "text": "The pump inspection attachment is absent from the handover package.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": true,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "R1",
+      "category": "required",
+      "text": "압력계 점검표에 교정 일자가 비어 있다. 압력 신뢰성을 판단하기 전에 기준 계기로 다시 측정해야 한다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": true,
+        "uncertain": false,
+        "information_missing": true,
+        "measurement_status": "required"
+      }
+    },
+    {
+      "id": "R2",
+      "category": "required",
+      "text": "The torque sensor certificate is absent. New torque readings must be collected before evaluating the alarm.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": true,
+        "uncertain": false,
+        "information_missing": true,
+        "measurement_status": "required"
+      }
+    },
+    {
+      "id": "R3",
+      "category": "required",
+      "text": "온도 편차의 원인을 판단하려면 독립 계측기로 온도를 한 번 더 측정해야 한다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": true,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "required"
+      }
+    },
+    {
+      "id": "R4",
+      "category": "required",
+      "text": "A fresh pump pressure test is necessary before the inspection finding can be assessed.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": true,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "required"
+      }
+    },
+    {
+      "id": "N1",
+      "category": "negated",
+      "text": "압력계 점검표에 교정 일자가 비어 있지만 이번 판단을 위한 추가 측정은 필요하지 않다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": true,
+        "measurement_status": "not_required"
+      }
+    },
+    {
+      "id": "N2",
+      "category": "negated",
+      "text": "The certificate is missing from the archive, but repeat torque measurements are not needed for this review.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": true,
+        "measurement_status": "not_required"
+      }
+    },
+    {
+      "id": "N3",
+      "category": "negated",
+      "text": "재측정 요구는 철회되었다. 현재 기록으로 충분하며 추가 측정은 불필요하다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "not_required"
+      }
+    },
+    {
+      "id": "N4",
+      "category": "negated",
+      "text": "The pressure test has been completed; no new readings are necessary for this assessment.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "not_required"
+      }
+    },
+    {
+      "id": "O1",
+      "category": "optional",
+      "text": "교육 자료를 늘리기 위해 다음 달 온도를 더 측정해 볼 수 있으나 이번 판단의 필수 조건은 아니다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "optional"
+      }
+    },
+    {
+      "id": "O2",
+      "category": "optional",
+      "text": "An extra torque sample is optional for the training exercise and is not a prerequisite for this review.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "optional"
+      }
+    },
+    {
+      "id": "O3",
+      "category": "optional",
+      "text": "연구팀은 압력 추가 측정을 선택 사항으로 제안했다. 현재 검토에 요구되는 것은 아니다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "optional"
+      }
+    },
+    {
+      "id": "O4",
+      "category": "optional",
+      "text": "Another pump test might enrich the research dataset, but the current decision does not require it.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "optional"
+      }
+    },
+    {
+      "id": "C1",
+      "category": "conflict",
+      "text": "동일 시점의 펌프에 대해 담당자 A는 운전 가능, 담당자 B는 운전 금지로 기록했다. 어느 판단을 적용할지 합의되지 않았다.",
+      "gold": {
+        "unresolved_conflict": true,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "C2",
+      "category": "conflict",
+      "text": "Two current inspection notes disagree on whether the press can remain in service. The disagreement is unresolved.",
+      "gold": {
+        "unresolved_conflict": true,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "C3",
+      "category": "resolved",
+      "text": "펌프 운전 가능 여부에 대한 의견 차이는 공동 점검에서 해소되었다. 담당자들이 동일한 결론에 합의했다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "C4",
+      "category": "resolved",
+      "text": "The disagreement about the press was resolved during the joint review; both inspectors now record the same conclusion.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "not_stated"
+      }
+    },
+    {
+      "id": "U1",
+      "category": "uncertain",
+      "text": "메모에는 추가 확인이라고만 쓰여 있어 서류 확인인지 재측정 요구인지 의미를 판단할 수 없다.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": true,
+        "information_missing": false,
+        "measurement_status": "unclear"
+      }
+    },
+    {
+      "id": "U2",
+      "category": "uncertain",
+      "text": "The handover says check again, but it is unclear whether this asks for another measurement or a document check.",
+      "gold": {
+        "unresolved_conflict": false,
+        "measurement_required": false,
+        "uncertain": true,
+        "information_missing": false,
+        "measurement_status": "unclear"
+      }
+    },
+    {
+      "id": "B1",
+      "category": "both",
+      "text": "압력 기록들이 서로 반대 결론을 내며 불일치가 해소되지 않았다. 판단 전에 압력을 다시 측정해야 한다.",
+      "gold": {
+        "unresolved_conflict": true,
+        "measurement_required": true,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "required"
+      }
+    },
+    {
+      "id": "B2",
+      "category": "both",
+      "text": "The unresolved inspection disagreement concerns continued operation. A new vibration measurement is required before reassessment.",
+      "gold": {
+        "unresolved_conflict": true,
+        "measurement_required": true,
+        "uncertain": false,
+        "information_missing": false,
+        "measurement_status": "required"
+      }
+    }
+  ]
+}
