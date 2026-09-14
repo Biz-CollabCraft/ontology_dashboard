@@ -2,7 +2,7 @@ from copy import deepcopy
 from dataclasses import replace
 
 import pytest
-from httpx import ReadTimeout
+from app.common.llm_contract import ProviderUnavailable
 
 from app.operations.decision_text_interpreter import (
     StructuredTextEvidenceInterpreter, TextBatch, TextClassification, TextInterpretationError, collect_excerpts,
@@ -23,7 +23,7 @@ class Classifier:
     def generate_json(self, prompt, payload, **kwargs):
         self.calls.append((prompt, payload, kwargs))
         if self.damage == 'timeout':
-            raise ReadTimeout('synthetic')
+            raise ProviderUnavailable('synthetic transport timeout')
         rows = [{'evidence_id': e['evidence_id'], 'unresolved_conflict': self.flags[0],
             'information_missing': False, 'measurement_status': 'required' if self.flags[1] else 'not_stated',
             'measurement_evidence': e['text'] if self.flags[1] else None, 'meaning': 'ambiguous_other' if self.flags[2] else 'new_measurement' if self.flags[1] else 'clear_other',
@@ -155,3 +155,41 @@ def test_provider_aliases_are_bounded_and_never_replace_source_hashes():
     hashes = {sha256(text.encode()).hexdigest() for text in source.limitations}
     assert set(cache) == hashes == {p.evidence_id for p in parsed}
     assert all(p.source_refs == source.source_refs for p in parsed)
+
+
+def test_repeated_tool_text_preserves_all_sources_without_another_model_call():
+    texts = tuple(f"Record {i} is available." for i in range(12))
+    first = result().model_copy(update={'limitations': (*texts, texts[0])})
+    second = first.model_copy(update={'tool_name': T.GET_INSPECTION_CONTEXT, 'source_refs': ('source:second',)})
+    provider = Classifier()
+    interpreter = StructuredTextEvidenceInterpreter(provider)
+    cache = {}
+    interpreter.interpret(collect_excerpts({first.tool_name:first}), cache=cache)
+    excerpts = collect_excerpts({first.tool_name:first,second.tool_name:second})
+    rows = interpreter.interpret(excerpts, cache=cache)
+    assert len(excerpts) == len(rows) == 26
+    assert len(cache) == 12 and len(provider.calls) == 1
+    assert len(provider.calls[0][1]['excerpts']) == 12
+    assert {(r.tool_name,r.field_path,r.source_refs) for r in rows} == {
+        (tool.value, f'limitations/{i}', source.source_refs)
+        for tool,source in [(first.tool_name,first),(second.tool_name,second)] for i in range(13)
+    }
+
+
+@pytest.mark.parametrize('texts,error', [
+    (tuple(f'Unique source {i}' for i in range(17)), 'text_batch_budget_exceeded'),
+    (tuple(str(i) + 'x'*3000 for i in range(4)), 'text_batch_budget_exceeded'),
+    (('Repeated',)*81, 'text_source_budget_exceeded'),
+    (('x'*4000,)*16, 'text_source_budget_exceeded'),
+])
+def test_unique_and_source_budgets_remain_independently_bounded(texts,error):
+    source = result().model_copy(update={'limitations':texts})
+    with pytest.raises(TextInterpretationError,match=error):
+        collect_excerpts({source.tool_name:source})
+
+
+def test_duplicate_source_does_not_bypass_missing_provenance():
+    first=result()
+    second=first.model_copy(update={'tool_name':T.GET_INSPECTION_CONTEXT,'source_refs':()})
+    with pytest.raises(TextInterpretationError,match='text_source_refs_missing'):
+        collect_excerpts({first.tool_name:first,second.tool_name:second})

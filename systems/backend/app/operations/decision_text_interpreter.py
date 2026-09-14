@@ -4,10 +4,9 @@ from __future__ import annotations
 from hashlib import sha256
 from typing import Any, Literal
 
-from httpx import HTTPError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from app.infra.llm.provider import LLMProvider
+from app.common.llm_contract import LLMProvider
 from app.operations.decision_support_contract import DecisionTextInterpretation
 from app.operations.decision_tools import DecisionToolResult
 
@@ -31,11 +30,29 @@ necessarily uncertainty about what the sentence means. Then classify meaning:
   Lack of any equipment-related request does not by itself make the text ambiguous.
 Use the CURRENT meaning after any clarification, withdrawal, or negation in the excerpt.
 
-Independently classify information_missing when a factual record/value is absent or unverified.
-An unclear instruction alone does not mean a factual record is missing. Both can coexist.
-measurement_status: required only for explicitly required NEW measurement; not_required for explicitly
-unneeded measurement; optional for a suggestion or training/research option; not_stated for a record
-review or no measurement assertion; unclear for ambiguity about whether measurement is requested.
+Classify information_missing independently and only from an EXPLICIT statement that a factual
+record/value is absent or unverified. Identify that record/value and its absence or unverified status
+in the excerpt. A request for new measurements does not establish that existing readings are missing;
+a request to review a record does not establish that the record is absent or unverified. Conflicting
+assessments and unclear instruction referents alone do not establish missing factual records/values.
+false means no explicit missing-information statement was identified, not that the data is complete.
+Explicit missing information can coexist with a measurement request, conflict, or unclear instruction.
+
+measurement_status concerns the CURRENT request for NEW physical readings or diagnostic tests.
+Read corrections, withdrawals, conditions, and qualifiers before selecting its status:
+- required: explicitly mandatory new measurement. Educational/research purpose does not override
+  an explicit requirement.
+- optional: a new measurement remains a suggestion or choice, even if the excerpt also says it is
+  not essential for the current decision. Nonessential does not by itself mean withdrawn.
+- not_required: new measurement is explicitly unnecessary, withdrawn, or replaced by existing-record
+  review in a clarification. This explicit correction takes precedence over the generic record-review rule.
+- unclear: the intended target/activity is unspecified so whether measurement is requested cannot
+  be established. Do not turn this uncertainty into a measurement requirement.
+- not_stated: no measurement assertion is made. Existing-record review alone belongs here.
+  If all stated interpretations of an ambiguous instruction are clearly nonmeasurement activities,
+  use not_stated for measurement_status while preserving the ambiguous meaning.
+Do not infer an unstated conditional trigger has occurred or treat a conditional request as optional
+merely because the trigger value is absent.
 measurement_evidence is a source quote about measurement. It must be an exact original span for
 required, including qualifiers. For other statuses it may be null or an exact span describing optional,
 unneeded, or unclear measurement. A quote does not itself establish a requirement. Do not infer requirements from warning grades, missing records, or generic checking.
@@ -75,37 +92,61 @@ class TextInterpretationError(RuntimeError):
     pass
 
 
+MAX_UNIQUE_EXCERPTS = 16
+MAX_UNIQUE_TEXT_CHARACTERS = 12000
+# Five bounded tools can repeat the same evidence at separate source locations.
+MAX_SOURCE_FIELDS = MAX_UNIQUE_EXCERPTS * 5
+MAX_SOURCE_TEXT_CHARACTERS = MAX_UNIQUE_TEXT_CHARACTERS * 5
+
+
+def _text_fields(result):
+    for i, text in enumerate(result.limitations):
+        yield f"limitations/{i}", text
+    for i, gap in enumerate(result.data.get("evidence_gaps") or []):
+        yield f"data/evidence_gaps/{i}/reason", gap.get("reason") if isinstance(gap, dict) else None
+    for i, inspection in enumerate(result.data.get("inspection_results") or []):
+        if isinstance(inspection, dict):
+            for key in ("note", "notes", "findings", "summary"):
+                if key in inspection:
+                    yield f"data/inspection_results/{i}/{key}", inspection[key]
+        else:
+            yield f"data/inspection_results/{i}", None
+
+
 def collect_excerpts(results: dict[Any, DecisionToolResult]) -> list[dict[str, Any]]:
-    """Explicit text allowlist. Do not recursively scrape arbitrary tool payloads."""
+    """Bound unique model text separately from retained source occurrences."""
     excerpts = []
+    unique = set()
+    unique_characters = source_characters = source_fields = 0
     for tool, result in results.items():
         if result.status != "available":
             continue
-        fields = [(f"limitations/{i}", text) for i, text in enumerate(result.limitations)]
-        for i, gap in enumerate(result.data.get("evidence_gaps") or []):
-            if isinstance(gap, dict):
-                fields.append((f"data/evidence_gaps/{i}/reason", gap.get("reason")))
-        for i, inspection in enumerate(result.data.get("inspection_results") or []):
-            if isinstance(inspection, dict):
-                for key in ("note", "notes", "findings", "summary"):
-                    fields.append((f"data/inspection_results/{i}/{key}", inspection.get(key)))
-        for path, text in fields:
+        for path, text in _text_fields(result):
+            source_fields += 1
+            if source_fields > MAX_SOURCE_FIELDS:
+                raise TextInterpretationError("text_source_budget_exceeded")
             if not isinstance(text, str) or not text.strip():
                 continue
             if not result.source_refs:
                 raise TextInterpretationError("text_source_refs_missing")
             if len(text) > 4000:
                 raise TextInterpretationError("text_excerpt_budget_exceeded")
+            source_characters += len(text)
+            if source_characters > MAX_SOURCE_TEXT_CHARACTERS:
+                raise TextInterpretationError("text_source_budget_exceeded")
+            if text not in unique:
+                unique.add(text)
+                unique_characters += len(text)
+                if len(unique) > MAX_UNIQUE_EXCERPTS or unique_characters > MAX_UNIQUE_TEXT_CHARACTERS:
+                    raise TextInterpretationError("text_batch_budget_exceeded")
             evidence_id = sha256(text.encode()).hexdigest()
             excerpts.append({"evidence_id": evidence_id, "text": text, "tool_name": tool.value,
                 "field_path": path, "source_refs": result.source_refs, "as_of": result.as_of})
-    if len(excerpts) > 16 or sum(len(e["text"]) for e in excerpts) > 12000:
-        raise TextInterpretationError("text_batch_budget_exceeded")
     return excerpts
 
 
 class StructuredTextEvidenceInterpreter:
-    name = "quoted-text-evidence-interpreter-v3"
+    name = "quoted-text-evidence-interpreter-v4"
 
     def __init__(self, provider: LLMProvider):
         self.provider = provider
@@ -126,7 +167,7 @@ class StructuredTextEvidenceInterpreter:
                     response_schema=schema, response_schema_name="decision_text_interpretation",
                 )
                 batch = TextBatch.model_validate(response)
-            except (ValidationError, ValueError, TypeError, KeyError, RuntimeError, HTTPError) as exc:
+            except (ValidationError, ValueError, TypeError, KeyError, RuntimeError) as exc:
                 raise TextInterpretationError(f"text_interpretation_failed:{type(exc).__name__}") from exc
             ids = [item.evidence_id for item in batch.assessments]
             if len(ids) != len(set(ids)) or set(ids) != set(aliases):

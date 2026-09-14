@@ -8,12 +8,11 @@ eligibility, or mutation.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from httpx import HTTPError
 from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from app.infra.llm.provider import LLMProvider
+from app.common.llm_contract import LLMProvider
 from app.operations.decision_policy import DecisionPolicyFacts
 from app.operations.decision_support_contract import DecisionAction, DecisionConfidence
 from app.operations.decision_tools import DecisionToolName, DecisionToolResult
@@ -134,7 +133,7 @@ class StructuredLLMDecisionPlanner:
                 response_schema_name="decision_tool_selection",
             )
             selection = ToolSelection.model_validate(raw)
-        except (ValidationError, ValueError, TypeError, KeyError, RuntimeError, HTTPError) as exc:
+        except (ValidationError, ValueError, TypeError, KeyError, RuntimeError) as exc:
             raise DecisionPlannerError(f"tool_selection_failed:{type(exc).__name__}") from exc
         if selection.next_tool is not None and selection.next_tool not in available_tools:
             raise DecisionPlannerError("tool_selection_outside_allowlist")
@@ -161,7 +160,7 @@ class StructuredLLMDecisionPlanner:
                 response_schema_name="decision_action_ranking",
             )
             ranking = ActionRanking.model_validate(raw)
-        except (ValidationError, ValueError, TypeError, KeyError, RuntimeError, HTTPError) as exc:
+        except (ValidationError, ValueError, TypeError, KeyError, RuntimeError) as exc:
             raise DecisionPlannerError(f"action_ranking_failed:{type(exc).__name__}") from exc
         allowed = set(allowed_actions)
         if ranking.recommended_action is not None and ranking.recommended_action not in allowed:

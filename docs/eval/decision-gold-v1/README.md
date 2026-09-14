@@ -49,3 +49,7 @@ PYTHONPATH=systems/backend:scripts PYTHONDONTWRITEBYTECODE=1 python3 scripts/eva
 ## 명시적인 초안 평가
 
 사용자가 요청한 탐색 비교에는 `--gold-dataset ... --allow-draft`를 prepare/run 양쪽에 명시한다. 이 경우 평가 분할 24개 중 제안 라벨이 있는 20개만 비교하고, 미정 4개 ID를 등록 파일에 남긴다. 결과는 검수 전 제안 라벨과의 일치도이며 검증된 골드 정확도가 아니다. 검수 상태와 release/export 차단은 유지한다. 기본 모드는 계속 사람 검수를 요구한다.
+
+## 후속 기준 검토
+
+정보 누락·측정 상태의 일관성 보강은 [v1.1 검토안](../decision-gold-v1.1/README.md)에 분리했다. 이 디렉터리의 원본 v1 라벨과 과거 평가 점수는 유지한다. v1.1은 관찰한 결과를 바탕으로 한 개발/회귀 초안이며 사람 검수 완료 상태가 아니다.

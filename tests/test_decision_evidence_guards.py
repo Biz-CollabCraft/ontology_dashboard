@@ -1,7 +1,7 @@
 from dataclasses import replace
 
 import pytest
-from httpx import ReadTimeout
+from app.common.llm_contract import ProviderUnavailable
 
 from app.operations.decision_evidence import remaining_tools
 from app.operations.decision_llm_planner import StructuredLLMDecisionPlanner
@@ -86,7 +86,7 @@ def test_missing_required_evidence_at_budget_limit_abstains():
 
 
 def test_http_timeout_fallback_is_observable_and_bounded():
-    p = FakeProvider([ReadTimeout('synthetic'), ReadTimeout('synthetic'), ReadTimeout('synthetic')])
+    p = FakeProvider([ProviderUnavailable('synthetic transport timeout'), ProviderUnavailable('synthetic transport timeout'), ProviderUnavailable('synthetic transport timeout')])
     result = ManufacturingDecisionAgent(tools=tools(), planner=StructuredLLMDecisionPlanner(p)).run(request())
     assert len(result.session.planner_errors) == 3
     assert result.session.proposal.recommended_action is not None

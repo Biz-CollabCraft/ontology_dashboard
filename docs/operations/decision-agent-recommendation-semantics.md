@@ -67,3 +67,7 @@ API에는 배치 내부의 짧은 ID(e0 등)와 그 enum/개수 제약을 제공
 ## 모델별 품질 근거
 
 [4o-mini/Luna 비교](../eval/decision-model-comparison-2026-09-14.md)에서 주요 세 flag는 4o-mini 87/105, Luna low 105/105였다. 기존의 특정 충돌 오탐/불필요 보류는 4o-mini 관찰이며 Luna에서는 미재현이다. 정보 누락/측정 상태 세부 분류는 Luna에서도 완벽하지 않다. 평가 결과와 실제 runtime 설정은 별개이며 이번 비교는 .env나 배포 설정을 변경하지 않았다. 모델 비교는 명시적 모델과 응답 모델 검증이 있는 evaluate_decision_model_comparison.py를 사용한다.
+
+## 선택한 기준 버전
+
+2026-09-14 사용자 승인으로 [Luna + text interpreter v4](decision-agent-luna-v4-baseline.md)를 로컬 Decision Agent 기준으로 선택했다. deterministic planner와 policy/human approval 경계는 유지하며, 세부 의미·조건부/복합 지시 한계는 해당 문서에 고정한다. 과거 평가 결과는 각 당시 설정의 증거로 보존한다.
