@@ -5,6 +5,8 @@ API 계약과 팀 공유 문서를 관리한다.
 
 ## 문서 묶음
 
+- [최종 시연 AI 브리핑 통합 및 검증](./ui/final-demo-ai-briefing-integration.md)
+
 - [최종 역할 분배 및 Step별 실행 계획](./final_team_role_and_step_plan.md)
 - [Ontology Operations & Closed-loop 구현 계획](./closed-loop-implementation-plan.md)
 - [Closed-loop Domain 계약](./closed-loop-domain-contract.md)
@@ -28,6 +30,9 @@ API 계약과 팀 공유 문서를 관리한다.
 - [AI 코드 리뷰 컨텍스트](./ai-code-review-context.md)
 
 ## 개인 기여 문서
+
+- [최신 CNC 7장 발표 대본](./presentations/ontology-dashboard-v4/ontology-dashboard-v4-5min-script.md)
+- [AI 브리핑 슬라이드 제작 기준](./presentations/ontology-dashboard-v4/2026-09-08-ai-briefing-slide-production-guide.md)
 
 - [Backend Runtime / Evidence Delivery Contribution](./contributions/hb-backend-runtime-evidence.md)
 - [AI Review / Evidence Boundary Contribution](./contributions/hb-ai-review-evidence.md)

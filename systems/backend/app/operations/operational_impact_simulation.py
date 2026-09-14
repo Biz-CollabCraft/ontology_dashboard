@@ -75,8 +75,13 @@ def simulate_operational_impact(
 
     required_domains = {"production", "maintenance_readiness", "quality_delivery"}
     missing_domains = sorted(required_domains.difference(contexts))
-    for envelope in contexts.values():
+    temporal_reasons = []
+    for domain, envelope in sorted(contexts.items()):
         require_matching_scope(identity, envelope)
+        if envelope.as_of != identity.decision_as_of:
+            temporal_reasons.append(f"CONTEXT_AS_OF_MISMATCH:{domain}")
+        if envelope.source_updated_at is not None and envelope.source_updated_at > identity.decision_as_of:
+            temporal_reasons.append(f"CONTEXT_SOURCE_AFTER_AS_OF:{domain}")
 
     versions = context_version_set(contexts)
     source_refs = tuple(
@@ -96,6 +101,13 @@ def simulate_operational_impact(
         "The simulation does not calculate or change failure probability.",
         "The simulation does not select or execute an action.",
     )
+
+    if temporal_reasons:
+        return _blocked_result(
+            identity=identity, risk_status=risk_status, versions=versions,
+            assumptions=assumptions, source_refs=source_refs, limitations=limitations,
+            reason_codes=tuple(temporal_reasons),
+        )
 
     if missing_domains:
         return _blocked_result(

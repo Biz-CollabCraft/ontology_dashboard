@@ -29,6 +29,21 @@
       "source_refs": ["maintenance-readiness-context-demo-v1#/maintenance_windows/0"]
     }
   ],
+  "concurrent_work_checks": [
+    {
+      "check_id": "CWCHK-001",
+      "asset_id": "CNC-S04-L02-03",
+      "scope": "same_asset",
+      "check_type": "same_equipment_active_work_order",
+      "checked_at": "2026-09-02T13:50:00+09:00",
+      "status": "no_active_conflict",
+      "overlapping_work_order_ids": [],
+      "planned_overlap_work_order_ids": [],
+      "prohibited_by_sop": true,
+      "relationship_state": "assumed_demo",
+      "source_refs": ["maintenance-readiness-context-demo-v1#/concurrent_work_checks/0"]
+    }
+  ],
   "part_requirements": [
     {
       "part_requirement_id": "PREQ-001",
@@ -80,6 +95,7 @@
   ],
   "limitations": [
     "This fixture is synthetic readiness context and is not a CMMS, WMS, HR, scheduling, reservation, issue, assignment, or execution record.",
-    "Candidate part and technician records must not be represented as confirmed inventory reservation or assignment."
+    "Candidate part and technician records must not be represented as confirmed inventory reservation or assignment.",
+    "Concurrent-work checks are demo readiness facts and must be rechecked before actual maintenance start."
   ]
 }

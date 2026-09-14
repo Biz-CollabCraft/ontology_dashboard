@@ -10,6 +10,7 @@ import { useAuth } from "./AuthContext";
 import { AuthShell } from "./AuthShell";
 import { useI18n } from "../../ui/i18n/I18nProvider";
 import { Info } from "lucide-react";
+import { AccountInfoPopover } from "./AccountInfoPopover";
 
 const DEMO_ACCOUNTS = [
   {
@@ -22,7 +23,16 @@ const DEMO_ACCOUNTS = [
     password: "Engineer!2026",
   },
   {
-    label: { ko: "운영 관리", en: "Operations" },
+    label: { ko: "보전팀", en: "Maintenance" },
+    description: {
+      ko: "요청 접수 · 현장 점검 · 조치안 협의 · 정비 결과 회신",
+      en: "Request intake · field inspection · maintenance plan · completion reply",
+    },
+    email: "technician@ontology.local",
+    password: "Technician!2026",
+  },
+  {
+    label: { ko: "생산 관리자", en: "Production Manager" },
     description: {
       ko: "판단 대기 · 생산 영향 · 정비 승인 · 보고 초안",
       en: "Pending decisions · production impact · maintenance approval · report draft",
@@ -30,28 +40,11 @@ const DEMO_ACCOUNTS = [
     email: "manager@ontology.local",
     password: "Manager!2026",
   },
-  {
-    label: { ko: "현장 작업", en: "Field" },
-    description: {
-      ko: "점검 브리핑 · 설비 단면 · 체크리스트 · 진행 상태",
-      en: "Inspection brief · equipment section · checklist · work status",
-    },
-    email: "technician@ontology.local",
-    password: "Technician!2026",
-  },
-  {
-    label: { ko: "경영진", en: "Executive" },
-    description: {
-      ko: "Executive Brief · 운영 리스크 · KPI · 의사결정 병목",
-      en: "Executive Brief · operational risk · KPI · decision bottlenecks",
-    },
-    email: "executive@ontology.local",
-    password: "Executive!2026",
-  },
 ] as const;
 
 const PUBLIC_DEMO_HOSTS = new Set([
   "dashboard.oosu.dev",
+  "kosa165.iptime.org",
   "127.0.0.1",
   "localhost",
 ]);
@@ -79,10 +72,10 @@ function roleAwareLandingPath(user: AuthUser): string {
     params.set("report", "executive-brief");
     params.set("role", "process_manager");
   } else if (roles.includes("process_manager")) {
-    params.set("view", "operations");
+    params.set("view", "overview");
     params.set("role", "process_manager");
   } else if (roles.includes("maintenance_technician")) {
-    params.set("view", "operations");
+    params.set("view", "overview");
     params.set("role", "field_operator");
   } else {
     params.set("view", "overview");
@@ -138,16 +131,16 @@ export function LoginPage() {
 
   return (
     <AuthShell
-      eyebrow="HANBIT TECH · RELIABILITY OPERATIONS"
+      eyebrow="COLLABCRAFT · RELIABILITY OPERATIONS"
       title={
         english
           ? "From live equipment status to operational decisions and executive reporting"
-          : "실시간 설비 현황에서 운영 판단과 경영 보고까지"
+          : "실시간 설비 현황에서 점검·정비와 생산 대응까지"
       }
       description={
         english
           ? "Connect the same equipment event and evidence across engineering investigation, operational decisions, and executive reporting."
-          : "같은 설비 이상 사건과 근거를 엔지니어의 조사, 운영 관리자의 판단, 경영진의 보고 언어로 연결합니다."
+          : "엔지니어의 이상 확인, 보전팀의 점검·정비, 생산 관리자의 작업 승인을 연결합니다."
       }
     >
       <form className="auth-form" onSubmit={submit}>
@@ -243,7 +236,7 @@ export function LoginPage() {
                   >
                     <Info size={13} />
                   </button>
-                  <div className="demo-account-popover">
+                  {openInfo === account.email ? <AccountInfoPopover onClose={() => setOpenInfo(null)}>
                     <strong>
                       {english ? account.label.en : account.label.ko}
                     </strong>
@@ -253,7 +246,7 @@ export function LoginPage() {
                         : account.description.ko}
                     </p>
                     <small>{account.email}</small>
-                  </div>
+                  </AccountInfoPopover> : null}
                 </div>
               </div>
             ))}

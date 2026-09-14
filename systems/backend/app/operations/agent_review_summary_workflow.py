@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Protocol
+from app.operations.agent_review_summary import AGENT_REVIEW_SUMMARY_SCHEMA_VERSION
 
 
 AGENT_REVIEW_SUMMARY_FLOW_VERSION = "agent-review-summary-flow-v1.0"
@@ -27,6 +28,8 @@ class AgentReviewSummaryWorkflowService(Protocol):
         history_window: str = "24h",
         limit: int | None = None,
         source: str = "fixture",
+        generation_policy: str = "always",
+        explicit_refresh: bool = False,
     ) -> dict[str, Any]:
         """Create or reuse validated summaries for available snapshots."""
 
@@ -47,6 +50,8 @@ class AgentReviewSummaryWorkflow:
         max_attempts: int = DEFAULT_WORKFLOW_MAX_ATTEMPTS,
         operating_mode: dict[str, Any] | None = None,
         source: str = "fixture",
+        generation_policy: str = "always",
+        explicit_refresh: bool = False,
     ) -> dict[str, Any]:
         attempt_limit = max(1, int(max_attempts))
         mode = _operating_mode(
@@ -61,11 +66,18 @@ class AgentReviewSummaryWorkflow:
         materialization: dict[str, Any] | None = None
         for attempt in range(1, attempt_limit + 1):
             try:
+                policy_options = {}
+                if generation_policy != "always" or explicit_refresh:
+                    policy_options = {
+                        "generation_policy": generation_policy,
+                        "explicit_refresh": explicit_refresh,
+                    }
                 materialization = self.service.materialize_agent_review_summaries(
                     project_id,
                     history_window=history_window,
                     limit=limit,
                     source=source,
+                    **policy_options,
                 )
                 attempts.append({"attempt": attempt, "status": "succeeded"})
                 break
@@ -95,12 +107,14 @@ class AgentReviewSummaryWorkflow:
             )
 
         materialized_count = int(materialization.get("materialized_count") or 0)
+        scanned_count = int(materialization.get("scanned_count", materialized_count))
         created_count = int(materialization.get("created_count") or 0)
         reused_count = int(materialization.get("reused_count") or 0)
+        pending_count = int(materialization.get("pending_count") or 0)
         failed_count = sum(
             1
             for item in materialization.get("items") or []
-            if str(item.get("status") or "") == "failed"
+            if str(item.get("status") or "") in {"failed", "fallback"}
         )
         return {
             "flow_version": AGENT_REVIEW_SUMMARY_FLOW_VERSION,
@@ -120,12 +134,12 @@ class AgentReviewSummaryWorkflow:
                 {
                     "stage": "snapshot_scan",
                     "status": "completed",
-                    "item_count": materialized_count,
+                    "item_count": scanned_count,
                 },
                 {
                     "stage": "packet_build",
                     "status": "completed",
-                    "item_count": materialized_count,
+                    "item_count": scanned_count,
                 },
                 {
                     "stage": "summary_materialization",
@@ -136,8 +150,8 @@ class AgentReviewSummaryWorkflow:
                 },
                 {
                     "stage": "consumer_ready",
-                    "status": "completed" if failed_count == 0 else "partial",
-                    "consumer_contract": "agent-review-summary-v1.0",
+                    "status": "pending" if pending_count else ("completed" if failed_count == 0 else "partial"),
+                    "consumer_contract": AGENT_REVIEW_SUMMARY_SCHEMA_VERSION,
                     "consumers": ["role_workflow_ui", "executive_brief_report"],
                 },
             ],
@@ -191,7 +205,7 @@ def _failed_workflow_result(
             {
                 "stage": "consumer_ready",
                 "status": "blocked",
-                "consumer_contract": "agent-review-summary-v1.0",
+                "consumer_contract": AGENT_REVIEW_SUMMARY_SCHEMA_VERSION,
                 "consumers": ["role_workflow_ui", "executive_brief_report"],
             },
         ],

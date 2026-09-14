@@ -18,12 +18,9 @@
 @import "./features/ontology/object-explorer-detail.css" layer(features);
 @import "./features/ontology/object-selection.css" layer(features);
 @import "./features/reports/role-report.css" layer(features);
-@import "./features/reference/reference-gallery.css" layer(features);
-@import "./features/teamshare/team-share-story.css" layer(features);
-@import "./features/teamshare/team-share-adaptive.css" layer(features);
-@import "./features/visualization/echarts-comparison-embed.css" layer(features);
 @import "./features/auth/auth-control-plane.css" layer(features);
 @import "./features/admin/admin-control-plane.css" layer(features);
 @import "./ui/foundry/convergence.css" layer(convergence);
 @import "./ui/foundry/interaction-polish.css" layer(polish);
 @import "./ui/foundry/accessibility-overrides.css" layer(overrides);
+@import "./features/auth/auth-accessibility.css" layer(overrides);

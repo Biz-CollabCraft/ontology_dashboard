@@ -459,13 +459,13 @@
     "maintenance_events": [],
     "activities": [
       {
-        "record_id": "WO-INS-GS-004-001",
+        "record_id": "ACT-GS-004-001",
         "record_type": "activity",
         "status": "",
         "activity_type": "work_order.requested",
         "recorded_at": "2026-08-01T00:05:00+09:00",
         "summary": "",
-        "source_ref": "closed-loop://activity/WO-INS-GS-004-001"
+        "source_ref": "closed-loop://activity/ACT-GS-004-001"
       }
     ],
     "similar_events": [
@@ -487,7 +487,7 @@
     ],
     "source_refs": [
       "closed-loop://work-order/WO-INS-GS-004-001",
-      "closed-loop://activity/WO-INS-GS-004-001",
+      "closed-loop://activity/ACT-GS-004-001",
       "equipment-history://1",
       "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
     ]
@@ -526,13 +526,13 @@
     "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#factor.1.mechanical_power_w",
     "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#factor.2.overstrain_index",
     "closed-loop://work-order/WO-INS-GS-004-001",
-    "closed-loop://activity/WO-INS-GS-004-001",
+    "closed-loop://activity/ACT-GS-004-001",
     "equipment-history://1"
   ],
   "closed_loop_boundary": {
     "mutation_allowed": false,
     "available_action_ids": [
-      "accept_inspection_work_order"
+      "approve_inspection_work_order"
     ],
     "forbidden_actions": [
       "create_work_order",

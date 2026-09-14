@@ -33,7 +33,7 @@ describe("role composed reliability workspace", () => {
     expect(new Set(result).size).toBe(result.length);
   });
 
-  it("keeps inspection targets and action ahead of charts on the inspection surface", () => {
+  it("keeps inspection targets beside evidence and actions beside workflow on the inspection surface", () => {
     const result = resolveReliabilityComposition("engineering", "objects", {
       hasCriticalRisk: true,
       hasDataQualityHold: true,
@@ -43,8 +43,10 @@ describe("role composed reliability workspace", () => {
       hasHighProductionExposure: false,
       hasMaintenanceOutcome: false,
     }, "inspection");
-    expect(result.slice(0, 3)).toEqual(["inspection-targets", "workflow-actions", "workflow-lifecycle"]);
-    expect(result.indexOf("feature-trend")).toBeGreaterThanOrEqual(3);
+    expect(result.slice(0, 4)).toEqual([
+      "inspection-targets", "evidence-factors", "workflow-lifecycle", "workflow-actions",
+    ]);
+    expect(result.at(-1)).toBe("feature-trend");
   });
 
   it("keeps the bottleneck table first on the executive bottleneck surface", () => {
@@ -95,8 +97,9 @@ describe("role composed reliability workspace", () => {
       hasMaintenanceOutcome: false,
     }, "maintenance-effect");
     expect(engineering.slice(0, 4)).toEqual([
-      "maintenance-effect", "feature-trend", "sensor-signals", "maintenance-history",
+      "maintenance-effect", "maintenance-history", "evidence-factors", "sensor-signals",
     ]);
+    expect(engineering.at(-1)).toBe("feature-trend");
     expect(engineering).not.toContain("business-kpis");
   });
 });

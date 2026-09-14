@@ -21,7 +21,7 @@ import {
   TrendingDown,
   Wrench,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, useEffect, useState, type ReactElement, type ReactNode } from "react";
 import {
   createOperationsAgentReviewSummary,
   getOperationsAgentReviewSummary,
@@ -1042,18 +1042,26 @@ function FeatureTrendBlock({
       icon={<RadioTower size={15} />}
       className="span-12"
     >
-      {loading && !hasChartData ? (
-        <FeatureTrendLoadingPlaceholder />
-      ) : hasChartData ? (
-        <div className="rw-feature-trends operations-side-map-report">
-          <CompactRiskTrend detail={detail} />
-          {sensors.map((sensor) => (
-            <SensorTrendChart key={sensor.id} sensor={sensor} />
-          ))}
+      <details className="rw-feature-disclosure">
+        <summary>
+          <span>그래프 확인</span>
+          <small>{hasChartData ? `위험 추세와 센서 ${sensors.length}개` : "관측 데이터 준비 상태"}</small>
+        </summary>
+        <div className="rw-feature-disclosure__content">
+          {loading && !hasChartData ? (
+            <FeatureTrendLoadingPlaceholder />
+          ) : hasChartData ? (
+            <div className="rw-feature-trends operations-side-map-report">
+              <CompactRiskTrend detail={detail} />
+              {sensors.map((sensor) => (
+                <SensorTrendChart key={sensor.id} sensor={sensor} />
+              ))}
+            </div>
+          ) : (
+            <Empty text="선택 설비의 시계열 관측이 준비되면 핵심 피쳐 2~4개를 표시합니다." />
+          )}
         </div>
-      ) : (
-        <Empty text="선택 설비의 시계열 관측이 준비되면 핵심 피쳐 2~4개를 표시합니다." />
-      )}
+      </details>
     </Block>
   );
 }
@@ -2862,6 +2870,19 @@ export function RoleComposedWorkspace(props: RoleComposedWorkspaceProps) {
   const shouldShowPromotionReason =
     props.view === "overview" &&
     (!props.surfaceId || promotionReasonSurfaces.has(props.surfaceId));
+  const productionImpactTriptych = new Set([
+    "production-exposure",
+    "business-kpis",
+    "material-context",
+  ]);
+  const renderComposedBlock = (id: (typeof blocks)[number]) => {
+    const block = renderBlock(id, props);
+    return isValidElement(block)
+      ? cloneElement(block as ReactElement<Record<string, unknown>>, {
+          "data-block-id": id,
+        })
+      : block;
+  };
 
   return (
     <div
@@ -2877,7 +2898,14 @@ export function RoleComposedWorkspace(props: RoleComposedWorkspaceProps) {
           <span>현재 운영 상태에 따라 중요한 블록을 위로 배치했습니다.</span>
         </div>
       ) : null}
-      {blocks.map((id) => renderBlock(id, props))}
+      {props.surfaceId === "production-impact" ? (
+        <section className="rw-production-impact-triptych" aria-label="생산 영향 핵심 정보">
+          {blocks.filter((id) => productionImpactTriptych.has(id)).map(renderComposedBlock)}
+        </section>
+      ) : null}
+      {blocks
+        .filter((id) => props.surfaceId !== "production-impact" || !productionImpactTriptych.has(id))
+        .map(renderComposedBlock)}
     </div>
   );
 }

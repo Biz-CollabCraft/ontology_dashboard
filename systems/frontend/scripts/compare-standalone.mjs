@@ -1,0 +1,14 @@
+import {chromium} from '@playwright/test';
+import {readFile,writeFile} from 'node:fs/promises';
+const browser=await chromium.launch();const ctx=await browser.newContext({viewport:{width:1440,height:1000}});
+const origin=process.env.STANDALONE_URL||'http://127.0.0.1:13310';const output='../../docs/eval/standalone-page-2026-09-06/';
+await ctx.request.post(`${origin}/api/auth/login`,{data:{email:'manager@ontology.local',password:'Manager!2026'}});
+const page=await ctx.newPage();await page.goto(`${origin}/factory-status-original/index.html`);await page.waitForFunction(()=>window.factoryState?.lineage);await page.evaluate(()=>document.fonts.ready);await page.waitForTimeout(300);
+const payload=await page.evaluate(()=>window.factoryState);await page.screenshot({path:output+'main-1440.png'});
+const reference=await ctx.newPage();const original=await readFile(process.env.ORIGINAL_HTML,'utf8');
+await reference.route('**/comparison.html',r=>r.fulfill({contentType:'text/html',body:original.replace('./support.js','./comparison-support.js')}));
+const originalSupport=await readFile(process.env.ORIGINAL_SUPPORT,'utf8');
+await reference.route('**/comparison-support.js',r=>r.fulfill({contentType:'text/javascript',body:originalSupport.replaceAll('https://unpkg.com/react@18.3.1/umd/react.production.min.js','./vendor/react.production.min.js').replaceAll('https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js','./vendor/react-dom.production.min.js').replaceAll('https://unpkg.com/@babel/standalone@7.29.0/babel.min.js','./vendor/babel.min.js')}));
+await reference.goto(`${origin}/factory-status-original/comparison.html`);await reference.waitForSelector('#dc-root h1');await reference.evaluate(p=>window.postMessage({type:'operations:state',payload:p},location.origin),payload);await reference.evaluate(()=>document.fonts.ready);await reference.waitForTimeout(400);await reference.screenshot({path:output+'original-1440.png'});
+const layout=p=>p.evaluate(()=>[...document.querySelectorAll('#dc-root header,#dc-root section')].map(el=>{const b=el.getBoundingClientRect();const s=getComputedStyle(el);return {tag:el.tagName,x:b.x,y:b.y,width:b.width,height:b.height,font:s.fontFamily,background:s.backgroundColor,gap:s.gap};}));
+const actual=await layout(page),expected=await layout(reference);await writeFile(output+'design-comparison.json',JSON.stringify({viewport:{width:1440,height:1000},sameBackendPayload:true,actual,original:expected,geometryEqual:JSON.stringify(actual)===JSON.stringify(expected)},null,2));console.log('Design comparison:',JSON.stringify(actual)===JSON.stringify(expected));await browser.close();

@@ -141,7 +141,7 @@ export function ContextPanel({
         </div>
         <div className={`dashboard-source-disclosure ${dataConnection.error && !activeSource ? "has-error" : ""}`}>
           <div>
-            <strong>{activeSource?.dataset_name ?? "Hanbit Tech Operations Reference"}</strong>
+            <strong>{activeSource?.dataset_name ?? "CollabCraft Operations Reference"}</strong>
             <small title={sourceDetail}>{sourceSummary}</small>
           </div>
           <button type="button" onClick={onOpenDatasets}>{t("common.inspect")} <ExternalLink size={11} /></button>

@@ -1,0 +1,29 @@
+{
+  "fixture_version": "temporal-policy-v2-fixed",
+  "evidence_level": "synthetic_policy_simulation",
+  "scenarios": ["GS-001", "GS-002", "GS-003", "GS-004", "GS-005", "GS-006", "GS-007", "GS-008"],
+  "splits": {"development": ["GS-001", "GS-002", "GS-003", "GS-004"], "fixed_holdout": ["GS-005", "GS-006", "GS-007", "GS-008"]},
+  "timing": {"snapshot_period_seconds": 20, "watcher_period_seconds": 5, "query_offsets_seconds": [1, 12, 19], "refresh_offset_seconds": 2, "end_seconds": 220, "retry_backoff_seconds": 10, "max_attempts_per_key": 2},
+  "profiles": {
+    "GS-001": {"completion_latency_seconds": 8, "fail_first_at_steps": [3]},
+    "GS-002": {"completion_latency_seconds": 8, "fail_first_at_steps": [3]},
+    "GS-003": {"completion_latency_seconds": 8, "fail_first_at_steps": [3]},
+    "GS-004": {"completion_latency_seconds": 8, "fail_first_at_steps": [3]},
+    "GS-005": {"completion_latency_seconds": 12, "fail_first_at_steps": [3]},
+    "GS-006": {"completion_latency_seconds": 18, "fail_first_at_steps": [3, 8]},
+    "GS-007": {"completion_latency_seconds": 8, "fail_first_at_steps": [8]},
+    "GS-008": {"completion_latency_seconds": 25, "fail_first_at_steps": [3]}
+  },
+  "steps": [
+    {"change": "initial", "gold": "PREGENERATE"},
+    {"change": "minor_numeric", "gold": "REUSE"},
+    {"change": "retrieval_timestamp", "gold": "REUSE"},
+    {"change": "risk_priority", "gold": "PREGENERATE"},
+    {"change": "unchanged", "gold": "REUSE"},
+    {"change": "work_order", "gold": "PREGENERATE"},
+    {"change": "display_metadata", "gold": "REUSE"},
+    {"change": "maintenance_event", "gold": "PREGENERATE"},
+    {"change": "production_option", "gold": "PREGENERATE"},
+    {"change": "explicit_refresh", "gold": "ON_DEMAND_OK"}
+  ]
+}

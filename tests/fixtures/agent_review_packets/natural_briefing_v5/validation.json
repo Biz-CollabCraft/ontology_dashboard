@@ -1,0 +1,19 @@
+{
+  "status": "passed",
+  "case_count": 9,
+  "base_case_count": 8,
+  "variant_case_count": 1,
+  "checks": [
+    "3_to_5_reader_lines",
+    "no_bullet_marker",
+    "no_visible_reference_number",
+    "no_internal_terms_in_visible_gold",
+    "decision_flow_composition_rule_present",
+    "relative_time_visible_gold",
+    "korean_reader_units_visible_gold",
+    "hide_internal_product_code",
+    "threshold_crossing_to_decision_wording",
+    "decision_conditions_without_operational_ownership"
+  ],
+  "violations": []
+}

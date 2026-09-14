@@ -230,8 +230,10 @@ def _run_candidate(
         provider_metadata = {}
         provider_error = exc.__class__.__name__
     errors = validate_agent_review_summary_contract(candidate, packet=packet)
-    quality_scores = _quality_scores(candidate, packet=packet)
-    gold_accuracy = _gold_accuracy(candidate, packet=packet)
+    # A provider failure has no model candidate; keep fallback delivery separate.
+    quality_scores = _quality_scores(candidate, packet=packet) if provider_error is None else {}
+    gold_accuracy = _gold_accuracy(candidate, packet=packet) if provider_error is None else {}
+    delivered_summary = candidate if provider_error is None and not errors else baseline_summary
     duration_ms = round((time.perf_counter() - started) * 1000, 3)
     prompt_payload = build_agent_review_summary_prompt_payload(
         packet=packet,
@@ -260,8 +262,10 @@ def _run_candidate(
         "validation_errors": errors,
         "quality_scores": quality_scores,
         "gold_accuracy": gold_accuracy,
-        "grounded_source_refs": _grounded_source_ref_count(candidate, packet),
-        "source_ref_status": "grounded" if not errors else "validation_failed",
+        "delivered_gold_accuracy": _gold_accuracy(delivered_summary, packet=packet),
+        "candidate_measurement": "measured" if provider_error is None else "not_measured",
+        "grounded_source_refs": _grounded_source_ref_count(candidate, packet) if provider_error is None else 0,
+        "source_ref_status": "grounded" if accepted else "validation_failed",
         "editable_output": _editable_candidate_payload(candidate) if accepted else None,
         "llm": {
             "duration_ms": duration_ms,

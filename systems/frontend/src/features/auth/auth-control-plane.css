@@ -19,12 +19,15 @@
 }
 .auth-brand { display: flex; align-items: center; gap: 11px; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .auth-brand .brand-mark { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid color-mix(in srgb, var(--fd-accent), transparent 62%); border-radius: 8px; color: #fff; background: var(--fd-accent); box-shadow: 0 8px 24px color-mix(in srgb, var(--fd-accent), transparent 72%); font-size: 10px; font-weight: 950; letter-spacing: .05em; }
-.auth-brand .brand-mark.hanbit-brand-mark { overflow: hidden; border-color: transparent; background: transparent; box-shadow: none; }
+.auth-brand .brand-mark.collabcraft-brand-mark { overflow: hidden; border-color: transparent; background: transparent; box-shadow: none; }
 .auth-brand > span:last-child { display: flex; flex-direction: column; gap: 1px; }
 .auth-brand strong { font-size: 13px; letter-spacing: -.01em; }
 .auth-brand small { color: var(--fd-text-muted); font-size: 9px; }
 .auth-platform-bar > div { display: flex; align-items: center; gap: 16px; color: var(--fd-text-secondary); font-size: 10px; }
 .auth-platform-bar > div span { display: flex; align-items: center; gap: 5px; }
+.auth-platform-bar .auth-theme-toggle { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border: 1px solid var(--fd-border); border-radius: 8px; color: var(--fd-text); background: var(--fd-surface-raised); cursor: pointer; }
+.auth-platform-bar .auth-theme-toggle:hover { color: var(--fd-accent); background: var(--fd-surface-subtle); }
+.auth-platform-bar .auth-theme-toggle:focus-visible { outline: 2px solid var(--fd-accent); outline-offset: 2px; }
 
 .auth-control-plane { display: grid; min-height: 0; grid-template-columns: minmax(540px, 1.1fr) minmax(520px, .9fr); }
 .auth-resource-context {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { navigate } from "../../routing";
 import type {
@@ -24,7 +24,7 @@ import { OperationsState } from "./components/OperationsUi";
 import { OperationsSelectionProvider, useOperationsSelection } from "./context/OperationsSelectionContext";
 import { OperationsObjectsPage } from "./objects/OperationsObjectsPage";
 import { OperationsOperationsPage } from "./operations/OperationsOperationsPage";
-import { OperationsOverviewPage } from "./overview/OperationsOverviewPage";
+import { EngineerFactoryLoading, EngineerFactoryStandalone } from "./overview/EngineerFactoryStandalone";
 import { OperationsReportsPage } from "./report/OperationsReportsPage";
 import { OperationsShell } from "./shell/OperationsShell";
 import { OperationsSystemAdminPage } from "./system/OperationsSystemAdminPage";
@@ -47,8 +47,15 @@ import {
   canReadOperationsSystemLogs,
 } from "./permissions";
 import "./operations.css";
+import { DecisionWorkspaceApplication } from "./decision/DecisionWorkspaceApplication";
 
 const Operations_REFRESH_INTERVAL_SECONDS = 10;
+const OperationsOverviewPage = lazy(() => import("./overview/OperationsOverviewPage").then((module) => ({ default: module.OperationsOverviewPage })));
+
+// Keep the operations-manager work context in the browser while navigating
+// between role surfaces. Live fleet refreshes continue independently; this
+// cache prevents reopening the same Case from reloading its evidence/history.
+const operationsManagerDetailCache = new Map<string, OperationsEventDetailModel>();
 
 function defaultRoleLens(roles: string[]): OperationsRoleLens {
   return roles.some((role) => role === "process_engineer" || role === "maintenance_technician")
@@ -64,6 +71,7 @@ export function OperationsApplication({ projectId, backupMode = false }: { proje
   const defaultSurface = experience ? defaultReliabilitySurface(experience.kind, backupMode) : null;
   const defaultView = defaultSurface?.view ?? experience?.defaultView ?? "overview";
   const defaultReportTab: OperationsReportTab = experience?.kind === "executive" ? "executive-brief" : "status-map";
+  if (!backupMode) return <DecisionWorkspaceApplication key={projectId} projectId={projectId} />;
   return (
     <OperationsSelectionProvider
       projectId={projectId}
@@ -105,13 +113,6 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       : "operations";
 
   useEffect(() => {
-    // URL query parameters are navigation hints, not authority. A copied
-    // manager URL must never force an engineer into the manager workflow lens.
-    if (!user || selection.role === authorizedRole) return;
-    updateSelection({ role: authorizedRole }, { replace: true });
-  }, [authorizedRole, selection.role, updateSelection, user]);
-
-  useEffect(() => {
     const surfaces = reliabilitySurfaces(experienceKind, backupMode);
     const currentSurface = selection.surface
       ? surfaces.find((item) => item.id === selection.surface) ?? null
@@ -133,6 +134,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   const refresh = useCallback(() => setRefreshVersion((value) => value + 1), []);
   const retryDetail = useCallback(() => setDetailVersion((value) => value + 1), []);
   const workflowChanged = useCallback(() => {
+    operationsManagerDetailCache.clear();
     setDetailVersion((value) => value + 1);
     setRefreshVersion((value) => value + 1);
   }, []);
@@ -242,6 +244,17 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       return;
     }
     let cancelled = false;
+    const cacheKey = `${projectId}:${model.context.workspaceId}:${selectedEvent.eventId}:${sensorWindow}`;
+    const canReuseManagerContext = authorizedRole === "process_manager";
+    if (canReuseManagerContext) {
+      const cached = operationsManagerDetailCache.get(cacheKey);
+      if (cached) {
+        setDetail(cached);
+        setDetailError(null);
+        setDetailLoading(false);
+        return () => { cancelled = true; };
+      }
+    }
     setDetailLoading(true);
     setDetailError(null);
     loadOperationsEventDetail({
@@ -255,7 +268,11 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       historyWindow: sensorWindow,
       metrics: model.metrics,
     })
-      .then((payload) => !cancelled && setDetail(payload))
+      .then((payload) => {
+        if (cancelled) return;
+        if (canReuseManagerContext) operationsManagerDetailCache.set(cacheKey, payload);
+        setDetail(payload);
+      })
       .catch((reason: unknown) => {
         if (cancelled) return;
         setDetail(null);
@@ -416,9 +433,14 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
 
   const useReliabilityPreview = backupMode || reliabilityWorkspacePreviewEnabled();
 
-  if (loading && !model) return useReliabilityPreview
-    ? <ReliabilityWorkspaceLoadingPlaceholder />
-    : <div className="operations-route-state"><OperationsState kind="loading" title="예지보전 화면 구성 중" detail="Project, Workspace, 설비 판단 데이터를 연결하고 있습니다." /></div>;
+  if (loading && !model) {
+    if (useReliabilityPreview && experienceKind === "engineering" && selection.surface === "factory-status") {
+      return <EngineerFactoryLoading />;
+    }
+    return useReliabilityPreview
+      ? <ReliabilityWorkspaceLoadingPlaceholder />
+      : <div className="operations-route-state"><OperationsState kind="loading" title="예지보전 화면 구성 중" detail="Project, Workspace, 설비 판단 데이터를 연결하고 있습니다." /></div>;
+  }
   if (error && !model) return <div className="operations-route-state"><OperationsState kind="error" title="예지보전 화면을 열지 못했습니다" detail={error} onRetry={refresh} /></div>;
   if (!model) return <div className="operations-route-state"><OperationsState kind="empty" title="표시할 운영 데이터가 없습니다" detail="Project와 Workspace 연결 상태를 확인하세요." /></div>;
 
@@ -441,7 +463,9 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       detail="immutable Result Artifact를 복원하기 전에는 Evidence, Action, Outcome, Report 본문을 표시하지 않습니다. 설비 현황에서 새 Case를 선택하거나 현재 설비의 최신 Case로 이동하세요."
     /></div>;
   } else if (useReliabilityPreview && !backupMode && selection.surface === "factory-status") {
-    content = <OperationsOverviewPage model={model} role={authorizedRole} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = experienceKind === "engineering"
+      ? <EngineerFactoryStandalone model={model} selectedAssetId={selection.assetId} onSelectAsset={previewAsset} onRefresh={refresh} />
+      : <Suspense fallback={<ReliabilityWorkspaceLoadingPlaceholder />}><OperationsOverviewPage model={model} role={selection.role} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} /></Suspense>;
   } else if (useReliabilityPreview && selection.view !== "system") {
     content = <RoleComposedWorkspace
       experienceKind={experienceKind}
@@ -473,7 +497,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
       ? <OperationsSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />
       : <OperationsState kind="error" title="시스템 관리자 권한 필요" detail="AI 요약 처리 로그는 관리자 감사 권한이 있는 사용자만 조회할 수 있습니다." />;
   } else {
-    content = <OperationsOverviewPage model={model} role={authorizedRole} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <Suspense fallback={<ReliabilityWorkspaceLoadingPlaceholder />}><OperationsOverviewPage model={model} role={selection.role} currentUserId={user?.user_id ?? ""} experienceKind={experienceKind} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canDecide} canExecuteFieldWorkflow={canExecuteFieldWorkflow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} /></Suspense>;
   }
 
   const body = <>
@@ -495,6 +519,17 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
     {detailLoading && useReliabilityPreview ? <div className="rw-composed-detail-loading">선택 설비 근거를 최신 상태로 동기화하고 있습니다.</div> : null}
     {content}
   </>;
+
+  // The engineer factory status is a complete standalone board. Its supplied
+  // structure replaces the legacy reliability shell, including its sidebar,
+  // heading and footer workflow rail. Other role surfaces keep that shell.
+  if (
+    useReliabilityPreview
+    && experienceKind === "engineering"
+    && selection.surface === "factory-status"
+  ) {
+    return <div className="engineer-standalone-route">{body}</div>;
+  }
 
   if (useReliabilityPreview && user) {
     return (
@@ -524,7 +559,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
     context={model.context}
     activeView={selection.view}
     dashboard={selection.dashboard}
-    role={authorizedRole}
+    role={selection.role}
     onNavigate={openView}
     onRoleChange={(role: OperationsRoleLens) => updateSelection({ role, view: "overview" })}
     onRefresh={refresh}

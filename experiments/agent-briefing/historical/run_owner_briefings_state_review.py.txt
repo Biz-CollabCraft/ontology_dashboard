@@ -1,0 +1,37 @@
+import sys,json,os,copy,hashlib,tempfile,time
+from pathlib import Path
+ROOT=Path('/Users/hb/.devspace/worktrees/ontology-dashboard-727ac25b')
+sys.path[:0]=[str(ROOT),str(ROOT/'systems/backend')]
+from app.dependencies import build_manufacturing_service
+from app.operations.context_providers import _history_record
+from app.operations.agent_review_summary import compose_deterministic_agent_review_summary,validate_agent_review_summary_contract
+from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider,build_tool_selected_agent_review_summary_prompt_payload,AGENT_REVIEW_SUMMARY_PROMPT_VERSION
+from scripts.run_pr167_extended_comparison import EvalProvider
+from jsonschema import Draft202012Validator
+OUT=Path('/private/tmp/owner-briefings-state-20260907');OUT.mkdir(exist_ok=True)
+def save(name,value): (OUT/name).write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n')
+if sys.argv[1]=='prepare':
+ cases=json.loads(Path('/private/tmp/owner-briefings-20260907/inputs.json').read_text())
+ for case in cases:
+  case['prompt_payload']=build_tool_selected_agent_review_summary_prompt_payload(packet=case['packet'],baseline_summary=compose_deterministic_agent_review_summary(case['packet']))
+ save('inputs.json',cases)
+ save('registration.json',{'model':'gpt-4o-mini-2024-07-18','planned_cases':3,'max_generations':6,'max_repairs_per_case':1,'prompt_version':AGENT_REVIEW_SUMMARY_PROMPT_VERSION,'scope':'local fixture service packet with constructed workflow records; no team DB; human review pending','inputs_sha256':hashlib.sha256((OUT/'inputs.json').read_bytes()).hexdigest()})
+ print('Prepared and schema-validated 3 packets.');sys.exit()
+from dotenv import dotenv_values
+for k,v in dotenv_values('/Users/hb/Documents/final/ontology-dashboard/.env').items():
+ if k in ('LLM_API_KEY','OPENAI_API_KEY','LLM_BASE_URL') and v: os.environ[k]=v
+idx=int(sys.argv[1]);case=json.loads((OUT/'inputs.json').read_text())[idx-1]
+reg=json.loads((OUT/'registration.json').read_text());assert reg['inputs_sha256']==hashlib.sha256((OUT/'inputs.json').read_bytes()).hexdigest()
+assert not (OUT/f'result-{idx}.json').exists()
+class Capture(EvalProvider):
+ def generate_json_with_metadata(self,*a,**kw):
+  r=super().generate_json_with_metadata(*a,**kw);self.raw=r;self.attempts=getattr(self,'attempts',[])+[r];return r
+provider=Capture(reg['model']);start=time.monotonic()
+try:
+ summary,meta=AgentReviewSummaryProvider(provider).generate_with_metadata(case['packet'])
+ errors=validate_agent_review_summary_contract(summary,packet=case['packet'])
+ result={'case_id':idx,'label':case['label'],'summary':summary,'accepted':not errors,'validation_errors':errors,'metadata':meta}
+except Exception as e: result={'case_id':idx,'accepted':False,'error_type':type(e).__name__,'review_attempts':getattr(e,'review_attempts',[])}
+result.update(raw=getattr(provider,'raw',None),attempts=getattr(provider,'attempts',[]),transport=provider.http_events,duration_seconds=round(time.monotonic()-start,3))
+save(f'result-{idx}.json',result)
+print(json.dumps({k:result.get(k) for k in ('case_id','accepted','validation_errors','error_type','duration_seconds')}))

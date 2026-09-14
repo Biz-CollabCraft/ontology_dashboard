@@ -67,6 +67,7 @@ const COMPOSITIONS: Record<ReliabilityExperienceKind, Record<Exclude<OperationsV
 };
 
 const SURFACE_COMPOSITIONS: Partial<Record<ReliabilitySurfaceId, ReliabilityBlockId[]>> = {
+  "factory-status": ["risk-metrics", "factory-map"],
   "executive-brief": ["risk-metrics", "production-exposure", "decision-bottleneck", "report-summary", "operational-kpis"],
   "operational-risk": ["risk-metrics", "risk-portfolio", "production-exposure", "line-risk", "risk-queue"],
   "executive-kpi": ["operational-kpis", "risk-metrics", "business-kpis", "production-exposure"],
@@ -75,20 +76,20 @@ const SURFACE_COMPOSITIONS: Partial<Record<ReliabilitySurfaceId, ReliabilityBloc
   "maintenance-effect": ["maintenance-effect", "maintenance-history", "production-exposure", "risk-portfolio"],
   roadmap: ["business-kpis", "decision-history", "maintenance-history", "material-context"],
 
-  "operations-status": ["risk-metrics", "operational-kpis", "line-risk", "risk-queue", "decision-queue", "production-exposure"],
-  "pending-decisions": ["decision-queue", "workflow-lifecycle", "production-exposure", "workflow-actions", "operational-kpis"],
-  "decision-case": ["workflow-lifecycle", "decision-queue", "production-exposure", "workflow-actions", "case-lineage", "evidence-factors"],
-  "production-impact": ["production-exposure", "business-kpis", "material-context", "risk-queue", "line-risk"],
-  "maintenance-approval": ["case-lineage", "workflow-lifecycle", "workflow-actions", "inspection-targets", "material-context", "maintenance-history", "maintenance-effect"],
-  backlog: ["decision-queue", "operational-kpis", "decision-history", "line-risk"],
-  "report-draft": ["report-summary", "case-lineage", "production-exposure", "decision-history"],
+  "operations-status": ["operational-kpis", "production-exposure", "decision-queue", "line-risk"],
+  "pending-decisions": ["operational-kpis", "production-exposure", "decision-queue", "workflow-lifecycle"],
+  "decision-case": ["production-exposure", "decision-queue", "evidence-factors", "workflow-lifecycle"],
+  "production-impact": ["production-exposure", "business-kpis", "material-context", "line-risk", "decision-queue"],
+  "maintenance-approval": ["case-lineage", "workflow-actions", "maintenance-effect", "material-context", "decision-queue", "maintenance-history"],
+  backlog: ["operational-kpis", "decision-history", "line-risk", "decision-queue"],
+  "report-draft": ["report-summary", "production-exposure", "decision-history", "decision-queue"],
 
-  monitoring: ["risk-queue", "feature-trend", "sensor-signals", "evidence-factors", "case-lineage"],
-  assets: ["evidence-factors", "inspection-targets", "sensor-signals", "feature-trend", "case-lineage"],
+  monitoring: ["risk-queue", "evidence-factors", "sensor-signals", "feature-trend"],
+  assets: ["asset-brief", "evidence-factors", "sensor-signals", "feature-trend", "maintenance-history"],
   "sensor-features": ["feature-trend", "sensor-signals", "evidence-factors", "maintenance-history"],
-  inspection: ["inspection-targets", "workflow-actions", "workflow-lifecycle", "feature-trend", "evidence-factors", "case-lineage"],
-  "maintenance-history": ["maintenance-history", "maintenance-effect", "decision-history", "evidence-factors"],
-  "field-notes": ["decision-history", "inspection-targets", "report-summary"],
+  inspection: ["inspection-targets", "evidence-factors", "workflow-lifecycle", "workflow-actions", "feature-trend"],
+  "maintenance-history": ["decision-history", "maintenance-history", "maintenance-effect", "evidence-factors", "feature-trend"],
+  "field-notes": ["report-summary", "inspection-targets", "evidence-factors", "feature-trend"],
 
   "my-work": ["risk-metrics", "factory-map", "workflow-lifecycle", "workflow-actions", "inspection-targets", "material-context"],
   "work-targets": ["asset-brief", "inspection-targets", "material-context", "feature-trend", "maintenance-history"],
@@ -117,9 +118,13 @@ export function resolveReliabilityComposition(
   if (view === "system") return [];
   const surfaceBlocks = surfaceId ? SURFACE_COMPOSITIONS[surfaceId as ReliabilitySurfaceId] : null;
   const roleSpecificSurfaceBlocks = kind === "engineering" && surfaceId === "maintenance-effect"
-    ? ["maintenance-effect", "feature-trend", "sensor-signals", "maintenance-history", "evidence-factors"] satisfies ReliabilityBlockId[]
+    ? ["maintenance-effect", "maintenance-history", "evidence-factors", "sensor-signals", "feature-trend"] satisfies ReliabilityBlockId[]
     : null;
   let blocks = [...(roleSpecificSurfaceBlocks ?? surfaceBlocks ?? COMPOSITIONS[kind][view])];
+  // Explicit menu surfaces have a deliberate, persona-specific information
+  // hierarchy. Runtime promotion must not reshuffle that decision or evidence
+  // cards after the operator has selected one of these focused workspaces.
+  if ((surfaceBlocks || roleSpecificSurfaceBlocks) && (kind === "engineering" || kind === "operations")) return blocks;
   const invariantCount = surfaceId === "executive-brief"
     ? Math.min(4, blocks.length)
     : surfaceBlocks || roleSpecificSurfaceBlocks

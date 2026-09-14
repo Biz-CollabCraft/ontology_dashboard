@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { week2OperationsRedirectPath } from "./routing";
+import { safeApplicationReturnPath, week2OperationsRedirectPath } from "./routing";
 
 describe("Operations workspace route boundary", () => {
   it("keeps the canonical operations route unchanged", () => {
@@ -54,3 +54,10 @@ describe("Operations workspace route boundary", () => {
     expect(week2OperationsRedirectPath("/team-share", "active-project")).toBeNull();
   });
 });
+
+ describe('standalone login return boundary',()=>{
+  it('preserves standalone identity but refuses external and sibling paths',()=>{
+    expect(safeApplicationReturnPath('/factory-status-original/index.html?asset=A&event=E')).toBe('/factory-status-original/index.html?asset=A&event=E');
+    for(const path of ['//evil.test/app/', '/factory-status-original/index.html.evil', '/factory-status-original/index.html/../../evil', 'https://evil.test/app/'])expect(safeApplicationReturnPath(path)).toBeNull();
+  });
+ });

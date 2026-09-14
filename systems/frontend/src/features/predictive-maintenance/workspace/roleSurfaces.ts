@@ -114,7 +114,7 @@ const FACTORY_STATUS_SURFACE: Record<Exclude<ReliabilityExperienceKind, "mainten
     detail: copy("셀 배치 · 위험 알림", "Cell layout · risk alerts"),
     page: page(
       "실시간 설비 현황",
-      "조사할 설비를 위치와 알림으로 좁히기",
+      "조사가 필요한 설비의 위치와 알림",
       "공장 배치에서 이상 알림이 발생한 셀과 설비를 먼저 찾고 센서·피쳐 근거로 이어갑니다.",
       "LIVE FACTORY STATUS",
       "Narrow investigation by location and alert",

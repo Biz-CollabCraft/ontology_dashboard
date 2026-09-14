@@ -79,10 +79,10 @@ def test_runtime_product_result_materialization_never_deletes_history() -> None:
         assert f"DELETE FROM {table}" not in implementation
 
 
-def test_live_pipeline_snapshot_uses_only_cadence_aligned_observations() -> None:
+def test_live_pipeline_snapshot_accepts_continuous_off_boundary_observations() -> None:
     implementation = inspect.getsource(live_runtime._live_pipeline_observation_rows)
 
-    assert "MOD(EXTRACT(EPOCH FROM observed_at)::bigint, 600) = 0" in implementation
+    assert "MOD(EXTRACT(EPOCH FROM observed_at)::bigint, 600) = 0" not in implementation
     assert "lookback_rows = max(minimum_history_rows, minimum_history_rows * 8)" in implementation
     assert "latest_continuous_window" in implementation
 

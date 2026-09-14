@@ -9,18 +9,15 @@ const appBase = configuredBase
   ? `/${configuredBase.replace(/^\/+|\/+$/g, "")}/`
   : githubPagesBase;
 
-const apiProxy = {
-  "/api": { target: "http://127.0.0.1:8100" },
-  "/health": { target: "http://127.0.0.1:8100" },
-  "/docs": { target: "http://127.0.0.1:8100" },
-  "/redoc": { target: "http://127.0.0.1:8100" },
-  "/openapi.json": { target: "http://127.0.0.1:8100" },
-};
+const apiTarget = process.env.DEV_API_TARGET || process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8100";
+const apiProxy = Object.fromEntries(
+  ["/api", "/health", "/docs", "/redoc", "/openapi.json"].map(path => [path, { target: apiTarget }]),
+);
 
 function interactiveTeamShareRoute(): Plugin {
   const rewrite = (
     request: { url?: string },
-    _response: unknown,
+    response: { writeHead: (code: number, headers: Record<string,string>) => void; end: () => void },
     next: () => void,
   ) => {
     const url = request.url ?? "";
@@ -44,6 +41,7 @@ function interactiveTeamShareRoute(): Plugin {
 
 export default defineConfig({
   base: appBase,
+  build: { rollupOptions: { input: { app: "index.html", briefingDemo: "demo-briefing.html", factory: "factory-status-original/index.html" } } },
   plugins: [interactiveTeamShareRoute(), react()],
   // ManufacturingApp is route-lazy, so Vite's initial source scan does not
   // always discover its heavy UI dependencies before the first browser load.
@@ -65,15 +63,15 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 3100,
     strictPort: true,
-    allowedHosts: ["dashboard.oosu.dev"],
+    allowedHosts: ["kosa165.iptime.org"],
     proxy: apiProxy,
   },
   preview: {
     host: "127.0.0.1",
     port: 3100,
     strictPort: true,
-    allowedHosts: ["dashboard.oosu.dev"],
+    allowedHosts: ["kosa165.iptime.org"],
     proxy: apiProxy,
   },
-  test: { environment: "jsdom", include: ["src/**/*.test.ts", "src/**/*.test.tsx"] },
+  test: { environment: "jsdom", include: ["src/**/*.test.ts", "src/**/*.test.tsx", "src/standalone/**/*.test.js"] },
 });

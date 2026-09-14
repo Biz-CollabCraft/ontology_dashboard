@@ -1,0 +1,622 @@
+{
+  "$defs": {
+    "ContextReadItem": {
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/OperationalContextEnvelope"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContextSourceProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "context",
+        "provenance"
+      ],
+      "title": "ContextReadItem",
+      "type": "object"
+    },
+    "ContextSourceProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source_context_id": {
+          "title": "Source Context Id",
+          "type": "string"
+        },
+        "schema_id": {
+          "title": "Schema Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "source_classification": {
+          "enum": [
+            "synthetic_demo_context",
+            "owner_system"
+          ],
+          "title": "Source Classification",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "valid_to": {
+          "format": "date-time",
+          "title": "Valid To",
+          "type": "string"
+        },
+        "source_sha256": {
+          "title": "Source Sha256",
+          "type": "string"
+        },
+        "binding_sha256": {
+          "title": "Binding Sha256",
+          "type": "string"
+        },
+        "bound_evidence_snapshot_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Bound Evidence Snapshot Id"
+        }
+      },
+      "required": [
+        "source_context_id",
+        "schema_id",
+        "schema_version",
+        "source_classification",
+        "valid_from",
+        "valid_to",
+        "source_sha256",
+        "binding_sha256",
+        "bound_evidence_snapshot_id"
+      ],
+      "title": "ContextSourceProvenance",
+      "type": "object"
+    },
+    "FreshnessMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "policy_version": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "max_age_seconds": {
+          "minimum": 0,
+          "title": "Max Age Seconds",
+          "type": "integer"
+        },
+        "state": {
+          "$ref": "#/$defs/FreshnessState"
+        }
+      },
+      "required": [
+        "policy_version",
+        "max_age_seconds",
+        "state"
+      ],
+      "title": "FreshnessMetadata",
+      "type": "object"
+    },
+    "FreshnessState": {
+      "enum": [
+        "fresh",
+        "stale",
+        "unknown"
+      ],
+      "title": "FreshnessState",
+      "type": "string"
+    },
+    "ImpactCalculationState": {
+      "enum": [
+        "calculated",
+        "not_calculable"
+      ],
+      "title": "ImpactCalculationState",
+      "type": "string"
+    },
+    "ImpactOption": {
+      "enum": [
+        "stop_now",
+        "planned_maintenance",
+        "continue_operation"
+      ],
+      "title": "ImpactOption",
+      "type": "string"
+    },
+    "ImpactOptionResult": {
+      "additionalProperties": false,
+      "properties": {
+        "option": {
+          "$ref": "#/$defs/ImpactOption"
+        },
+        "state": {
+          "$ref": "#/$defs/ImpactCalculationState"
+        },
+        "preconditions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Preconditions",
+          "type": "array"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "required_units": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Required Units"
+        },
+        "primary_capacity_after_action": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primary Capacity After Action"
+        },
+        "gross_exposed_units": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gross Exposed Units"
+        },
+        "alternative_absorbed_units": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alternative Absorbed Units"
+        },
+        "remaining_exposed_units": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remaining Exposed Units"
+        },
+        "intermediate_values": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Intermediate Values",
+          "type": "object"
+        },
+        "limitations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "option",
+        "state"
+      ],
+      "title": "ImpactOptionResult",
+      "type": "object"
+    },
+    "ImpactSimulationAssumptions": {
+      "additionalProperties": false,
+      "properties": {
+        "policy_version": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "primary_capacity_units": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/ImpactOption"
+          },
+          "title": "Primary Capacity Units",
+          "type": "object"
+        },
+        "alternative_capacity_allowed": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/ImpactOption"
+          },
+          "title": "Alternative Capacity Allowed",
+          "type": "object"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "policy_version",
+        "primary_capacity_units",
+        "alternative_capacity_allowed",
+        "source_refs"
+      ],
+      "title": "ImpactSimulationAssumptions",
+      "type": "object"
+    },
+    "ImpactSimulationResult": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": "operational-impact-simulation-v1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "simulation_policy_version": {
+          "title": "Simulation Policy Version",
+          "type": "string"
+        },
+        "evidence_snapshot_id": {
+          "title": "Evidence Snapshot Id",
+          "type": "string"
+        },
+        "risk_status": {
+          "title": "Risk Status",
+          "type": "string"
+        },
+        "context_version_set": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Context Version Set",
+          "type": "object"
+        },
+        "assumptions": {
+          "$ref": "#/$defs/ImpactSimulationAssumptions"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/ImpactOptionResult"
+          },
+          "title": "Options",
+          "type": "array"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "simulation_policy_version",
+        "evidence_snapshot_id",
+        "risk_status",
+        "context_version_set",
+        "assumptions",
+        "options",
+        "source_refs",
+        "limitations"
+      ],
+      "title": "ImpactSimulationResult",
+      "type": "object"
+    },
+    "OperationalContextEnvelope": {
+      "additionalProperties": false,
+      "description": "Bounded result returned by a read-only operational domain port.",
+      "properties": {
+        "owner_domain": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Owner Domain",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/OperationalScope"
+        },
+        "status": {
+          "$ref": "#/$defs/OperationalContextStatus"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Version"
+        },
+        "source_updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Updated At"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "freshness": {
+          "$ref": "#/$defs/FreshnessMetadata"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        },
+        "limitations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "owner_domain",
+        "scope",
+        "status",
+        "retrieved_at",
+        "as_of",
+        "freshness"
+      ],
+      "title": "OperationalContextEnvelope",
+      "type": "object"
+    },
+    "OperationalContextStatus": {
+      "enum": [
+        "available",
+        "unavailable",
+        "not_connected",
+        "stale",
+        "unauthorized",
+        "failed"
+      ],
+      "title": "OperationalContextStatus",
+      "type": "string"
+    },
+    "OperationalRequestIdentity": {
+      "additionalProperties": false,
+      "description": "Application-fixed identity that an agent or tool must not alter.",
+      "properties": {
+        "organization_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Organization Id",
+          "type": "string"
+        },
+        "project_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Project Id",
+          "type": "string"
+        },
+        "workspace_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Workspace Id",
+          "type": "string"
+        },
+        "asset_id": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "evidence_snapshot_id": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Evidence Snapshot Id",
+          "type": "string"
+        },
+        "decision_as_of": {
+          "format": "date-time",
+          "title": "Decision As Of",
+          "type": "string"
+        }
+      },
+      "required": [
+        "organization_id",
+        "project_id",
+        "workspace_id",
+        "asset_id",
+        "evidence_snapshot_id",
+        "decision_as_of"
+      ],
+      "title": "OperationalRequestIdentity",
+      "type": "object"
+    },
+    "OperationalScope": {
+      "additionalProperties": false,
+      "properties": {
+        "organization_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Organization Id",
+          "type": "string"
+        },
+        "project_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Project Id",
+          "type": "string"
+        },
+        "workspace_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Workspace Id",
+          "type": "string"
+        },
+        "asset_id": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Asset Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "organization_id",
+        "project_id",
+        "workspace_id",
+        "asset_id"
+      ],
+      "title": "OperationalScope",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "operational-context-read-v1",
+      "default": "operational-context-read-v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "identity": {
+      "$ref": "#/$defs/OperationalRequestIdentity"
+    },
+    "retrieved_at": {
+      "format": "date-time",
+      "title": "Retrieved At",
+      "type": "string"
+    },
+    "context_fingerprint": {
+      "title": "Context Fingerprint",
+      "type": "string"
+    },
+    "domains": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ContextReadItem"
+      },
+      "title": "Domains",
+      "type": "object"
+    },
+    "production_impact": {
+      "$ref": "#/$defs/ImpactSimulationResult"
+    },
+    "limitations": {
+      "default": [
+        "Conditional production comparison is not realized loss or production recovery.",
+        "Inspection downtime estimates are not substituted for capacity policy inputs.",
+        "Schedule agreement, maintenance authorization and work start remain separate owner records."
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "identity",
+    "retrieved_at",
+    "context_fingerprint",
+    "domains",
+    "production_impact"
+  ],
+  "title": "OperationalContextRead",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/operational-context-read.schema.json"
+}

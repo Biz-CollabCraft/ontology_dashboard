@@ -245,6 +245,12 @@ def test_maintenance_readiness_links_action_part_inventory_and_skill() -> None:
     assert result.data["inventory_snapshots"][0]["on_hand_quantity"] == 2
     assert result.data["inventory_snapshots"][0]["reserved_quantity"] == 2
     assert result.data["inventory_snapshots"][0]["available_quantity"] == 0
+    concurrent_work = result.data["concurrent_work_checks"][0]
+    assert concurrent_work["check_id"] == "CWCHK-001"
+    assert concurrent_work["status"] == "no_active_conflict"
+    assert concurrent_work["prohibited_by_sop"] is True
+    assert concurrent_work["overlapping_work_order_ids"] == []
+    assert result.data["readiness"]["concurrent_work_ready"] is True
     assert result.data["readiness"]["overall_state"] == "blocked"
     assert result.data["readiness"]["blockers"] == ["part_inventory"]
 
@@ -278,6 +284,31 @@ def test_maintenance_readiness_rejects_invalid_available_quantity() -> None:
             ),
             retrieved_at=datetime(2026, 9, 2, 2, tzinfo=timezone.utc),
         )
+
+
+def test_maintenance_readiness_blocks_active_same_asset_work_conflict() -> None:
+    conflicted = json.loads(json.dumps(MAINTENANCE_FIXTURE))
+    conflicted["inventory_snapshots"][0]["reserved_quantity"] = 0
+    conflicted["inventory_snapshots"][0]["available_quantity"] = 2
+    conflicted["concurrent_work_checks"][0]["status"] = "active_conflict_detected"
+    conflicted["concurrent_work_checks"][0]["overlapping_work_order_ids"] = [
+        "WO-DEMO-ACTIVE-009"
+    ]
+    adapter = FixtureMaintenanceReadinessContextReadPort(
+        context=conflicted,
+        source_ref="fixture:maintenance",
+    )
+
+    result = adapter.lookup(
+        identity=identity(
+            as_of=datetime(2026, 9, 2, 1, tzinfo=timezone.utc)
+        ),
+        retrieved_at=datetime(2026, 9, 2, 2, tzinfo=timezone.utc),
+    )
+
+    assert result.data["readiness"]["overall_state"] == "blocked"
+    assert result.data["readiness"]["concurrent_work_ready"] is False
+    assert result.data["readiness"]["blockers"] == ["concurrent_work"]
 
 
 def test_maintenance_readiness_for_other_asset_is_unavailable() -> None:

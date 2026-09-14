@@ -1,0 +1,256 @@
+{
+  "gold_id": "agent-review-decision-briefing-v4.2",
+  "reviewer": null,
+  "candidate": null,
+  "status": "not_measured",
+  "cases": [
+    {
+      "case_id": "GS-001",
+      "ratings": {
+        "근거 충실성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "관계 연결": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "우선순위·판단": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "실무 활용성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "전달력": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        }
+      },
+      "critical_errors": null
+    },
+    {
+      "case_id": "GS-002",
+      "ratings": {
+        "근거 충실성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "관계 연결": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "우선순위·판단": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "실무 활용성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "전달력": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        }
+      },
+      "critical_errors": null
+    },
+    {
+      "case_id": "GS-003",
+      "ratings": {
+        "근거 충실성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "관계 연결": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "우선순위·판단": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "실무 활용성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "전달력": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        }
+      },
+      "critical_errors": null
+    },
+    {
+      "case_id": "GS-004",
+      "ratings": {
+        "근거 충실성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "관계 연결": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "우선순위·판단": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "실무 활용성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "전달력": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        }
+      },
+      "critical_errors": null
+    },
+    {
+      "case_id": "GS-005",
+      "ratings": {
+        "근거 충실성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "관계 연결": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "우선순위·판단": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "실무 활용성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "전달력": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        }
+      },
+      "critical_errors": null
+    },
+    {
+      "case_id": "GS-006",
+      "ratings": {
+        "근거 충실성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "관계 연결": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "우선순위·판단": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "실무 활용성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "전달력": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        }
+      },
+      "critical_errors": null
+    },
+    {
+      "case_id": "GS-007",
+      "ratings": {
+        "근거 충실성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "관계 연결": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "우선순위·판단": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "실무 활용성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "전달력": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        }
+      },
+      "critical_errors": null
+    },
+    {
+      "case_id": "GS-008",
+      "ratings": {
+        "근거 충실성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "관계 연결": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "우선순위·판단": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "실무 활용성": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        },
+        "전달력": {
+          "score": null,
+          "quote": null,
+          "reason": null
+        }
+      },
+      "critical_errors": null
+    }
+  ]
+}

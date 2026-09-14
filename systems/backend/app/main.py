@@ -49,9 +49,16 @@ from app.diagnosis.runtime_router import (
     router as predictive_maintenance_runtime_router,
 )
 from app.operations.service import EventNotFound
+from app.common.exceptions import RateLimitExceeded
 
 
 app = create_app()
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_error_handler(_: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(status_code=429, headers={"Retry-After": str(exc.retry_after)},
+        content={"error": {"code": "rate_limit_exceeded", "message": "생성 요청이 많습니다. 잠시 후 다시 시도해 주세요.", "retry_after": exc.retry_after}})
 
 
 @app.exception_handler(AuthError)

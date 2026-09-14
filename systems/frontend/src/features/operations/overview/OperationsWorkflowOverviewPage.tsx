@@ -8,6 +8,7 @@ import {
   DatabaseZap,
   Gauge,
   LineChart,
+  Maximize2,
   Printer,
   RefreshCw,
   RotateCcw,
@@ -15,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   createOperationsAgentReviewSummary,
   getOperationsAgentReviewSummary,
@@ -70,6 +72,7 @@ import {
   type MaintenanceWorkflowDisplayStatus,
   type PostMaintenancePredictionSummary,
 } from "../maintenance/MaintenanceWorkflowActionPanel";
+import { GenDataRiskBandBackground, statusFromGenDataRisk } from "./riskBandThresholds";
 
 interface WorkOrderCandidate {
   event: OperationsEvent;
@@ -96,6 +99,8 @@ type WorkStatus =
   | "assigned"
   | "inspection_started"
   | "inspection_completed"
+  | "inspection_closed_no_action"
+  | "inspection_data_check_required"
   | "maintenance_started"
   | "maintenance_completed"
   | "observation_pending"
@@ -260,6 +265,8 @@ const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
   assigned: "담당자 배정됨",
   inspection_started: "점검 중",
   inspection_completed: "점검 완료·정비 검토",
+  inspection_closed_no_action: "점검 완료·조치 불필요",
+  inspection_data_check_required: "추가 데이터 확인 필요",
   maintenance_started: "정비 중",
   maintenance_completed: "정비 완료",
   observation_pending: "정비 후 관측 대기",
@@ -272,6 +279,8 @@ const WORK_STATUS_ACTION: Record<WorkStatus, { label: string; disabled: boolean 
   assigned: { label: "점검 시작", disabled: false },
   inspection_started: { label: "점검 결과 기록", disabled: false },
   inspection_completed: { label: "비용 확인·정비 판단", disabled: true },
+  inspection_closed_no_action: { label: "처리 완료", disabled: true },
+  inspection_data_check_required: { label: "데이터 확인 대기", disabled: true },
   maintenance_started: { label: "정비 완료", disabled: false },
   maintenance_completed: { label: "정비 후 관측 대기", disabled: true },
   observation_pending: { label: "관측 데이터 대기", disabled: true },
@@ -319,6 +328,8 @@ const CLOSED_LOOP_LIFECYCLE_LABEL: Record<OperationsClosedLoopLifecycleStep, str
   inspection_approved: "점검 승인",
   inspection_in_progress: "점검 중",
   inspection_completed: "점검 완료",
+  inspection_closed_no_action: "점검 종결",
+  inspection_data_check_required: "추가 데이터 확인",
   recommendation_proposed: "정비안 제안",
   maintenance_requested: "정비 요청",
   maintenance_approved: "정비 승인",
@@ -329,10 +340,10 @@ const CLOSED_LOOP_LIFECYCLE_LABEL: Record<OperationsClosedLoopLifecycleStep, str
 };
 
 const REPORT_OUTPUT_OPTIONS: Array<{ id: OperationsReportTab; label: string; detail: string }> = [
-  { id: "status-map", label: "상태 요약", detail: "설비 맵과 위험 상태" },
-  { id: "inspection-request", label: "점검 요청", detail: "현장 확인 항목" },
-  { id: "summary-report", label: "요약 보고서", detail: "관리자 공유본" },
-  { id: "executive-brief", label: "Executive Brief", detail: "선택 이벤트 보고서" },
+  { id: "status-map", label: "상태 요약", detail: "장비 상태와 위험 예측" },
+  { id: "inspection-request", label: "점검 요청", detail: "점검 위치와 센서 근거" },
+  { id: "summary-report", label: "요약 보고서", detail: "상태·근거·후속 조치 공유본" },
+  { id: "executive-brief", label: "Executive Brief", detail: "생산 영향과 권장 판단" },
 ];
 
 type WorkQueueColumnId = "candidate" | "requested" | "inspection" | "observe" | "repredict";
@@ -405,10 +416,7 @@ function productionLossLabel(value: number | null): string {
 }
 
 function demoStatusForRisk(risk: number): OperationsRiskStatus {
-  if (risk >= 0.78) return "critical";
-  if (risk >= 0.62) return "warning";
-  if (risk >= 0.42) return "attention";
-  return "normal";
+  return statusFromGenDataRisk(risk) as OperationsRiskStatus;
 }
 
 function isGeneratedResultEvent(eventId: string | null | undefined): boolean {
@@ -562,8 +570,14 @@ function operationsMonitorStatusLabel(status: OperationsRiskStatus, workStatus?:
   return "정상";
 }
 
-function alertBadgeCount(assets: OperationsAsset[]): number {
-  return assets.filter((asset) => mapTone(asset.status) !== "normal").length;
+const ACKNOWLEDGED_ALERTS_STORAGE_KEY = "operations.acknowledged-alerts.v1";
+
+function assetAlertKey(asset: OperationsAsset): string {
+  return `${asset.assetId}:${asset.eventId ?? asset.observedAt}`;
+}
+
+function alertBadgeCount(assets: OperationsAsset[], acknowledgedAlerts: Set<string>): number {
+  return assets.filter((asset) => mapTone(asset.status) !== "normal" && !acknowledgedAlerts.has(assetAlertKey(asset))).length;
 }
 
 function displayPartLabel(value: boolean | null): string {
@@ -1272,6 +1286,10 @@ function workStatusFromLifecycleSummary(summary: OperationsClosedLoopLifecycleSu
     case "maintenance_requested":
     case "maintenance_approved":
       return "assigned";
+    case "inspection_closed_no_action":
+      return "inspection_closed_no_action";
+    case "inspection_data_check_required":
+      return "inspection_data_check_required";
     case "inspection_in_progress":
     case "maintenance_in_progress":
       return "inspection_started";
@@ -1316,6 +1334,8 @@ function closedLoopActionForStatus(closedLoop: OperationsClosedLoopSummary | nul
     assigned: ["start_inspection_work_order", "start_inspection"],
     inspection_started: ["complete_inspection_work_order", "complete_inspection", "complete_work_order"],
     inspection_completed: [],
+    inspection_closed_no_action: [],
+    inspection_data_check_required: [],
     maintenance_started: ["complete_maintenance_work_order", "complete_maintenance", "complete_work_order"],
     maintenance_completed: [],
     observation_pending: [],
@@ -1354,6 +1374,7 @@ function workQueueColumn(status: WorkStatus): WorkQueueColumnId {
   if (status === "candidate_recommended") return "candidate";
   if (status === "work_requested" || status === "assigned") return "requested";
   if (status === "inspection_started" || status === "inspection_completed" || status === "maintenance_started") return "inspection";
+  if (status === "inspection_closed_no_action") return "repredict";
   if (status === "maintenance_completed" || status === "observation_pending") return "observe";
   return "repredict";
 }
@@ -1465,6 +1486,7 @@ function WorkStatusTimeline({
     "assigned",
     "inspection_started",
     "inspection_completed",
+    "inspection_closed_no_action",
     "maintenance_started",
     "maintenance_completed",
     "observation_pending",
@@ -1627,9 +1649,10 @@ function ReportOutputDialog({
 function WorkflowPrintReport({
   reportTab,
   asset,
-  detail,
   factors,
   inspectionTargets,
+  sensors,
+  sensorWindow,
   planningImpact,
   workStatus,
   assignee,
@@ -1637,9 +1660,10 @@ function WorkflowPrintReport({
 }: {
   reportTab: OperationsReportTab;
   asset: OperationsAsset;
-  detail: OperationsEventDetailModel | null;
   factors: OperationsAsset["topFactors"];
   inspectionTargets: InspectionTargetView[];
+  sensors: ReturnType<typeof sensorSeries>;
+  sensorWindow: OperationsSensorWindowId;
   planningImpact: ReturnType<typeof planningImpactFromOperationContext>;
   workStatus: WorkStatus;
   assignee: string;
@@ -1650,6 +1674,15 @@ function WorkflowPrintReport({
   const riskPercent = asset.failureProbability === null || asset.failureProbability === undefined
     ? "-"
     : formatProbability(asset.failureProbability);
+  const reportPurpose = reportTab === "status-map"
+    ? "선택 장비의 현재 위험 상태와 작업 진행 상태를 빠르게 공유합니다."
+    : reportTab === "inspection-request"
+      ? "현장 담당자가 확인할 위치와 점검 항목을 작업 문맥과 함께 전달합니다."
+      : reportTab === "executive-brief"
+        ? "위험 판단과 생산 영향, 권장 결정을 경영 검토 문맥으로 요약합니다."
+        : "선택 장비의 상태, 판단 근거와 후속 확인 사항을 관리자 공유본으로 정리합니다.";
+  const printableSensors = sensors.filter((sensor) => sensor.points.length > 0);
+  const hasInspectionEvidence = inspectionTargets.length > 0 || factors.length > 0;
   return (
     <section className="operations-workflow-print-report" aria-label={`${reportTitle} 출력`}>
       <header>
@@ -1667,32 +1700,68 @@ function WorkflowPrintReport({
         <div><dt>계획 영향</dt><dd>{productionLossLabel(planningImpact?.estimatedLossUnits ?? null)}</dd></div>
         <div><dt>판단</dt><dd>{DECISION_LABEL[asset.recommendedDecision]}</dd></div>
       </dl>
-      {reportTab === "inspection-request" ? (
-        <section>
+      <section className="operations-print-purpose-summary">
+        <h2>보고 목적</h2>
+        <p>{reportPurpose}</p>
+      </section>
+      {reportTab === "inspection-request" && inspectionTargets.length ? (
+        <section className="operations-print-purpose-detail">
           <h2>점검 요청 항목</h2>
-          {inspectionTargets.length ? inspectionTargets.map((target) => (
+          {inspectionTargets.map((target) => (
             <article key={target.target?.targetId ?? target.factor?.id ?? `inspection-target-${target.rank}`}>
               <b>{target.rank}. {target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}</b>
               <p>{inspectionMethodLabel(target.target)}</p>
             </article>
-          )) : <p>현재 확인 가능한 점검 위치 근거가 없습니다.</p>}
+          ))}
         </section>
       ) : null}
-      {reportTab !== "inspection-request" ? (
-        <section>
+      {reportTab !== "inspection-request" && factors.length ? (
+        <section className="operations-print-purpose-detail">
           <h2>판단 근거</h2>
-          {factors.length ? factors.slice(0, 5).map((factor) => (
+          {factors.slice(0, 5).map((factor) => (
             <article key={factor.id}>
               <b>{fieldFactorItem(factor)}</b>
               <p>{fieldFactorSymptom(factor)} · {factorValueLabel(factor)}</p>
             </article>
-          )) : <p>Top factor 근거가 제공되지 않았습니다.</p>}
+          ))}
         </section>
       ) : null}
-      <section>
-        <h2>데이터 경계</h2>
-        <p>{detail ? "현재 선택 설비의 연결 데이터를 기준으로 출력합니다." : "현재 확인 가능한 운영 요약을 기준으로 출력합니다."} 이 화면은 작업 생성이나 정비 효과를 확정하지 않습니다.</p>
-      </section>
+      {hasInspectionEvidence ? <section className="operations-print-inspection-evidence operations-side-map-report">
+        <h2>점검 근거</h2>
+        <div className="equipment-sketch" aria-label="설비 점검 근거도">
+          <EquipmentSketchVisual assetType={asset.assetType} inspectionTargets={inspectionTargets} />
+          <div>
+            <strong>{inspectionTargets[0]?.target?.componentLabel ?? (factors[0] ? fieldFactorItem(factors[0]) : fieldFailureLabel(asset.predictedFailureType))}</strong>
+            <ol>
+              {inspectionTargets.length ? inspectionTargets.map((target) => (
+                <li key={target.target?.targetId ?? target.factor?.id ?? `print-inspection-${target.rank}`}>
+                  <b>{target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}</b>
+                  <span>{inspectionLocationLabel(target.target)} · {target.target ? inspectionBasisSummary(target.target) : target.factor ? fieldFactorSymptom(target.factor) : "위치 근거 미제공"}</span>
+                </li>
+              )) : null}
+            </ol>
+          </div>
+        </div>
+      </section> : null}
+      {printableSensors.length ? <section className="operations-print-sensor-history operations-side-map-report">
+        <h2>센서 현황</h2>
+        <p>선택 장비의 관측 이력을 동일한 기간 기준으로 표시합니다.</p>
+        {printableSensors.map((sensor) => (
+          <MapReportFeatureSeries
+            key={`print-${sensor.id}`}
+            title={displaySensorLabel(sensor.id, sensor.label)}
+            unit={sensor.unit}
+            points={sensor.points}
+            windowId={sensorWindow}
+            window={sensor.window}
+            currentValue={sensor.currentValue}
+            currentObservedAt={sensor.currentObservedAt}
+            primary={PRIMARY_FIELD_SENSOR_KEYS.has(sensor.id)}
+            emptyTitle="관측 이력 없음"
+            emptyDetail={`${displaySensorLabel(sensor.id, sensor.label)} 관측 이력이 없습니다.`}
+          />
+        ))}
+      </section> : null}
     </section>
   );
 }
@@ -1742,6 +1811,7 @@ function FactoryMonitoringMapPanel({
   postMaintenancePredictions,
   planningBasis,
   liveDemo,
+  acknowledgedAlerts,
   focusMode,
   onFocusModeChange,
   onPreviewAssetSlot,
@@ -1751,26 +1821,33 @@ function FactoryMonitoringMapPanel({
   postMaintenancePredictions: Record<string, PostMaintenancePredictionSummary>;
   planningBasis: { value: string; fallback: boolean };
   liveDemo: RealtimeDemoSnapshot;
+  acknowledgedAlerts: Set<string>;
   focusMode: "all" | "exceptions";
   onFocusModeChange: (mode: "all" | "exceptions") => void;
   onPreviewAssetSlot: (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => void;
 }) {
   return (
-    <OperationsPanel title="공장 설비 상태맵" eyebrow="실시간 라인/셀 현황" className="operations-process-panel operations-factory-map-panel">
-      <div className="operations-plan-impact-note">
-        {FACTORY_LAYOUT_NOTICE} · {planningBasis.fallback ? "생산 영향 데이터 미연결" : "생산계획 연계"} · {planningBasis.value}
-      </div>
+    <OperationsPanel
+      title="공장 설비 상태맵"
+      eyebrow="실시간 라인/셀 현황"
+      className="operations-process-panel operations-factory-map-panel"
+      actions={(
+        <div className="operations-factory-map-heading-tools">
+          <div className="operations-plan-impact-note">
+            {FACTORY_LAYOUT_NOTICE} · {planningBasis.fallback ? "생산 영향 데이터 미연결" : "생산계획 연계"} · {planningBasis.value}
+          </div>
+          <div className="operations-factory-map-legend" aria-label="설비 상태 범례">
+            <i className="normal">정상</i><i className="attention">주의</i><i className="critical">긴급</i><i className="warning">점검 중</i><i className="hold">완료 확인 필요</i><i className="slot">미연결</i>
+          </div>
+          <div className="operations-factory-map-mode" role="group" aria-label="설비 상태맵 강조 방식">
+            <button type="button" className={focusMode === "all" ? "is-active" : ""} onClick={() => onFocusModeChange("all")}>전체 설비</button>
+            <button type="button" className={focusMode === "exceptions" ? "is-active" : ""} onClick={() => onFocusModeChange("exceptions")}>이상만 강조</button>
+          </div>
+        </div>
+      )}
+    >
       {factoryCells.length ? (
         <div className={`operations-factory-map focus-${focusMode}`}>
-          <div className="operations-factory-map-toolbar">
-            <div className="operations-factory-map-mode" role="group" aria-label="설비 상태맵 강조 방식">
-              <button type="button" className={focusMode === "all" ? "is-active" : ""} onClick={() => onFocusModeChange("all")}>전체 설비</button>
-              <button type="button" className={focusMode === "exceptions" ? "is-active" : ""} onClick={() => onFocusModeChange("exceptions")}>이상만 강조</button>
-            </div>
-            <div className="operations-factory-map-legend" aria-label="설비 상태 범례">
-              <i className="normal">정상</i><i className="attention">주의</i><i className="critical">긴급</i><i className="warning">점검 중</i><i className="hold">완료 확인 필요</i><i className="slot">미연결</i>
-            </div>
-          </div>
           <div className="operations-factory-line-map">
             {FACTORY_SITE_IDS.map((site) => {
               const siteCells = factoryCells.filter((cell) => cell.site === site);
@@ -1784,7 +1861,7 @@ function FactoryMonitoringMapPanel({
                     : siteCells.some((cell) => cell.summary?.attention)
                       ? "attention"
                       : "normal";
-              const siteBadgeCount = alertBadgeCount(siteAssets);
+              const siteBadgeCount = alertBadgeCount(siteAssets, acknowledgedAlerts);
               return (
                 <article key={site} className={`operations-factory-line-row tone-${siteTone}`}>
                   <header>
@@ -1810,6 +1887,7 @@ function FactoryMonitoringMapPanel({
                             const liveStatus = isLiveDemoFocus ? liveDemo.status : null;
                             const liveRisk = isLiveDemoFocus ? liveDemo.risk : null;
                             const tone = asset ? mapTone(liveStatus ?? currentPrediction?.statusGrade ?? asset.status) : "slot";
+                            const alertAcknowledged = asset ? acknowledgedAlerts.has(assetAlertKey(asset)) : false;
                             const title = asset
                               ? `${displayFactorySlotName(slot, cell)} · ${operationsMonitorStatusLabel(liveStatus ?? currentPrediction?.statusGrade ?? asset.status)} · ${formatProbability(liveRisk ?? currentPrediction?.failureProbability ?? asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}${isLiveDemoFocus ? " · 최근 Result 수신" : ""}`
                               : `${cell.label} · ${slot.label} · 설비 미연결`;
@@ -1817,7 +1895,7 @@ function FactoryMonitoringMapPanel({
                               <button
                                 key={slot.id}
                                 type="button"
-                                className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""} ${isLiveDemoFocus ? "is-live-result-focus" : ""} ${focusMode === "exceptions" && tone === "normal" && !selected && !isLiveDemoFocus ? "is-deemphasized" : ""}`}
+                                className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""} ${isLiveDemoFocus ? "is-live-result-focus" : ""} ${tone !== "normal" && !alertAcknowledged ? "has-alert" : ""} ${focusMode === "exceptions" && tone === "normal" && !selected && !isLiveDemoFocus ? "is-deemphasized" : ""}`}
                                 aria-pressed={selected}
                                 aria-label={`${displayFactorySlotName(slot, cell)} · ${asset.assetId} · ${operationsMonitorStatusLabel(liveStatus ?? currentPrediction?.statusGrade ?? asset.status)} · 위험 ${formatProbability(liveRisk ?? currentPrediction?.failureProbability ?? asset.failureProbability)}`}
                                 onClick={() => onPreviewAssetSlot(asset, slot, cell)}
@@ -1825,7 +1903,7 @@ function FactoryMonitoringMapPanel({
                               >
                                 <span>{displayAssetShortName(asset)}</span>
                                 {isLiveDemoFocus ? <small className="operations-live-node-risk">{formatProbability(liveRisk)}</small> : null}
-                                {tone !== "normal" ? <b className="operations-asset-alert-badge" aria-label={`${operationsMonitorStatusLabel(liveStatus ?? asset.status)} 알림`}>{isLiveDemoFocus ? "LIVE" : tone === "critical" ? "!" : "1"}</b> : null}
+                                {tone !== "normal" && !alertAcknowledged ? <b className="operations-asset-alert-badge" aria-label={`${operationsMonitorStatusLabel(liveStatus ?? asset.status)} 알림`}>{isLiveDemoFocus ? "LIVE" : tone === "critical" ? "!" : "1"}</b> : null}
                               </button>
                             ) : (
                               <div key={slot.id} className={`operations-factory-asset-node ${tone} ${slot.kind}`} title={title} aria-label={title}>
@@ -1844,6 +1922,123 @@ function FactoryMonitoringMapPanel({
         </div>
       ) : <OperationsState kind="empty" title="셀 배치 데이터가 없습니다" detail="연결된 설비 판단에 공장 셀 기준 배치 정보가 없습니다." />}
     </OperationsPanel>
+  );
+}
+
+function EngineerFactoryDashboard({
+  model,
+  selectedAsset,
+  factoryCells,
+  planningBasis,
+  liveDemo,
+  onPreviewAssetSlot,
+  onPreviewAsset,
+  onRefresh,
+}: {
+  model: OperationsBootstrapModel;
+  selectedAsset: OperationsAsset | null;
+  factoryCells: FactoryCellLayout[];
+  planningBasis: { value: string; fallback: boolean };
+  liveDemo: RealtimeDemoSnapshot;
+  onPreviewAssetSlot: (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => void;
+  onPreviewAsset: (assetId: string, eventId: string | null) => void;
+  onRefresh: () => void;
+}) {
+  const selected = selectedAsset ?? model.assets.find((asset) => asset.assetId === liveDemo.assetId) ?? model.assets[0] ?? null;
+  const actionable = model.assets.filter((asset) => asset.status === "critical" || asset.status === "warning").length;
+  const held = model.assets.filter((asset) => asset.status === "data_quality_hold").length;
+  const running = Math.max(0, model.metrics.totalAssets - held);
+  const recentEvents = [...model.events]
+    .sort((left, right) => (timestampMillis(right.observedAt) ?? 0) - (timestampMillis(left.observedAt) ?? 0))
+    .slice(0, 3);
+  const riskValues = model.events
+    .filter((event) => event.assetId === selected?.assetId && typeof event.failureProbability === "number")
+    .sort((left, right) => (timestampMillis(left.observedAt) ?? 0) - (timestampMillis(right.observedAt) ?? 0))
+    .map((event) => event.failureProbability as number)
+    .slice(-18);
+  const chartValues = riskValues.length > 1
+    ? riskValues
+    : selected?.failureProbability !== null && selected?.failureProbability !== undefined
+      ? [Math.max(0, selected.failureProbability * 0.72), selected.failureProbability]
+      : [];
+  const chartPoints = chartValues.map((value, index) => {
+    const x = chartValues.length === 1 ? 50 : (index / (chartValues.length - 1)) * 100;
+    return `${x.toFixed(2)},${(100 - value * 100).toFixed(2)}`;
+  }).join(" ");
+  const selectedFactors = selected?.topFactors.filter((factor) => typeof factor.value === "number").slice(0, 4) ?? [];
+  const statusTone = selected?.status ?? "data_quality_hold";
+
+  return (
+    <div className="engineer-factory-dashboard" data-testid="engineer-factory-dashboard">
+      <header className="engineer-factory-header">
+        <div><strong>공장 현황</strong><span>{model.context.workspaceName} · {model.lineRisk.length.toLocaleString()}개 라인 · 설비 {model.metrics.totalAssets.toLocaleString()}대</span></div>
+        <div className="engineer-factory-live"><i /><b>실시간 수집 중</b><span>기준 시각 {formatTimestamp(model.context.observedAt ?? model.context.refreshedAt)}</span><button type="button" onClick={onRefresh}><RefreshCw size={13} />새로고침</button></div>
+      </header>
+
+      <section className="engineer-factory-kpis" aria-label="공장 핵심 현황">
+        <article><span>즉시 조치 필요 설비</span><strong>{actionable}<small>대</small></strong><p>긴급·경고 등급으로 현장 확인이 필요합니다.</p></article>
+        <article><span>가동 중 설비</span><strong>{running}<small>/ {model.metrics.totalAssets}대</small></strong><p>데이터 품질 보류 {held}대는 별도로 구분합니다.</p></article>
+        <article><span>예상 정지 영향</span><strong>{formatMinutes(model.metrics.estimatedDowntimeMinutes)}</strong><p>현재 위험 설비의 예측 비가동 시간 합계입니다.</p></article>
+      </section>
+
+      <section className="engineer-factory-main-grid">
+        <section className="engineer-factory-card engineer-equipment-list" aria-label="라인 셀 설비 상태">
+          <header><strong>라인 · 셀 · 설비 상태</strong><span>설비를 누르면 현황이 함께 바뀝니다</span></header>
+          <div className="engineer-equipment-scroll">
+            {factoryCells.map((cell) => (
+              <article key={cell.id}>
+                <div><b>{cell.label}</b><small>{cell.summary ? `${cell.summary.assets.length}대` : "미연결"}</small></div>
+                <div className="engineer-equipment-slots">
+                  {cell.slots.map((slot) => {
+                    const asset = slot.asset;
+                    const active = asset?.assetId === selected?.assetId;
+                    const live = asset?.assetId === liveDemo.assetId;
+                    const tone = asset ? mapTone(live ? liveDemo.status : asset.status) : "slot";
+                    return asset ? (
+                      <button
+                        type="button"
+                        key={slot.id}
+                        className={`tone-${tone} ${active ? "is-selected" : ""}`}
+                        onClick={() => onPreviewAssetSlot(asset, slot, cell)}
+                        title={`${displayAssetName(asset)} · ${operationsMonitorStatusLabel(live ? liveDemo.status : asset.status)}`}
+                      >
+                        <span>{displayAssetShortName(asset)}</span>
+                        <small>{operationsMonitorStatusLabel(live ? liveDemo.status : asset.status)}</small>
+                      </button>
+                    ) : null;
+                  })}
+                </div>
+              </article>
+            ))}
+          </div>
+          <footer className="engineer-equipment-legend">
+            <span><i className="normal" />정상</span><span><i className="attention" />주의</span><span><i className="critical" />긴급</span><span><i className="hold" />확인 필요</span>
+          </footer>
+        </section>
+
+        <section className="engineer-factory-card engineer-risk-trend" aria-label="선택 설비 위험 추세">
+          <header><div><strong>위험 점수 추세 · 최근 관측</strong><span>{selected ? `${displayAssetName(selected)} · ${selected.assetId}` : "설비를 선택하세요"}</span></div><b className={`tone-${statusTone}`}>{formatProbability(selected?.failureProbability ?? null)}</b></header>
+          {chartPoints ? <div className="engineer-risk-chart"><svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="위험 점수 추세"><GenDataRiskBandBackground /><polyline points={chartPoints} /></svg><div><span>이전 관측</span><span>현재</span></div></div> : <OperationsState kind="empty" title="위험 추세 없음" detail="선택 설비의 위험 관측이 아직 연결되지 않았습니다." />}
+          <footer><span>현재 상태 <b>{operationsMonitorStatusLabel(selected?.status ?? "data_quality_hold")}</b></span><span>{planningBasis.value}</span></footer>
+        </section>
+
+        <section className="engineer-factory-card engineer-recent-events" aria-label="최근 이벤트">
+          <header><strong>최근 이벤트</strong><span>최근 {recentEvents.length}건</span></header>
+          <div>{recentEvents.map((event) => <button type="button" key={event.eventId} onClick={() => onPreviewAsset(event.assetId, event.eventId)}><span><OperationsStatusBadge status={event.status} /><time>{formatTimestamp(event.observedAt)}</time></span><strong>{displayEventLabel(event.eventId)}</strong><small>{displayEventAssetName(event)} · {event.line}</small><p>{fieldFailureLabel(event.predictedFailureType)} · {DECISION_LABEL[event.recommendedDecision]}</p></button>)}</div>
+        </section>
+      </section>
+
+      <section className="engineer-factory-bottom-grid">
+        <section className="engineer-factory-card engineer-evidence-summary">
+          <header><strong>선택 설비 근거 요약</strong><span>{selected?.observedAt ? `${formatTimestamp(selected.observedAt)} 관측` : "관측 시각 없음"}</span></header>
+          {selected ? <><div className="engineer-evidence-lead"><OperationsStatusBadge status={selected.status} /><b>{fieldFailureLabel(selected.predictedFailureType)}</b></div><ol>{selected.topFactors.slice(0, 4).map((factor) => <li key={factor.id}>{fieldFactorSymptom(factor)} · 기여도 {Math.round(Math.abs(factor.contribution) * 100)}%</li>)}</ol><dl><div><dt>담당자</dt><dd>{selected.assignedEngineer ?? "미배정"}</dd></div><div><dt>예상 정지</dt><dd>{formatMinutes(selected.estimatedDowntimeMinutes)}</dd></div><div><dt>부품</dt><dd>{displayPartLabel(selected.sparePartAvailable)}</dd></div><div><dt>권고</dt><dd>{DECISION_LABEL[selected.recommendedDecision]}</dd></div></dl></> : <OperationsState kind="empty" title="선택 설비 없음" detail="상태맵에서 설비를 선택하면 근거가 표시됩니다." />}
+        </section>
+        <section className="engineer-factory-card engineer-live-signals">
+          <header><strong>실시간 상태 신호</strong><span>위험 기여 상위 {selectedFactors.length}건</span></header>
+          {selectedFactors.length ? <div>{selectedFactors.map((factor) => { const ratio = Math.min(100, Math.max(8, Math.abs(factor.contribution) * 100)); return <article key={factor.id}><i><b style={{ height: `${ratio}%` }} /></i><strong>{typeof factor.value === "number" ? factor.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) : "-"}<small>{factor.unit ?? ""}</small></strong><span>{displaySensorLabel(factor.feature, factor.label)}</span></article>; })}</div> : <OperationsState kind="empty" title="상태 신호 없음" detail="선택 설비의 센서 기여 정보가 아직 연결되지 않았습니다." />}
+        </section>
+      </section>
+    </div>
   );
 }
 
@@ -1933,6 +2128,16 @@ export function OperationsWorkflowOverviewPage({
   const [detailDrawerTab, setDetailDrawerTab] = useState<DrawerTab>("status");
   const [factorySlotPreview, setFactorySlotPreview] = useState<FactorySlotPreview | null>(null);
   const [factoryFocusMode, setFactoryFocusMode] = useState<"all" | "exceptions">("exceptions");
+  const acknowledgedAlertsStorageKey = `${ACKNOWLEDGED_ALERTS_STORAGE_KEY}:${currentUserId}`;
+  const [acknowledgedAlerts, setAcknowledgedAlerts] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(`${ACKNOWLEDGED_ALERTS_STORAGE_KEY}:${currentUserId}`) ?? "[]");
+      return new Set(Array.isArray(stored) ? stored.filter((item): item is string => typeof item === "string") : []);
+    } catch {
+      return new Set();
+    }
+  });
   const [postMaintenancePredictions, setPostMaintenancePredictions] = useState<Record<string, PostMaintenancePredictionSummary>>({});
   const autoOpenedDrawerKeyRef = useRef<string | null>(null);
   const suppressAutoOpenDrawerRef = useRef(false);
@@ -1947,6 +2152,23 @@ export function OperationsWorkflowOverviewPage({
       return { ...current, [assetId]: prediction };
     });
   }, []);
+  const acknowledgeAlert = useCallback((asset: OperationsAsset) => {
+    const alertKey = assetAlertKey(asset);
+    setAcknowledgedAlerts((current) => {
+      if (current.has(alertKey)) return current;
+      const next = new Set(current);
+      next.add(alertKey);
+      const retained = [...next].slice(-1000);
+      return new Set(retained);
+    });
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(acknowledgedAlertsStorageKey, JSON.stringify([...acknowledgedAlerts]));
+    } catch {
+      // Acknowledgement still works for the current session when storage is unavailable.
+    }
+  }, [acknowledgedAlerts, acknowledgedAlertsStorageKey]);
   useEffect(() => {
     if (!selectedAsset || detailDrawerOpen) return;
     if (suppressAutoOpenDrawerRef.current) return;
@@ -1958,10 +2180,11 @@ export function OperationsWorkflowOverviewPage({
     const drawerKey = `${selectedAsset.assetId}:${selectedEventId}`;
     if (autoOpenedDrawerKeyRef.current === drawerKey) return;
     autoOpenedDrawerKeyRef.current = drawerKey;
+    acknowledgeAlert(selectedAsset);
     setFactorySlotPreview(null);
     setDetailDrawerOpen(true);
     setDetailDrawerTab("status");
-  }, [detailDrawerOpen, selectedAsset, selectedEvent?.eventId]);
+  }, [acknowledgeAlert, detailDrawerOpen, selectedAsset, selectedEvent?.eventId]);
   // Live demo ticks update cards and map emphasis only. They must not mutate
   // the selected Case because that writes asset_id/event_id into the URL and
   // reopens the detail drawer after login or after the user closes it.
@@ -2072,6 +2295,8 @@ export function OperationsWorkflowOverviewPage({
   const previewInDrawer = (assetId: string, eventId: string | null) => {
     suppressAutoOpenDrawerRef.current = false;
     setFactorySlotPreview(null);
+    const asset = model.assets.find((candidate) => candidate.assetId === assetId);
+    if (asset) acknowledgeAlert(asset);
     onPreviewAsset(assetId, eventId);
     setDetailDrawerOpen(true);
     setDetailDrawerTab("status");
@@ -2080,13 +2305,14 @@ export function OperationsWorkflowOverviewPage({
   const previewFactoryAssetSlot = (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => {
     suppressAutoOpenDrawerRef.current = false;
     setFactorySlotPreview({ slot, cell });
+    acknowledgeAlert(asset);
     onPreviewAsset(asset.assetId, asset.eventId);
     setDetailDrawerOpen(true);
     setDetailDrawerTab("status");
   };
 
   return (
-    <div className="operations-page operations-overview-page" data-testid="operations-overview">
+    <div className="operations-page operations-overview-page" data-testid="operations-overview" data-role={role}>
       <section className="operations-monitoring-hero" aria-label="실시간 공장 모니터링 현황">
         <div>
           <span>실시간 공장 모니터링</span>
@@ -2155,6 +2381,7 @@ export function OperationsWorkflowOverviewPage({
         postMaintenancePredictions={postMaintenancePredictions}
         planningBasis={planningBasis}
         liveDemo={liveDemo}
+        acknowledgedAlerts={acknowledgedAlerts}
         focusMode={factoryFocusMode}
         onFocusModeChange={setFactoryFocusMode}
         onPreviewAssetSlot={previewFactoryAssetSlot}
@@ -2268,7 +2495,7 @@ export function OperationsWorkflowOverviewPage({
             {selectedAsset
               ? experienceKind === "executive"
                 ? `${displayFactoryAssetName(selectedAsset.assetId) ?? displayAssetName(selectedAsset)} · 운영 리스크 확인`
-                : role === "field_operator"
+                : String(role) === "field_operator"
                 ? `${displayFactoryAssetName(selectedAsset.assetId) ?? displayAssetName(selectedAsset)} · ${operationsMonitorStatusLabel(selectedAsset.status, selectedClosedLoopStatus)}`
                 : `${displayFactoryAssetName(selectedAsset.assetId) ?? displayAssetName(selectedAsset)} · 생산 영향 확인`
               : "선택된 설비가 없습니다"}
@@ -2276,7 +2503,7 @@ export function OperationsWorkflowOverviewPage({
           <p>
             {experienceKind === "executive"
               ? `고위험 설비 ${(metrics.critical + metrics.warning).toLocaleString()}대 · 판단 대기 ${metrics.pendingDecisions.toLocaleString()}건 · 예상 다운타임 ${formatMinutes(metrics.estimatedDowntimeMinutes)}. 같은 Decision Case 근거로 Executive Brief를 생성할 수 있습니다.`
-              : role === "field_operator"
+              : String(role) === "field_operator"
               ? fieldSummary
               : `${agentSummaryLine} · 상세 설명은 설비 클릭 후 센서 그래프 아래에서 확인합니다.`}
           </p>
@@ -2306,7 +2533,7 @@ export function OperationsWorkflowOverviewPage({
             </div>
           </OperationsPanel>
         </div>
-      ) : role === "field_operator" ? (
+      ) : String(role) === "field_operator" ? (
         <div className="operations-role-overview operations-role-overview-wide">
           <OperationsPanel title="우선순위" eyebrow="점검 요청 기준" className="operations-today-panel">
             <div className="operations-order-board">
@@ -2386,6 +2613,7 @@ function MapReportFeatureSeries({
   primary,
   liveDemo,
   loading,
+  onExpand,
 }: {
   title: string;
   unit: string | null;
@@ -2399,6 +2627,7 @@ function MapReportFeatureSeries({
   primary?: boolean;
   liveDemo?: RealtimeDemoSnapshot | null;
   loading?: boolean;
+  onExpand?: () => void;
 }) {
   const color = title.includes("진동") || title.includes("토크") ? "#a7630c" : "#285fcb";
   const filteredPoints = filterSeriesPoints(points, currentObservedAt, windowId);
@@ -2411,6 +2640,7 @@ function MapReportFeatureSeries({
       <section className="asset-series-block">
         <header className="asset-series-heading">
           <div><LineChart size={17} /><strong>{title}</strong></div>
+          {onExpand ? <button type="button" className="asset-series-expand" aria-label={`${title} 그래프 확대`} onClick={onExpand}><Maximize2 size={14} /></button> : null}
           <span>{loading ? "관측 이력 로딩 중" : "관측 이력 없음"}</span>
         </header>
         {loading
@@ -2531,8 +2761,9 @@ function MapReportFeatureSeries({
       <header className="asset-series-heading">
         <div><RotateCcw size={17} /><strong>{title}</strong></div>
         <span className="asset-baseline-key"><i style={{ background: color }} />{liveDemo ? "10분 요약 라인 · 터치/호버 정확값 · NOW 실시간" : seriesRangeLabel(visiblePoints, windowId, window)}</span>
+        {onExpand ? <button type="button" className="asset-series-expand" aria-label={`${title} 그래프 확대`} onClick={onExpand}><Maximize2 size={14} /></button> : null}
       </header>
-      <svg className="asset-series-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${title} 관측 흐름`}>
+      <svg className={onExpand ? "asset-series-chart is-expandable" : "asset-series-chart"} viewBox={`0 0 ${chartWidth} ${chartHeight}`} role={onExpand ? "button" : "img"} tabIndex={onExpand ? 0 : undefined} aria-label={onExpand ? `${title} 그래프 확대` : `${title} 관측 흐름`} onClick={onExpand} onKeyDown={onExpand ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onExpand(); } } : undefined}>
         <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
         {liveDemo ? <rect className="asset-live-sweep" x={frame.left} y={frame.top} width={width} height={height} /> : null}
         {liveDemo ? <rect className="asset-forecast-lane" x={frame.right} y={frame.top} width={forecastRight - frame.right} height={height} /> : null}
@@ -2703,13 +2934,27 @@ function FeatureSeriesCollection({
   liveDemo?: RealtimeDemoSnapshot | null;
   loading?: boolean;
 }) {
-  const visibleSensors = sensors;
+  const [expandedSensorId, setExpandedSensorId] = useState<string | null>(null);
+  useEffect(() => {
+    if (expandedSensorId && !sensors.some((sensor) => sensor.id === expandedSensorId)) {
+      setExpandedSensorId(null);
+    }
+  }, [sensors, expandedSensorId]);
+  useEffect(() => {
+    if (!expandedSensorId) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpandedSensorId(null);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [expandedSensorId]);
+  const expandedSensor = sensors.find((sensor) => sensor.id === expandedSensorId) ?? null;
   const isInitialHistoryLoading = Boolean(
     loading && sensors.some((sensor) => sensor.points.length === 0),
   );
   return (
     <section className="operations-feature-series-collection" aria-label={title}>
-      <header>
+      <header className="operations-sensor-control-row">
         <LineChart size={14} />
         <strong>{title}</strong>
         <div className="asset-window-control" role="group" aria-label="관측 기간 선택">
@@ -2730,10 +2975,10 @@ function FeatureSeriesCollection({
         <FeatureSeriesLoadingPlaceholder title={title} />
       ) : sensors.length ? (
         <>
-          {visibleSensors.map((sensor) => (
+          {sensors.map((sensor) => (
             <MapReportFeatureSeries
               key={sensor.id}
-              title={sensor.label}
+              title={displaySensorLabel(sensor.id, sensor.label)}
               unit={sensor.unit}
               points={sensor.points}
               windowId={windowId}
@@ -2744,11 +2989,37 @@ function FeatureSeriesCollection({
               liveDemo={liveDemo}
               loading={loading}
               emptyTitle="관측 이력 없음"
-              emptyDetail={`${sensor.label} 관측 이력이 비어 있어 임의 그래프를 표시하지 않습니다.`}
+              emptyDetail={`${displaySensorLabel(sensor.id, sensor.label)} 관측 이력이 비어 있어 임의 그래프를 표시하지 않습니다.`}
+              onExpand={() => setExpandedSensorId(sensor.id)}
             />
           ))}
         </>
       ) : loading ? <OperationsState kind="loading" title="관측 이력 로딩 중" detail="선택 설비의 센서 그래프를 불러오는 중입니다." /> : <OperationsState kind="empty" title={emptyTitle} detail={emptyDetail} />}
+      {expandedSensor ? (
+        <div className="operations-sensor-detail-layer" role="presentation">
+          <button type="button" className="operations-sensor-detail-scrim" aria-label="센서 상세 닫기" onClick={() => setExpandedSensorId(null)} />
+          <section className="operations-sensor-detail-dialog" role="dialog" aria-modal="true" aria-label={`${displaySensorLabel(expandedSensor.id, expandedSensor.label)} 상세 그래프`}>
+            <header>
+              <div><LineChart size={16} /><strong>{displaySensorLabel(expandedSensor.id, expandedSensor.label)}</strong><span>센서 상세 그래프</span></div>
+              <button type="button" aria-label="센서 상세 닫기" onClick={() => setExpandedSensorId(null)}><X size={16} /></button>
+            </header>
+            <MapReportFeatureSeries
+              title={displaySensorLabel(expandedSensor.id, expandedSensor.label)}
+              unit={expandedSensor.unit}
+              points={expandedSensor.points}
+              windowId={windowId}
+              window={expandedSensor.window}
+              currentValue={expandedSensor.currentValue}
+              currentObservedAt={expandedSensor.currentObservedAt}
+              primary={PRIMARY_FIELD_SENSOR_KEYS.has(expandedSensor.id)}
+              liveDemo={liveDemo}
+              loading={loading}
+              emptyTitle="관측 이력 없음"
+              emptyDetail={`${displaySensorLabel(expandedSensor.id, expandedSensor.label)} 관측 이력이 비어 있습니다.`}
+            />
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -2918,7 +3189,9 @@ function AssetPreviewPanel({
     if (!asset) return;
     setPrintReportTab(reportTab);
     setReportOutputOpen(false);
-    window.setTimeout(() => window.print(), 100);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.print());
+    });
   };
   const agentSummaryKey = asset
     ? `${asset.assetId}:${candidate?.event.eventId ?? ""}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}`
@@ -3091,7 +3364,7 @@ function AssetPreviewPanel({
                   <LineChart size={14} />
                   <strong>실시간 피쳐 변화</strong>
                   <span className={`operations-live-feed-status ${selectedLiveSnapshot ? "is-hot" : ""}`}>
-                    {selectedLiveSnapshot ? "LIVE now" : "최신 관측 기준"} · {formatTimestamp(selectedLiveSnapshot?.nowAt ?? asset.observedAt)}
+                    {selectedLiveSnapshot ? "실시간" : "최신 관측 기준"} · {formatTimestamp(selectedLiveSnapshot?.nowAt ?? asset.observedAt)}
                   </span>
                 </header>
                 {selectedLiveSnapshot ? (
@@ -3121,19 +3394,7 @@ function AssetPreviewPanel({
                     </div>
                   </div>
                 ) : null}
-                <FeatureSeriesCollection
-                  title="핵심 센서"
-                  sensors={liveFeatureSnapshots}
-                  windowId={sensorWindow}
-                  onWindowChange={onSensorWindowChange}
-                  liveDemo={selectedLiveSnapshot}
-                  loading={detailLoading}
-                  emptyTitle="관측 이력 없음"
-                  emptyDetail={detailError || "현재 선택 설비에 연결된 주요 피쳐 이력이 없습니다."}
-                />
-                <p className="operations-live-feature-note">
-                  원본 필드명 대신 한국어 현장 용어로 표시합니다. LIVE 그래프는 과거 관측 이력 위에 지금 값과 단기 추세 범위를 함께 표시합니다.
-                </p>
+                <p className="operations-live-feature-note">새 관측값과 위험 판단 근거를 같은 시점 기준으로 표시합니다.</p>
               </section>
               <dl className="operations-monitoring-detail-grid" aria-label="선택 설비 현재 상태">
                 <div><dt>설비명</dt><dd>{assetDisplayName}</dd></div>
@@ -3356,8 +3617,9 @@ function AssetPreviewPanel({
                 ) : null}
               </section>
 
+              <div className="operations-inspection-sensor-workbench">
               <section className="operations-overview-inspection-panel operations-side-map-report" aria-label="점검 근거">
-                <header><Wrench size={14} /><strong>점검 근거</strong><span>SOP 참고 안내</span></header>
+                <header><Wrench size={14} /><strong>점검 근거</strong><span>점검 절차 안내</span></header>
                 <div className="equipment-sketch" aria-label="설비 참고도">
                   <EquipmentSketchVisual assetType={asset.assetType} inspectionTargets={inspectionTargets} />
                   <div>
@@ -3413,15 +3675,9 @@ function AssetPreviewPanel({
                 </div>
               </section>
 
-              <section className="operations-overview-report-graph operations-side-map-report" aria-label="요약 리포트 센서 관측 그래프">
-                <header><LineChart size={14} /><strong>요약 리포트 관측 흐름</strong><span>{detailLoading ? "불러오는 중" : detailError ? "상세 연결 실패" : "동일 관측 기준"}</span></header>
-                <div className="operations-overview-risk-meter">
-                  <div><span>위험 예측 확률</span><strong>{riskPercent === null ? "-" : `${riskPercent}%`}</strong></div>
-                  <i aria-hidden="true"><b style={{ width: `${riskPercent ?? 0}%` }} /></i>
-                  <small>고장 확정이 아니라 점검 우선순위 판단 근거입니다.</small>
-                </div>
+              <section className="operations-overview-report-graph operations-side-map-report" aria-label="센서 현황">
                 <FeatureSeriesCollection
-                  title="센서 관측 흐름"
+                  title="센서 현황"
                   sensors={liveFeatureSnapshots}
                   windowId={sensorWindow}
                   onWindowChange={onSensorWindowChange}
@@ -3430,8 +3686,8 @@ function AssetPreviewPanel({
                   emptyTitle="센서 이력 없음"
                   emptyDetail="현재 화면 데이터에는 표시할 센서 관측 이력이 없습니다."
                 />
-                <DerivedMetricSlots sensors={realtimeFeatureSnapshots} windowId={sensorWindow} />
               </section>
+              </div>
             </>
           ) : null}
 
@@ -3486,18 +3742,22 @@ function AssetPreviewPanel({
               onClose={() => setReportOutputOpen(false)}
             />
           ) : null}
-          {printReportTab ? (
-            <WorkflowPrintReport
-              reportTab={printReportTab}
-              asset={asset}
-              detail={detail}
-              factors={factors}
-              inspectionTargets={inspectionTargets}
-              planningImpact={planningImpact}
-              workStatus={workStatus}
-              assignee={assignee}
-              workId={workId}
-            />
+          {printReportTab ? createPortal(
+            <div className="operations-print-root is-direct-print" aria-hidden="true">
+              <div className="operations-print-preview-canvas"><WorkflowPrintReport
+                reportTab={printReportTab}
+                asset={asset}
+                factors={factors}
+                inspectionTargets={inspectionTargets}
+                sensors={physicalHistorySnapshots}
+                sensorWindow={sensorWindow}
+                planningImpact={planningImpact}
+                workStatus={workStatus}
+                assignee={assignee}
+                workId={workId}
+              /></div>
+            </div>,
+            document.body,
           ) : null}
         </div>
       ) : <OperationsState kind="empty" title="선택된 설비가 없습니다" detail="왼쪽의 설비 또는 라인을 선택하세요." />}

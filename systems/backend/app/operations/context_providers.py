@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from app.operations.agent_briefing_context import preserve_inspection_details, briefing_activities
+
 
 @dataclass(frozen=True)
 class AgentReviewContext:
@@ -174,7 +176,7 @@ class MaintenanceHistoryContextProvider:
             {
                 "description": str(item.get("description") or ""),
                 "occurred_at": str(item.get("occurred_at") or ""),
-                "source_ref": f"equipment-history://{index + 1}",
+                "source_ref": str(item.get("source_ref") or item.get("source") or f"equipment-history://{index + 1}"),
             }
             for index, item in enumerate(equipment_history[:3])
             if isinstance(item, dict)
@@ -209,7 +211,7 @@ class MaintenanceHistoryContextProvider:
                 "inspection_results": inspection_results,
                 "maintenance_actions": maintenance_actions,
                 "maintenance_events": maintenance_events,
-                "activities": activities[:5],
+                "activities": briefing_activities(activities),
                 "similar_events": [],
                 "recent_equipment_history": recent_equipment_history,
                 "source_refs": source_refs,
@@ -299,7 +301,7 @@ def _history_record(item: dict[str, Any], *, source_prefix: str) -> dict[str, An
         or item.get("id")
         or ""
     )
-    return {
+    record = {
         "record_id": record_id,
         "record_type": record_type,
         "status": str(item.get("status") or item.get("outcome") or ""),
@@ -316,6 +318,25 @@ def _history_record(item: dict[str, Any], *, source_prefix: str) -> dict[str, An
         ),
         "source_ref": f"{source_prefix}/{record_id}" if record_id else source_prefix,
     }
+
+    preserve_inspection_details(item, record)
+    return preserve_owner_record_provenance(item, record)
+
+
+def preserve_owner_record_provenance(item: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+    # Preserve only fields already provided by the canonical owner. Do not infer actors
+    # from assignment or turn a recording timestamp into approval/start time.
+    provenance_fields = (
+        'actor_id', 'actor_user_id', 'actor_display_name', 'recorded_by', 'assigned_to', 'assigned_at',
+        'created_at', 'updated_at', 'approved_at', 'started_at', 'completed_at', 'recorded_at',
+        'work_order_id', 'event_id', 'asset_id', 'equipment_id',
+        'maintenance_action_id', 'maintenance_event_id',
+        'recommendation_id', 'recommendation_decision_id',
+    )
+    provenance = {key: item[key] for key in provenance_fields if isinstance(item.get(key), str)}
+    if provenance:
+        record['owner_record_provenance'] = provenance
+    return record
 
 
 def _dedupe_gap_dicts(gaps: Any) -> list[dict[str, str]]:

@@ -1,0 +1,461 @@
+{
+  "case_id": "GS-008",
+  "input_payload_sha256": "c4c3092330df56b401b61d3b92da5d0bef25fb4501b4d3237302c9d24bf5d8a3",
+  "scenario_kind": "grounded_review_with_history_conflict",
+  "evidence": [
+    {
+      "id": "GS-008:identity",
+      "pointer": "/cases/7/prompt_payload/summary_context/asset_id",
+      "value_sha256": "63b08ee33db517d096a164f7478f16c3b9d232c1ac99d555c9a273325f3a2fa7",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:risk",
+      "pointer": "/cases/7/prompt_payload/summary_context/risk_summary",
+      "value_sha256": "1688c3d8a08c400ae5f7bdb463c277c361df0eba0fcb2d862bcb5bda1db920a6",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:gaps",
+      "pointer": "/cases/7/prompt_payload/summary_context/evidence_gaps",
+      "value_sha256": "f75fef2880c6a2d724b4fb8d5e0808872339f6297bb138a517775ca22301b566",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:quality",
+      "pointer": "/cases/7/prompt_payload/summary_context/confidence_label",
+      "value_sha256": "b86afbf8fe3b4e5672f9f683705712c08f8efa46ee45d106cde2434f7009c3b8",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:history",
+      "pointer": "/cases/7/prompt_payload/summary_context/maintenance_history",
+      "value_sha256": "888489b0d6ae18941afdd28126b043933504e0ee129a32736edb559ea82a3ebd",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:draft_history",
+      "pointer": "/cases/7/prompt_payload/summary_context/review_draft/history_summary",
+      "value_sha256": "676c0fb97e975314aa50bf564eaf11d0d0aea577a508b5ded6e42f8cbfc0f04c",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:production",
+      "pointer": "/cases/7/prompt_payload/summary_context/operation_context",
+      "value_sha256": "3cd646bde08b92a17e68c4e7021a3893bf217ee31780384d4d2cdcfaea0f1fca",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:time",
+      "pointer": "/cases/7/prompt_payload/summary_context/generated_at",
+      "value_sha256": "5a662a44e013d6af07c3da03540f1b5998c6cd094e32b0f2a1cc6e20e890b24f",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:policy_priority",
+      "pointer": "/cases/7/packet/review_priority",
+      "value_sha256": "75d5dcd3dc5a680a2c915977fa522dec4bc36ea1bc97524181c0e56965425222",
+      "visibility": "packet_only",
+      "interpretation": "원본 정책 우선순위: 기존 모델 입력에는 없음. answer_only에서 이 레이블이나 설비 중요도 미언급으로 감점 금지."
+    },
+    {
+      "id": "GS-008:factor_tool_wear_min",
+      "pointer": "/cases/7/prompt_payload/summary_context/model_factors/0",
+      "value_sha256": "abe5041dd617236bd1782b6e9047fcbc0fa00bd6709bd12dff79e8774b2593a0",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:factor_overstrain_index",
+      "pointer": "/cases/7/prompt_payload/summary_context/model_factors/1",
+      "value_sha256": "d0c1747927349a417933e189927bc313fa2006976199f3939ec20b8a4352694f",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:factor_torque_nm",
+      "pointer": "/cases/7/prompt_payload/summary_context/model_factors/2",
+      "value_sha256": "6b7c0cd613199d3f46f6ceb8f3f76c6e423b29f3fe718dd8565510ccd1984d5b",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:target_tooling",
+      "pointer": "/cases/7/prompt_payload/summary_context/inspection_targets/0",
+      "value_sha256": "cabd3838eb6de5cc3975981631b0bdf6dd1b4493ac829c5ea9a07dbd2f3b973a",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:sop_tooling",
+      "pointer": "/cases/7/prompt_payload/summary_context/sop_guidance/0",
+      "value_sha256": "2c4434493292a68ba99ca992577deacf83000d87331be60b90e8b61985c40d79",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:part_SP-CNC-CARBIDE-INSERT-ONE",
+      "pointer": "/cases/7/prompt_payload/summary_context/spare_part_context/traversals/0/spare_parts/0",
+      "value_sha256": "64f715fa01fade9c0a27ff529bc4b5ed4e2914791a5acc5576c2ed2f24d64f25",
+      "visibility": "model_visible",
+      "interpretation": "설비 단위 시나리오 가용값; 수량·실재고·확정 납기 아님"
+    },
+    {
+      "id": "GS-008:similar_tooling_0",
+      "pointer": "/cases/7/prompt_payload/summary_context/similar_event_context/traversals/0/similar_events/0",
+      "value_sha256": "325bc0accf98117034198967e4462b2c2567a231bb55d9bc20a85682ff6d6044",
+      "visibility": "model_visible",
+      "interpretation": "데모 참고 사례; 같은 설비의 30일 집계 또는 이번 조치 효과 보장 아님"
+    },
+    {
+      "id": "GS-008:target_drive_power",
+      "pointer": "/cases/7/prompt_payload/summary_context/inspection_targets/1",
+      "value_sha256": "a9874179b05b76a7fdb81434f4584c4996348c98a60aa6e4283e060618585be7",
+      "visibility": "model_visible",
+      "interpretation": ""
+    },
+    {
+      "id": "GS-008:part_SP-CNC-DRIVE-COUPLING-KIT",
+      "pointer": "/cases/7/prompt_payload/summary_context/spare_part_context/traversals/1/spare_parts/0",
+      "value_sha256": "20ea1b55dbe7c7d4dbc691ed359443bb50161bf831d04ed23f659ec1bfd9f4c6",
+      "visibility": "model_visible",
+      "interpretation": "설비 단위 시나리오 가용값; 수량·실재고·확정 납기 아님"
+    },
+    {
+      "id": "GS-008:similar_drive_power_0",
+      "pointer": "/cases/7/prompt_payload/summary_context/similar_event_context/traversals/1/similar_events/0",
+      "value_sha256": "efc22d0d9a0727667f3a7acff4bb7f10a1ff449a5a88ffc0ee5e03962e4b74ee",
+      "visibility": "model_visible",
+      "interpretation": "데모 참고 사례; 같은 설비의 30일 집계 또는 이번 조치 효과 보장 아님"
+    }
+  ],
+  "allowed_relations": [
+    {
+      "from": "GS-008:factor_tool_wear_min",
+      "relation": "supports_inspection_candidate",
+      "to": "GS-008:target_tooling",
+      "not_implied": "고장 원인 확정 또는 교체 필요 확정"
+    },
+    {
+      "from": "GS-008:target_tooling",
+      "relation": "has_linked_procedure_reference",
+      "to": "GS-008:sop_tooling",
+      "not_implied": "절차 전문·기준 충족·작업 승인 확인"
+    },
+    {
+      "from": "GS-008:target_tooling",
+      "relation": "has_conditional_replacement_candidate",
+      "to": "GS-008:part_SP-CNC-CARBIDE-INSERT-ONE",
+      "not_implied": "현재 고장 부품/실재고 수량/교체 승인"
+    },
+    {
+      "from": "GS-008:target_tooling",
+      "relation": "has_related_example",
+      "to": "GS-008:similar_tooling_0",
+      "not_implied": "동일 설비·동일 사건·인과/조치 효과 보장"
+    },
+    {
+      "from": "GS-008:factor_overstrain_index",
+      "relation": "supports_inspection_candidate",
+      "to": "GS-008:target_drive_power",
+      "not_implied": "고장 원인 확정 또는 교체 필요 확정"
+    },
+    {
+      "from": "GS-008:factor_torque_nm",
+      "relation": "supports_inspection_candidate",
+      "to": "GS-008:target_drive_power",
+      "not_implied": "고장 원인 확정 또는 교체 필요 확정"
+    },
+    {
+      "from": "GS-008:target_drive_power",
+      "relation": "has_conditional_replacement_candidate",
+      "to": "GS-008:part_SP-CNC-DRIVE-COUPLING-KIT",
+      "not_implied": "현재 고장 부품/실재고 수량/교체 승인"
+    },
+    {
+      "from": "GS-008:target_drive_power",
+      "relation": "has_related_example",
+      "to": "GS-008:similar_drive_power_0",
+      "not_implied": "동일 설비·동일 사건·인과/조치 효과 보장"
+    }
+  ],
+  "criteria": [
+    {
+      "id": "GS-008.E1",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "대상 설비·위험 등급/확률을 정확히 보존한다. hold이면 위험 판단 불가를 유지한다.",
+      "support": [
+        "GS-008:identity",
+        "GS-008:risk",
+        "GS-008:quality"
+      ]
+    },
+    {
+      "id": "GS-008.E2",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "이력 요약과 구조화 값의 불일치를 임의의 집계로 해소하지 않는다. 사용할 수 없는 범위는 한정한다.",
+      "support": [
+        "GS-008:history",
+        "GS-008:draft_history",
+        "GS-008:gaps"
+      ]
+    },
+    {
+      "id": "GS-008.E3",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "blocked_input",
+      "eligibility_reason": "수량·담당자·확정 입고일 및 최신 조회 증거가 입력에 없음. 미언급 감점 금지, 날조는 별도 치명 오류.",
+      "requirement": "최신 실재고 수량·담당자 이름·확정 입고일을 정확히 답한다.",
+      "support": [
+        "GS-008:part_SP-CNC-CARBIDE-INSERT-ONE",
+        "GS-008:part_SP-CNC-DRIVE-COUPLING-KIT"
+      ]
+    },
+    {
+      "id": "GS-008.E4",
+      "axis": "evidence",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "판단과 관련된 부품의 등록 가용 상태·조달 기간을 활용한다. 가용 여부를 수량으로 바꾸거나 계획 조달 기간을 확정 납기로 바꾸지 않는다.",
+      "support": [
+        "GS-008:part_SP-CNC-CARBIDE-INSERT-ONE",
+        "GS-008:part_SP-CNC-DRIVE-COUPLING-KIT"
+      ]
+    },
+    {
+      "id": "GS-008.M1",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "제공된 요인→해당 점검 후보의 연결과 요인 방향을 보존한다. hold에서는 부품·요인을 새로 만들지 않는다.",
+      "support": [
+        "GS-008:factor_tool_wear_min",
+        "GS-008:factor_overstrain_index",
+        "GS-008:factor_torque_nm",
+        "GS-008:target_tooling",
+        "GS-008:target_drive_power"
+      ]
+    },
+    {
+      "id": "GS-008.M2",
+      "axis": "mapping",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "점검 후보에 실제 연결된 절차·부품·참고 사례만 연결한다. 다른 부품의 조달 기간이나 사례 결과를 전용하지 않는다.",
+      "support": [
+        "GS-008:sop_tooling",
+        "GS-008:part_SP-CNC-CARBIDE-INSERT-ONE",
+        "GS-008:similar_tooling_0",
+        "GS-008:part_SP-CNC-DRIVE-COUPLING-KIT",
+        "GS-008:similar_drive_power_0"
+      ]
+    },
+    {
+      "id": "GS-008.P1",
+      "axis": "priority",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "GS-002와 주요 조건이 같은 경고 사례다. 설비 식별자를 구분하되 숫자만으로 두 설비 간 고유 순위를 만들지 않는다.",
+      "support": [
+        "GS-008:risk",
+        "GS-008:production",
+        "GS-008:quality",
+        "GS-008:factor_tool_wear_min",
+        "GS-008:factor_overstrain_index",
+        "GS-008:factor_torque_nm"
+      ]
+    },
+    {
+      "id": "GS-008.P2",
+      "axis": "priority",
+      "profiles": [
+        "answer_only"
+      ],
+      "eligibility": "blocked_input",
+      "eligibility_reason": "원본에는 있으나 모델 입력에 없음. 숨겨진 정답으로 감점하지 않는다.",
+      "requirement": "설비 중요도와 원본 정책 우선순위를 반영한 설명을 한다.",
+      "support": [
+        "GS-008:policy_priority"
+      ]
+    },
+    {
+      "id": "GS-008.P3",
+      "axis": "priority",
+      "profiles": [
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "원본 우선순위·설비 중요도·예측 기간 등 필요한 판단 근거가 소비자 입력으로 전달되는지 확인한다.",
+      "support": [
+        "GS-008:policy_priority",
+        "GS-008:risk"
+      ]
+    },
+    {
+      "id": "GS-008.D1",
+      "axis": "decision",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "근거가 있는 점검 검토와 조건부 교체 일정만 제안한다. 데이터/승인/자원 미확인의 범위와 실제 필요한 다음 판단을 구분한다.",
+      "support": [
+        "GS-008:quality",
+        "GS-008:gaps",
+        "GS-008:history",
+        "GS-008:production",
+        "GS-008:part_SP-CNC-CARBIDE-INSERT-ONE",
+        "GS-008:part_SP-CNC-DRIVE-COUPLING-KIT"
+      ]
+    },
+    {
+      "id": "GS-008.B1",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "역할별 판단 목적을 구분하고 핵심 조회 결과와 의미를 1~2문장 중심으로 전달한다. 내부 필드명·불필요한 면책 반복·이미 있는 정보의 재조회 요구를 줄인다.",
+      "support": [
+        "GS-008:identity",
+        "GS-008:risk",
+        "GS-008:production",
+        "GS-008:part_SP-CNC-CARBIDE-INSERT-ONE",
+        "GS-008:part_SP-CNC-DRIVE-COUPLING-KIT"
+      ]
+    },
+    {
+      "id": "GS-008.B2",
+      "axis": "briefing",
+      "profiles": [
+        "answer_only",
+        "pipeline"
+      ],
+      "eligibility": "applicable",
+      "eligibility_reason": null,
+      "requirement": "계획 생산 영향과 실제 손실을 구분하고 가정 시간·손실 추정치를 유지한다.",
+      "support": [
+        "GS-008:production",
+        "GS-008:quality"
+      ]
+    }
+  ],
+  "priority_expectation": {
+    "visible_input_judgment": "GS-002와 주요 조건이 같은 경고 사례다. 설비 식별자를 구분하되 숫자만으로 두 설비 간 고유 순위를 만들지 않는다.",
+    "upstream_policy": {
+      "level": "high",
+      "reasons": [
+        "risk.status_grade=warning",
+        "asset.criticality=high",
+        "operation_context.production_impact=medium"
+      ],
+      "source_fields": [
+        "risk.status_grade",
+        "asset.criticality",
+        "operation_context.production_impact"
+      ]
+    },
+    "policy_visible_to_model": false,
+    "exact_cross_asset_rank_required": false
+  },
+  "allowed_conclusions": [
+    "GS-002와 주요 조건이 같은 경고 사례다. 설비 식별자를 구분하되 숫자만으로 두 설비 간 고유 순위를 만들지 않는다.",
+    "관련 절차·부품은 후보와 준비 조건으로 설명한다. 제공된 수량/담당자가 없으면 없는 정보라고 한정한다.",
+    "조건부 대안과 보류를 허용한다. 참고 문장과 다른 어순·동의어를 감점하지 않는다."
+  ],
+  "forbidden_conclusions": [
+    "고장 원인 확정·자동 승인·완료 날조",
+    "다른 부품/설비 근거의 잘못된 연결",
+    "미확인→0 또는 없음",
+    "데모 가용값→실재고 수량",
+    "등록 조달 기간→확정 입고일",
+    "부품 대기 기간만으로 점검 연기",
+    "참고 유사 사례→최근 30일 전체 집계"
+  ],
+  "input_conflicts": [
+    "I01: 30일 전체 집계와 참고 사례 혼재"
+  ],
+  "resource_facts": [
+    {
+      "part": "카바이드 절삭 인서트 1개",
+      "availability": "available_from_fixture",
+      "lead_time_days": 1,
+      "replacement_window_minutes": null,
+      "stock_quantity": null,
+      "contact": null
+    },
+    {
+      "part": "주축 구동 커플링 키트",
+      "availability": "available_from_fixture",
+      "lead_time_days": 2,
+      "replacement_window_minutes": 180,
+      "stock_quantity": null,
+      "contact": null
+    }
+  ],
+  "reference_display_label": "시나리오 자료 기준 · 실제 재고/발주 조회 아님",
+  "reference_briefing": {
+    "title": "경고 — 공구 점검 근거와 준비 상태 확인",
+    "summary": "4구역 4셀 CNC 가공기 2는 경고 등급이며 예측 위험도는 82.5%입니다. 공구 마모와 과부하 지표가 위험도를 높이는 방향으로 반영돼, 공구 체결부와 동력 전달부의 점검 근거를 대조할 필요가 있습니다.",
+    "role_summaries": [
+      {
+        "role": "process_engineer",
+        "quote": "공구 매거진·스핀들 공구 체결부는 마모 근거와, 주축 모터·커플링은 과부하 근거와 연결해 점검 범위를 검토하세요. 참고한 유사 사례는 데모 이력이므로 동일한 조치가 이번에도 효과가 있다고 단정할 수 없습니다."
+      },
+      {
+        "role": "maintenance_technician",
+        "quote": "절삭 인서트와 커플링 키트는 시나리오상 가용으로 분류돼 있으며, 등록 조달 기간은 각각 1일과 2일입니다. 공구 계통 점검 절차는 연결돼 있으나 재고 수량과 작업요청·승인 상태는 미확인입니다."
+      },
+      {
+        "role": "process_manager",
+        "quote": "데모 계획에서는 생산 영향이 중간 수준이며, 정지 120분 가정의 손실 추정치는 25개입니다. 이 수치를 실제 손실과 구분하고 현재 작업요청·승인 상태를 확인해 점검 시점과 생산 순서 조정을 검토하세요."
+      }
+    ]
+  },
+  "reference_status": "illustrative_not_unique_answer_human_review_pending"
+}

@@ -74,7 +74,7 @@ class MockJsonProvider:
         editable = payload.get("baseline_editable_fields") or {}
         role_rows = editable.get("role_summaries") or [
             {"role": role, "quote": "검토 필요"}
-            for role in payload.get("output_roles") or ("field_operator", "process_manager")
+            for role in payload.get("output_roles") or ("process_engineer", "maintenance_technician", "process_manager")
         ]
         return {
             "title": editable.get("title") or "설비 검토 요약",
@@ -142,12 +142,13 @@ def raw_input_payload(packet: dict[str, Any], baseline: dict[str, Any]) -> dict[
             "operation_context": packet.get("operation_context_summary"),
             "maintenance_history": packet.get("maintenance_history_summary"),
         },
-        "output_roles": ["field_operator", "process_manager"],
+        "output_roles": ["process_engineer", "maintenance_technician", "process_manager"],
         "baseline_editable_fields": {
             "title": "",
             "summary": "",
             "role_summaries": [
-                {"role": "field_operator", "quote": ""},
+                {"role": "process_engineer", "quote": ""},
+                {"role": "maintenance_technician", "quote": ""},
                 {"role": "process_manager", "quote": ""},
             ],
         },
@@ -161,7 +162,8 @@ def evidence_input_payload(packet: dict[str, Any]) -> dict[str, Any]:
         "title": "",
         "summary": "",
         "role_summaries": [
-            {"role": "field_operator", "label": "", "quote": "", "source_refs": []},
+            {"role": "process_engineer", "label": "", "quote": "", "source_refs": []},
+            {"role": "maintenance_technician", "label": "", "quote": "", "source_refs": []},
             {"role": "process_manager", "label": "", "quote": "", "source_refs": []},
         ],
     }
@@ -344,11 +346,11 @@ def _validate_editable_candidate(candidate: Any) -> list[str]:
         if not isinstance(candidate.get(field), str) or not candidate[field].strip()
     ]
     roles = candidate.get("role_summaries")
-    if not isinstance(roles, list) or len(roles) != 2:
+    if not isinstance(roles, list) or len(roles) != 3:
         errors.append("role_summaries_invalid")
     elif any(
         not isinstance(item, dict)
-        or item.get("role") not in {"field_operator", "process_manager"}
+        or item.get("role") not in {"process_engineer", "maintenance_technician", "process_manager"}
         or not isinstance(item.get("quote"), str)
         or not item["quote"].strip()
         for item in roles

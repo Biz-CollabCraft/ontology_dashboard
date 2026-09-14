@@ -1,0 +1,37 @@
+"""Bounded review checks for the three frozen owner-record cases, not a semantic judge."""
+import json,re
+from pathlib import Path
+
+def inspect(case, candidate, baseline):
+    roles={r['role']:r['quote'] for r in candidate['role_summaries']}
+    prose=' '.join([candidate['summary'],*roles.values()])
+    history=case['prompt_payload']['summary_context']['maintenance_history']
+    issues=[];anchors=[]
+    for key in ('inspection_results','work_orders'):
+        for record in history.get(key,[]):
+            context=record.get('record_context') or {}
+            if context.get('temporal_relation')!='at_or_before_basis' or context.get('asset_scope')=='mismatch' or context.get('event_relation')=='other_event':
+                continue
+            rid=record['record_id'];anchors.append(rid)
+            if rid not in prose:issues.append({'code':'record_id_missing','expected':rid})
+            provenance=record.get('owner_record_provenance') or {}
+            timestamp=provenance.get('approved_at') or record.get('recorded_at')
+            if timestamp:
+                hm=timestamp[11:16];hour,minute=hm.split(':')
+                if hm not in prose and not re.search(rf'{int(hour)}시\s*{int(minute)}분',prose):
+                    issues.append({'code':'record_time_missing','record_id':rid,'expected':timestamp})
+            if key=='inspection_results':
+                # These anchors belong only to this frozen case; alternate wording needs human review.
+                if '편심' not in prose:issues.append({'code':'finding_anchor_missing','record_id':rid})
+                if record.get('outcome')=='maintenance_recommended' and not any(t in prose for t in ('정비 권고','정비 권장')):
+                    issues.append({'code':'outcome_needs_review','expected':'maintenance_recommended'})
+    if '승인 여부는 검토 중' in prose:
+        issues.append({'code':'unsupported_review_in_progress','note':'No record establishes an approval review in progress.'})
+    operation=case['prompt_payload']['summary_context'].get('operation_context') or {}
+    minutes=operation.get('estimated_downtime_minutes')
+    if minutes is not None and str(minutes) not in roles.get('process_manager',''):
+        issues.append({'code':'conditional_duration_missing','expected':minutes})
+    if any(t in prose for t in ('데모 가정','시나리오상','합성 데이터')):issues.append({'code':'provenance_disclaimer_in_prose'})
+    same=candidate['summary']==baseline['summary'] and all(r['quote']==next(b['quote'] for b in baseline['role_summaries'] if b['role']==r['role']) for r in candidate['role_summaries'])
+    if same:issues.append({'code':'all_prose_copied'})
+    return {'all_prose_copied':same,'issues':issues,'record_anchors':anchors,'human_review_required':True,'scope':'literal anchors and explicit problematic phrases only; not comprehensive semantic validation'}

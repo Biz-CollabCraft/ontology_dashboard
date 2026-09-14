@@ -95,14 +95,37 @@ async function getEventActivity(eventId: string): Promise<unknown> {
   return payload;
 }
 
-async function getAssetDetailViewModel(
+/** Check the backend/database connection before requesting observation history.
+ *  This intentionally has no client-side timeout: the readiness response is the
+ *  connection boundary, while the detail request reports data availability.
+ */
+async function ensureObservationConnection(): Promise<void> {
+  const response = await fetch(`${API_BASE}/health/ready`, {
+    credentials: "include",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const dependency = payload?.dependency ? ` · ${payload.dependency}` : "";
+    throw new ApiError(
+      response.status,
+      "observation_connection_unavailable",
+      `관측 연결을 확인하지 못했습니다${dependency}. 잠시 후 다시 시도해 주세요.`,
+    );
+  }
+}
+
+export async function loadOperationsAssetDetail(
   projectId: string,
   workspaceId: string,
   assetId: string,
   eventId: string,
   datasetVersionId: string,
   historyWindow: OperationsSensorWindowId,
+  checkObservationConnection = true,
 ): Promise<AssetDetailViewModel> {
+  if (checkObservationConnection) await ensureObservationConnection();
   const backendHistoryWindow = historyWindow === "30d"
     ? "30d"
     : historyWindow === "7d"
@@ -254,6 +277,7 @@ export async function loadOperationsBootstrap(
   projectId: string,
   requestedWorkspaceId?: string | null,
   selectedEventId?: string | null,
+  options: { allowLocalUiSamples?: boolean } = {},
 ): Promise<OperationsBootstrapModel> {
   const [project, workspaces] = await Promise.all([
     getProject(projectId),
@@ -300,7 +324,7 @@ export async function loadOperationsBootstrap(
   }
   let events = promoteRuntimeProductResultsToEvents(results, sortRisk(rawEvents.map(adaptEvent)));
   let assets = mergeAssets(results, events);
-  if (project.id === "manufacturing-demo-project" && resultState.status === "rejected") {
+  if (options.allowLocalUiSamples !== false && project.id === "manufacturing-demo-project" && resultState.status === "rejected") {
     const sampled = withLocalUiSamples(assets, events);
     assets = sampled.assets;
     events = sampled.events;
@@ -329,14 +353,14 @@ export async function loadOperationsBootstrap(
     ?? events[0]?.datasetVersionId
     ?? "dsv-canonical-v3-1";
   const sourceVersion = dataSource?.source_version ?? context?.source_version ?? "Canonical V3.1";
-  const isHanbitReferenceProject = project.id === "manufacturing-demo-project";
+  const isCollabCraftReferenceProject = project.id === "manufacturing-demo-project";
 
   return {
     context: {
       projectId: project.id,
-      projectName: isHanbitReferenceProject ? "Smart Factory A" : project.display_name,
+      projectName: isCollabCraftReferenceProject ? "Smart Factory A" : project.display_name,
       workspaceId: workspace.id,
-      workspaceName: isHanbitReferenceProject ? "Production Reliability" : workspace.display_name,
+      workspaceName: isCollabCraftReferenceProject ? "Production Reliability" : workspace.display_name,
       datasetVersionId,
       datasetLabel: dataSource?.dataset_name
         ? `${dataSource.dataset_name} · ${sourceVersion}`
@@ -359,6 +383,29 @@ export async function loadOperationsBootstrap(
     lineRisk,
     selectionRestoreError,
   };
+}
+
+export async function loadEngineerFilesystemOverview(
+  projectId: string,
+  workspaceId: string,
+): Promise<OperationsBootstrapModel> {
+  const response = await fetch(
+    `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/predictive-maintenance/filesystem-overview`,
+    {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      payload?.error?.code ?? "filesystem_overview_failed",
+      payload?.error?.message ?? payload?.detail ?? `파일 관측 요청 실패: ${response.status}`,
+    );
+  }
+  return payload as OperationsBootstrapModel;
 }
 
 async function loadLegacyReport(eventId: string, role: Role, reportType?: ReportType): Promise<{ report: Report | null; warning: string | null }> {
@@ -410,7 +457,7 @@ export async function loadOperationsEventDetail(input: {
   const activityPromise: Promise<unknown | null> = usesRuntimeProductResult
     ? Promise.resolve(null)
     : getEventActivity(input.event.eventId);
-  const assetDetailPromise = getAssetDetailViewModel(
+  const assetDetailPromise = loadOperationsAssetDetail(
     input.projectId,
     input.workspaceId,
     input.event.assetId,
@@ -457,6 +504,30 @@ export async function loadOperationsEventDetail(input: {
   return assetDetailState.status === "fulfilled"
     ? applyAssetDetailViewModel(detail, assetDetailState.value)
     : detail;
+}
+
+/** Decision workspace reads the governed detail directly; no report generation. */
+export async function loadDecisionWorkspaceDetail(input: {
+  projectId: string;
+  workspaceId: string;
+  event: OperationsEvent;
+}): Promise<OperationsEventDetailModel> {
+  const view = await loadOperationsAssetDetail(
+    input.projectId, input.workspaceId, input.event.assetId,
+    input.event.eventId, input.event.datasetVersionId, "24h", false,
+  );
+  const basis = view.snapshot_basis;
+  if (basis.event_id !== input.event.eventId || basis.asset_id !== input.event.assetId
+      || view.asset.asset_id !== input.event.assetId || !basis.artifact_id
+      || basis.dataset_version !== input.event.datasetVersionId) {
+    throw new Error("선택한 이상 건과 근거가 일치하지 않습니다. 다시 조회해 주세요.");
+  }
+  if (!basis.evidence_payload_reference) {
+    throw new Error("원본 판단 근거가 없어 상세 검토를 진행할 수 없습니다. 근거 데이터 연결을 확인해 주세요.");
+  }
+  return applyAssetDetailViewModel(composeEventDetail({
+    event: { ...input.event, failureProbability: view.risk.current, status: view.data_status.is_data_quality_hold ? "data_quality_hold" : view.risk.status_grade ?? "data_quality_hold", observedAt: basis.observed_at }, evidence: null, report: null, activity: null, warnings: [],
+  }), view);
 }
 
 export async function loadOperationsReportVariant(input: {

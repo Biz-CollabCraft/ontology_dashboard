@@ -1,0 +1,55 @@
+def agent_review_summary(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        dataset_version_id: str | None = None,
+        history_window: str = "24h",
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Return a validated read-only review summary with deterministic fallback."""
+
+        packet = self.agent_review_packet(
+            asset_id,
+            project_id,
+            dataset_version_id=dataset_version_id,
+            history_window=history_window,
+        )
+        provider = self.agent_review_summary_provider
+        if provider is None:
+            summary, errors = validated_agent_review_summary(packet=packet)
+            return summary, {
+                "provider": "none",
+                "fallback": True,
+                "reason": "agent_review_summary_provider_disabled",
+                "validation_errors": errors,
+            }
+
+        try:
+            candidate = provider.generate(packet)
+            candidate_errors = validate_agent_review_summary_contract(candidate, packet=packet)
+            if candidate.get("mode") != "llm":
+                candidate_errors.append("mode_invalid_for_candidate")
+            if not candidate_errors:
+                return candidate, {
+                    "provider": provider.name,
+                    "fallback": False,
+                    "reason": None,
+                    "validation_errors": [],
+                }
+            summary, errors = validated_agent_review_summary(packet=packet)
+            return summary, {
+                "provider": provider.name,
+                "fallback": True,
+                "reason": "summary_validation_failed",
+                "validation_errors": candidate_errors,
+                "fallback_validation_errors": errors,
+            }
+        except Exception as exc:
+            summary, errors = validated_agent_review_summary(packet=packet)
+            return summary, {
+                "provider": getattr(provider, "name", "unknown"),
+                "fallback": True,
+                "reason": type(exc).__name__,
+                "message": str(exc),
+                "validation_errors": errors,
+            }

@@ -1,0 +1,164 @@
+{
+  "gold_answer_set_id": "agent-review-decision-grounding-v4",
+  "status": "authored_review_ready_partial_input_coverage",
+  "human_review": "not_measured",
+  "purpose": "근거 → 관계 → 우선순위 → 판단 → 역할별 브리핑을 각각 평가한다.",
+  "source_file_sha256": "64542521b01b1b6628b6a54b1ae1e4510f6c5b9ac39f4ca47e149518a5ac4228",
+  "base_reference_sha256": "9663665015e581fe5a57e3e3e45921451ff78d8066ed2d86c2c52a63c038e779",
+  "source_resolution": "위 해시와 일치하는 기존 frozen-inputs-v2.json을 사용한다. outputs에서는 ../briefing-gold-v3, 프로젝트에서는 ../natural_briefing_v3에 보존돼 있다.",
+  "provenance": {
+    "development_cases_seen": true,
+    "candidate_outputs_seen": true,
+    "independent_holdout": false,
+    "real_inventory_validation": false,
+    "prior_scores_changed": false
+  },
+  "profiles": {
+    "answer_only": {
+      "input": "기존 prompt_payload 그대로",
+      "rule": "모델에게 실제 제공된 필드만 근거로 판단한다. packet_only 근거 누락은 모델 감점 금지. 최종 문장과 인용 가능한 근거만 평가하며 내부 사고과정 제출은 요구하지 않는다."
+    },
+    "pipeline": {
+      "input": "원본 패킷·조회 기록·실제 전달 입력",
+      "rule": "조회 호출 수가 아니라 필요한 데이터가 올바른 범위·시각·관계로 전달됐는지 검사한다. 조회 로그가 없으면 조회 품질은 not_measured. fixture lookup 성공을 외부 재고 조회 성공으로 바꾸지 않는다."
+    }
+  },
+  "axes": {
+    "evidence": "필수 근거의 사용, 출처·기준 시각·충돌·누락 처리. 이미 제공된 정보를 사용자에게 다시 조회하라고 떠넘기지 않는다.",
+    "mapping": "같은 설비의 요인→점검 후보→위치→절차→부품·관련 이력을 연결한다. 후보를 확정 고장/교체 대상으로 승격하지 않는다.",
+    "priority": "위험도·중요도·생산 영향을 구분하고 가용 자원과 요청 상태는 실행 가능 일정에 반영한다. 위험 검토 긴급성과 부품 조달 대기를 혼동하지 않는다.",
+    "decision": "지원되는 결론과 조건부 대안·보류를 구분한다. 부품·작업 상태가 불명확하면 그 범위만 보류한다.",
+    "briefing": "공통 요약은 현재 상태와 판단 요지, 엔지니어는 근거와 점검 범위, 정비는 조회된 준비 정보와 작업 상태, 관리자는 영향과 일정 판단을 설명한다."
+  },
+  "item_scale": {
+    "2": "필수 의미·관계·조건을 정확히 충족",
+    "1": "주요 의미는 맞으나 일부 누락 또는 모호함",
+    "0": "필수 내용 누락 또는 잘못된 의미",
+    "blocked_input": "입력 누락/충돌로 판정 불가능; 후보 감점으로 처리하지 않음",
+    "not_measured": "필요한 후보 출력/조회 기록/검토가 없음"
+  },
+  "aggregation": {
+    "axis_score": "프로필별로 applicable이며 실제 검토된 항목의 점수 합 / (2 × 검토 항목 수). 검토 항목이 0이면 null.",
+    "coverage": "축별 전체 대상 항목 수, 검토 수, blocked_input 수, not_measured 수를 함께 보고한다. 일부만 검토하고 전체 점수로 발표하지 않는다.",
+    "critical_errors": "근거 없는 원인 확정·잘못된 설비/부품 연결·요인 방향 반전·미확인을 0/없음으로 변환·승인/실행/완료 날조·기준 이후 기록 소급은 별도 fail. 문체 점수로 상쇄하지 않는다.",
+    "selection": "축별 결과를 분리 보고한다. 종합 가중치·모델 합격선·전체 순위는 이 버전에서 임의로 정하지 않는다."
+  },
+  "priority_rules": [
+    "데이터 품질 보류는 데이터 보강이 먼저다. 위험 등급이나 생산 손실을 채워 넣지 않는다.",
+    "critical은 우선 검토 대상으로 다루되 운영 중단·자동 승인까지 단정하지 않는다.",
+    "낮은 생산 영향이 높은 설비 위험도를 낮추지는 않는다. 높은 위험도만으로 생산 손실량을 늘리지 않는다.",
+    "부품 조달 기간은 조건부 교체 일정에 영향을 준다. 그것만으로 필요한 점검을 같은 기간 미루지 않는다.",
+    "여러 warning 사례 간 정확한 순위·날짜는 일정·정책 입력 없이 강제하지 않는다. 근거 있는 동순위와 조건부 대안을 허용한다."
+  ],
+  "display_policy": {
+    "reference_badge": "시나리오 자료 기준 · 실제 재고/발주 조회 아님",
+    "rule": "아래 참고 브리핑은 이 출처 표시와 함께 읽는다. 문장만 별도 내보내면 출처 한정을 문장에 포함한다. 현재 제품 UI에 표시가 구현됐다는 뜻은 아니다.",
+    "resource_rule": "가용 플래그는 설비 단위 시나리오 값이다. 수량이나 실재고를 뜻하지 않는다. 조달 일수는 등록된 계획값이며 확정 납기가 아니다."
+  },
+  "input_repair_requirements": [
+    {
+      "id": "R1",
+      "requirement": "참고 유사 사례와 최근 30일 전체 집계를 분리한다.",
+      "affected": "GS-001~006,008"
+    },
+    {
+      "id": "R2",
+      "requirement": "GS-004를 시점 충돌 검사로 명시하거나 새 버전에서 기준 시각을 정합화한다.",
+      "affected": "GS-004"
+    },
+    {
+      "id": "R3",
+      "requirement": "hold의 날짜 요약 잔존과 허용 이력 출처를 정리한다.",
+      "affected": "GS-007"
+    },
+    {
+      "id": "R4",
+      "requirement": "설비 중요도·정책 우선순위·예측 기간을 실제 모델 입력으로 전달할 계약을 정의한다.",
+      "affected": "non_hold"
+    },
+    {
+      "id": "R5",
+      "requirement": "부품별 재고/예약 수량, 조회 시각, 가용 여부, 등록 조달 기간과 확정 납기, 담당자·연락 경로를 명시하는 새 시나리오를 추가한다.",
+      "affected": "resource_coverage"
+    }
+  ],
+  "review_procedure": "모델명/비용을 가리고 원문과 전달 입력을 함께 검토한다. 항목마다 후보 문장 인용·지원 근거·판정 이유를 기록한다. LLM 검토와 사람 검토는 구분하고 불일치 조정을 기록한다.",
+  "cases": [
+    {
+      "case_id": "GS-001",
+      "file": "GS-001.json"
+    },
+    {
+      "case_id": "GS-002",
+      "file": "GS-002.json"
+    },
+    {
+      "case_id": "GS-003",
+      "file": "GS-003.json"
+    },
+    {
+      "case_id": "GS-004",
+      "file": "GS-004.json"
+    },
+    {
+      "case_id": "GS-005",
+      "file": "GS-005.json"
+    },
+    {
+      "case_id": "GS-006",
+      "file": "GS-006.json"
+    },
+    {
+      "case_id": "GS-007",
+      "file": "GS-007.json"
+    },
+    {
+      "case_id": "GS-008",
+      "file": "GS-008.json"
+    }
+  ],
+  "calibration_examples": [
+    {
+      "case_id": "GS-004",
+      "candidate": "커플링 조달이 2일 걸리므로 점검도 이틀 뒤에 하면 됩니다.",
+      "axis": "priority",
+      "expected": "0",
+      "reason": "부품 확보와 점검 긴급성을 같은 일정으로 단정한다."
+    },
+    {
+      "case_id": "GS-003",
+      "candidate": "토크 상승이 위험을 높여 커플링 교체가 확정됐습니다.",
+      "axis": "mapping",
+      "expected": "critical_error",
+      "reason": "토크는 risk_down이고 점검 후보를 교체 확정으로 승격했다."
+    },
+    {
+      "case_id": "GS-004",
+      "candidate": "커플링 조달 계획값은 2일입니다. 점검은 우선 검토하고, 교체가 필요하면 부품 확보 시점을 일정에 반영합니다.",
+      "axis": "priority",
+      "expected": "2_for_local_criterion_not_full_case_pass",
+      "reason": "점검 검토와 조건부 교체 일정을 분리한다. 출처 표시를 함께 읽는 예시다."
+    },
+    {
+      "case_id": "GS-005",
+      "candidate": "생산 영향이 낮으므로 77.2% 위험은 무시해도 됩니다.",
+      "axis": "priority",
+      "expected": "0",
+      "reason": "생산 영향으로 설비 위험 판단을 없앤다."
+    },
+    {
+      "case_id": "GS-002",
+      "candidate": "설비 중요도를 언급하지 않았다.",
+      "axis": "priority",
+      "expected": "blocked_input_for_P2",
+      "reason": "당시 모델 입력에 중요도가 없으므로 숨은 기준으로 감점하지 않는다."
+    },
+    {
+      "case_id": "GS-007",
+      "candidate": "손실은 0개이고 커플링 재고는 없습니다.",
+      "axis": "evidence",
+      "expected": "critical_error",
+      "reason": "두 항목 모두 미확인을 확정 사실로 바꿨다."
+    }
+  ]
+}

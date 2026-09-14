@@ -20,6 +20,28 @@ class RelationshipState(StrEnum):
     CONFLICTING = "conflicting"
 
 
+class DecisionPressure(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    UNKNOWN = "unknown"
+
+
+class MaintenanceWindowSuitability(StrEnum):
+    SUITABLE = "suitable"
+    CONDITIONAL = "conditional"
+    UNSUITABLE = "unsuitable"
+    UNKNOWN = "unknown"
+
+
+class PartReservationState(StrEnum):
+    AVAILABLE = "available"
+    PARTIALLY_RESERVED = "partially_reserved"
+    FULLY_RESERVED = "fully_reserved"
+    UNAVAILABLE = "unavailable"
+    UNKNOWN = "unknown"
+
+
 class ProductionOrder(FrozenModel):
     order_id: str = Field(min_length=1, max_length=240)
     product_id: str = Field(min_length=1, max_length=240)
@@ -84,6 +106,8 @@ class ProductionDecisionContext(FrozenModel):
     production_orders: tuple[ProductionOrder, ...]
     wip: tuple[WipRecord, ...]
     alternative_resources: tuple[AlternativeResourceCapacity, ...]
+    due_pressure: DecisionPressure = DecisionPressure.UNKNOWN
+    schedule_slack_minutes: int | None = Field(default=None)
     limitations: tuple[str, ...] = ()
 
     @model_validator(mode="after")
@@ -120,6 +144,8 @@ class MaintenanceWindow(FrozenModel):
     expected_duration_minutes: int = Field(gt=0)
     approval_required: bool
     active_work_order_conflict: bool
+    suitability: MaintenanceWindowSuitability = MaintenanceWindowSuitability.UNKNOWN
+    conflict_reason: str | None = Field(default=None, max_length=500)
     relationship_state: RelationshipState
     source_refs: tuple[str, ...] = Field(min_length=1)
 
@@ -129,6 +155,29 @@ class MaintenanceWindow(FrozenModel):
         _require_aware(self.available_to, "available_to")
         if self.available_from >= self.available_to:
             raise ValueError("maintenance available_from must be before available_to")
+        if self.active_work_order_conflict and self.suitability is MaintenanceWindowSuitability.SUITABLE:
+            raise ValueError("conflicting maintenance window cannot be marked suitable")
+        if self.suitability is MaintenanceWindowSuitability.UNSUITABLE and not self.conflict_reason:
+            raise ValueError("unsuitable maintenance window requires conflict_reason")
+        return self
+
+
+class ConcurrentWorkCheck(FrozenModel):
+    check_id: str = Field(min_length=1, max_length=240)
+    asset_id: str = Field(min_length=1, max_length=240)
+    scope: str = Field(min_length=1, max_length=120)
+    check_type: str = Field(min_length=1, max_length=120)
+    checked_at: datetime
+    status: str = Field(min_length=1, max_length=80)
+    overlapping_work_order_ids: tuple[str, ...] = ()
+    planned_overlap_work_order_ids: tuple[str, ...] = ()
+    prohibited_by_sop: bool
+    relationship_state: RelationshipState
+    source_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_checked_at(self) -> ConcurrentWorkCheck:
+        _require_aware(self.checked_at, "checked_at")
         return self
 
 
@@ -169,6 +218,7 @@ class PartInventorySnapshot(FrozenModel):
     on_hand_quantity: int = Field(ge=0)
     reserved_quantity: int = Field(ge=0)
     available_quantity: int = Field(ge=0)
+    reservation_state: PartReservationState = PartReservationState.UNKNOWN
     expected_replenishment_at: datetime | None = None
     inventory_location_ref: str | None = Field(default=None, max_length=240)
     relationship_state: RelationshipState
@@ -180,6 +230,14 @@ class PartInventorySnapshot(FrozenModel):
             raise ValueError("reserved quantity must not exceed on-hand quantity")
         if self.available_quantity != self.on_hand_quantity - self.reserved_quantity:
             raise ValueError("available quantity must equal on-hand minus reserved")
+        if self.reservation_state is PartReservationState.AVAILABLE and self.available_quantity <= 0:
+            raise ValueError("available reservation_state requires positive available_quantity")
+        if self.reservation_state is PartReservationState.FULLY_RESERVED and not (
+            self.on_hand_quantity > 0 and self.reserved_quantity == self.on_hand_quantity
+        ):
+            raise ValueError("fully_reserved requires all on-hand inventory to be reserved")
+        if self.reservation_state is PartReservationState.UNAVAILABLE and self.available_quantity != 0:
+            raise ValueError("unavailable reservation_state requires zero available_quantity")
         if self.expected_replenishment_at is not None:
             _require_aware(
                 self.expected_replenishment_at,
@@ -212,9 +270,12 @@ class MaintenanceReadinessContext(FrozenModel):
     action_code: str = Field(min_length=1, max_length=120)
     required_skill_codes: tuple[str, ...] = Field(min_length=1)
     maintenance_windows: tuple[MaintenanceWindow, ...]
+    concurrent_work_checks: tuple[ConcurrentWorkCheck, ...] = ()
     part_requirements: tuple[PartRequirement, ...]
     inventory_snapshots: tuple[PartInventorySnapshot, ...]
     technician_candidates: tuple[TechnicianReadiness, ...]
+    blocking_reasons: tuple[str, ...] = ()
+    recommendation_blockers: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
 
     @model_validator(mode="after")
@@ -238,6 +299,10 @@ class MaintenanceReadinessContext(FrozenModel):
                 )
         if any(window.asset_id != self.asset_id for window in self.maintenance_windows):
             raise ValueError("maintenance window asset mismatch")
+        if any(check.asset_id != self.asset_id for check in self.concurrent_work_checks):
+            raise ValueError("concurrent work check asset mismatch")
+        if any(not reason.strip() for reason in (*self.blocking_reasons, *self.recommendation_blockers)):
+            raise ValueError("blocking_reasons must not contain empty values")
         return self
 
 

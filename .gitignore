@@ -418,3 +418,11 @@ systems/frontend/test-results/
 # Generated evaluation outputs
 tests/eval/results/*.json
 tests/eval/runtime/
+# Keep evaluation conclusions in versioned Markdown; raw proofs are regenerated locally/CI.
+docs/eval/**/*.json
+docs/eval/**/*.png
+docs/eval/**/*.txt
+docs/eval/**/*.cjs
+docs/eval/**/*.py
+docs/eval/**/artifacts/
+docs/eval/**/screenshots/

@@ -115,10 +115,16 @@ from app.infra.db.role_workflow_repository import RoleWorkflowRepository
 from app.infra.db.operations_audit_repository import AuditRepository
 from app.operations.role_workflow_service import RoleWorkflowService
 from app.operations.agent_review_summary_provider import AgentReviewSummaryProvider
+from app.infra.db.operational_context_repository import OperationalContextRepository
 from app.operations.context_providers import default_agent_review_context_registry
 from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.operations.service import ManufacturingPredictiveMaintenanceService
 from app.operations.operational_decision_support_port import OperationalDecisionSupportService
+from app.operations.decision_session_service import DecisionSessionApplicationService
+from app.operations.decision_support_agent import ManufacturingDecisionAgent
+from app.operations.decision_tools import ManufacturingDecisionTools
+from app.operations.decision_llm_planner import StructuredLLMDecisionPlanner
+from app.operations.decision_text_interpreter import StructuredTextEvidenceInterpreter
 
 
 ROOT = project_root()
@@ -230,6 +236,7 @@ def build_manufacturing_service(
         domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
         maintenance_lineage_query=maintenance_lineage_query,
         company_context_query=company_context_repository,
+        operational_context_repository=OperationalContextRepository(str(target)),
         runtime_asset_detail_service=runtime_asset_detail_service,
         workspace_id=MANUFACTURING_WORKSPACE,
     )
@@ -251,11 +258,60 @@ def get_service() -> ManufacturingPredictiveMaintenanceService:
 
 
 @lru_cache(maxsize=1)
+def get_operational_context_repository() -> OperationalContextRepository:
+    target = database_target()
+    migrate(str(target))
+    return OperationalContextRepository(str(target))
+
+
+@lru_cache(maxsize=1)
 def get_operational_decision_support_service() -> OperationalDecisionSupportService:
     target = database_target()
     if is_postgresql(target):
         return PersistedOperationalDecisionSupportService(ROOT, database_url=str(target))
     return PersistedOperationalDecisionSupportService(ROOT, Path(target))
+
+
+@lru_cache(maxsize=1)
+def get_decision_session_service() -> DecisionSessionApplicationService:
+    service = get_service()
+    target = database_target()
+
+    def packet_loader(identity):
+        # Resolve the selected runtime event; never substitute the fixture packet.
+        from app.operations.decision_workflow_context import with_decision_workflow
+
+        packet = service.runtime_agent_review_packet(
+            identity.asset_id, identity.project_id,
+            organization_id=identity.organization_id, workspace_id=identity.workspace_id,
+            dataset_version_id=None, event_id=identity.evidence_snapshot_id,
+        )
+        lineage = get_maintenance_loop_service().event_lineage(
+            organization_id=identity.organization_id, project_id=identity.project_id,
+            workspace_id=identity.workspace_id, event_id=identity.evidence_snapshot_id,
+        )
+        return with_decision_workflow(packet, lineage, identity)
+
+    provider_name = os.getenv("LLM_PROVIDER", "deterministic").strip().lower()
+    planner = None
+    text_interpreter = None
+    if provider_name not in {"", "none", "deterministic", "offline"}:
+        provider = configured_provider()
+        planner = StructuredLLMDecisionPlanner(provider)
+        text_interpreter = StructuredTextEvidenceInterpreter(provider)
+
+    def agent_factory(identity):
+        repository = OperationalContextRepository(str(target)).capture(identity)
+        tools = ManufacturingDecisionTools(
+            packet_loader=packet_loader,
+            operational_ports=repository.ports(),
+        )
+        return ManufacturingDecisionAgent(tools=tools, planner=planner, text_interpreter=text_interpreter)
+
+    return DecisionSessionApplicationService(
+        packet_loader=packet_loader,
+        agent_factory=agent_factory,
+    )
 
 
 def _password_hasher() -> PasswordHasher:
@@ -551,6 +607,12 @@ class _RuntimeThenDemoEvidenceProjection:
         projection = self.runtime.event_evidence_projection(**scope)
         if projection is not None:
             return projection
+        event_id = str(scope.get("event_id") or "")
+        if event_id.startswith("FILE#"):
+            from app.diagnosis.runtime_router import filesystem_event_evidence_projection
+            projection = filesystem_event_evidence_projection(event_id)
+            if projection is not None:
+                return projection
         if app_environment() not in {"development", "demo", "test"}:
             return None
         if (
@@ -558,13 +620,100 @@ class _RuntimeThenDemoEvidenceProjection:
             or scope.get("workspace_id") != MANUFACTURING_WORKSPACE
         ):
             return None
-        event_id = str(scope.get("event_id") or "")
         try:
             if self.demo.project_id_for_event(event_id) != scope.get("project_id"):
                 return None
             return self.demo.event_evidence_projection(event_id)
         except KeyError:
             return None
+
+
+class _FilesystemThenDemoEvidenceProjection:
+    def __init__(self, demo: ManufacturingPredictiveMaintenanceService) -> None:
+        self.demo = demo
+
+    def event_evidence_projection(self, **scope: Any) -> dict[str, Any] | None:
+        event_id = str(scope.get("event_id") or "")
+        if event_id.startswith("FILE#") and scope.get("project_id") == "manufacturing-demo-project" and scope.get("workspace_id") == MANUFACTURING_WORKSPACE:
+            from app.diagnosis.runtime_router import filesystem_event_evidence_projection
+            projection = filesystem_event_evidence_projection(event_id)
+            if projection is not None:
+                return projection
+        try:
+            return self.demo.event_evidence_projection(event_id)
+        except KeyError:
+            return None
+
+
+def _refresh_agent_review_summary_for_workflow_change(
+    *,
+    organization_id: str,
+    project_id: str,
+    workspace_id: str,
+    asset_id: str,
+    event_id: str,
+    dataset_version_id: str | None = None,
+    trigger: str,
+) -> dict[str, Any]:
+    """Materialize the stored AI briefing after a maintenance workflow change."""
+
+    service = get_service()
+    history_window = "24h"
+    if event_id.startswith("FILE#"):
+        from app.operations.filesystem_briefing import filesystem_briefing_packet
+
+        packet = filesystem_briefing_packet(
+            asset_id=asset_id,
+            event_id=event_id,
+            dataset_version_id=dataset_version_id,
+            project_id=project_id,
+            history_window=history_window,
+            service=service,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+        )
+    else:
+        try:
+            packet = service.runtime_agent_review_packet(
+                asset_id,
+                project_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                dataset_version_id=dataset_version_id,
+                event_id=event_id,
+                history_window=history_window,
+            )
+        except (KeyError, RuntimeError):
+            packet = service.agent_review_packet(
+                asset_id,
+                project_id,
+                dataset_version_id=dataset_version_id,
+                history_window=history_window,
+            )
+            basis = packet.get("snapshot_basis") or {}
+            if event_id not in {basis.get("event_id"), basis.get("artifact_id")}:
+                raise
+    summary, trace = service._materialize_agent_review_packet(
+        packet=packet,
+        project_id=project_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+        history_window=history_window,
+        trigger=trigger,
+        engine="simple",
+        generation_policy="always",
+    )
+    materialization = trace.get("materialization") or {}
+    workflow_run = trace.get("workflow_run") or {}
+    return {
+        "status": "ready" if summary and not trace.get("fallback") else "fallback",
+        "trigger": trigger,
+        "summary_id": materialization.get("summary_id"),
+        "summary_key": materialization.get("summary_key"),
+        "workflow_run_id": workflow_run.get("workflow_run_id"),
+        "fallback": bool(trace.get("fallback")),
+        "reason": trace.get("reason"),
+    }
 
 
 @lru_cache(maxsize=1)
@@ -580,19 +729,27 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
             project_context=context,
             connection_factory=postgres_repository_connection,
         )
+        diagnosis_runtime = get_predictive_maintenance_runtime_service()
+        event_evidence_query = _RuntimeThenDemoEvidenceProjection(
+            diagnosis_runtime,
+            get_service(),
+        )
+        replay_session_query = diagnosis_runtime
     else:
         repository = MaintenanceRepository(
             target,
             project_context=RuntimeProjectContextResolver(target),
         )
-    diagnosis_runtime = get_predictive_maintenance_runtime_service()
+        # The demo server intentionally uses the local SQLite/file contract.
+        # Do not initialize the PostgreSQL-only live runtime merely to list or
+        # advance inspection work orders. The manufacturing service already
+        # exposes the same evidence projection boundary for this scope.
+        event_evidence_query = _FilesystemThenDemoEvidenceProjection(get_service())
+        replay_session_query = None
     return MaintenanceLoopService(
         repository,
-        event_evidence_query=_RuntimeThenDemoEvidenceProjection(
-            diagnosis_runtime,
-            get_service(),
-        ),
-        replay_session_query=diagnosis_runtime,
+        event_evidence_query=event_evidence_query,
+        replay_session_query=replay_session_query,
         cost_basis_provider=JsonMaintenanceCostBasisProvider(
             ROOT
             / "data"
@@ -605,6 +762,7 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
             / "maintenance_cost"
             / "cooling-system-restore-cost-basis-v1.json",
         ),
+        agent_review_summary_refresher=_refresh_agent_review_summary_for_workflow_change,
     )
 
 

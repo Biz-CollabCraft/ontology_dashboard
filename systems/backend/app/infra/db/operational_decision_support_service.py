@@ -17,11 +17,6 @@ from app.operations.operational_decision_support_port import (
     DecisionSupportMaterializationInProgress,
     DecisionSupportTrace,
 )
-from app.operations.operational_context_ports import (
-    FixtureMaintenanceReadinessContextReadPort,
-    FixtureProductionDecisionContextReadPort,
-    FixtureQualityDeliveryContextReadPort,
-)
 from app.operations.operational_decision_agent import (
     BoundedOperationalDecisionAgent,
     OperationalAgentIntent,
@@ -37,7 +32,6 @@ from app.operations.operational_decision_materialization import (
     materialize_operational_brief,
 )
 from app.operations.operational_impact_simulation import (
-    ImpactOption,
     ImpactSimulationAssumptions,
 )
 
@@ -58,6 +52,8 @@ class PersistedOperationalDecisionSupportService:
     def __post_init__(self) -> None:
         if self.database_url is not None or self.database_path is None:
             return
+        from app.infra.db.migrations import migrate
+        migrate(str(self.database_path))
         with sqlite3.connect(self.database_path) as connection:
             connection.executescript(
                 """
@@ -191,6 +187,8 @@ class PersistedOperationalDecisionSupportService:
                 retrieved_at=identity.decision_as_of,
                 validated_at=identity.decision_as_of,
             )
+            if key != self._cache_key(identity=identity, actor_role=actor_role):
+                raise RuntimeError("operational_context_changed_during_materialization")
             brief = compose_operational_decision_brief(request=request, result=result)
             snapshot = materialize_operational_brief(
                 request=request,
@@ -370,8 +368,9 @@ class PersistedOperationalDecisionSupportService:
                 else:
                     stale_recovered = False
                 run["stale_recovered"] = stale_recovered
-                self._runs.append(run)
-                self._active_runs[key] = run
+                reserved = dict(run)
+                self._runs.append(reserved)
+                self._active_runs[key] = reserved
                 return stale_recovered
 
         with sqlite3.connect(self.database_path) as connection:
@@ -454,6 +453,7 @@ class PersistedOperationalDecisionSupportService:
                 organization_id=str(run["organization_id"]),
                 project_id=str(run["project_id"]),
             ) as connection:
+                self._update_run(connection, run)
                 connection.execute(
                     """
                     INSERT INTO operational_decision_briefs (
@@ -474,14 +474,18 @@ class PersistedOperationalDecisionSupportService:
                         snapshot.stored_at,
                     ),
                 )
-                self._update_run(connection, run)
             return
         if self.database_path is None:
             with self._lock:
+                active = self._active_runs.get(key)
+                if active is None or active['workflow_run_id'] != run['workflow_run_id']:
+                    raise RuntimeError('operational_decision_lease_lost')
+                active.update(run)
                 self._snapshots[key] = snapshot
                 self._active_runs.pop(key, None)
             return
         with sqlite3.connect(self.database_path) as connection:
+            self._update_run(connection, run)
             connection.execute(
                 """
                 INSERT OR REPLACE INTO operational_decision_briefs (
@@ -490,7 +494,6 @@ class PersistedOperationalDecisionSupportService:
                 """,
                 (key, snapshot.model_dump_json(), snapshot.stored_at.isoformat()),
             )
-            self._update_run(connection, run)
 
     def _finish_run(self, run: dict[str, Any]) -> None:
         if self.database_url is not None:
@@ -498,14 +501,18 @@ class PersistedOperationalDecisionSupportService:
                 organization_id=str(run["organization_id"]),
                 project_id=str(run["project_id"]),
             ) as connection:
-                self._update_run(connection, run)
+                self._update_run(connection, run, require_owner=False)
             return
         if self.database_path is None:
             with self._lock:
-                self._active_runs.pop(str(run["cache_key"]), None)
+                key = str(run['cache_key'])
+                active = self._active_runs.get(key)
+                if active is not None and active['workflow_run_id'] == run['workflow_run_id']:
+                    active.update(run)
+                    self._active_runs.pop(key, None)
             return
         with sqlite3.connect(self.database_path) as connection:
-            self._update_run(connection, run)
+            self._update_run(connection, run, require_owner=False)
 
     @staticmethod
     def _expire_run_payload(run: dict[str, Any], *, now: datetime) -> None:
@@ -575,12 +582,14 @@ class PersistedOperationalDecisionSupportService:
     def _update_run(
         connection: sqlite3.Connection,
         run: dict[str, Any],
+        *,
+        require_owner: bool = True,
     ) -> None:
         cursor = connection.execute(
             """
             UPDATE operational_decision_workflow_runs
             SET status = ?, reason = ?, run_json = ?, completed_at = ?, updated_at = ?
-            WHERE workflow_run_id = ?
+            WHERE workflow_run_id = ? AND status = 'running' AND cache_key = ?
             """,
             (
                 run["status"],
@@ -589,10 +598,11 @@ class PersistedOperationalDecisionSupportService:
                 run["completed_at"],
                 run["updated_at"],
                 run["workflow_run_id"],
+                run['cache_key'],
             ),
         )
-        if cursor.rowcount != 1:
-            raise RuntimeError("operational_decision_workflow_run_not_found")
+        if cursor.rowcount != 1 and require_owner:
+            raise RuntimeError("operational_decision_lease_lost")
 
     def _postgres_connection(
         self,
@@ -611,60 +621,31 @@ class PersistedOperationalDecisionSupportService:
     def _agent(
         self, identity: OperationalRequestIdentity
     ) -> BoundedOperationalDecisionAgent:
-        fixture_root = self.root / "data" / "fixtures" / "operation_context"
-        production = _load(fixture_root / "operational-decision-context-evidence-aligned-v1.json")
-        maintenance = _load(fixture_root / "maintenance-readiness-context-evidence-aligned-v1.json")
-        quality = _load(fixture_root / "quality-delivery-context-evidence-aligned-v1.json")
-        for context in (production, maintenance, quality):
-            context["scope"]["organization_id"] = identity.organization_id
-            context["scope"]["project_id"] = identity.project_id
-            context["scope"]["workspace_id"] = identity.workspace_id
-        # The public demo path uses the fixture's explicitly satisfiable branch;
-        # blocked/partial variants remain covered by the domain and Agent tests.
-        maintenance["inventory_snapshots"][0]["reserved_quantity"] = 0
-        maintenance["inventory_snapshots"][0]["available_quantity"] = 2
-        for lot in quality["quality_lots"]:
-            lot["quality_state"] = "released"
-            lot["release_required"] = False
-        return BoundedOperationalDecisionAgent(
-            ports={
-                "production": FixtureProductionDecisionContextReadPort(
-                    context=production,
-                    source_ref="fixture:operational-decision-context-evidence-aligned-v1",
-                ),
-                "maintenance_readiness": FixtureMaintenanceReadinessContextReadPort(
-                    context=maintenance,
-                    source_ref="fixture:maintenance-readiness-context-evidence-aligned-v1",
-                ),
-                "quality_delivery": FixtureQualityDeliveryContextReadPort(
-                    context=quality,
-                    source_ref="fixture:quality-delivery-context-evidence-aligned-v1",
-                ),
-            },
-            impact_assumptions=ImpactSimulationAssumptions(
-                policy_version="operational-impact-demo-v1",
-                primary_capacity_units={
-                    ImpactOption.STOP_NOW: 0,
-                    ImpactOption.PLANNED_MAINTENANCE: 120,
-                    ImpactOption.CONTINUE_OPERATION: 200,
-                },
-                alternative_capacity_allowed={
-                    ImpactOption.STOP_NOW: True,
-                    ImpactOption.PLANNED_MAINTENANCE: True,
-                    ImpactOption.CONTINUE_OPERATION: False,
-                },
-                source_refs=("policy:operational-impact-demo-v1",),
-            ),
+        repository = self._context_repository().capture(identity)
+        policy = repository.lookup("impact_policy", identity=identity, retrieved_at=identity.decision_as_of)
+        assumptions = ImpactSimulationAssumptions.model_validate(policy.data) if policy.data else ImpactSimulationAssumptions(
+            policy_version="unavailable-db-policy-v1", primary_capacity_units={},
+            alternative_capacity_allowed={}, source_refs=("unavailable:impact-policy",),
         )
+        return BoundedOperationalDecisionAgent(ports=repository.ports(), impact_assumptions=assumptions)
 
-    @staticmethod
+    def _context_repository(self):
+        from app.infra.db.operational_context_repository import OperationalContextRepository
+        target = self.database_url or self.database_path
+        if target is None:
+            raise RuntimeError("operational context database is not configured")
+        return OperationalContextRepository(target)
+
     def _cache_key(
+        self,
         *,
         identity: OperationalRequestIdentity,
         actor_role: DecisionBriefRole,
     ) -> str:
         return "|".join(
             (
+                "db-context-v3",
+                self._context_repository().version_fingerprint(identity),
                 identity.organization_id,
                 identity.project_id,
                 identity.workspace_id,
@@ -674,7 +655,3 @@ class PersistedOperationalDecisionSupportService:
                 actor_role.value,
             )
         )
-
-
-def _load(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))

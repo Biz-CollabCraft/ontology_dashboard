@@ -382,7 +382,7 @@ function eventAsset(event: OperationsEvent): OperationsAsset {
       : event.assetId.toUpperCase().startsWith("CMP-")
         ? "compressor"
         : "equipment",
-    site: event.assetId.match(/^[A-Z]+-(S\d+)-/)?.[1] ?? "Hanbit Tech Plant",
+    site: event.assetId.match(/^[A-Z]+-(S\d+)-/)?.[1] ?? "CollabCraft Plant",
     line: event.line,
     cell: event.line,
     status: event.status,
@@ -731,6 +731,7 @@ function sensorsFromAssetDetailViewModel(
       value: point.value,
       qualityStatus: point.quality_status,
     })),
+    bands: feature.bands ?? null,
   }));
 }
 
@@ -766,7 +767,8 @@ function evidenceGapsFromAssetDetailViewModel(
 }
 
 function evidenceBasisFromAssetDetailViewModel(
-  item: NonNullable<AssetDetailViewModel["evidence_context"]>["selected_basis"][number]
+  item:
+    | NonNullable<AssetDetailViewModel["evidence_context"]>["selected_basis"][number]
     | NonNullable<AssetDetailViewModel["evidence_context"]>["rejected_basis"][number],
 ): OperationsEvidenceContextBasis {
   return {
@@ -776,6 +778,8 @@ function evidenceBasisFromAssetDetailViewModel(
     sourceVersion: item.source_version,
     domain: item.domain,
     relationPath: item.relation_path,
+    relationPaths: item.relation_paths ?? [],
+    displayFields: item.display_fields ?? [],
     factType: item.fact_type,
     valueSummary: item.value_summary,
     requiredForBoundary: item.required_for_boundary,

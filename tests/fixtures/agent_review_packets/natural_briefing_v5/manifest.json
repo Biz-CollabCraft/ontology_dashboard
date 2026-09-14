@@ -1,0 +1,9 @@
+{
+  "files": {
+    "gold-v5.json": "0eb2f0c58241e852670a632337ec5c1298f88622f518d59d8e09aeba1f764cf8",
+    "briefings.md": "ca9018635e40fafcb7c493916a45eb819d42adb2bafd95fb1983b34653fa0565",
+    "validation.json": "de82628975cd2097423b2a4167bf092ef150b4d3fdb53ba27734728d00d589ca"
+  },
+  "case_count": 9,
+  "gold_answer_set_id": "agent-review-decision-briefing-v5-reader-lines"
+}

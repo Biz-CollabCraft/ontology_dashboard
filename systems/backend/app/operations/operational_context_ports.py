@@ -223,6 +223,8 @@ class FixtureProductionDecisionContextReadPort:
                     "alternative_resources"
                 )
                 or [],
+                "due_pressure": self.context.get("due_pressure") or "unknown",
+                "schedule_slack_minutes": self.context.get("schedule_slack_minutes"),
                 "limitations": self.context.get("limitations") or [],
             }
         )
@@ -275,6 +277,8 @@ class FixtureProductionDecisionContextReadPort:
                     item.model_dump(mode="json")
                     for item in selected_alternatives
                 ],
+                "due_pressure": parsed.due_pressure.value,
+                "schedule_slack_minutes": parsed.schedule_slack_minutes,
             }
             if not selected_orders:
                 limitations = (
@@ -361,6 +365,10 @@ class FixtureMaintenanceReadinessContextReadPort:
                     "maintenance_windows"
                 )
                 or [],
+                "concurrent_work_checks": self.context.get(
+                    "concurrent_work_checks"
+                )
+                or [],
                 "part_requirements": self.context.get("part_requirements")
                 or [],
                 "inventory_snapshots": self.context.get(
@@ -371,6 +379,8 @@ class FixtureMaintenanceReadinessContextReadPort:
                     "technician_candidates"
                 )
                 or [],
+                "blocking_reasons": self.context.get("blocking_reasons") or [],
+                "recommendation_blockers": self.context.get("recommendation_blockers") or [],
                 "limitations": self.context.get("limitations") or [],
             }
         )
@@ -415,6 +425,10 @@ class FixtureMaintenanceReadinessContextReadPort:
                     item.model_dump(mode="json")
                     for item in parsed.maintenance_windows
                 ],
+                "concurrent_work_checks": [
+                    item.model_dump(mode="json")
+                    for item in parsed.concurrent_work_checks
+                ],
                 "part_requirements": [
                     item.model_dump(mode="json")
                     for item in parsed.part_requirements
@@ -427,6 +441,8 @@ class FixtureMaintenanceReadinessContextReadPort:
                     item.model_dump(mode="json")
                     for item in parsed.technician_candidates
                 ],
+                "blocking_reasons": list(parsed.blocking_reasons),
+                "recommendation_blockers": list(parsed.recommendation_blockers),
                 "readiness": _maintenance_readiness(parsed),
                 "execution_records": {
                     "part_reservations": [],
@@ -527,6 +543,11 @@ def _maintenance_readiness(
         not item.active_work_order_conflict
         for item in context.maintenance_windows
     )
+    concurrent_work_ready = all(
+        item.status == "no_active_conflict"
+        and not item.overlapping_work_order_ids
+        for item in context.concurrent_work_checks
+    )
     skill_ready = any(
         set(context.required_skill_codes).issubset(item.skill_codes)
         for item in context.technician_candidates
@@ -534,6 +555,8 @@ def _maintenance_readiness(
     blockers: list[str] = []
     if not window_ready:
         blockers.append("maintenance_window")
+    if not concurrent_work_ready:
+        blockers.append("concurrent_work")
     if part_blockers:
         blockers.append("part_inventory")
     if not skill_ready:
@@ -542,6 +565,7 @@ def _maintenance_readiness(
     return {
         "overall_state": "blocked" if blockers else "ready_for_human_approval",
         "window_ready": window_ready,
+        "concurrent_work_ready": concurrent_work_ready,
         "part_ready": not part_blockers,
         "skill_candidate_ready": skill_ready,
         "blocked_part_requirement_ids": part_blockers,

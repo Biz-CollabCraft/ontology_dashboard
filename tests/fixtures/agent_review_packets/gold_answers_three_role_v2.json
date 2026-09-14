@@ -1,0 +1,200 @@
+{
+  "gold_answer_set_id": "agent-review-summary-three-role-proxy-v2",
+  "purpose": "Pre-registered automatic evidence and role coverage; not human usefulness.",
+  "limits": [
+    "This file scores required operational facts, not full natural-language equivalence.",
+    "Usefulness and Korean quality remain candidate signals until calibrated by human review."
+  ],
+  "global_must_not_claim": [
+    "승인이 완료되었습니다",
+    "수리가 완료되었습니다",
+    "자동으로 실행합니다",
+    "고장이 확정되었습니다"
+  ],
+  "cases": {
+    "GS-001": {
+      "must_mention": [
+        "normal",
+        "11.6%",
+        "확인"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "process_engineer": [
+          "주축 모터",
+          "확인"
+        ],
+        "maintenance_technician": [
+          "주축 모터",
+          "확인"
+        ],
+        "process_manager": [
+          "생산",
+          "검토"
+        ]
+      },
+      "must_not_claim": []
+    },
+    "GS-002": {
+      "must_mention": [
+        "warning",
+        "82.5%",
+        "확인"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "process_engineer": [
+          "공구 매거진",
+          "확인"
+        ],
+        "maintenance_technician": [
+          "공구 매거진",
+          "확인"
+        ],
+        "process_manager": [
+          "생산",
+          "검토"
+        ]
+      },
+      "must_not_claim": []
+    },
+    "GS-003": {
+      "must_mention": [
+        "warning",
+        "60.2%",
+        "확인"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "process_engineer": [
+          "스핀들 냉각 라인",
+          "확인"
+        ],
+        "maintenance_technician": [
+          "스핀들 냉각 라인",
+          "확인"
+        ],
+        "process_manager": [
+          "생산",
+          "검토"
+        ]
+      },
+      "must_not_claim": []
+    },
+    "GS-004": {
+      "must_mention": [
+        "critical",
+        "90.8%",
+        "확인"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "process_engineer": [
+          "주축 모터",
+          "확인"
+        ],
+        "maintenance_technician": [
+          "주축 모터",
+          "확인"
+        ],
+        "process_manager": [
+          "생산",
+          "검토"
+        ]
+      },
+      "must_not_claim": []
+    },
+    "GS-005": {
+      "must_mention": [
+        "warning",
+        "77.2%",
+        "확인"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "process_engineer": [
+          "공구 매거진",
+          "확인"
+        ],
+        "maintenance_technician": [
+          "공구 매거진",
+          "확인"
+        ],
+        "process_manager": [
+          "생산",
+          "검토"
+        ]
+      },
+      "must_not_claim": []
+    },
+    "GS-006": {
+      "must_mention": [
+        "attention",
+        "29.5%",
+        "확인"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "process_engineer": [
+          "공구 매거진",
+          "확인"
+        ],
+        "maintenance_technician": [
+          "공구 매거진",
+          "확인"
+        ],
+        "process_manager": [
+          "생산",
+          "검토"
+        ]
+      },
+      "must_not_claim": []
+    },
+    "GS-007": {
+      "must_mention": [
+        "데이터 품질",
+        "확인"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "process_engineer": [
+          "데이터 품질",
+          "근거"
+        ],
+        "maintenance_technician": [
+          "확인",
+          "기록"
+        ],
+        "process_manager": [
+          "확인",
+          "근거"
+        ]
+      },
+      "must_not_claim": []
+    },
+    "GS-008": {
+      "must_mention": [
+        "warning",
+        "82.5%",
+        "확인"
+      ],
+      "visible_limitations": [],
+      "role_points": {
+        "process_engineer": [
+          "공구 매거진",
+          "확인"
+        ],
+        "maintenance_technician": [
+          "공구 매거진",
+          "확인"
+        ],
+        "process_manager": [
+          "생산",
+          "검토"
+        ]
+      },
+      "must_not_claim": []
+    }
+  },
+  "rubric_status": "frozen_three_role_automatic_proxy"
+}

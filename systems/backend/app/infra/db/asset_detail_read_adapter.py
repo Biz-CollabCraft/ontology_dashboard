@@ -99,6 +99,10 @@ class PostgreSQLAssetDetailReadAdapter:
         payload = row.get("prediction_result_payload")
         if not isinstance(payload, dict):
             return None
+        # Legacy prediction rows have an index summary but no producer evidence.
+        # A payload declaring any artifact field must still pass strict validation.
+        if not any(key in payload for key in ("artifact_id", "artifact_type", "schema_version", "evidence_payload")):
+            return None
         self.validate_artifact(payload)
         for field in ("artifact_id", "asset_id", "asset_type", "schema_version"):
             if str(payload.get(field)) != str(row[field]):
@@ -133,7 +137,7 @@ class PostgreSQLAssetDetailReadAdapter:
             cell_id=None,
             asset_type=None,
             status_grade=None,
-            offset=0,
+            offset=max(0, int(query.get("offset") or 0)),
             limit=max(1, int(query.get("limit") or 20)),
         )
         if source_contract != "result_artifact":

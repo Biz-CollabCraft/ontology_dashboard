@@ -1,0 +1,663 @@
+{
+  "gold_answer_set_id": "agent-review-summary-natural-briefing-v3",
+  "status": "not_measured",
+  "reviewer": null,
+  "reviewer_type": null,
+  "candidate_anonymous_id": null,
+  "candidate_artifact_sha256": null,
+  "gold_file_sha256": "9663665015e581fe5a57e3e3e45921451ff78d8066ed2d86c2c52a63c038e779",
+  "cases": [
+    {
+      "case_id": "GS-001",
+      "hard_gate_findings": null,
+      "fields": {
+        "summary": {
+          "meaning_judgments": [
+            {
+              "criterion": "대상 설비를 정확히 식별한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            },
+            {
+              "criterion": "등급 normal 및 예측 위험도 11.6%; 점검 판단에 연결되는 근거 또는 핵심 한계.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_engineer": {
+          "meaning_judgments": [
+            {
+              "criterion": "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "maintenance_technician": {
+          "meaning_judgments": [
+            {
+              "criterion": "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_manager": {
+          "meaning_judgments": [
+            {
+              "criterion": "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        }
+      }
+    },
+    {
+      "case_id": "GS-002",
+      "hard_gate_findings": null,
+      "fields": {
+        "summary": {
+          "meaning_judgments": [
+            {
+              "criterion": "대상 설비를 정확히 식별한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            },
+            {
+              "criterion": "등급 warning 및 예측 위험도 82.5%; 점검 판단에 연결되는 근거 또는 핵심 한계.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_engineer": {
+          "meaning_judgments": [
+            {
+              "criterion": "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "maintenance_technician": {
+          "meaning_judgments": [
+            {
+              "criterion": "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_manager": {
+          "meaning_judgments": [
+            {
+              "criterion": "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        }
+      }
+    },
+    {
+      "case_id": "GS-003",
+      "hard_gate_findings": null,
+      "fields": {
+        "summary": {
+          "meaning_judgments": [
+            {
+              "criterion": "대상 설비를 정확히 식별한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            },
+            {
+              "criterion": "등급 warning 및 예측 위험도 60.2%; 점검 판단에 연결되는 근거 또는 핵심 한계.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_engineer": {
+          "meaning_judgments": [
+            {
+              "criterion": "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "maintenance_technician": {
+          "meaning_judgments": [
+            {
+              "criterion": "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_manager": {
+          "meaning_judgments": [
+            {
+              "criterion": "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        }
+      }
+    },
+    {
+      "case_id": "GS-004",
+      "hard_gate_findings": null,
+      "fields": {
+        "summary": {
+          "meaning_judgments": [
+            {
+              "criterion": "대상 설비를 정확히 식별한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            },
+            {
+              "criterion": "등급 critical 및 예측 위험도 90.8%; 점검 판단에 연결되는 근거 또는 핵심 한계.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            },
+            {
+              "criterion": "기준 시각 이후 작업요청 기록을 당시 상태와 구분한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_engineer": {
+          "meaning_judgments": [
+            {
+              "criterion": "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "maintenance_technician": {
+          "meaning_judgments": [
+            {
+              "criterion": "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            },
+            {
+              "criterion": "00:05 requested 기록과 00:00 기준 시각의 차이를 설명한다. 승인·완료로 승격하지 않는다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_manager": {
+          "meaning_judgments": [
+            {
+              "criterion": "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        }
+      }
+    },
+    {
+      "case_id": "GS-005",
+      "hard_gate_findings": null,
+      "fields": {
+        "summary": {
+          "meaning_judgments": [
+            {
+              "criterion": "대상 설비를 정확히 식별한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            },
+            {
+              "criterion": "등급 warning 및 예측 위험도 77.2%; 점검 판단에 연결되는 근거 또는 핵심 한계.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_engineer": {
+          "meaning_judgments": [
+            {
+              "criterion": "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "maintenance_technician": {
+          "meaning_judgments": [
+            {
+              "criterion": "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_manager": {
+          "meaning_judgments": [
+            {
+              "criterion": "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        }
+      }
+    },
+    {
+      "case_id": "GS-006",
+      "hard_gate_findings": null,
+      "fields": {
+        "summary": {
+          "meaning_judgments": [
+            {
+              "criterion": "대상 설비를 정확히 식별한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            },
+            {
+              "criterion": "등급 attention 및 예측 위험도 29.5%; 점검 판단에 연결되는 근거 또는 핵심 한계.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_engineer": {
+          "meaning_judgments": [
+            {
+              "criterion": "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "maintenance_technician": {
+          "meaning_judgments": [
+            {
+              "criterion": "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_manager": {
+          "meaning_judgments": [
+            {
+              "criterion": "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        }
+      }
+    },
+    {
+      "case_id": "GS-007",
+      "hard_gate_findings": null,
+      "fields": {
+        "summary": {
+          "meaning_judgments": [
+            {
+              "criterion": "대상 설비를 정확히 식별한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            },
+            {
+              "criterion": "데이터 품질에 따른 판단 보류와 구체적인 보강 대상.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_engineer": {
+          "meaning_judgments": [
+            {
+              "criterion": "관측값·시각 보강을 우선하고 모델 근거·점검 대상이 없음을 유지한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "maintenance_technician": {
+          "meaning_judgments": [
+            {
+              "criterion": "점검 대상·부품 후보를 만들지 않고 데이터 보강 및 작업 상태 확인을 우선한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_manager": {
+          "meaning_judgments": [
+            {
+              "criterion": "생산 영향·손실량은 미확인으로 유지하고 데이터 보강 후 승인·일정 판단을 제안한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        }
+      }
+    },
+    {
+      "case_id": "GS-008",
+      "hard_gate_findings": null,
+      "fields": {
+        "summary": {
+          "meaning_judgments": [
+            {
+              "criterion": "대상 설비를 정확히 식별한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            },
+            {
+              "criterion": "등급 warning 및 예측 위험도 82.5%; 점검 판단에 연결되는 근거 또는 핵심 한계.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_engineer": {
+          "meaning_judgments": [
+            {
+              "criterion": "구체적 점검 위치와 모델 요인을 연결한다. 요인 방향·인과·추세를 과장하지 않는다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "maintenance_technician": {
+          "meaning_judgments": [
+            {
+              "criterion": "준비할 점검 범위 또는 부품 후보를 설명하고 실제 준비 가능 여부와 요청·승인 상태의 미확인을 보존한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        },
+        "process_manager": {
+          "meaning_judgments": [
+            {
+              "criterion": "생산 영향 등급, 가정 정지 시간과 추정 손실량을 계획 가정으로 설명하고 요청·승인 상태 확인을 일정 판단과 연결한다.",
+              "judgment": null,
+              "candidate_quote": null,
+              "reason": null
+            }
+          ],
+          "quality_scores": {
+            "readability": null,
+            "role_relevance": null,
+            "decision_clarity": null,
+            "concision": null
+          },
+          "notes": null
+        }
+      }
+    }
+  ]
+}

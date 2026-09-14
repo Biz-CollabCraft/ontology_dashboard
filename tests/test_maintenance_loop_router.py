@@ -186,48 +186,50 @@ def cost_request(action_code: str = "TOOL_REPLACEMENT") -> dict:
     }
 
 
-def test_manager_can_request_and_decide_but_idempotency_header_is_required() -> None:
-    client, service = client_for("process_manager")
 
-    missing = client.post(f"{BASE}/inspection-work-orders", json=INSPECTION)
-    requested = client.post(
+def test_engineer_requests_inspection_and_technician_decides_recommendation() -> None:
+    engineer_client, engineer_service = client_for("process_engineer")
+    missing = engineer_client.post(f"{BASE}/inspection-work-orders", json=INSPECTION)
+    requested = engineer_client.post(
         f"{BASE}/inspection-work-orders",
         json=INSPECTION,
         headers={"Idempotency-Key": "inspection-request-001"},
     )
-    decided = client.post(
+    technician_client, technician_service = client_for("maintenance_technician")
+    decided = technician_client.post(
         f"{BASE}/recommendations/REC-1/decisions",
-        json={"disposition": "accept", "note": "approved"},
+        json={"disposition": "accept", "note": "maintenance confirmed"},
         headers={"Idempotency-Key": "recommendation-decision-001"},
     )
-
     assert missing.status_code == 422
     assert requested.status_code == 200
     assert decided.status_code == 200
-    assert [name for name, _ in service.calls] == ["request", "decision"]
+    assert [name for name, _ in engineer_service.calls] == ["request"]
+    assert [name for name, _ in technician_service.calls] == ["decision"]
 
 
 def test_inspection_request_rejects_caller_supplied_authorization_lineage() -> None:
-    client, service = client_for("process_manager")
+    client, service = client_for("process_engineer")
     forged = {
         **INSPECTION,
         "operational_decision_kind": "review_shutdown",
         "source_product_result_id": "FORGED-RESULT",
     }
-
     response = client.post(
         f"{BASE}/inspection-work-orders",
         json=forged,
         headers={"Idempotency-Key": "inspection-request-001"},
     )
-
     assert response.status_code == 422
     assert service.calls == []
 
 
-def test_process_engineer_can_record_inspection_result() -> None:
-    client, service = client_for("process_engineer")
-
+def test_maintenance_technician_can_accept_and_record_inspection_result() -> None:
+    client, service = client_for("maintenance_technician")
+    accepted = client.post(
+        f"{BASE}/inspection-work-orders/INSPECTION-WO-1/accept",
+        headers={"Idempotency-Key": "inspection-accept-001"},
+    )
     started = client.post(
         f"{BASE}/inspection-work-orders/INSPECTION-WO-1/start",
         headers={"Idempotency-Key": "inspection-start-001"},
@@ -237,30 +239,27 @@ def test_process_engineer_can_record_inspection_result() -> None:
         json=RESULT,
         headers={"Idempotency-Key": "inspection-complete-001"},
     )
-
+    assert accepted.status_code == 200
     assert started.status_code == 200
     assert completed.status_code == 200
     assert completed.json()["maintenance_event_id"] is None
-    assert [name for name, _ in service.calls] == ["transition", "complete"]
+    assert [name for name, _ in service.calls] == ["transition", "transition", "complete"]
 
 
-def test_maintenance_technician_cannot_take_process_engineer_inspection_action() -> None:
-    client, service = client_for("maintenance_technician")
-
+def test_process_engineer_cannot_take_maintenance_inspection_action() -> None:
+    client, service = client_for("process_engineer")
     response = client.post(
         f"{BASE}/inspection-work-orders/INSPECTION-WO-1/complete",
         json=RESULT,
         headers={"Idempotency-Key": "inspection-complete-001"},
     )
-
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "role_context_denied"
     assert service.calls == []
 
 
-def test_manager_approves_maintenance_but_cannot_execute_it() -> None:
-    client, service = client_for("process_manager")
-
+def test_technician_approves_and_executes_maintenance() -> None:
+    client, service = client_for("maintenance_technician")
     missing_idempotency = client.post(
         f"{BASE}/maintenance-work-orders/MAINTENANCE-WO-1/approve",
         json={"simulation_session_id": "SIMULATION-SESSION-001"},
@@ -270,52 +269,40 @@ def test_manager_approves_maintenance_but_cannot_execute_it() -> None:
         json={"simulation_session_id": "SIMULATION-SESSION-001"},
         headers={"Idempotency-Key": "maintenance-approve-001"},
     )
-    denied = client.post(
-        f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/start",
-        json={},
-        headers={"Idempotency-Key": "maintenance-start-001"},
-    )
-
-    assert missing_idempotency.status_code == 422
-    assert approved.status_code == 200
-    assert denied.status_code == 403
-    assert [name for name, _ in service.calls] == ["maintenance_approve"]
-
-
-def test_technician_executes_and_requests_replay_without_caller_lineage() -> None:
-    client, service = client_for("maintenance_technician")
-
-    denied_approval = client.post(
-        f"{BASE}/maintenance-work-orders/MAINTENANCE-WO-1/approve",
-        json={"simulation_session_id": "SIMULATION-SESSION-001"},
-        headers={"Idempotency-Key": "maintenance-approve-001"},
-    )
     started = client.post(
         f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/start",
         json={},
         headers={"Idempotency-Key": "maintenance-start-001"},
     )
-    completed = client.post(
+    assert missing_idempotency.status_code == 422
+    assert approved.status_code == 200
+    assert started.status_code == 200
+    assert [name for name, _ in service.calls] == ["maintenance_approve", "maintenance_start"]
+
+
+def test_technician_completes_maintenance_and_engineer_requests_effect_replay() -> None:
+    technician_client, technician_service = client_for("maintenance_technician")
+    completed = technician_client.post(
         f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/complete",
         json={"outcome": "tool replaced"},
         headers={"Idempotency-Key": "maintenance-complete-001"},
     )
-    replay = client.post(
+    denied_replay = technician_client.post(
         f"{BASE}/maintenance-events/MAINTENANCE-EVENT-1/replay",
         json={"restart_at": "2026-08-24T09:35:00Z"},
         headers={"Idempotency-Key": "maintenance-replay-001"},
     )
-
-    assert denied_approval.status_code == 403
-    assert started.status_code == 200
+    engineer_client, engineer_service = client_for("process_engineer")
+    replay = engineer_client.post(
+        f"{BASE}/maintenance-events/MAINTENANCE-EVENT-1/replay",
+        json={"restart_at": "2026-08-24T09:35:00Z"},
+        headers={"Idempotency-Key": "maintenance-replay-001"},
+    )
     assert completed.status_code == 200
+    assert denied_replay.status_code == 403
     assert replay.status_code == 200
-    assert [name for name, _ in service.calls] == [
-        "maintenance_start",
-        "maintenance_complete",
-        "maintenance_replay",
-    ]
-
+    assert [name for name, _ in technician_service.calls] == ["maintenance_complete"]
+    assert [name for name, _ in engineer_service.calls] == ["maintenance_replay"]
 
 def test_maintenance_commands_reject_caller_supplied_canonical_lineage() -> None:
     client, service = client_for("maintenance_technician")
@@ -335,8 +322,8 @@ def test_maintenance_commands_reject_caller_supplied_canonical_lineage() -> None
     assert service.calls == []
 
 
-def test_manager_requests_cost_analysis_and_readers_can_query_results() -> None:
-    manager_client, manager_service = client_for("process_manager")
+def test_technician_requests_cost_analysis_and_readers_can_query_results() -> None:
+    manager_client, manager_service = client_for("maintenance_technician")
     created = manager_client.post(
         f"{BASE}/inspection-results/INSPECTION-RESULT-1/cost-analyses",
         json=cost_request(),
@@ -355,12 +342,12 @@ def test_manager_requests_cost_analysis_and_readers_can_query_results() -> None:
         "cost_get",
         "cost_list",
     ]
-    assert manager_service.calls[0][1]["actor_id"] == "user-process_manager"
+    assert manager_service.calls[0][1]["actor_id"] == "user-maintenance_technician"
     assert "asset_id" not in created.request.content.decode("utf-8")
 
 
-def test_reader_lists_candidates_and_manager_can_request_cooling_cost() -> None:
-    manager_client, manager_service = client_for("process_manager")
+def test_reader_lists_candidates_and_technician_can_request_cooling_cost() -> None:
+    manager_client, manager_service = client_for("maintenance_technician")
     candidates = manager_client.get(
         f"{BASE}/inspection-results/INSPECTION-RESULT-1/action-candidates"
     )
@@ -383,7 +370,7 @@ def test_reader_lists_candidates_and_manager_can_request_cooling_cost() -> None:
 
 
 def test_cost_analysis_request_rejects_forged_lineage_and_wrong_role() -> None:
-    manager_client, manager_service = client_for("process_manager")
+    manager_client, manager_service = client_for("maintenance_technician")
     forged = manager_client.post(
         f"{BASE}/inspection-results/INSPECTION-RESULT-1/cost-analyses",
         json={
@@ -413,7 +400,7 @@ def test_cost_analysis_request_rejects_forged_lineage_and_wrong_role() -> None:
 
 
 def test_cooling_cost_request_rejects_client_owned_economic_inputs() -> None:
-    manager_client, manager_service = client_for("process_manager")
+    manager_client, manager_service = client_for("maintenance_technician")
     response = manager_client.post(
         f"{BASE}/inspection-results/INSPECTION-RESULT-1/cost-analyses",
         json={

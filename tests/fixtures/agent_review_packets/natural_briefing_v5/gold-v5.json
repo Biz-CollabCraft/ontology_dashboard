@@ -1,0 +1,808 @@
+{
+  "gold_answer_set_id": "agent-review-decision-briefing-v5-reader-lines",
+  "base_reference_sha256": "c13fc7ed41f895803ae426a4d404360338acdcc5624ae30a5020cac924c9efb2",
+  "source_file_sha256": "64542521b01b1b6628b6a54b1ae1e4510f6c5b9ac39f4ca47e149518a5ac4228",
+  "human_review": "not_measured",
+  "authoring_policy": {
+    "style": "공통 요약 1~2문장, 역할별 quote는 3~5개 짧은 문장 줄. 각 quote는 현재 상태 → 원인 관계 → 확인된 기록/비교 근거 → 남은 공백 → 다음 판단 흐름으로 작성한다. 화면에 보이는 gold는 현재 시각 기준 상대 시간과 한국어 단위를 사용한다.",
+    "reference_scope": "외부 문서는 브리핑 구성 참고용이며 사례의 사실 근거는 고정 입력뿐이다.",
+    "runtime_status": "gold 작성 지침과 캡쳐 표현 기준을 확장했다. 새 모델 비교 전에 이 answer set과 prompt 버전을 명시해야 한다.",
+    "source_disclaimers_in_prose": false,
+    "visible_reference_numbers": false,
+    "reader_line_format": true,
+    "decision_flow_required": true
+  },
+  "scoring": {
+    "active_axes": [
+      "근거 충실성",
+      "관계 연결",
+      "우선순위·판단",
+      "실무 활용성",
+      "전달력"
+    ],
+    "scale": {
+      "0": "핵심 누락 또는 잘못된 판단",
+      "1": "부분 충족, 일부 연결이 약함",
+      "2": "핵심 근거와 판단이 충분하고 명확함"
+    },
+    "reporting": "사례당 5축, 8개 사례 총 40개 평정 칸. 총점이나 모델 순위는 만들지 않고 축별 결과를 보고한다.",
+    "critical_errors": "원인·승인·착수·완료 날조, 요인 방향 반전, 잘못된 부품 연결, 미확인을 수량 0으로 바꾸는 오류, 내부 표현 노출은 별도 기록하며 좋은 문체로 상쇄하지 않는다.",
+    "legacy_details": "v4의 97개 항목은 근거 점검용 체크리스트로 보존하며 이번 5축 평정에 97개를 추가 합산하지 않는다. 96개는 v3의 근거 포인터 확인 수다.",
+    "input_limits": "모델에 없는 중요도·재고 수량·담당자는 미언급 감점 금지. 판정할 수 없는 축은 null과 사유로 남긴다.",
+    "field_unit": "공통 요약+선택 역할을 한 화면으로 읽는 사용 맥락에서 평가한다. 세 역할 문장을 모두 읽어야만 한 역할의 핵심이 충족되는 구성은 피한다.",
+    "display_axes": [
+      "문장 줄 3~5개",
+      "불릿 기호 없음",
+      "근거 번호 비노출",
+      "내부어 제거",
+      "현재 상태와 남은 결정 우선"
+    ],
+    "variant_policy": "기본 8건과 승인 기록 변형은 분리 평가한다. 기본 GS-002에는 승인 기록을 요구하지 않고, GS-002-approved-work-order에는 승인 시각과 착수 조건 미확인을 요구한다."
+  },
+  "references": [
+    {
+      "title": "HSE: Shift handover",
+      "url": "https://www.hse.gov.uk/humanfactors/topics/shift-handover.htm",
+      "application": "수신자의 정보 필요에 맞춘 전달, 현재 작업 상태와 시점 구분, 확인이 필요한 사항의 인계."
+    },
+    {
+      "title": "IBM: Work order management",
+      "url": "https://www.ibm.com/think/topics/work-order-management",
+      "application": "필요성·긴급성·자원 제약을 우선순위와 일정에 연결하는 구성. 담당자·작업상태·부품 정보는 실제 입력 범위에서만 사용."
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "GS-001",
+      "reference_briefing": {
+        "title": "정상 범위 — 낮은 위험도에서 점검 필요성 판단",
+        "summary": "1구역 1셀 CNC 가공기 1은 정상 등급이며 예측 위험도는 11.6%입니다. 현재 근거는 즉시 정비보다 관측 추세 보강과 점검 필요성 판단에 맞춰져 있습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "현재 위험도는 낮고, 기계 동력·토크·온도 차이는 모두 위험도를 낮추는 방향으로 반영됐습니다.\n다만 연결된 점검 후보는 주축 모터·커플링과 냉각 라인이므로, 판단 흐름은 낮은 위험도 확인 뒤 현장 관측값과 변화 이력을 대조하는 쪽입니다.\n유사 이력에는 동력 전달부 체결 확인과 커플링 편심 재조정 뒤 토크·과부하 지표가 완화된 사례가 있습니다.\n이번 설비에서는 같은 이상이 확인된 것이 아니므로, 이 사례는 점검 범위를 좁히는 참고 근거로만 사용해야 합니다.\n다음 판단에는 최근 위험 시계열과 현장 관측값이 필요하며, 이 값이 있어야 점검 유지와 단순 모니터링을 구분할 수 있습니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "현재 단계는 교체 착수가 아니라 낮은 위험도 상태에서 점검 필요성을 판단하는 단계입니다.\n커플링 키트와 냉각 팬 유닛은 가용으로 등록돼 있고 조달 예상 기간은 각각 2일과 1일입니다.\n하지만 실제 재고 수량과 작업요청·승인 상태는 확인되지 않아 준비 완료나 착수 가능 상태로 볼 수 없습니다.\n교체가 필요해질 경우 커플링 작업 예상 시간은 3시간, 냉각 팬 작업 예상 시간은 90분입니다.\n현장 점검 결과가 교체 필요로 이어질 때만 필요한 부품 수량과 작업 가능 시간이 준비 범위 판단의 조건이 됩니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "process_manager",
+            "quote": "현재 생산 판단은 정상 등급과 낮은 위험도를 기준으로 즉시 정지 일정을 잡을지 검토하는 단계입니다.\n생산 영향은 없음으로 분류되고, 45분 정지 가정의 예상 손실은 0개입니다.\n다만 이 값은 점검 필요성이 낮다는 계획 근거이지, 계속 운전이 항상 안전하다는 승인 근거는 아닙니다.\n작업요청·승인 상태와 현장 점검 결과가 확인되지 않아 생산 순서 변경을 확정할 근거는 부족합니다.\n추가 조치가 필요해지면 실제 작업 범위에 맞춰 정지 시간과 생산 영향을 다시 계산해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "현재 위험도는 낮고, 기계 동력·토크·온도 차이는 모두 위험도를 낮추는 방향으로 반영됐습니다.\n다만 연결된 점검 후보는 주축 모터·커플링과 냉각 라인이므로, 판단 흐름은 낮은 위험도 확인 뒤 현장 관측값과 변화 이력을 대조하는 쪽입니다.\n유사 이력에는 동력 전달부 체결 확인과 커플링 편심 재조정 뒤 토크·과부하 지표가 완화된 사례가 있습니다.\n이번 설비에서는 같은 이상이 확인된 것이 아니므로, 이 사례는 점검 범위를 좁히는 참고 근거로만 사용해야 합니다.\n다음 판단에는 최근 위험 시계열과 현장 관측값이 필요하며, 이 값이 있어야 점검 유지와 단순 모니터링을 구분할 수 있습니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "현재 단계는 교체 착수가 아니라 낮은 위험도 상태에서 점검 필요성을 판단하는 단계입니다.\n커플링 키트와 냉각 팬 유닛은 가용으로 등록돼 있고 조달 예상 기간은 각각 2일과 1일입니다.\n하지만 실제 재고 수량과 작업요청·승인 상태는 확인되지 않아 준비 완료나 착수 가능 상태로 볼 수 없습니다.\n교체가 필요해질 경우 커플링 작업 예상 시간은 3시간, 냉각 팬 작업 예상 시간은 90분입니다.\n현장 점검 결과가 교체 필요로 이어질 때만 필요한 부품 수량과 작업 가능 시간이 준비 범위 판단의 조건이 됩니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재 생산 판단은 정상 등급과 낮은 위험도를 기준으로 즉시 정지 일정을 잡을지 검토하는 단계입니다.\n생산 영향은 없음으로 분류되고, 45분 정지 가정의 예상 손실은 0개입니다.\n다만 이 값은 점검 필요성이 낮다는 계획 근거이지, 계속 운전이 항상 안전하다는 승인 근거는 아닙니다.\n작업요청·승인 상태와 현장 점검 결과가 확인되지 않아 생산 순서 변경을 확정할 근거는 부족합니다.\n추가 조치가 필요해지면 실제 작업 범위에 맞춰 정지 시간과 생산 영향을 다시 계산해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        }
+      ],
+      "line_level_evidence_policy": {
+        "status": "required_for_new_model_outputs",
+        "gold_text_visible_citations": "none",
+        "evaluation_mapping": "source_pointers remain internal review aids; visible prose must stand without reference numbers",
+        "composition_rule": "current_state_to_next_decision_flow",
+        "time_rendering": "current_time_relative_kst for visible gold; model prompt preserves source ISO for runtime mapping",
+        "unit_rendering": "korean_reader_units"
+      }
+    },
+    {
+      "case_id": "GS-002",
+      "reference_briefing": {
+        "title": "경고 — 공구·동력 전달 계통 점검 범위 판단",
+        "summary": "4구역 4셀 CNC 가공기 1은 경고 등급이며 예측 위험도는 82.5%입니다. 공구 마모와 과부하 지표가 공구 체결부와 동력 전달부 점검으로 이어지지만, 작업요청·승인 기록은 아직 확인되지 않았습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "현재 판단은 경고 등급의 원인이 공구 체결부와 동력 전달부 중 어디에 가까운지 좁히는 단계입니다.\n공구 마모는 공구 매거진·스핀들 공구 체결부, 과부하는 주축 모터·커플링의 점검 근거로 연결됩니다.\n토크는 위험도를 낮추는 방향으로 반영됐고, 최근 악화 여부를 판단할 변화 이력은 제공되지 않았습니다.\n유사 이력에서는 공구 체결 점검과 인서트 교체 뒤 공구 사용 시간 상승 추세가 안정화됐습니다.\n따라서 공구 체결부를 먼저 대조하고, 인서트 교체 여부는 현재 설비의 점검 결과가 판단 근거가 됩니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "현재 단계는 점검 후보와 자재 후보를 준비하는 단계이며, 작업요청·승인 상태는 미확인입니다.\n절삭 인서트와 커플링 키트는 가용으로 등록돼 있고 조달 예상 기간은 각각 1일과 2일입니다.\n공구 계통 점검 절차는 연결돼 있지만 실제 재고 수량은 확인되지 않았습니다.\n커플링 교체 예상 시간은 3시간이며, 인서트 교체 시간은 등록되지 않았습니다.\n점검 결과가 인서트 교체인지 동력 전달부 조정·교체인지에 따라 필요한 부품과 작업 시간이 달라지므로, 조치 범위 확인이 먼저 필요합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "process_manager",
+            "quote": "현재 생산 판단은 경고 등급 설비의 점검 시점을 생산 순서에 어떻게 반영할지 정하는 단계입니다.\n생산 영향은 중간 수준이며, 120분 정지 시 예상 손실은 25개입니다.\n작업요청·승인 상태가 확인되지 않았으므로 승인된 작업을 바로 일정에 배치할 수는 없습니다.\n커플링 교체가 필요한 경우 작업 예상 시간은 3시간으로, 현재 손실 계산의 정지 2시간과 다릅니다.\n교체 범위가 정해지면 같은 정지 조건으로 손실을 다시 산정해 생산 순서를 검토해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "현재 판단은 경고 등급의 원인이 공구 체결부와 동력 전달부 중 어디에 가까운지 좁히는 단계입니다.\n공구 마모는 공구 매거진·스핀들 공구 체결부, 과부하는 주축 모터·커플링의 점검 근거로 연결됩니다.\n토크는 위험도를 낮추는 방향으로 반영됐고, 최근 악화 여부를 판단할 변화 이력은 제공되지 않았습니다.\n유사 이력에서는 공구 체결 점검과 인서트 교체 뒤 공구 사용 시간 상승 추세가 안정화됐습니다.\n따라서 공구 체결부를 먼저 대조하고, 인서트 교체 여부는 현재 설비의 점검 결과가 판단 근거가 됩니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "현재 단계는 점검 후보와 자재 후보를 준비하는 단계이며, 작업요청·승인 상태는 미확인입니다.\n절삭 인서트와 커플링 키트는 가용으로 등록돼 있고 조달 예상 기간은 각각 1일과 2일입니다.\n공구 계통 점검 절차는 연결돼 있지만 실제 재고 수량은 확인되지 않았습니다.\n커플링 교체 예상 시간은 3시간이며, 인서트 교체 시간은 등록되지 않았습니다.\n점검 결과가 인서트 교체인지 동력 전달부 조정·교체인지에 따라 필요한 부품과 작업 시간이 달라지므로, 조치 범위 확인이 먼저 필요합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재 생산 판단은 경고 등급 설비의 점검 시점을 생산 순서에 어떻게 반영할지 정하는 단계입니다.\n생산 영향은 중간 수준이며, 120분 정지 시 예상 손실은 25개입니다.\n작업요청·승인 상태가 확인되지 않았으므로 승인된 작업을 바로 일정에 배치할 수는 없습니다.\n커플링 교체가 필요한 경우 작업 예상 시간은 3시간으로, 현재 손실 계산의 정지 2시간과 다릅니다.\n교체 범위가 정해지면 같은 정지 조건으로 손실을 다시 산정해 생산 순서를 검토해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        }
+      ],
+      "line_level_evidence_policy": {
+        "status": "required_for_new_model_outputs",
+        "gold_text_visible_citations": "none",
+        "evaluation_mapping": "source_pointers remain internal review aids; visible prose must stand without reference numbers",
+        "composition_rule": "current_state_to_next_decision_flow",
+        "time_rendering": "current_time_relative_kst for visible gold; model prompt preserves source ISO for runtime mapping",
+        "unit_rendering": "korean_reader_units"
+      }
+    },
+    {
+      "case_id": "GS-003",
+      "reference_briefing": {
+        "title": "경고 — 냉각 경로 점검과 생산 영향 재대조",
+        "summary": "1구역 4셀 CNC 가공기 3은 경고 등급이며 예측 위험도는 60.2%입니다. 온도 차이가 냉각 경로 점검으로 이어지지만, 작업요청·승인 기록은 확인되지 않았습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "현재 판단은 온도 차이 상승을 냉각 경로의 현장 점검으로 연결할지 정하는 단계입니다.\n온도 차이는 위험 상승 요인이고, 점검 위치는 스핀들 냉각 라인과 열 배출 경로로 좁혀집니다.\n토크와 기계 동력은 위험도를 낮추는 방향으로 반영돼 동력 전달부보다 냉각 계통 확인이 먼저입니다.\n유사 이력에서는 냉각 라인 막힘과 방열 팬 점검 뒤 온도 차이가 완화됐습니다.\n이번 설비에서 막힘이나 팬 고장이 확인된 것은 아니므로, 현장 점검 결과로 냉각 경로 이상 여부를 구분해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "현재 단계는 냉각 계통 점검 준비이며, 작업요청·승인 상태는 미확인입니다.\n냉각 팬 유닛은 가용으로 등록돼 있고 조달 예상 기간은 1일, 교체 예상 시간은 90분입니다.\n함께 연결된 커플링 키트도 가용으로 등록돼 있으며 조달 예상 기간은 2일, 교체 예상 시간은 3시간입니다.\n다만 온도 차이에 직접 연결된 것은 냉각 계통이므로 동력 전달부 작업까지 확대할지는 점검 결과로 구분해야 합니다.\n실제 재고 수량과 작업 가능 시간이 확인돼야 냉각 팬 교체 준비가 완료됐는지 판단할 수 있습니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "process_manager",
+            "quote": "현재 생산 판단은 냉각 계통 점검을 언제 배치할지 검토하는 단계입니다.\n생산 영향은 중간 수준이며, 150분 정지 시 예상 손실은 32개입니다.\n작업요청·승인 상태가 확인되지 않아 승인된 작업 일정을 전제로 생산 순서를 바꿀 수는 없습니다.\n냉각 팬 교체 예상 90분과 생산 영향 계산의 정지 150분은 서로 다른 계획값입니다.\n실제 작업 범위가 정해지면 준비·점검 시간을 포함한 정지 조건으로 생산 영향과 일정 변경 범위를 다시 대조해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "현재 판단은 온도 차이 상승을 냉각 경로의 현장 점검으로 연결할지 정하는 단계입니다.\n온도 차이는 위험 상승 요인이고, 점검 위치는 스핀들 냉각 라인과 열 배출 경로로 좁혀집니다.\n토크와 기계 동력은 위험도를 낮추는 방향으로 반영돼 동력 전달부보다 냉각 계통 확인이 먼저입니다.\n유사 이력에서는 냉각 라인 막힘과 방열 팬 점검 뒤 온도 차이가 완화됐습니다.\n이번 설비에서 막힘이나 팬 고장이 확인된 것은 아니므로, 현장 점검 결과로 냉각 경로 이상 여부를 구분해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "현재 단계는 냉각 계통 점검 준비이며, 작업요청·승인 상태는 미확인입니다.\n냉각 팬 유닛은 가용으로 등록돼 있고 조달 예상 기간은 1일, 교체 예상 시간은 90분입니다.\n함께 연결된 커플링 키트도 가용으로 등록돼 있으며 조달 예상 기간은 2일, 교체 예상 시간은 3시간입니다.\n다만 온도 차이에 직접 연결된 것은 냉각 계통이므로 동력 전달부 작업까지 확대할지는 점검 결과로 구분해야 합니다.\n실제 재고 수량과 작업 가능 시간이 확인돼야 냉각 팬 교체 준비가 완료됐는지 판단할 수 있습니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재 생산 판단은 냉각 계통 점검을 언제 배치할지 검토하는 단계입니다.\n생산 영향은 중간 수준이며, 150분 정지 시 예상 손실은 32개입니다.\n작업요청·승인 상태가 확인되지 않아 승인된 작업 일정을 전제로 생산 순서를 바꿀 수는 없습니다.\n냉각 팬 교체 예상 90분과 생산 영향 계산의 정지 150분은 서로 다른 계획값입니다.\n실제 작업 범위가 정해지면 준비·점검 시간을 포함한 정지 조건으로 생산 영향과 일정 변경 범위를 다시 대조해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        }
+      ],
+      "line_level_evidence_policy": {
+        "status": "required_for_new_model_outputs",
+        "gold_text_visible_citations": "none",
+        "evaluation_mapping": "source_pointers remain internal review aids; visible prose must stand without reference numbers",
+        "composition_rule": "current_state_to_next_decision_flow",
+        "time_rendering": "current_time_relative_kst for visible gold; model prompt preserves source ISO for runtime mapping",
+        "unit_rendering": "korean_reader_units"
+      }
+    },
+    {
+      "case_id": "GS-004",
+      "reference_briefing": {
+        "title": "위험 — 동력 전달부 점검과 기준 시각 분리",
+        "summary": "4구역 2셀 CNC 가공기 3은 위험 등급이며 예측 위험도는 90.8%입니다. 동력 전달부 점검 필요성은 높지만, 함께 보이는 작업요청은 기준 시각 이후 기록이므로 당시 승인 상태와 분리해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "현재 판단은 높은 위험 신호를 동력 전달부 점검으로 우선 연결하는 단계입니다.\n기계 동력·과부하·토크가 모두 위험 상승 요인으로 나타나 주축 모터·커플링·동력 전달 하우징을 먼저 봐야 합니다.\n유사 이력에서는 체결 상태 확인과 커플링 편심 재조정 뒤 토크·과부하 지표가 완화됐습니다.\n다만 현재 설비의 고장 부위와 교체 필요성은 아직 현장 관측값과 점검 결과로 확인되지 않았습니다.\n따라서 커플링 교체 결론보다 체결·정렬 상태를 먼저 확인하고 그 결과로 조치 범위를 정해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "현재 단계는 위험 등급 설비의 동력 전달부 점검을 준비하되, 기준 시각의 승인 상태를 분리해 판단하는 단계입니다.\n커플링 키트는 현재 가용 불가로 등록돼 있고 조달 예상 기간은 2일, 교체 예상 시간은 3시간입니다.\n00:05 작업요청 기록은 기준 시각인 00:00 이후 기록이므로 당시 작업요청·승인 상태의 근거로 쓸 수 없습니다.\n기준 시각에 맞는 승인·작업 시작·완료 기록은 제공되지 않았습니다.\n교체 필요성이 점검 결과로 확인되면 실제 부품 확보 가능 시점과 작업 가능 시간을 대조해 착수 조건을 정해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "process_manager",
+            "quote": "현재 생산 판단은 위험 등급 설비의 점검 시점과 부품 확보 조건을 나눠 보는 단계입니다.\n생산 영향은 높은 수준이며, 240분 정지 시 예상 손실은 51개입니다.\n기준 이후의 작업요청 기록으로 기준 시각의 승인 상태나 작업 착수를 확정할 수는 없습니다.\n커플링 교체 예상 3시간과 생산 영향 계산의 정지 4시간은 다른 값이고, 조달 예상 2일이 곧 2일 정지를 뜻하지도 않습니다.\n점검 시점, 부품 확보 시점, 실제 정지 시간을 분리해 생산 계획과 손실 추정치를 다시 검토해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "현재 판단은 높은 위험 신호를 동력 전달부 점검으로 우선 연결하는 단계입니다.\n기계 동력·과부하·토크가 모두 위험 상승 요인으로 나타나 주축 모터·커플링·동력 전달 하우징을 먼저 봐야 합니다.\n유사 이력에서는 체결 상태 확인과 커플링 편심 재조정 뒤 토크·과부하 지표가 완화됐습니다.\n다만 현재 설비의 고장 부위와 교체 필요성은 아직 현장 관측값과 점검 결과로 확인되지 않았습니다.\n따라서 커플링 교체 결론보다 체결·정렬 상태를 먼저 확인하고 그 결과로 조치 범위를 정해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "현재 단계는 위험 등급 설비의 동력 전달부 점검을 준비하되, 기준 시각의 승인 상태를 분리해 판단하는 단계입니다.\n커플링 키트는 현재 가용 불가로 등록돼 있고 조달 예상 기간은 2일, 교체 예상 시간은 3시간입니다.\n00:05 작업요청 기록은 기준 시각인 00:00 이후 기록이므로 당시 작업요청·승인 상태의 근거로 쓸 수 없습니다.\n기준 시각에 맞는 승인·작업 시작·완료 기록은 제공되지 않았습니다.\n교체 필요성이 점검 결과로 확인되면 실제 부품 확보 가능 시점과 작업 가능 시간을 대조해 착수 조건을 정해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재 생산 판단은 위험 등급 설비의 점검 시점과 부품 확보 조건을 나눠 보는 단계입니다.\n생산 영향은 높은 수준이며, 240분 정지 시 예상 손실은 51개입니다.\n기준 이후의 작업요청 기록으로 기준 시각의 승인 상태나 작업 착수를 확정할 수는 없습니다.\n커플링 교체 예상 3시간과 생산 영향 계산의 정지 4시간은 다른 값이고, 조달 예상 2일이 곧 2일 정지를 뜻하지도 않습니다.\n점검 시점, 부품 확보 시점, 실제 정지 시간을 분리해 생산 계획과 손실 추정치를 다시 검토해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        }
+      ],
+      "line_level_evidence_policy": {
+        "status": "required_for_new_model_outputs",
+        "gold_text_visible_citations": "none",
+        "evaluation_mapping": "source_pointers remain internal review aids; visible prose must stand without reference numbers",
+        "composition_rule": "current_state_to_next_decision_flow",
+        "time_rendering": "current_time_relative_kst for visible gold; model prompt preserves source ISO for runtime mapping",
+        "unit_rendering": "korean_reader_units"
+      }
+    },
+    {
+      "case_id": "GS-005",
+      "reference_briefing": {
+        "title": "경고 — 공구·동력 전달부 동시 점검 범위 구분",
+        "summary": "3구역 1셀 CNC 가공기 3은 경고 등급이며 예측 위험도는 77.2%입니다. 공구 마모·과부하·기계 동력이 함께 올라 공구 계통과 동력 전달부를 구분해 점검해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "현재 판단은 공구 계통과 동력 전달부 중 어떤 조치가 필요한지 분리하는 단계입니다.\n공구 마모는 공구 체결부, 과부하와 기계 동력은 주축 모터·커플링의 점검 근거입니다.\n관련 이력에는 공구 체결 점검·인서트 교체 사례와 커플링 편심 재조정 사례가 모두 있습니다.\n최근 30일의 유사 이벤트 전체 건수는 확인되지 않아 반복 발생 정도를 확정할 수 없습니다.\n두 계통의 점검 결과를 따로 남겨야 인서트 교체와 동력 전달부 조정 중 필요한 조치를 판단할 수 있습니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "현재 단계는 공구 계통과 동력 전달부 점검 결과에 따라 필요한 자재를 좁히는 단계입니다.\n절삭 인서트와 커플링 키트는 가용으로 등록돼 있고 조달 예상 기간은 각각 1일과 2일입니다.\n공구 계통 점검 절차는 연결돼 있지만 실제 재고 수량과 작업요청·승인 상태는 미확인입니다.\n커플링 교체 예상 시간은 3시간이고 인서트 교체 시간은 등록되지 않았습니다.\n부품이 가용으로 표시돼도 작업 승인이 확인된 것은 아니므로, 점검 결과로 필요한 자재와 작업 범위를 먼저 구분해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "process_manager",
+            "quote": "현재 생산 판단은 경고 등급 설비의 점검 시점과 교체 범위가 생산 손실에 미치는 영향을 나눠 보는 단계입니다.\n생산 영향은 낮은 수준이며, 100분 정지 시 예상 손실은 18개입니다.\n위험도는 77.2%로 경고 수준이므로 생산 영향이 낮아도 점검 시점 검토는 필요합니다.\n커플링 교체 예상 시간은 3시간으로 현재 손실 계산의 정지 100분보다 깁니다.\n동력 전달부 교체가 필요해지면 실제 작업 범위에 맞춰 정지 계획과 손실 추정치를 다시 계산해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "현재 판단은 공구 계통과 동력 전달부 중 어떤 조치가 필요한지 분리하는 단계입니다.\n공구 마모는 공구 체결부, 과부하와 기계 동력은 주축 모터·커플링의 점검 근거입니다.\n관련 이력에는 공구 체결 점검·인서트 교체 사례와 커플링 편심 재조정 사례가 모두 있습니다.\n최근 30일의 유사 이벤트 전체 건수는 확인되지 않아 반복 발생 정도를 확정할 수 없습니다.\n두 계통의 점검 결과를 따로 남겨야 인서트 교체와 동력 전달부 조정 중 필요한 조치를 판단할 수 있습니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "현재 단계는 공구 계통과 동력 전달부 점검 결과에 따라 필요한 자재를 좁히는 단계입니다.\n절삭 인서트와 커플링 키트는 가용으로 등록돼 있고 조달 예상 기간은 각각 1일과 2일입니다.\n공구 계통 점검 절차는 연결돼 있지만 실제 재고 수량과 작업요청·승인 상태는 미확인입니다.\n커플링 교체 예상 시간은 3시간이고 인서트 교체 시간은 등록되지 않았습니다.\n부품이 가용으로 표시돼도 작업 승인이 확인된 것은 아니므로, 점검 결과로 필요한 자재와 작업 범위를 먼저 구분해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재 생산 판단은 경고 등급 설비의 점검 시점과 교체 범위가 생산 손실에 미치는 영향을 나눠 보는 단계입니다.\n생산 영향은 낮은 수준이며, 100분 정지 시 예상 손실은 18개입니다.\n위험도는 77.2%로 경고 수준이므로 생산 영향이 낮아도 점검 시점 검토는 필요합니다.\n커플링 교체 예상 시간은 3시간으로 현재 손실 계산의 정지 100분보다 깁니다.\n동력 전달부 교체가 필요해지면 실제 작업 범위에 맞춰 정지 계획과 손실 추정치를 다시 계산해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        }
+      ],
+      "line_level_evidence_policy": {
+        "status": "required_for_new_model_outputs",
+        "gold_text_visible_citations": "none",
+        "evaluation_mapping": "source_pointers remain internal review aids; visible prose must stand without reference numbers",
+        "composition_rule": "current_state_to_next_decision_flow",
+        "time_rendering": "current_time_relative_kst for visible gold; model prompt preserves source ISO for runtime mapping",
+        "unit_rendering": "korean_reader_units"
+      }
+    },
+    {
+      "case_id": "GS-006",
+      "reference_briefing": {
+        "title": "주의 — 낮은 위험 신호에서 근거 보강 후 판단",
+        "summary": "2구역 2셀 CNC 가공기 2는 주의 등급이며 예측 위험도는 29.5%입니다. 위험 요인은 하향 방향이라 즉시 교체보다 변화 이력과 현장 근거 보강이 먼저입니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "현재 판단은 낮은 위험 신호에서 점검 후보를 유지할지 정하는 단계입니다.\n공구 마모·토크·기계 동력은 모두 위험도를 낮추는 방향으로 반영됐습니다.\n점검 후보는 공구 매거진과 주축 모터·커플링이지만, 적용할 점검 절차와 변화 이력은 제공되지 않았습니다.\n관련 이력에는 공구 체결 점검·인서트 교체와 커플링 편심 재조정 사례가 있습니다.\n이번 위험 요인이 하향 방향이므로 과거 조치 이력만으로 즉시 교체를 결정하지 말고, 변화 이력과 현장 관측값을 먼저 보강해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "현재 단계는 교체 준비가 아니라 적용할 점검 절차와 점검 범위를 정하는 단계입니다.\n절삭 인서트와 커플링 키트는 가용으로 등록돼 있고 조달 예상 기간은 각각 1일과 2일입니다.\n작업요청·승인 상태와 적용 점검 절차가 확인되지 않아 준비 완료 여부는 판단할 수 없습니다.\n커플링 교체 예상 시간은 3시간이며 인서트 교체 시간은 등록되지 않았습니다.\n과거 유사 사례에서 교체가 있었다는 이유만으로 이번 작업을 교체로 확정하지 말고, 점검 결과로 필요한 자재를 좁혀야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "process_manager",
+            "quote": "현재 생산 판단은 주의 등급 설비의 점검 필요성이 생산 순서 변경까지 이어지는지 보는 단계입니다.\n생산 영향은 낮은 수준이며, 60분 정지 시 예상 손실은 13개입니다.\n작업요청 상태와 점검 필요성이 확인되지 않아 교체 일정을 확정할 수는 없습니다.\n현재 정지 60분은 커플링 교체 예상 3시간과 같은 작업 조건이 아닙니다.\n교체 필요성이 새로 확인되면 그 작업 범위에 맞춰 생산 영향과 정지 계획을 다시 검토해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "현재 판단은 낮은 위험 신호에서 점검 후보를 유지할지 정하는 단계입니다.\n공구 마모·토크·기계 동력은 모두 위험도를 낮추는 방향으로 반영됐습니다.\n점검 후보는 공구 매거진과 주축 모터·커플링이지만, 적용할 점검 절차와 변화 이력은 제공되지 않았습니다.\n관련 이력에는 공구 체결 점검·인서트 교체와 커플링 편심 재조정 사례가 있습니다.\n이번 위험 요인이 하향 방향이므로 과거 조치 이력만으로 즉시 교체를 결정하지 말고, 변화 이력과 현장 관측값을 먼저 보강해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "현재 단계는 교체 준비가 아니라 적용할 점검 절차와 점검 범위를 정하는 단계입니다.\n절삭 인서트와 커플링 키트는 가용으로 등록돼 있고 조달 예상 기간은 각각 1일과 2일입니다.\n작업요청·승인 상태와 적용 점검 절차가 확인되지 않아 준비 완료 여부는 판단할 수 없습니다.\n커플링 교체 예상 시간은 3시간이며 인서트 교체 시간은 등록되지 않았습니다.\n과거 유사 사례에서 교체가 있었다는 이유만으로 이번 작업을 교체로 확정하지 말고, 점검 결과로 필요한 자재를 좁혀야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재 생산 판단은 주의 등급 설비의 점검 필요성이 생산 순서 변경까지 이어지는지 보는 단계입니다.\n생산 영향은 낮은 수준이며, 60분 정지 시 예상 손실은 13개입니다.\n작업요청 상태와 점검 필요성이 확인되지 않아 교체 일정을 확정할 수는 없습니다.\n현재 정지 60분은 커플링 교체 예상 3시간과 같은 작업 조건이 아닙니다.\n교체 필요성이 새로 확인되면 그 작업 범위에 맞춰 생산 영향과 정지 계획을 다시 검토해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        }
+      ],
+      "line_level_evidence_policy": {
+        "status": "required_for_new_model_outputs",
+        "gold_text_visible_citations": "none",
+        "evaluation_mapping": "source_pointers remain internal review aids; visible prose must stand without reference numbers",
+        "composition_rule": "current_state_to_next_decision_flow",
+        "time_rendering": "current_time_relative_kst for visible gold; model prompt preserves source ISO for runtime mapping",
+        "unit_rendering": "korean_reader_units"
+      }
+    },
+    {
+      "case_id": "GS-007",
+      "reference_briefing": {
+        "title": "판단 보류 — 관측값 보강 후 위험·생산 영향 재판단",
+        "summary": "4구역 5셀 CNC 가공기 1은 데이터 품질 문제로 위험 등급과 예측 위험도를 판단할 수 없습니다. 현재 결정은 정비 일정 확정이 아니라 관측값과 이력 시각을 보강하는 것입니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "현재 단계는 점검 위치를 정하기보다 판단 가능한 관측 구간을 확보하는 단계입니다.\n주변 공기 온도·토크 관측값과 과거 관측 시각이 부족해 위험 판단 근거와 전후 변화 비교가 성립하지 않습니다.\n점검 대상과 적용 가능한 SOP 기준도 확정되지 않아 특정 계통 이상을 말할 수 없습니다.\n생산 영향 판단 역시 위험도와 작업 범위가 확인된 뒤에야 연결할 수 있습니다.\n먼저 유효한 관측값과 이력 시각을 보강해야 위험도 재평가와 점검 대상 선정이 가능합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "현재 단계는 작업 착수가 아니라 데이터 보강 후 점검 범위를 정하는 단계입니다.\n점검 결과와 작업요청·승인 상태가 제공되지 않아 착수 상태를 판단할 수 없습니다.\n점검 대상과 부품 정보가 없어 필요한 자재, 조달 기간, 작업 시간을 안내할 수 없습니다.\n실제 재고 수량과 작업 가능 시간도 확인되지 않아 준비 완료 여부를 확정할 수 없습니다.\n데이터 보강 후 점검 대상이 정해지면 그 대상에 맞는 절차와 부품 정보가 준비 여부 판단 근거가 됩니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "process_manager",
+            "quote": "현재 생산 판단은 정비 일정을 확정하는 것이 아니라 생산 영향 산정에 필요한 전제부터 확보하는 단계입니다.\n위험 등급과 예측 위험도가 판단 보류 상태라 생산 영향과 예상 손실량을 산정할 근거가 부족합니다.\n점검 승인 상태와 작업 범위도 확인되지 않아 생산 순서 변경을 확정할 수 없습니다.\n이를 생산 영향 없음이나 위험 해소로 처리하면 안 되며, 현재는 판단 가능한 데이터가 부족한 상태입니다.\n관측값과 정비 근거를 보강해야 위험도, 작업 범위, 생산 영향을 같은 기준으로 다시 판단할 수 있습니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "현재 단계는 점검 위치를 정하기보다 판단 가능한 관측 구간을 확보하는 단계입니다.\n주변 공기 온도·토크 관측값과 과거 관측 시각이 부족해 위험 판단 근거와 전후 변화 비교가 성립하지 않습니다.\n점검 대상과 적용 가능한 SOP 기준도 확정되지 않아 특정 계통 이상을 말할 수 없습니다.\n생산 영향 판단 역시 위험도와 작업 범위가 확인된 뒤에야 연결할 수 있습니다.\n먼저 유효한 관측값과 이력 시각을 보강해야 위험도 재평가와 점검 대상 선정이 가능합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "현재 단계는 작업 착수가 아니라 데이터 보강 후 점검 범위를 정하는 단계입니다.\n점검 결과와 작업요청·승인 상태가 제공되지 않아 착수 상태를 판단할 수 없습니다.\n점검 대상과 부품 정보가 없어 필요한 자재, 조달 기간, 작업 시간을 안내할 수 없습니다.\n실제 재고 수량과 작업 가능 시간도 확인되지 않아 준비 완료 여부를 확정할 수 없습니다.\n데이터 보강 후 점검 대상이 정해지면 그 대상에 맞는 절차와 부품 정보가 준비 여부 판단 근거가 됩니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재 생산 판단은 정비 일정을 확정하는 것이 아니라 생산 영향 산정에 필요한 전제부터 확보하는 단계입니다.\n위험 등급과 예측 위험도가 판단 보류 상태라 생산 영향과 예상 손실량을 산정할 근거가 부족합니다.\n점검 승인 상태와 작업 범위도 확인되지 않아 생산 순서 변경을 확정할 수 없습니다.\n이를 생산 영향 없음이나 위험 해소로 처리하면 안 되며, 현재는 판단 가능한 데이터가 부족한 상태입니다.\n관측값과 정비 근거를 보강해야 위험도, 작업 범위, 생산 영향을 같은 기준으로 다시 판단할 수 있습니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        }
+      ],
+      "line_level_evidence_policy": {
+        "status": "required_for_new_model_outputs",
+        "gold_text_visible_citations": "none",
+        "evaluation_mapping": "source_pointers remain internal review aids; visible prose must stand without reference numbers",
+        "composition_rule": "current_state_to_next_decision_flow",
+        "time_rendering": "current_time_relative_kst for visible gold; model prompt preserves source ISO for runtime mapping",
+        "unit_rendering": "korean_reader_units"
+      }
+    },
+    {
+      "case_id": "GS-008",
+      "reference_briefing": {
+        "title": "경고 — 동일 위험도 설비와 구분한 공구 점검 판단",
+        "summary": "4구역 4셀 CNC 가공기 2는 경고 등급이며 예측 위험도는 82.5%입니다. 같은 위험도 수치의 다른 설비와 혼동하지 말고 이 설비의 공구·동력 전달 근거로 점검 범위를 정해야 합니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "현재 판단은 이 설비의 공구 마모와 과부하 근거를 기준으로 점검 위치를 좁히는 단계입니다.\n공구 마모는 공구 매거진·스핀들 공구 체결부, 과부하는 주축 모터·커플링 점검으로 연결됩니다.\n토크는 위험도를 낮추는 방향으로 반영됐으므로 교체 여부는 현장 점검 결과가 판단 근거가 됩니다.\n관련 이력에는 공구 체결 점검 후 인서트 교체 사례와 커플링 편심 재조정 사례가 있습니다.\n같은 위험도 수치가 나온 다른 설비와 섞지 말고, 이 설비의 점검 결과로 두 계통의 조치 필요성을 구분해야 합니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "현재 단계는 두 부품을 일괄 교체하는 것이 아니라 점검 결과에 맞춰 자재와 작업 범위를 구분하는 단계입니다.\n절삭 인서트와 커플링 키트는 가용으로 등록돼 있고 조달 예상 기간은 각각 1일과 2일입니다.\n공구 계통 점검 절차는 연결돼 있지만 실제 재고 수량과 작업요청·승인 상태는 미확인입니다.\n커플링 교체 예상 시간은 3시간이며 인서트 교체 시간은 등록되지 않았습니다.\n공구 체결부와 동력 전달부 점검 결과가 나와야 필요한 자재와 착수 가능 조건을 구체화할 수 있습니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "process_manager",
+            "quote": "현재 생산 판단은 경고 등급 설비의 점검 시점과 생산 순서를 정하되 다른 설비와 혼동하지 않는 것입니다.\n생산 영향은 중간 수준이며, 120분 정지 시 예상 손실은 25개입니다.\n작업요청·승인 상태가 확인되지 않아 승인된 작업 일정을 전제로 생산 순서를 확정할 수 없습니다.\n커플링 교체 예상 3시간은 생산 영향 계산의 정지 2시간과 차이가 있습니다.\n교체 여부와 범위가 정해지면 정지 조건을 맞춘 손실 재산정이 이 설비의 작업 순서 판단 근거가 됩니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          }
+        ]
+      },
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "현재 판단은 이 설비의 공구 마모와 과부하 근거를 기준으로 점검 위치를 좁히는 단계입니다.\n공구 마모는 공구 매거진·스핀들 공구 체결부, 과부하는 주축 모터·커플링 점검으로 연결됩니다.\n토크는 위험도를 낮추는 방향으로 반영됐으므로 교체 여부는 현장 점검 결과가 판단 근거가 됩니다.\n관련 이력에는 공구 체결 점검 후 인서트 교체 사례와 커플링 편심 재조정 사례가 있습니다.\n같은 위험도 수치가 나온 다른 설비와 섞지 말고, 이 설비의 점검 결과로 두 계통의 조치 필요성을 구분해야 합니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "현재 단계는 두 부품을 일괄 교체하는 것이 아니라 점검 결과에 맞춰 자재와 작업 범위를 구분하는 단계입니다.\n절삭 인서트와 커플링 키트는 가용으로 등록돼 있고 조달 예상 기간은 각각 1일과 2일입니다.\n공구 계통 점검 절차는 연결돼 있지만 실제 재고 수량과 작업요청·승인 상태는 미확인입니다.\n커플링 교체 예상 시간은 3시간이며 인서트 교체 시간은 등록되지 않았습니다.\n공구 체결부와 동력 전달부 점검 결과가 나와야 필요한 자재와 착수 가능 조건을 구체화할 수 있습니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재 생산 판단은 경고 등급 설비의 점검 시점과 생산 순서를 정하되 다른 설비와 혼동하지 않는 것입니다.\n생산 영향은 중간 수준이며, 120분 정지 시 예상 손실은 25개입니다.\n작업요청·승인 상태가 확인되지 않아 승인된 작업 일정을 전제로 생산 순서를 확정할 수 없습니다.\n커플링 교체 예상 3시간은 생산 영향 계산의 정지 2시간과 차이가 있습니다.\n교체 여부와 범위가 정해지면 정지 조건을 맞춘 손실 재산정이 이 설비의 작업 순서 판단 근거가 됩니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        }
+      ],
+      "line_level_evidence_policy": {
+        "status": "required_for_new_model_outputs",
+        "gold_text_visible_citations": "none",
+        "evaluation_mapping": "source_pointers remain internal review aids; visible prose must stand without reference numbers",
+        "composition_rule": "current_state_to_next_decision_flow",
+        "time_rendering": "current_time_relative_kst for visible gold; model prompt preserves source ISO for runtime mapping",
+        "unit_rendering": "korean_reader_units"
+      }
+    },
+    {
+      "case_id": "GS-002-approved-work-order",
+      "base_case_id": "GS-002",
+      "fixture_source": "/private/tmp/luna-bullet-validation-20260908-v4/inputs.json case 3",
+      "reference_briefing": {
+        "title": "경고 — 승인된 커플링 보정 작업의 착수 조건 판단",
+        "summary": "4구역 4셀 CNC 가공기 1은 경고 등급이며 공구 마모와 과부하 지표가 공구 체결부와 동력 전달 계통 점검으로 이어집니다. 커플링 정렬 점검에서는 편심과 정비 권고가 기록됐고, 커플링 보정 작업요청은 승인 상태이나 시작·완료 기록은 제공되지 않았습니다.",
+        "role_summaries": [
+          {
+            "role": "process_engineer",
+            "quote": "현재 판단은 공구·동력 전달 계통의 이상 위치를 좁히는 단계이며, 승인 여부보다 현장 관측과 기준 초과가 가리키는 점검 위치가 우선입니다.\n공구 마모 230분은 기준 220분을 넘어 공구 매거진·스핀들 공구 체결부 확인으로 이어집니다.\n과부하 지표 12,650 뉴턴미터·분은 기준 12,000 뉴턴미터·분을 넘어 주축 모터·커플링·동력 전달부의 체결·발열·진동 확인으로 이어집니다.\n이미 커플링 정렬 점검에서 편심과 정비 권고가 기록됐지만, 유사 이력의 인서트 교체나 커플링 재조정이 현재 자산의 원인 확정 근거는 아닙니다.\n다음 판단에는 현장 관측값, 이상 소음·진동·발열·체결 상태, 최근 위험 시계열이 필요하며 이 값이 있어야 점검 위치와 원인 후보를 좁힐 수 있습니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "maintenance_technician",
+            "quote": "점검 결과는 39일 전 23:40 커플링 정렬 점검에서 편심 확인 및 정비 권고로 기록됐고, 커플링 정렬 보정 작업요청은 **승인 상태**입니다.\n승인 시각은 39일 전 23:55이지만, 승인 기록은 정비 수행 기록이 아니며 시작·완료 기록은 제공되지 않았습니다.\n따라서 현재 남은 판단은 승인 여부가 아니라 승인된 보정 작업의 착수 조건과 작업 시점입니다.\n제공 자료에는 카바이드 절삭 인서트 조달 예상 기간 1일, 주축 구동 커플링 키트 조달 예상 기간 2일, 커플링 작업 창 180분이 있습니다.\n다만 실제 재고 수량과 작업 가능 시간은 확인되지 않았으므로, 부품 가용 수량·현장 작업 가능 시간·안전 조건이 작업 착수 가능 여부의 남은 판단 조건입니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          },
+          {
+            "role": "process_manager",
+            "quote": "현재 생산 판단은 승인된 커플링 보정 작업을 어느 생산 공백에 배치할지 정하는 단계입니다.\n커플링 정렬 보정 작업요청은 승인 상태이고 승인 시각은 39일 전 23:55이지만, 시작·완료 기록은 없어 실행 완료를 전제로 일정화할 수 없습니다.\n제공된 계획값은 정지 120분과 예상 손실 25개이며, 이는 실제 손실 실적이나 고객 주문 영향이 아니라 생산 일정 판단용 추정치입니다.\n생산·품질·납기 영향의 현재 연결 정보와 실제 작업 가능 시간이 확인돼야 어느 생산 공백에 작업을 배치할지 확정할 수 있습니다.\n승인된 작업요청을 기준으로 작업 가능 시간과 생산·품질 영향 자료를 함께 반영한 값이 셀 순서와 정지 시점 판단 조건입니다.",
+            "display_contract": {
+              "format": "reader_line",
+              "line_count_target": "3-5",
+              "rendering": "plain sentence lines; no bullet marker; evidence disclosure is non-numbered",
+              "composition": "current state -> causal relation -> recorded/comparison evidence -> blocking gaps -> next decision",
+              "time_rendering": "current_time_relative_kst",
+              "unit_rendering": "korean_reader_units"
+            }
+          }
+        ]
+      },
+      "line_level_evidence_policy": {
+        "status": "required_for_new_model_outputs",
+        "visible_citations": "none",
+        "source_refs": [
+          "closed-loop://inspection-result/IR-REVIEW-001",
+          "closed-loop://work-order/WO-REVIEW-001",
+          "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+          "operation-context://production-planning-context-v1"
+        ],
+        "composition_rule": "current_state_to_next_decision_flow",
+        "time_rendering": "current_time_relative_kst for visible gold; model prompt preserves source ISO for runtime mapping",
+        "unit_rendering": "korean_reader_units"
+      },
+      "critical_boundaries": [
+        "승인은 작업 수행이 아니다",
+        "착수·완료 기록이 없으면 실행 상태를 말하지 않는다",
+        "조달 예상 기간은 도착 예정일이 아니다",
+        "실제 재고 수량과 작업 가능 시간은 미확인으로 둔다"
+      ],
+      "expanded_text_support": [
+        {
+          "role": "process_engineer",
+          "added_text": "현재 판단은 공구·동력 전달 계통의 이상 위치를 좁히는 단계이며, 승인 여부보다 현장 관측과 SOP 비교가 우선입니다.\n공구 마모는 230 min, 과부하 지표는 12,650 N·m·min으로 기준 초과가 가리키는 점검 위치 판단입니다.\n이 기준은 공구 사용 시간·마모·체결·이상 소음과 주축 모터·커플링·동력 전달부의 체결·발열·진동 확인으로 이어집니다.\n이미 커플링 정렬 점검에서 편심과 정비 권고가 기록됐지만, 유사 이력의 인서트 교체나 커플링 재조정이 현재 자산의 원인 확정 근거는 아닙니다.\n다음 판단에는 현장 관측값, 이상 소음·진동·발열·체결 상태, 최근 위험 시계열이 필요하며 이 값이 있어야 점검 위치와 원인 후보를 좁힐 수 있습니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "maintenance_technician",
+          "added_text": "점검 결과는 2026-07-31T23:40:00+09:00 커플링 정렬 점검에서 편심 확인 및 정비 권고로 기록됐고, 커플링 정렬 보정 작업요청은 **승인 상태**입니다.\n승인 시각은 2026-07-31T23:55:00+09:00이지만, 승인 기록은 정비 수행 기록이 아니며 시작·완료 기록은 제공되지 않았습니다.\n따라서 현재 남은 판단은 승인 여부가 아니라 승인된 보정 작업의 착수 조건과 작업 시점입니다.\n제공 자료에는 카바이드 절삭 인서트 조달 예상 기간 1일, 주축 구동 커플링 키트 조달 예상 기간 2일, 커플링 작업 창 180분이 있습니다.\n다만 실제 재고 수량과 작업 가능 시간은 확인되지 않았으므로, 부품 가용 수량·현장 작업 가능 시간·안전 조건이 작업 착수 가능 여부의 남은 판단 조건입니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        },
+        {
+          "role": "process_manager",
+          "added_text": "현재 생산 판단은 승인된 커플링 보정 작업을 어느 생산 공백에 배치할지 정하는 단계입니다.\n커플링 정렬 보정 작업요청은 승인 상태이고 승인 시각은 2026-07-31T23:55:00+09:00이지만, 시작·완료 기록은 없어 실행 완료를 전제로 일정화할 수 없습니다.\n제공된 계획값은 정지 120분과 예상 손실 25개이며, 이는 실제 손실 실적이나 고객 주문 영향이 아니라 생산 일정 판단용 추정치입니다.\n생산·품질·납기 영향의 현재 연결 정보와 실제 작업 가능 시간이 확인돼야 어느 생산 공백에 작업을 배치할지 확정할 수 있습니다.\n승인된 작업요청을 기준으로 작업 가능 시간과 생산·품질 영향 자료를 함께 반영한 값이 셀 순서와 정지 시점 판단 조건입니다.",
+          "source_pointers": [
+            "/decision_flow/primary_chain",
+            "/prompt_payload/summary_context",
+            "/prompt_payload/decision_facts"
+          ]
+        }
+      ]
+    }
+  ],
+  "derived_from": "agent-review-decision-briefing-v4.2 + decision-flow-v1 human revision"
+}

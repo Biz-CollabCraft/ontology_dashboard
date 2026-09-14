@@ -1,0 +1,47 @@
+import sys,json,os,copy,hashlib,tempfile,time
+from pathlib import Path
+ROOT=Path('/Users/hb/.devspace/worktrees/ontology-dashboard-727ac25b')
+sys.path[:0]=[str(ROOT),str(ROOT/'systems/backend')]
+from app.dependencies import build_manufacturing_service
+from app.operations.context_providers import _history_record
+from app.operations.agent_review_summary import compose_deterministic_agent_review_summary,validate_agent_review_summary_contract
+from app.operations.agent_review_summary_provider import AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT, AgentReviewSummaryProvider,build_tool_selected_agent_review_summary_prompt_payload,AGENT_REVIEW_SUMMARY_PROMPT_VERSION
+from scripts.run_pr167_extended_comparison import EvalProvider
+from jsonschema import Draft202012Validator
+import app.operations.agent_review_summary_provider as provider_module
+BASE_SYSTEM_PROMPT=AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
+KOREAN_ADDITION=''
+SHARED_ADDITION=''
+OUT=Path(os.environ.get('LUNA_BULLET_OUT','/private/tmp/luna-bullet-validation-20260908-v2'));OUT.mkdir(exist_ok=True)
+def save(name,value): (OUT/name).write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n')
+if sys.argv[1]=='prepare':
+ assert not (OUT/'registration.json').exists()
+ cases=json.loads(Path('/private/tmp/owner-briefings-expanded-20260907/inputs.json').read_text())
+ for case in cases:
+  case['prompt_payload']=build_tool_selected_agent_review_summary_prompt_payload(packet=case['packet'],baseline_summary=compose_deterministic_agent_review_summary(case['packet']))
+ save('system-prompts.json',{'before':BASE_SYSTEM_PROMPT,'addition':KOREAN_ADDITION+'\n'+SHARED_ADDITION,'after':AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT})
+ save('inputs.json',cases)
+ save('registration.json',{'models':['gpt-5.6-luna'],'reasoning_effort':'low for GPT-5 models; not applicable for 4o mini','planned_cases':[3,8],'max_generations':4,'experiment_version':'luna-reader-bullets-v1','system_sha256':hashlib.sha256(AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT.encode()).hexdigest(),'max_repairs_per_case':1,'prompt_version':AGENT_REVIEW_SUMMARY_PROMPT_VERSION,'scope':'local fixture service packet with constructed workflow records; no team DB; human review pending','inputs_sha256':hashlib.sha256((OUT/'inputs.json').read_bytes()).hexdigest()})
+ print('Prepared frozen packets; Luna cases 3 and 8.');sys.exit()
+from dotenv import dotenv_values
+for k,v in dotenv_values('/Users/hb/Documents/final/ontology-dashboard/.env').items():
+ if k in ('LLM_API_KEY','OPENAI_API_KEY','LLM_BASE_URL') and v: os.environ[k]=v
+model=sys.argv[1];idx=int(sys.argv[2]);case=json.loads((OUT/'inputs.json').read_text())[idx-1]
+reg=json.loads((OUT/'registration.json').read_text());assert reg['inputs_sha256']==hashlib.sha256((OUT/'inputs.json').read_bytes()).hexdigest()
+assert model in reg['models']
+assert reg['system_sha256']==hashlib.sha256(AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT.encode()).hexdigest()
+assert case['prompt_payload']==build_tool_selected_agent_review_summary_prompt_payload(packet=case['packet'],baseline_summary=compose_deterministic_agent_review_summary(case['packet']))
+assert not (OUT/f'{model}-{idx}.json').exists()
+class Capture(EvalProvider):
+ def generate_json_with_metadata(self,*a,**kw):
+  assert hashlib.sha256(a[0].encode()).hexdigest()==reg['system_sha256']
+  r=super().generate_json_with_metadata(*a,**kw);self.raw=r;self.attempts=getattr(self,'attempts',[])+[r];return r
+provider=Capture(model);start=time.monotonic()
+try:
+ summary,meta=AgentReviewSummaryProvider(provider).generate_with_metadata(case['packet'])
+ errors=validate_agent_review_summary_contract(summary,packet=case['packet'])
+ result={'case_id':idx,'label':case['label'],'summary':summary,'accepted':not errors,'validation_errors':errors,'metadata':meta}
+except Exception as e: result={'case_id':idx,'accepted':False,'error_type':type(e).__name__,'review_attempts':getattr(e,'review_attempts',[])}
+result.update(model=model,raw=getattr(provider,'raw',None),attempts=getattr(provider,'attempts',[]),transport=provider.http_events,duration_seconds=round(time.monotonic()-start,3))
+save(f'{model}-{idx}.json',result)
+print(json.dumps({k:result.get(k) for k in ('case_id','accepted','validation_errors','error_type','duration_seconds')}))

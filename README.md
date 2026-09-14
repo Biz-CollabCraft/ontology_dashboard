@@ -1,5 +1,7 @@
 # 온톨로지 기반 설비 예지보전 플랫폼 (`ontology_dashboard`)
 
+로컬 브리핑 서버 실행·재시작 시 [환경 설정 점검표](docs/operations/local-briefing-environment.md)를 먼저 확인합니다. 직접 uvicorn을 실행하면 `.env`가 자동 로딩되지 않습니다.
+
 제조 설비의 센서·정비·예측 데이터를 온톨로지 기반으로 연결하고, 같은 분석 결과를
 Dashboard, Operations, Executive Brief, API에서 일관되게 활용하기 위한 팀 프로젝트입니다.
 

@@ -8,6 +8,7 @@ from jsonschema import Draft202012Validator
 
 from app.operations.agent_review_summary import (
     compose_deterministic_agent_review_summary,
+    summary_schema,
     validate_agent_review_summary,
     validate_agent_review_summary_contract,
     validated_agent_review_summary,
@@ -99,7 +100,7 @@ def test_agent_review_summary_schema_accepts_read_only_grounded_summary() -> Non
 
 
 def test_deterministic_agent_review_summary_validates_all_gold_packets() -> None:
-    validator = Draft202012Validator(SUMMARY_SCHEMA)
+    validator = Draft202012Validator(summary_schema())
 
     for scenario in ("GS-002", "GS-004", "GS-007"):
         packet = json.loads((GOLD_ROOT / f"{scenario}.json").read_text(encoding="utf-8"))
@@ -123,6 +124,7 @@ def test_deterministic_agent_review_summary_explains_factor_bundle_focus() -> No
 
     assert summary["confidence_label"] == "partial"
     assert "약 51건" in process_quote
+    assert "데모 가정 기준" in process_quote
     assert "요청됨 상태" in process_quote
     assert "requested" not in process_quote
     assert len(summary["inspection_focus"]) == 1
@@ -286,11 +288,11 @@ def test_agent_review_summary_validator_rejects_available_action_echo_as_command
     packet = json.loads((GOLD_ROOT / "GS-004.json").read_text(encoding="utf-8"))
     summary = compose_deterministic_agent_review_summary(packet)
     summary["mode"] = "llm"
-    summary["summary"] = "accept_inspection_work_order 를 실행해 수락하십시오."
+    summary["summary"] = "approve_inspection_work_order 를 실행해 승인하십시오."
 
     errors = validate_agent_review_summary_contract(summary, packet=packet)
 
-    assert "available_action_echo:accept_inspection_work_order" in errors
+    assert "available_action_echo:approve_inspection_work_order" in errors
 
 
 def test_agent_review_summary_validator_rejects_invented_history_summary() -> None:
@@ -639,3 +641,24 @@ def test_agent_review_packet_schema_rejects_empty_source_refs() -> None:
     errors = list(Draft202012Validator(PACKET_SCHEMA).iter_errors(packet))
 
     assert errors
+
+
+def test_generation_prompt_includes_validator_wording_constraints():
+    from app.operations.agent_review_summary import FORBIDDEN_PROSE_CLAIMS
+    from app.operations.agent_review_summary_provider import AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
+    assert all(phrase in AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT for phrase in FORBIDDEN_PROSE_CLAIMS)
+
+
+def test_preserved_source_footnote_is_not_generated_completion_claim():
+    import copy
+    packet = copy.deepcopy(PACKET)
+    packet.setdefault('operation_context_summary', {})['limitations'] = [
+        '정비 완료·위험 등급·예측 결과는 변경하지 않습니다.'
+    ]
+    summary = compose_deterministic_agent_review_summary(packet)
+    assert not any(e.startswith('forbidden_prose_claims:') for e in validate_agent_review_summary_contract(summary, packet=packet))
+    summary['data_footnotes'][-1]['note'] = '정비 완료'
+    assert 'forbidden_prose_claims:정비 완료' in validate_agent_review_summary_contract(summary, packet=packet)
+    summary = compose_deterministic_agent_review_summary(packet)
+    summary['summary'] = '정비 완료'
+    assert 'forbidden_prose_claims:정비 완료' in validate_agent_review_summary_contract(summary, packet=packet)

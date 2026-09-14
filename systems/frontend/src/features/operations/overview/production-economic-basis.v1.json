@@ -1,0 +1,105 @@
+{
+  "version": "production-reference-economics-v1.1",
+  "currency": "KRW",
+  "status": "illustrative_not_site_quote",
+  "sources": [
+    {
+      "id": "nist",
+      "url": "https://tsapps.nist.gov/publication/get_pdf.cfm?pub_id=928028",
+      "basis": "공정·노무 비용을 단가 × 시간으로 분리하는 계산 방법"
+    },
+    {
+      "id": "minimum-wage",
+      "url": "https://www.minimumwage.go.kr/minWage/policy/decisionMain.do",
+      "basis": "2026 시간급 10320원은 하한 참고치일 뿐 정비원 실제 시급이 아님"
+    },
+    {
+      "id": "haas",
+      "url": "https://sales.haascnc.com/sites/default/files/autofs/SapDownloads/MonthlyPriceList/US/Dealer/Haas%20Tooling%20Price%20Sheet.pdf",
+      "basis": "APKT160408 HMP20 10개 소매 참고 88.95 USD, 2025-10-03 자료. 현재 견적 아님"
+    },
+    {
+      "id": "doe",
+      "url": "https://www.energy.gov/sites/default/files/2014/05/f16/compressed_air_sourcebook.pdf",
+      "basis": "압축공기 전력비는 소비전력 × 운전시간 × 실제 한계 전력단가로 산정"
+    },
+    {
+      "id": "repo",
+      "url": "data/fixtures/maintenance_cost/tool-insert-cost-basis-v1.json",
+      "basis": "기존 데모 OEE .846, 사이클 4분/개, 공헌이익 5000원/개, 정비 시급 17520원 참고값"
+    }
+  ],
+  "parameters": [
+    {
+      "key": "units_per_hour",
+      "value": 12.69,
+      "unit": "개/시간/CNC",
+      "kind": "existing_demo_assumption",
+      "basis": "60 / 4 × 0.846; 실측 생산능력 아님"
+    },
+    {
+      "key": "daily_hours",
+      "value": 16,
+      "unit": "시간/일",
+      "kind": "demo_assumption",
+      "basis": "2교대 8시간 가정; 실제 일일 생산계획 아님"
+    },
+    {
+      "key": "unit_production_cost",
+      "value": 10000,
+      "unit": "원/개",
+      "kind": "demo_assumption",
+      "basis": "재료·가공·배부원가 합계 예시. ERP 원가 없으므로 실제 원가로 사용 금지"
+    },
+    {
+      "key": "unit_contribution",
+      "value": 5000,
+      "unit": "원/개",
+      "kind": "existing_demo_assumption",
+      "basis": "매출액이 아닌 판매가-변동비 가정. 정지에 따른 기회손실 노출액"
+    },
+    {
+      "key": "labor_hourly",
+      "value": 17520,
+      "unit": "원/인시",
+      "kind": "existing_reference_unverified",
+      "basis": "기존 저장소 292원/분 × 60. 실제 급여·도급비·야간 가산·부대비 제외"
+    },
+    {
+      "key": "usd_krw_assumption",
+      "value": 1400,
+      "unit": "원/USD",
+      "kind": "demo_assumption",
+      "basis": "현재 환율이 아닌 고정 비교 환율"
+    }
+  ],
+  "profiles": {
+    "CNC": {
+      "affected_cnc": 1,
+      "default_stop_minutes": 30,
+      "default_stop_basis": "기존 TOOL_REPLACEMENT 데모 예방정지 30분. 안전정지·접근·작업·시험운전 포함 참고 정책이며 현장 표준 아님.",
+      "labor_minutes": 10,
+      "parts_cost": 12453,
+      "part_scope": "절삭 인서트 1개 교체 시",
+      "basis": "round(88.95 / 10 × 1400). 공구 전체 교체 가격 아님"
+    },
+    "CMP": {
+      "affected_cnc": 4,
+      "default_stop_minutes": 60,
+      "default_stop_basis": "정지·감압 준비15분 + 소모품 작업30분 + 재가동 확인15분의 데모 가정. 제조사 표준시간 아님.",
+      "labor_minutes": 30,
+      "parts_cost": 100000,
+      "part_scope": "필터·오일 소모품 교체 시",
+      "basis": "소모품 10만원·작업30분은 예산 시나리오 가정. 모델별 견적 없음. 동일 셀 CNC 4대 의존·예비 압축기 없음 가정"
+    }
+  },
+  "limitations": [
+    "정비 시간은 생산 정지 시간과 별도",
+    "요청 정지 시간이 미입력일 때만 설비별 기본값으로 참고 계산. 명시한 0분은 유지하며 잘못된 값은 기본값으로 덮지 않음. 승인 일정에 저장하지 않음",
+    "생산원가·기회손실·매출을 합산하지 않음",
+    "교체비는 조건부 예시이며 점검만 할 때 반드시 발생하는 비용이 아님",
+    "압축기 생산 영향은 의존 설비 및 공기 저장량·예비기 확인 필요",
+    "고장 점수를 확률로 가정한 금전 기대손실을 생성하지 않음",
+    "VAT·배송·긴급출동·잔업·폐기·재작업·납기위약금 제외"
+  ]
+}

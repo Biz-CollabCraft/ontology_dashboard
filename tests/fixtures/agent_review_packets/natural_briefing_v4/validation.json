@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "cases": 8,
+  "relation_edges": 52,
+  "criteria": 97,
+  "blocked_criteria": 17,
+  "checks": [
+    "source pointer/value hash",
+    "relation endpoints",
+    "criterion support references",
+    "no hidden evidence required from answer-only applicable items",
+    "reference editable schema",
+    "frozen v3 artifacts unchanged"
+  ],
+  "semantic_human_review": "not_measured",
+  "model_scores": "not_measured",
+  "input_conflicts_resolved": false
+}

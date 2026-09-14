@@ -131,7 +131,7 @@ export interface PredictiveMaintenanceDashboardResponse {
     maintenance_events: Array<Record<string, unknown>>;
   } | null;
   fallback_available: true;
-  fallback_name: "Hanbit Tech Operations Reference";
+  fallback_name: "CollabCraft Operations Reference";
   replay_source: "postgresql_prediction_timeline";
 }
 

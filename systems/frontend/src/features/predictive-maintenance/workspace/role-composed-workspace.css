@@ -268,6 +268,93 @@
 .rw-workflow-prerequisite strong { font-size:13px; }.rw-workflow-prerequisite p { margin:0; color:var(--rw-muted); font-size:12px; line-height:1.55; }
 .rw-bottleneck-table { display:grid; border:1px solid var(--rw-line); border-radius:8px; overflow:hidden; }
 .rw-bottleneck-sla-note { margin:0 0 8px; padding:8px 10px; border:1px solid rgba(148,163,184,.14); border-radius:7px; color:var(--rw-muted,#8ea0b3); background:rgba(148,163,184,.04); font-size:11px; line-height:1.5; }
+
+/* Graphs stay available without forcing every persona workspace to become a
+   long scrolling document. The native disclosure remains keyboard accessible. */
+.rw-feature-disclosure { border:0; }
+.rw-feature-disclosure > summary { display:flex; min-height:38px; align-items:center; justify-content:space-between; gap:12px; border:1px solid rgba(96,165,250,.3); border-radius:7px; padding:8px 11px; color:inherit; background:rgba(59,130,246,.08); cursor:pointer; list-style:none; }
+.rw-feature-disclosure > summary::-webkit-details-marker { display:none; }
+.rw-feature-disclosure > summary span { font-size:11px; font-weight:850; }
+.rw-feature-disclosure > summary small { color:var(--rw-muted,#8ea0b3); font-size:9px; }
+.rw-feature-disclosure > summary::after { content:"그래프 열기"; border-radius:999px; padding:3px 7px; color:#2563eb; background:rgba(59,130,246,.12); font-size:8px; font-weight:850; }
+.rw-feature-disclosure[open] > summary::after { content:"그래프 닫기"; }
+.rw-feature-disclosure__content { padding-top:10px; }
+
+@media (min-width:981px) {
+  /* Engineer: monitoring and diagnosis place evidence beside the work queue. */
+  [data-surface="monitoring"] > [data-block-id="risk-queue"] { grid-column:1 / span 6; grid-row:1 / span 2; }
+  [data-surface="monitoring"] > [data-block-id="evidence-factors"] { grid-column:7 / -1; grid-row:1; }
+  [data-surface="monitoring"] > [data-block-id="sensor-signals"] { grid-column:7 / -1; grid-row:2; }
+  [data-surface="monitoring"] > [data-block-id="feature-trend"] { grid-column:1 / -1; grid-row:3; }
+
+  [data-surface="assets"] > [data-block-id="asset-brief"],
+  [data-surface="assets"] > [data-block-id="feature-trend"],
+  [data-surface="assets"] > [data-block-id="maintenance-history"] { grid-column:1 / -1; }
+  [data-surface="assets"] > [data-block-id="evidence-factors"] { grid-column:1 / span 6; }
+  [data-surface="assets"] > [data-block-id="sensor-signals"] { grid-column:7 / -1; }
+
+  [data-surface="inspection"] > [data-block-id="inspection-targets"] { grid-column:1 / span 6; grid-row:1; }
+  [data-surface="inspection"] > [data-block-id="evidence-factors"] { grid-column:7 / -1; grid-row:1; }
+  [data-surface="inspection"] > [data-block-id="workflow-lifecycle"] { grid-column:1 / span 6; grid-row:2; }
+  [data-surface="inspection"] > [data-block-id="workflow-actions"] { grid-column:7 / -1; grid-row:2; }
+  [data-surface="inspection"] > [data-block-id="feature-trend"] { grid-column:1 / -1; grid-row:3; }
+
+  [data-surface="maintenance-effect"] > [data-block-id="maintenance-effect"] { grid-column:1 / span 6; grid-row:1; }
+  [data-surface="maintenance-effect"] > [data-block-id="evidence-factors"] { grid-column:7 / -1; grid-row:1; }
+  [data-surface="maintenance-effect"] > [data-block-id="maintenance-history"] { grid-column:1 / span 6; grid-row:2; }
+  [data-surface="maintenance-effect"] > [data-block-id="sensor-signals"] { grid-column:7 / -1; grid-row:2; }
+  [data-surface="maintenance-effect"] > [data-block-id="feature-trend"] { grid-column:1 / -1; grid-row:3; }
+
+  [data-surface="maintenance-history"] > [data-block-id="decision-history"] { grid-column:1 / span 6; grid-row:1; }
+  [data-surface="maintenance-history"] > [data-block-id="maintenance-history"] { grid-column:7 / -1; grid-row:1; }
+  [data-surface="maintenance-history"] > [data-block-id="maintenance-effect"] { grid-column:1 / span 6; grid-row:2; }
+  [data-surface="maintenance-history"] > [data-block-id="evidence-factors"] { grid-column:7 / -1; grid-row:2; }
+  [data-surface="maintenance-history"] > [data-block-id="feature-trend"] { grid-column:1 / -1; grid-row:3; }
+
+  [data-surface="field-notes"] > [data-block-id="report-summary"] { grid-column:1 / -1; grid-row:1; }
+  [data-surface="field-notes"] > [data-block-id="inspection-targets"] { grid-column:1 / span 6; grid-row:2; }
+  [data-surface="field-notes"] > [data-block-id="evidence-factors"] { grid-column:1 / span 6; grid-row:3; }
+  [data-surface="field-notes"] > [data-block-id="feature-trend"] { grid-column:7 / -1; grid-row:2 / span 2; }
+
+  /* Operations manager: fixed decision hierarchy, with duplicate queues removed. */
+  [data-surface="operations-status"] > [data-block-id="operational-kpis"],
+  [data-surface="operations-status"] > [data-block-id="line-risk"] { grid-column:1 / -1; }
+  [data-surface="operations-status"] > [data-block-id="production-exposure"] { grid-column:1 / span 6; }
+  [data-surface="operations-status"] > [data-block-id="decision-queue"] { grid-column:7 / -1; }
+
+  [data-surface="pending-decisions"] > [data-block-id="operational-kpis"],
+  [data-surface="pending-decisions"] > [data-block-id="workflow-lifecycle"] { grid-column:1 / -1; }
+  [data-surface="pending-decisions"] > [data-block-id="production-exposure"] { grid-column:1 / span 6; }
+  [data-surface="pending-decisions"] > [data-block-id="decision-queue"] { grid-column:7 / -1; }
+
+  [data-surface="decision-case"] > [data-block-id="production-exposure"] { grid-column:1 / span 6; grid-row:1; }
+  [data-surface="decision-case"] > [data-block-id="decision-queue"] { grid-column:7 / -1; grid-row:1; }
+  [data-surface="decision-case"] > [data-block-id="evidence-factors"] { grid-column:1 / span 6; grid-row:2; }
+  [data-surface="decision-case"] > [data-block-id="workflow-lifecycle"] { grid-column:1 / -1; grid-row:3; }
+
+  [data-surface="production-impact"] > [data-block-id="production-exposure"] { grid-column:1 / span 4; }
+  [data-surface="production-impact"] > [data-block-id="business-kpis"] { grid-column:5 / span 4; }
+  [data-surface="production-impact"] > [data-block-id="material-context"] { grid-column:9 / span 4; }
+  [data-surface="production-impact"] > [data-block-id="line-risk"] { grid-column:1 / span 6; }
+[data-surface="production-impact"] > [data-block-id="decision-queue"] { grid-column:7 / -1; }
+.rw-production-impact-triptych { grid-column:1 / -1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; overflow:hidden; border:1px solid var(--rw-border,rgba(148,163,184,.28)); border-radius:10px; background:var(--rw-surface,rgba(15,23,42,.54)); box-shadow:0 8px 24px rgba(0,0,0,.08); }
+.rw-production-impact-triptych > .rw-composed-block { grid-column:auto!important; height:100%; border:0; border-right:1px solid var(--rw-border,rgba(148,163,184,.22)); border-radius:0; box-shadow:none; }
+.rw-production-impact-triptych > .rw-composed-block:last-child { border-right:0; }
+
+  [data-surface="maintenance-approval"] > [data-block-id="case-lineage"],
+  [data-surface="maintenance-approval"] > [data-block-id="workflow-actions"] { grid-column:1 / -1; }
+  [data-surface="maintenance-approval"] > [data-block-id="maintenance-effect"] { grid-column:1 / span 4; }
+  [data-surface="maintenance-approval"] > [data-block-id="material-context"] { grid-column:5 / span 4; }
+  [data-surface="maintenance-approval"] > [data-block-id="decision-queue"] { grid-column:9 / span 4; }
+  [data-surface="maintenance-approval"] > [data-block-id="maintenance-history"] { grid-column:1 / span 4; }
+
+  [data-surface="backlog"] > .rw-composed-block { grid-column:1 / -1; }
+
+  [data-surface="report-draft"] > [data-block-id="report-summary"] { grid-column:1 / -1; }
+  [data-surface="report-draft"] > [data-block-id="production-exposure"] { grid-column:1 / span 4; }
+  [data-surface="report-draft"] > [data-block-id="decision-history"] { grid-column:5 / span 4; }
+  [data-surface="report-draft"] > [data-block-id="decision-queue"] { grid-column:9 / span 4; }
+}
 .rw-bottleneck-sla-note strong { color:var(--rw-text,#eef4f8); }
 .rw-bottleneck-table>header,.rw-bottleneck-table>button { display:grid; grid-template-columns:minmax(130px,1.2fr) 76px minmax(110px,.8fr) minmax(130px,1.15fr) minmax(100px,.8fr); align-items:center; gap:8px; min-height:44px; padding:7px 10px; text-align:left; }
 .rw-bottleneck-table>header { color:var(--rw-muted); background:var(--rw-panel); font-size:11px; font-weight:800; }
@@ -301,6 +388,9 @@
 :root[data-density="standard"] .rw-composed-grid .operations-maintenance-workflow-panel :where(span,p,small,label,legend) { font-size:12px!important; line-height:1.45; }
 
 @media (max-width: 760px) {
+  .rw-production-impact-triptych { grid-template-columns:1fr; }
+  .rw-production-impact-triptych > .rw-composed-block { border-right:0; border-bottom:1px solid var(--rw-border,rgba(148,163,184,.22)); }
+  .rw-production-impact-triptych > .rw-composed-block:last-child { border-bottom:0; }
   .rw-bottleneck-table { overflow-x:auto; }
   .rw-bottleneck-table>header,.rw-bottleneck-table>button { min-width:690px; }
 }

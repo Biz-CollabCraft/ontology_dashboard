@@ -14,7 +14,7 @@ import {
 import { useState, type ReactNode } from "react";
 import type { OperationsContextModel, OperationsDashboardMode, OperationsRoleLens, OperationsView } from "../api/operationsContracts";
 import { OperationsFreshness } from "../components/OperationsUi";
-import { HanbitLogo } from "../../../ui/foundry/HanbitLogo";
+import { CollabCraftLogo } from "../../../ui/foundry/CollabCraftLogo";
 
 const VIEW_LABELS: Record<OperationsView, { label: string; description: string }> = {
   overview: { label: "Overview", description: "운영 상황판" },
@@ -104,7 +104,7 @@ export function OperationsShell({
     <main className="operations-app">
       <header className="operations-global-header">
         <div className="operations-brand">
-          <span className="operations-brand-mark hanbit-brand-mark"><HanbitLogo /></span>
+          <span className="operations-brand-mark collabcraft-brand-mark"><CollabCraftLogo /></span>
           <div><span>Ontology Dashboard</span><strong>Predictive Maintenance</strong></div>
         </div>
         <div className="operations-header-context" aria-label="현재 운영 문맥">
@@ -113,15 +113,13 @@ export function OperationsShell({
           <div className="is-dataset"><span>Dataset</span><strong title={context.datasetLabel}>{context.sourceVersion ?? "Dataset"} · {context.datasetVersionId}</strong></div>
         </div>
         <div className="operations-header-actions">
-          {!workflowMode ? (
-            <label>
-              <span>역할</span>
-              <select value={role} onChange={(event) => onRoleChange(event.target.value as OperationsRoleLens)}>
-                <option value="process_manager">생산 관리자</option>
-                <option value="field_operator">현장 담당자</option>
-              </select>
-            </label>
-          ) : null}
+          <label>
+            <span>역할</span>
+            <select value={role} onChange={(event) => onRoleChange(event.target.value as OperationsRoleLens)}>
+              <option value="process_manager">생산 관리자</option>
+              <option value="field_operator">현장/보전 담당자</option>
+            </select>
+          </label>
           <button type="button" className="operations-icon-button" onClick={onRefresh} aria-label="데이터 새로고침" disabled={refreshing}><RefreshCw size={17} className={refreshing ? "is-spinning" : ""} /></button>
           <button type="button" className="operations-icon-button" onClick={() => void onLogout()} aria-label="로그아웃" title="로그아웃"><LogOut size={17} /></button>
           <button type="button" className="operations-icon-button operations-mobile-menu" onClick={() => setMobileOpen((current) => !current)} aria-label="메뉴 열기">{mobileOpen ? <X size={19} /> : <Menu size={19} />}</button>

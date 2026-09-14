@@ -60,6 +60,9 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
             "0042_company_operational_context",
             "0043_inspection_work_order_assignment",
             "0044_repair_legacy_inspection_assignment",
+            "0045_versioned_operational_context",
+            "0046_operational_context_versions_and_bindings",
+            "0051_factory_records",
         ]
     assert second == []
 

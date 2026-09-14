@@ -45,7 +45,7 @@ def test_agent_review_summary_watcher_cli_reports_workflow_contract(tmp_path: Pa
     assert payload["workflow"]["engine"] == "simple"
     assert payload["workflow"]["max_attempts"] == 1
     assert payload["workflow"]["attempt_count"] == 1
-    assert payload["workflow"]["terminal_status"] == "completed"
+    assert payload["workflow"]["terminal_status"] == "partial"
     assert payload["workflow"]["attempts"] == [{"attempt": 1, "status": "succeeded"}]
     assert payload["operating_mode"] == {
         "mode": "once",

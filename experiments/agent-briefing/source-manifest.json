@@ -1,0 +1,349 @@
+{
+  "source_branch": "codex/pr167-ai-briefing-optimization-plan",
+  "source_head": "8a5c50d8",
+  "captured_at": "2026-09-08",
+  "files": [
+    {
+      "source": "scripts/compare_agent_review_summary_models.py",
+      "destination": "scripts/compare_agent_review_summary_models.py",
+      "kind": "active-evaluation",
+      "source_sha256": "8831b990c33fca4023d41704008c6fbdc6b250556fee33a7306c70bfe3f8a506"
+    },
+    {
+      "source": "scripts/run_pr167_extended_comparison.py",
+      "destination": "scripts/run_pr167_extended_comparison.py",
+      "kind": "active-evaluation",
+      "source_sha256": "888f220fd263890824e218b3349cc6f47fa2a7c7b6cf42de7b796acb389fb1ba"
+    },
+    {
+      "source": "scripts/run_pr167_registered_comparison.py",
+      "destination": "scripts/run_pr167_registered_comparison.py",
+      "kind": "active-evaluation",
+      "source_sha256": "3cd4760a672c4626767b015fe21887c9d97faf9b777cf9a77e7db31a37194163"
+    },
+    {
+      "source": "scripts/run_luna_120_stability.py",
+      "destination": "scripts/run_luna_120_stability.py",
+      "kind": "active-evaluation",
+      "source_sha256": "a9f8a4523670a4ce8c70b27674c8a11e8459af2ef924b11032cbcc4fa6f2f213"
+    },
+    {
+      "source": "scripts/replay_pr167_measured_latency.py",
+      "destination": "scripts/replay_pr167_measured_latency.py",
+      "kind": "active-evaluation",
+      "source_sha256": "e856624d99cd50eb032d52f3be32606fbd9d08b8be3ea2b99a8a72878e6121ed"
+    },
+    {
+      "source": "scripts/audit_pr167_database_readiness.py",
+      "destination": "scripts/audit_pr167_database_readiness.py",
+      "kind": "active-evaluation",
+      "source_sha256": "c65d066ab4f1ce0348e630a6d9e5fe399c5f0728aa1656805ac971b83e53da52"
+    },
+    {
+      "source": "tests/eval/test_agent_summary_model_comparison.py",
+      "destination": "tests/eval/test_agent_summary_model_comparison.py",
+      "kind": "active-evaluation",
+      "source_sha256": "c192cc97ea597757644e47d4b6dae7dc19125e9d2473f52c8e121fe95ef4ee95"
+    },
+    {
+      "source": "tests/eval/test_agent_summary_extended_comparison.py",
+      "destination": "tests/eval/test_agent_summary_extended_comparison.py",
+      "kind": "active-evaluation",
+      "source_sha256": "44255422f2bedaa21b63ea0ab7ee12e44d05b899937bc3f37d8faefe39e7f913"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/gold_answers_three_role_v2.json",
+      "destination": "tests/fixtures/agent_review_packets/gold_answers_three_role_v2.json",
+      "kind": "active-evaluation",
+      "source_sha256": "c79708a68159f3229143c51017ab69fbc2ea365d95d1687ea76aa9b8b1b2ffd2"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v3/gold_answers_natural_briefing_v3.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v3/gold_answers_natural_briefing_v3.json",
+      "kind": "historical-gold",
+      "source_sha256": "9663665015e581fe5a57e3e3e45921451ff78d8066ed2d86c2c52a63c038e779"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v3/gold-v3-review.md",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v3/gold-v3-review.md",
+      "kind": "historical-gold",
+      "source_sha256": "61922a213c21ffc6be4a9b4010a1c289c1b04cf055d96a8d7bbdf89299cc98c4"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v3/validation.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v3/validation.json",
+      "kind": "historical-gold",
+      "source_sha256": "b6cc19397c19095ab93d2369da16c685d2d9f32f34445e1324898b8032145cd8"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v3/manifest.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v3/manifest.json",
+      "kind": "historical-gold",
+      "source_sha256": "8c1dcebbe737cc8b92a6cb263bb93593d4796b245146a6f8e8fe080a86729b7e"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v3/review-worksheet.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v3/review-worksheet.json",
+      "kind": "historical-gold",
+      "source_sha256": "cd98f52dc38969ba9a38cee6ec983d8881f9cd35c0aa3024f14f623692b9854a"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v3/frozen-inputs-v2.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v3/frozen-inputs-v2.json",
+      "kind": "historical-gold",
+      "source_sha256": "64542521b01b1b6628b6a54b1ae1e4510f6c5b9ac39f4ca47e149518a5ac4228"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-008.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-008.json",
+      "kind": "historical-gold",
+      "source_sha256": "b01eeec5bb432af1adf6a9be9f37683c6c9718cfa9df420e9e36a04be4965818"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/gold-v4-review.md",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/gold-v4-review.md",
+      "kind": "historical-gold",
+      "source_sha256": "e577686b9c1747b09f5252f6b3c922991def0ee812f3f3c2e141317a167d8b3f"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-004.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-004.json",
+      "kind": "historical-gold",
+      "source_sha256": "784bb4cc551013b01a0384f27183d24de1777696fc374e1f13e70731050f24a7"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-005.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-005.json",
+      "kind": "historical-gold",
+      "source_sha256": "899eb7d05da7b0a3cc78a73c91ce777afb90951a85a2e39103aec39cabdebc21"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-002.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-002.json",
+      "kind": "historical-gold",
+      "source_sha256": "c883bc91e2c973cd452aa9e933aa6aea9857bf6a8670aa640d530d6371ef130a"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-003.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-003.json",
+      "kind": "historical-gold",
+      "source_sha256": "cd71f43c3fbf2f76e013c3382be5bc8b6670aa4944665fff73893e5a9c39c8d9"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/validation.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/validation.json",
+      "kind": "historical-gold",
+      "source_sha256": "5adfd20a5039bcce917fb08b9ae0d2ba3ad5fa038f3247f824659a3f3a89c493"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/manifest.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/manifest.json",
+      "kind": "historical-gold",
+      "source_sha256": "1074760d0fdadbb80088aff19f83082c55b897780bb97dca387e329eb88c6160"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/review-worksheet.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/review-worksheet.json",
+      "kind": "historical-gold",
+      "source_sha256": "e538fe0d7e5aa0cc2bab36a518dfd3d90860e2c8a3810ea5555eb031810d2e21"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/protocol.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/protocol.json",
+      "kind": "historical-gold",
+      "source_sha256": "b45836aca46e0eb3eb70a712b3fdb9429ff0b8d867dd18176ece9d69ae7b2786"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-001.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-001.json",
+      "kind": "historical-gold",
+      "source_sha256": "23da030fb83365dee6491b8a5d76936872a03f43ac6f622c796e98adb6458045"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-006.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-006.json",
+      "kind": "historical-gold",
+      "source_sha256": "6deaedc5e8b1888281b20448606844288c40413810be980bb792502ff955eca1"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-007.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4/GS-007.json",
+      "kind": "historical-gold",
+      "source_sha256": "fafc19f5783d138ea7c698a26d256a28399a55901ba308f38696df4ddf0cd605"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4_1/gold-v4.1.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4_1/gold-v4.1.json",
+      "kind": "historical-gold",
+      "source_sha256": "c13fc7ed41f895803ae426a4d404360338acdcc5624ae30a5020cac924c9efb2"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4_1/validation.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4_1/validation.json",
+      "kind": "historical-gold",
+      "source_sha256": "282dea3bc65229f00a122372a5f780844002f0b81386ec5d2f53feddf2cb7471"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4_1/manifest.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4_1/manifest.json",
+      "kind": "historical-gold",
+      "source_sha256": "360f518bb5d31326347e6351f577e7a12d20db05c7ceaac0c4281bca4fdca812"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4_1/gold-v4.1-briefings.md",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4_1/gold-v4.1-briefings.md",
+      "kind": "historical-gold",
+      "source_sha256": "b02ebc80a0c820d4b2e7b4713b0e7c3c66a9f976aa2fb1cd2dfe3ddad634d89f"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/reference-and-rubric.md",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/reference-and-rubric.md",
+      "kind": "historical-gold",
+      "source_sha256": "1c5b28eac08f852f91f67543cdb53a2c7dd7c77090bdc5c41014ae90f9d57213"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/briefings.md",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/briefings.md",
+      "kind": "historical-gold",
+      "source_sha256": "553ac99e7fa1fa23d0a784f40a2e6615f618cd81f9f53db83fa9f62dde765121"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/validation.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/validation.json",
+      "kind": "historical-gold",
+      "source_sha256": "feb0850ba84dada12b45a1edbcc3fabfe0f9d4733557218c529e427d6c791885"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/manifest.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/manifest.json",
+      "kind": "historical-gold",
+      "source_sha256": "f4c2f675df36ff5181dc66b195a607a71af50b55a9bd9d5380d2791bb3e60458"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/review-worksheet.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/review-worksheet.json",
+      "kind": "historical-gold",
+      "source_sha256": "e782f3d5f119576fa9539f1a75a83772bdde8912438e739b49b8d5577938fb1e"
+    },
+    {
+      "source": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/gold-v4.2.json",
+      "destination": "tests/fixtures/agent_review_packets/natural_briefing_v4_2/gold-v4.2.json",
+      "kind": "historical-gold",
+      "source_sha256": "3221195fa795a22f5ee8428c736610120d6071fefe113250b5912d41b93bdc75"
+    },
+    {
+      "source": "docs/eval/2026-09-06-agent-judge-controlled-historical-report.md",
+      "destination": "docs/eval/2026-09-06-agent-judge-controlled-historical-report.md",
+      "kind": "historical-report",
+      "source_sha256": "5b87373103f801bc58cac7036962cd101b8118e3be090d505cd2411146c03f71"
+    },
+    {
+      "source": "docs/eval/2026-09-07-live-fix-selective-absorption.md",
+      "destination": "docs/eval/2026-09-07-live-fix-selective-absorption.md",
+      "kind": "historical-report",
+      "source_sha256": "35402851d7625baad53b4d589507ecb55fd6cdb36785ec43b0e551ab0e6a88c2"
+    },
+    {
+      "source": "docs/eval/2026-09-07-luna-product-validation-decision.md",
+      "destination": "docs/eval/2026-09-07-luna-product-validation-decision.md",
+      "kind": "historical-report",
+      "source_sha256": "7a683c5ad9c9b10f588d2a8c4fa8543ac7f3f373ff684c5fc2138f8f2f178dfc"
+    },
+    {
+      "source": "docs/eval/2026-09-07-pr167-briefing-final-evaluation.md",
+      "destination": "docs/eval/2026-09-07-pr167-briefing-final-evaluation.md",
+      "kind": "historical-report",
+      "source_sha256": "13637920dbbbd43f3c9512fcdf19fd672bc8aa6a006b6601fe55414c7cd4e20e"
+    },
+    {
+      "source": "docs/eval/2026-09-07-pr167-gpt5-mini-luna-comparison.md",
+      "destination": "docs/eval/2026-09-07-pr167-gpt5-mini-luna-comparison.md",
+      "kind": "historical-report",
+      "source_sha256": "5638ef1f1b715ed73487c6a3509ddda7ade6c57beaec5c72299fa1d992ab7b62"
+    },
+    {
+      "source": "docs/eval/2026-09-07-sop-owner-record-briefing-enrichment.md",
+      "destination": "docs/eval/2026-09-07-sop-owner-record-briefing-enrichment.md",
+      "kind": "historical-report",
+      "source_sha256": "634fab5a718a330c6483901dad3cdacd091d5ba0c76a03c9f33489fcba84e20e"
+    },
+    {
+      "source": "docs/eval/2026-09-08-agent-briefing-usefulness-prelim.md",
+      "destination": "docs/eval/2026-09-08-agent-briefing-usefulness-prelim.md",
+      "kind": "historical-report",
+      "source_sha256": "2a27efb0610defe0abd7bfb3c5e143ce17f4907265335614934f828619eba25c"
+    },
+    {
+      "source": "docs/eval/2026-09-08-contribution-metric-verification.md",
+      "destination": "docs/eval/2026-09-08-contribution-metric-verification.md",
+      "kind": "historical-report",
+      "source_sha256": "cc1d1d36f6a7c26ad98b4551f10e8ecb369770e4cc03a8047cb92e3de6c761bd"
+    },
+    {
+      "source": "docs/eval/2026-09-08-reader-line-briefing-prompt-evidence.md",
+      "destination": "docs/eval/2026-09-08-reader-line-briefing-prompt-evidence.md",
+      "kind": "historical-report",
+      "source_sha256": "bed3361a3ddbf5962480ddb3d3f20d80a54cea422794c28ee5c94b76a0bfc345"
+    },
+    {
+      "source": "scripts/evaluate_owner_briefing_review.py",
+      "destination": "experiments/agent-briefing/historical/evaluate_owner_briefing_review.py.txt",
+      "kind": "historical-source-not-executable",
+      "source_sha256": "3c56d5732a583382f714c7ad6d85da2898cdae8952ac9c1c9e8eceaf2789ded6"
+    },
+    {
+      "source": "scripts/run_expanded_briefing_models.py",
+      "destination": "experiments/agent-briefing/historical/run_expanded_briefing_models.py.txt",
+      "kind": "historical-source-not-executable",
+      "source_sha256": "1874f8d55d326a19c036d4b4dfa4aab9c90c9efa09fb4cfac7c9d989d2c47bd6"
+    },
+    {
+      "source": "scripts/run_luna_bullet_validation.py",
+      "destination": "experiments/agent-briefing/historical/run_luna_bullet_validation.py.txt",
+      "kind": "historical-source-not-executable",
+      "source_sha256": "63073a9ea77046545aa051b72e86f77d807cbd580c0a68600c848259295ca5ad"
+    },
+    {
+      "source": "scripts/run_luna_validation.py",
+      "destination": "experiments/agent-briefing/historical/run_luna_validation.py.txt",
+      "kind": "historical-source-not-executable",
+      "source_sha256": "c3317ce2017bb4d70d647494e9edf9417847851b87ea90e66086c62ec2269a5b"
+    },
+    {
+      "source": "scripts/run_owner_briefing_models.py",
+      "destination": "experiments/agent-briefing/historical/run_owner_briefing_models.py.txt",
+      "kind": "historical-source-not-executable",
+      "source_sha256": "1b1dac26841cf3c04532e82c9459f8a100639e10aed9bea0ed72b30e709dd9c9"
+    },
+    {
+      "source": "scripts/run_owner_briefings_facts_review.py",
+      "destination": "experiments/agent-briefing/historical/run_owner_briefings_facts_review.py.txt",
+      "kind": "historical-source-not-executable",
+      "source_sha256": "4bde324265e482f18fe8c99ec076990f5ca638f560aa15bbbe1bd5691b1b221f"
+    },
+    {
+      "source": "scripts/run_owner_briefings_korean.py",
+      "destination": "experiments/agent-briefing/historical/run_owner_briefings_korean.py.txt",
+      "kind": "historical-source-not-executable",
+      "source_sha256": "4cdfacced893ff4b512850baae27f71dd385b306bdfcc53f974d817a55fd6597"
+    },
+    {
+      "source": "scripts/run_owner_briefings_review.py",
+      "destination": "experiments/agent-briefing/historical/run_owner_briefings_review.py.txt",
+      "kind": "historical-source-not-executable",
+      "source_sha256": "7e6d32987bfeb4158049c3d3ab01640be489ca47b506312722e6ceae82be0da5"
+    },
+    {
+      "source": "scripts/run_owner_briefings_state_review.py",
+      "destination": "experiments/agent-briefing/historical/run_owner_briefings_state_review.py.txt",
+      "kind": "historical-source-not-executable",
+      "source_sha256": "47375df1b0bc9efd23d1e99c109e16c099f2ca40101cf8afc1b42a6515f9780e"
+    },
+    {
+      "source": "scripts/run_shared_briefing_models.py",
+      "destination": "experiments/agent-briefing/historical/run_shared_briefing_models.py.txt",
+      "kind": "historical-source-not-executable",
+      "source_sha256": "c845e7e10c6ce4c1da70a4663ede711a8a9070ad5b27c3c5302dd90afc88213d"
+    }
+  ]
+}

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from typing import Protocol
 
+
 DEFAULT_HISTORY_WINDOW = "24h"
 HISTORY_WINDOW_HOURS = {
     "24h": 24,
@@ -64,6 +65,7 @@ class AssetDetailReadPort(Protocol):
         workspace_id: str,
         dataset_version_id: str | None,
         limit: int,
+        offset: int = 0,
     ) -> list[dict[str, Any]]: ...
 
     def feature_series(
@@ -196,6 +198,7 @@ class AssetDetailViewModelService:
         workspace_id: str,
         dataset_version_id: str | None = None,
         limit: int = 20,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         return self.read_port.latest_result_artifact_references(
             organization_id=organization_id,
@@ -203,6 +206,7 @@ class AssetDetailViewModelService:
             workspace_id=workspace_id,
             dataset_version_id=dataset_version_id,
             limit=limit,
+            offset=offset,
         )
 
     def _detail_view(
@@ -253,7 +257,7 @@ class AssetDetailViewModelService:
             dataset_version_id=request.dataset_version_id,
             event_id=request.event_id,
         )
-        return compose_asset_detail_view_model(
+        view = compose_asset_detail_view_model(
             asset=asset or {
                 "asset_id": request.asset_id,
                 "asset_type": artifact["asset_type"],
@@ -267,6 +271,10 @@ class AssetDetailViewModelService:
             history_window=request.history_window,
             event_id=request.event_id,
         )
+
+        from app.operations.signal_unit_policy import apply_signal_units
+        return apply_signal_units(view, organization_id=request.organization_id,
+                                  project_id=request.project_id, workspace_id=request.workspace_id)
 
 
 def compose_asset_detail_view_model(
@@ -471,6 +479,8 @@ def _evidence_basis_item(
         "source_version": str(item.get("source_version") or ""),
         "domain": str(item.get("domain") or "unresolved"),
         "relation_path": [str(path) for path in item.get("relation_path") or []],
+        "relation_paths": item.get("relation_paths") or [],
+        "display_fields": item.get("display_fields") or [],
         "fact_type": str(item.get("fact_type") or "unknown"),
         "value_summary": str(item.get("value_summary") or ""),
         "required_for_boundary": bool(item.get("required_for_boundary")),
@@ -988,6 +998,8 @@ _LIFECYCLE_STEP_LABELS = {
     "inspection_approved": "점검 시작 대기",
     "inspection_in_progress": "점검 진행 중",
     "inspection_completed": "점검 결과 확인",
+    "inspection_closed_no_action": "점검 완료·조치 불필요",
+    "inspection_data_check_required": "추가 데이터 확인 필요",
     "recommendation_proposed": "정비안 검토 대기",
     "maintenance_requested": "정비 승인 대기",
     "maintenance_approved": "정비 시작 대기",
@@ -1005,6 +1017,8 @@ _LIFECYCLE_ORDER = [
     "inspection_approved",
     "inspection_in_progress",
     "inspection_completed",
+    "inspection_closed_no_action",
+    "inspection_data_check_required",
     "recommendation_proposed",
     "maintenance_requested",
     "maintenance_approved",
@@ -1031,27 +1045,27 @@ _NEXT_STEP_BY_CURRENT = {
 }
 
 _ACTION_OWNER_BY_ID = {
-    "create_inspection_work_order": ("process_manager", "생산 운영 의사결정자"),
-    "request_inspection_work_order": ("process_manager", "생산 운영 의사결정자"),
-    "request_inspection": ("process_manager", "생산 운영 의사결정자"),
-    "accept_inspection_work_order": ("process_engineer", "현장 관리자"),
-    "start_inspection_work_order": ("process_engineer", "현장 엔지니어"),
-    "start_inspection": ("process_engineer", "현장 엔지니어"),
-    "complete_inspection_work_order": ("process_engineer", "현장 엔지니어"),
-    "complete_inspection": ("process_engineer", "현장 엔지니어"),
-    "calculate_maintenance_cost": ("process_manager", "생산 운영 의사결정자"),
+    "create_inspection_work_order": ("process_engineer", "설비 엔지니어"),
+    "request_inspection_work_order": ("process_engineer", "설비 엔지니어"),
+    "request_inspection": ("process_engineer", "설비 엔지니어"),
+    "accept_inspection_work_order": ("maintenance_technician", "보전팀"),
+    "start_inspection_work_order": ("maintenance_technician", "보전팀"),
+    "start_inspection": ("maintenance_technician", "보전팀"),
+    "complete_inspection_work_order": ("maintenance_technician", "보전팀"),
+    "complete_inspection": ("maintenance_technician", "보전팀"),
+    "calculate_maintenance_cost": ("maintenance_technician", "보전팀"),
     "create_operations_manual_recommendation": (
-        "process_manager",
-        "생산 운영 의사결정자",
+        "maintenance_technician",
+        "보전팀",
     ),
     "decide_operations_manual_recommendation": (
-        "process_manager",
-        "생산 운영 의사결정자",
+        "maintenance_technician",
+        "보전팀",
     ),
-    "approve_maintenance_work_order": ("process_manager", "생산 운영 의사결정자"),
+    "approve_maintenance_work_order": ("maintenance_technician", "보전팀"),
     "start_maintenance_action": ("maintenance_technician", "정비 작업자"),
     "complete_maintenance_action": ("maintenance_technician", "정비 작업자"),
-    "request_maintenance_replay": ("maintenance_technician", "정비 작업자"),
+    "request_maintenance_replay": ("process_engineer", "설비 엔지니어"),
 }
 
 _ACTIONS_REQUIRING_INPUT = {
@@ -1064,6 +1078,10 @@ _ACTIONS_REQUIRING_INPUT = {
     "complete_maintenance_action",
     "request_maintenance_replay",
 }
+
+
+def compose_closed_loop_read_model(closed_loop: dict[str, Any], *, prediction_available: bool, evidence_available: bool) -> dict[str, Any]:
+    return _closed_loop_read_model(closed_loop, prediction_available=prediction_available, evidence_available=evidence_available)
 
 
 def _closed_loop_read_model(
@@ -1140,6 +1158,17 @@ def _closed_loop_current_step(closed_loop: dict[str, Any]) -> str | None:
         if status == "completed":
             return "maintenance_completed"
 
+    inspection_results = _sorted_by_time(
+        closed_loop.get("inspection_results") or [],
+        keys=("recorded_at",),
+    )
+    if inspection_results:
+        inspection_outcome = inspection_results[0].get("outcome")
+        if inspection_outcome == "no_action_required":
+            return "inspection_closed_no_action"
+        if inspection_outcome == "data_check_required":
+            return "inspection_data_check_required"
+
     work_orders = _sorted_by_time(
         closed_loop.get("work_orders") or [],
         keys=("updated_at", "created_at"),
@@ -1171,11 +1200,24 @@ def _closed_loop_current_step(closed_loop: dict[str, Any]) -> str | None:
 
 
 def _completed_lifecycle_steps(current_step: str) -> list[str]:
+    if current_step in {
+        "inspection_closed_no_action",
+        "inspection_data_check_required",
+    }:
+        current_step = "inspection_completed"
+    progress_order = [
+        step
+        for step in _LIFECYCLE_ORDER
+        if step not in {
+            "inspection_closed_no_action",
+            "inspection_data_check_required",
+        }
+    ]
     try:
-        index = _LIFECYCLE_ORDER.index(current_step)
+        index = progress_order.index(current_step)
     except ValueError:
         return []
-    return _LIFECYCLE_ORDER[:index]
+    return progress_order[:index]
 
 
 def _closed_loop_primary_action(actions: list[dict[str, Any]]) -> dict[str, Any] | None:

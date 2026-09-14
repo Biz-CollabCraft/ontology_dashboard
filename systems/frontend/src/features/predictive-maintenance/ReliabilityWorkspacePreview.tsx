@@ -22,7 +22,7 @@ import {
 import type { AuthUser } from "../../types";
 import { displayPreset, useDisplayPreferences } from "../../ui/foundry/displayPreferences";
 import { useI18n } from "../../ui/i18n/I18nProvider";
-import { HanbitLogo } from "../../ui/foundry/HanbitLogo";
+import { CollabCraftLogo } from "../../ui/foundry/CollabCraftLogo";
 import type {
   OperationsClosedLoopLifecycleStep,
   OperationsAgentReviewPacket,
@@ -86,6 +86,8 @@ const LIFECYCLE_LABELS: Record<OperationsClosedLoopLifecycleStep, [string, strin
   inspection_approved: ["점검 승인", "Inspection approved"],
   inspection_in_progress: ["점검 중", "Inspection in progress"],
   inspection_completed: ["점검 완료", "Inspection completed"],
+  inspection_closed_no_action: ["점검 종결", "Inspection closed"],
+  inspection_data_check_required: ["추가 데이터 확인", "Additional data required"],
   recommendation_proposed: ["정비안 제안", "Recommendation proposed"],
   maintenance_requested: ["정비 요청", "Maintenance requested"],
   maintenance_approved: ["정비 승인", "Maintenance approved"],
@@ -207,9 +209,6 @@ export function reliabilityWorkspacePreviewEnabled() {
   if (queryEnabled) return true;
   const basePath = import.meta.env.BASE_URL.replace(/\/+$/, "");
   const pathname = window.location.pathname;
-  if (basePath === "") {
-    return /^\/app\/projects\/[^/]+\/operations/.test(pathname);
-  }
   const previewBaseEnabled = basePath === "/reliability-preview"
     && (pathname === basePath || pathname.startsWith(`${basePath}/`));
   return previewBaseEnabled;
@@ -231,7 +230,7 @@ export function ReliabilityWorkspaceLoadingPlaceholder() {
     >
       <header className="rw-preview-topbar">
         <div className="rw-preview-topbar-left">
-          <div className="rw-preview-brand"><span><HanbitLogo /></span><div><strong>Hanbit Tech</strong><small>Reliability Operations</small></div></div>
+          <div className="rw-preview-brand"><span><CollabCraftLogo /></span><div><strong>CollabCraft</strong><small>Reliability Operations</small></div></div>
           <div className="rw-preview-loading-line is-breadcrumb" />
         </div>
         <div className="rw-preview-loading-line is-user" />
@@ -662,7 +661,7 @@ export function ReliabilityWorkspacePreview({
       <header className="rw-preview-topbar">
         <div className="rw-preview-topbar-left">
           <button type="button" className="rw-preview-icon-button" onClick={() => setLeftOpen((value) => !value)} aria-label={leftOpen ? "Collapse navigation" : "Open navigation"}>{leftOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}</button>
-          <div className="rw-preview-brand"><span><HanbitLogo /></span><div><strong>Hanbit Tech</strong><small>Reliability Operations</small></div></div>
+          <div className="rw-preview-brand"><span><CollabCraftLogo /></span><div><strong>CollabCraft</strong><small>Reliability Operations</small></div></div>
           <div className="rw-preview-breadcrumb"><span>{context.projectName}</span><i>/</i><strong>{english ? activeNav.label.en : activeNav.label.ko}</strong></div>
         </div>
         <div className="rw-preview-topbar-right">

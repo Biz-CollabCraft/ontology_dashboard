@@ -1,0 +1,24 @@
+.prb-dialog-controls{display:flex;align-items:center;gap:8px}
+.prb-dialog-controls button{min-width:36px;height:36px;padding:0 10px;border:1px solid var(--ef-border);border-radius:4px;background:var(--operations-surface);color:inherit;cursor:pointer}
+.prb-dialog-controls .prb-print-button{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700}
+.prb-detail-risk-column{display:flex;min-width:0;flex-direction:column;gap:10px}
+.prb-detail-risk-column>.prb-risk{flex:none}
+.production-impact-print-root{display:none}
+@media print {
+ @page{size:A4 portrait;margin:12mm}
+ body.production-impact-print-mode>*:not(.production-impact-print-root){display:none!important}
+ body.production-impact-print-mode{height:auto!important;overflow:visible!important;background:white!important}
+ body.production-impact-print-mode>.production-impact-print-root{display:block!important;color:#172b46;background:white;--ef-border:#bfcee0;--ef-muted:#52657d;--operations-border-strong:#bfcee0;--operations-panel:white;--operations-surface:#f5f8fc;--operations-text:#172b46;font:11px sans-serif;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+ .production-impact-print-root .prb-dialog,.production-impact-print-root .prb-scroll{display:block!important;position:static!important;inset:auto!important;width:auto!important;max-width:none!important;height:auto!important;max-height:none!important;overflow:visible!important;box-shadow:none!important;border:0!important}
+ .production-impact-print-root .prb-dialog>header{padding:8px 0}
+ .production-impact-print-root .prb-dialog>.prb-scroll{padding:0}
+ .production-impact-print-root .prb-detail-charts{display:block!important}
+ .production-impact-print-root .prb-risk{height:65mm!important;break-inside:avoid}
+ .production-impact-print-root .prb-basis,.production-impact-print-root .prb-sensor,.production-impact-print-root .prb-metric{break-inside:avoid}
+ .production-impact-print-root .prb-table-scroll{overflow:visible!important}
+ .production-impact-print-root table{width:100%!important;min-width:0!important;table-layout:fixed;overflow-wrap:anywhere;font-size:9px}
+ .production-impact-print-root th,.production-impact-print-root td{padding:4px}
+ .production-impact-print-root thead{display:table-header-group}
+ .production-impact-print-root tr{break-inside:avoid}
+ .production-impact-print-root a{color:inherit;text-decoration:underline}
+}

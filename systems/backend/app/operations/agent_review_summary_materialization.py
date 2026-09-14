@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from typing import Any
 
 from app.operations.agent_review_summary import (
+    AGENT_REVIEW_SUMMARY_SCHEMA_VERSION,
+    ROLE_POLICY_VERSION,
     validate_agent_review_summary_contract,
     validated_agent_review_summary,
 )
@@ -16,7 +19,7 @@ from app.operations.agent_review_summary_provider import (
 )
 from app.operations.ports import AuditRepositoryPort
 
-SUMMARY_MATERIALIZATION_VERSION = "agent-review-summary-materialization-v1.1"
+SUMMARY_MATERIALIZATION_VERSION = "agent-review-summary-materialization-v1.2"
 
 
 class AgentReviewSummaryMaterializer:
@@ -52,6 +55,8 @@ class AgentReviewSummaryMaterializer:
         )
         materialization_key = summary_key(key_payload)
         cached = self.repository.get_agent_review_summary(materialization_key)
+        if cached is not None and not _valid_cached_summary(cached, packet=packet):
+            cached = None
         should_refresh_fallback = (
             refresh_fallback
             and cached is not None
@@ -117,7 +122,7 @@ class AgentReviewSummaryMaterializer:
         )
         materialization_key = summary_key(key_payload)
         cached = self.repository.get_agent_review_summary(materialization_key)
-        if cached is not None:
+        if cached is not None and _valid_cached_summary(cached, packet=packet):
             return cached["summary"], {
                 **cached["trace"],
                 "context_sha256": key_payload["context_sha256"],
@@ -136,6 +141,15 @@ class AgentReviewSummaryMaterializer:
         }
 
     def _generate_summary(self, packet: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        started = time.monotonic()
+        metrics = {"provider_invocations": 0, "content_attempt_count": None,
+                   "repair_count": None, "usage": None}
+        summary, trace = self._generate_summary_measured(packet, metrics)
+        return summary, {**trace, "generation_metrics": {
+            **metrics, "duration_ms": round((time.monotonic() - started) * 1000, 3),
+        }}
+
+    def _generate_summary_measured(self, packet, metrics):
         provider = self.provider
         if provider is None:
             summary, errors = validated_agent_review_summary(packet=packet)
@@ -147,7 +161,16 @@ class AgentReviewSummaryMaterializer:
             }
 
         try:
-            candidate = provider.generate(packet)
+            metrics["provider_invocations"] = 1
+            if hasattr(provider, "generate_with_metadata"):
+                candidate, metadata = provider.generate_with_metadata(packet)
+                attempts = metadata.get("content_review_attempts")
+                if isinstance(attempts, list):
+                    metrics["content_attempt_count"] = len(attempts)
+                    metrics["repair_count"] = max(0, len(attempts) - 1)
+                metrics["usage"] = metadata.get("usage")
+            else:
+                candidate = provider.generate(packet)
             candidate_errors = validate_agent_review_summary_contract(
                 candidate, packet=packet
             )
@@ -169,6 +192,10 @@ class AgentReviewSummaryMaterializer:
                 "fallback_validation_errors": errors,
             }
         except Exception as exc:
+            attempts = getattr(exc, "review_attempts", None)
+            if isinstance(attempts, list):
+                metrics["content_attempt_count"] = len(attempts)
+                metrics["repair_count"] = max(0, len(attempts) - 1)
             summary, errors = validated_agent_review_summary(packet=packet)
             return summary, {
                 "provider": getattr(provider, "name", "unknown"),
@@ -190,17 +217,24 @@ def summary_key_payload(
 ) -> dict[str, Any]:
     basis = packet.get("snapshot_basis") or {}
     source_sha256 = str(basis.get("source_sha256") or _sha256_json(basis))
+    evidence_basis_sha256 = _sha256_json(basis)
     return {
         "materialization_version": SUMMARY_MATERIALIZATION_VERSION,
         "organization_id": organization_id,
         "project_id": project_id,
         "workspace_id": workspace_id,
         "asset_id": str(packet.get("asset_id") or ""),
+        "artifact_id": str(basis.get("artifact_id") or ""),
         "event_id": str(basis.get("event_id") or ""),
+        "decision_as_of": str(basis.get("observed_at") or ""),
+        "evidence_payload_reference": str(basis.get("evidence_payload_reference") or ""),
+        "evidence_model_version": str(basis.get("model_version") or ""),
         "dataset_version": str(basis.get("dataset_version") or ""),
+        "evidence_basis_sha256": evidence_basis_sha256,
         "history_window": history_window,
         "packet_schema_version": str(packet.get("schema_version") or ""),
-        "summary_schema_version": "agent-review-summary-v1.0",
+        "summary_schema_version": AGENT_REVIEW_SUMMARY_SCHEMA_VERSION,
+        "role_policy_version": ROLE_POLICY_VERSION,
         "prompt_version": AGENT_REVIEW_SUMMARY_PROMPT_VERSION,
         "model_version": _provider_model_version(provider),
         "source_sha256": source_sha256,
@@ -219,6 +253,21 @@ def _provider_model_version(provider: AgentReviewSummaryProvider | None) -> str:
     if model:
         return f"{provider.name}:{model}"
     return provider.name
+
+
+def _valid_cached_summary(record: dict[str, Any], *, packet: dict[str, Any]) -> bool:
+    """A key match alone is insufficient: validate stored prose against current evidence."""
+    summary = record.get("summary")
+    if not isinstance(summary, dict) or summary.get("schema_version") != AGENT_REVIEW_SUMMARY_SCHEMA_VERSION:
+        return False
+    if record.get("status") not in {"ready", "fallback"}:
+        return False
+    if record["status"] == "ready" and summary.get("mode") != "llm":
+        return False
+    try:
+        return not validate_agent_review_summary_contract(summary, packet=packet)
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return False
 
 
 def _stable_fallback_reason(reason: Any) -> bool:
@@ -241,6 +290,11 @@ def _summary_context_sha256(packet: dict[str, Any]) -> str:
             "review_priority": packet.get("review_priority"),
             "model_expression_context": packet.get("model_expression_context") or {},
             "operation_context_summary": packet.get("operation_context_summary") or {},
+            "reference_economics": packet.get("reference_economics") or {},
+            "evidence_context": {
+                key: value for key, value in (packet.get("evidence_context") or {}).items()
+                if key != "relation_retrieved_at"  # Read audit time is not generation evidence.
+            },
             "maintenance_history_summary": packet.get("maintenance_history_summary") or {},
             "sop_guidance": packet.get("sop_guidance") or [],
             "inspection_targets": packet.get("inspection_targets") or [],
@@ -259,6 +313,8 @@ def _materialization_trace(record: dict[str, Any], *, reused: bool) -> dict[str,
         "status": record["status"],
         "reused": reused,
         "source_sha256": record["source_sha256"],
+        "evidence_basis_sha256": _sha256_json(record.get("snapshot_basis") or {}),
+        "decision_as_of": (record.get("snapshot_basis") or {}).get("observed_at"),
         "context_sha256": (record.get("trace") or {}).get("context_sha256"),
         "prompt_version": record["prompt_version"],
         "model_version": record["model_version"],
@@ -281,6 +337,8 @@ def _pending_materialization_trace(
         "status": "pending",
         "reused": False,
         "source_sha256": key_payload["source_sha256"],
+        "evidence_basis_sha256": key_payload["evidence_basis_sha256"],
+        "decision_as_of": key_payload["decision_as_of"],
         "context_sha256": key_payload["context_sha256"],
         "prompt_version": key_payload["prompt_version"],
         "model_version": key_payload["model_version"],

@@ -1,0 +1,18 @@
+{
+  "version": "manufacturing-signal-units-v1",
+  "scope": {"organization_id": "org-ontology-demo", "project_id": "manufacturing-demo-project", "workspace_id": "manufacturing-demo"},
+  "basis": "user_authorized_display_assumption",
+  "rules": "Only exact raw keys with absent source units. Preserve values, history, risk and thresholds; never apply to derived model features. Source units take precedence.",
+  "signals": {
+    "voltage_raw": {"label": "전압", "unit": "V"},
+    "pressure_raw": {"label": "압력", "unit": "kPa"},
+    "rotation_raw": {"label": "회전속도", "unit": "rpm"},
+    "vibration_raw": {"label": "진동 속도", "unit": "mm/s"},
+    "torque_nm": {"label": "토크", "unit": "N·m"},
+    "tool_wear_min": {"label": "공구 사용시간", "unit": "min"},
+    "air_temperature_k": {"label": "주변 온도", "unit": "K"},
+    "process_temperature_k": {"label": "공정 온도", "unit": "K"},
+    "rotational_speed_rpm": {"label": "회전속도", "unit": "rpm"},
+    "relative_vibration_z": {"label": "상대 진동", "unit": "z-score"}
+  }
+}
