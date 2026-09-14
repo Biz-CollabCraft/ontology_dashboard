@@ -68,7 +68,7 @@ def test_unclear_requirement_is_human_review_not_a_positive_measurement_claim():
     ('ambiguous_request', 'not_stated', None),
     ('ambiguous_other', 'not_stated', None),
     ('record_review', 'not_stated', 'REQUEST_INSPECTION'),
-    ('record_review', 'required', 'REQUEST_INSPECTION'),
+    ('record_review', 'required', None),
     ('new_measurement', 'required', 'REQUEST_ADDITIONAL_DIAGNOSIS'),
 ])
 def test_meaning_controls_review_and_blocks_record_review_from_measurement(meaning, status, expected):
@@ -92,6 +92,9 @@ def test_meaning_controls_review_and_blocks_record_review_from_measurement(meani
     if meaning.startswith('ambiguous'):
         assert run.session.recommendation_gate_reason == 'text_interpretation_requires_human_review'
         assert run.session.text_interpretations[0].quote == text
+    if meaning == 'record_review' and status == 'required':
+        assert run.session.recommendation_gate_reason == 'text_interpretation_unverified'
+        assert run.session.text_interpretation_errors == ('text_interpretation_failed:ValidationError',)
 
 
 def test_optional_measurement_quote_is_preserved_without_creating_a_requirement():
@@ -101,3 +104,22 @@ def test_optional_measurement_quote_is_preserved_without_creating_a_requirement(
     assert parsed.measurement_evidence == source.limitations[0]
     assert not parsed.measurement_required
     assert not parsed.uncertain
+
+
+def test_record_review_required_measurement_status_fails_closed():
+    text = 'Review the calibration record and new vibration readings are required.'
+    class Provider(AssessmentProvider):
+        def generate_json(self, prompt, payload, **kwargs):
+            return {'assessments': [dict(evidence_id=e['evidence_id'], unresolved_conflict=False,
+                information_missing=False, measurement_status='required', measurement_evidence='new vibration readings are required',
+                meaning='record_review', rationale='Inconsistent synthetic classification') for e in payload['excerpts']]}
+    data = packet()
+    data['limitations'] = [text]
+    run = ManufacturingDecisionAgent(tools=replace(tools(), packet_loader=lambda _: data),
+        text_interpreter=StructuredTextEvidenceInterpreter(Provider('required', 'new vibration readings are required', missing=False))).run(
+        DecisionAgentRequest(identity=IDENTITY, actor_role='process_engineer',
+            policy_facts=DecisionPolicyFacts(risk_status='warning')))
+    assert run.session.proposal.recommended_action is None
+    assert run.session.recommendation_gate_reason == 'text_interpretation_unverified'
+    assert run.session.text_interpretation_errors == ('text_interpretation_failed:ValidationError',)
+    assert not run.session.text_interpretations

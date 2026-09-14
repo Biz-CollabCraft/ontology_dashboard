@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, is_dataclass, replace
 from threading import Lock
 from hashlib import sha256
 import json
@@ -42,13 +42,16 @@ class DecisionSessionApplicationService:
                 raise ValueError("invalid decision request_id")
             key = json.dumps([identity.model_dump(mode="json"), actor_id, actor_role, request_id or uuid4().hex], sort_keys=True)
             session_id = "DS-" + sha256(key.encode()).hexdigest()
-            # Bind the server-owned evidence contents, not just the client snapshot label.
-            stable_packet = deepcopy(packet)
-            # This field records retrieval time, not a source revision.
-            if isinstance(stable_packet.get("evidence_context"), dict):
-                stable_packet["evidence_context"].pop("relation_retrieved_at", None)
-            evidence_binding = sha256(json.dumps(stable_packet, sort_keys=True, default=str).encode()).hexdigest()
-            result = DurableDecisionRunner(agent, self.run_store).run(request, session_id, evidence_binding=evidence_binding)
+            stable_packet = _stable_packet(packet)
+            evidence_binding = _packet_binding(stable_packet)
+            frozen_agent = _freeze_agent_packet(agent, stable_packet)
+            def validate_latest_binding() -> None:
+                latest = self.packet_loader(identity)
+                self._validate_packet_identity(latest, identity)
+                if _packet_binding(_stable_packet(latest)) != evidence_binding:
+                    raise ValueError("decision_session_context_changed")
+            result = DurableDecisionRunner(frozen_agent, self.run_store).run(
+                request, session_id, evidence_binding=evidence_binding, evidence_validator=validate_latest_binding)
         else:
             if request_id is not None:
                 raise ValueError("durable decision storage unavailable")
@@ -84,3 +87,23 @@ class DecisionSessionApplicationService:
             raise ValueError("decision_session_asset_mismatch")
         if basis.get("artifact_id") != identity.evidence_snapshot_id:
             raise ValueError("decision_session_snapshot_mismatch")
+
+
+def _stable_packet(packet: dict) -> dict:
+    stable_packet = deepcopy(packet)
+    # This field records retrieval time, not a source revision.
+    if isinstance(stable_packet.get("evidence_context"), dict):
+        stable_packet["evidence_context"].pop("relation_retrieved_at", None)
+    return stable_packet
+
+
+def _packet_binding(packet: dict) -> str:
+    return sha256(json.dumps(packet, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _freeze_agent_packet(agent: ManufacturingDecisionAgent, packet: dict) -> ManufacturingDecisionAgent:
+    if not is_dataclass(agent.tools) or not hasattr(agent.tools, "packet_loader"):
+        return agent
+    frozen_packet = deepcopy(packet)
+    frozen_tools = replace(agent.tools, packet_loader=lambda _identity: deepcopy(frozen_packet))
+    return replace(agent, tools=frozen_tools)

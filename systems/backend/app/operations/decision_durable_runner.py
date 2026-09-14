@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from hashlib import sha256
 import json
 from threading import Event, Thread
+from typing import Callable
 from uuid import uuid4
 
 from app.operations.decision_run_store import DecisionRunStore, DecisionRunLeaseLost
@@ -40,7 +41,7 @@ class DurableDecisionRunner:
             raise ValueError("decision parallelism must be between 1 and 3")
         self.agent, self.store, self.max_workers = agent, store, max_workers
 
-    def run(self, request: DecisionAgentRequest, session_id: str, *, evidence_binding: str = ""):
+    def run(self, request: DecisionAgentRequest, session_id: str, *, evidence_binding: str = "", evidence_validator: Callable[[], None] | None = None):
         from langgraph.graph import END, StateGraph
         agent, store = self.agent, self.store
         policy = agent.policy_guard.evaluate(request.policy_facts)
@@ -180,6 +181,8 @@ class DurableDecisionRunner:
                 planner_errors=tuple(state["planner_errors"]), recommendation_gate_reason=reason)
             result = DecisionAgentRunResult(engine="langgraph+durable+parallel" + ("+llm-ranking" if agent.planner else "") + ("+text-llm" if agent.text_interpreter else ""),
                 session=session, policy=policy, tool_results={k.value: v for k,v in values.items()})
+            if evidence_validator is not None:
+                evidence_validator()
             state["result"] = result.model_dump(mode="json")
             state["phase"] = "completed"
             save()

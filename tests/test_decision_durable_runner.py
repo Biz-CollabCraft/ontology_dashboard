@@ -237,3 +237,52 @@ def test_same_client_key_different_actor_is_a_separate_run(store):
     a=service.create(identity=IDENTITY,actor_role="process_engineer",request_id="request-owner",actor_id="one")
     b=service.create(identity=IDENTITY,actor_role="process_engineer",request_id="request-owner",actor_id="two")
     assert a.session.decision_session_id!=b.session.decision_session_id
+
+
+def _session_id(identity, actor_role, request_id, actor_id=""):
+    import json
+    from hashlib import sha256
+    key = json.dumps([identity.model_dump(mode="json"), actor_id, actor_role, request_id], sort_keys=True)
+    return "DS-" + sha256(key.encode()).hexdigest()
+
+
+def test_service_freezes_initial_packet_for_tool_reads(store):
+    stable = packet(IDENTITY)
+    changed = packet(IDENTITY)
+    changed["condition_decision_signals"] = {"additional_measurement_required": True}
+    changed["limitations"] = ["Changed packet would require another measurement if the tool read it."]
+
+    def live_packet(identity):
+        return stable
+
+    def mismatched_agent_factory(identity):
+        return ManufacturingDecisionAgent(
+            tools=agent_factory(identity).tools.__class__(packet_loader=lambda _identity: changed, operational_ports={}),
+            sleep=lambda _seconds: None,
+        )
+
+    service = DecisionSessionApplicationService(live_packet, mismatched_agent_factory, store)
+    result = service.create(identity=IDENTITY, actor_role="process_engineer", request_id="freeze-packet")
+
+    assert result.session.proposal.recommended_action == "REQUEST_INSPECTION"
+    assert result.tool_results[DecisionToolName.GET_ASSET_CONDITION.value].data["decision_signals"].get("additional_measurement_required") is None
+
+
+def test_service_revalidates_live_packet_before_publishing_result(store):
+    calls = {"count": 0}
+    stable = packet(IDENTITY)
+    changed = packet(IDENTITY)
+    changed["limitations"] = ["Different evidence under the same snapshot label"]
+
+    def changing_packet(identity):
+        calls["count"] += 1
+        return stable if calls["count"] == 1 else changed
+
+    service = DecisionSessionApplicationService(changing_packet, agent_factory, store)
+
+    with pytest.raises(ValueError, match="decision_session_context_changed"):
+        service.create(identity=IDENTITY, actor_role="process_engineer", request_id="changed-before-publish")
+
+    state = store.load(_session_id(IDENTITY, "process_engineer", "changed-before-publish"), IDENTITY)
+    assert state is not None
+    assert state["result"] is None

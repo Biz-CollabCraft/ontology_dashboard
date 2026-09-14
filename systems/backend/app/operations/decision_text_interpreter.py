@@ -75,6 +75,8 @@ class TextClassification(BaseModel):
     @model_validator(mode="after")
     def validate_measurement_support(self):
         if self.measurement_status == "required":
+            if self.meaning != "new_measurement":
+                raise ValueError("required measurement must be classified as new_measurement")
             if not self.measurement_evidence or not self.measurement_evidence.strip():
                 raise ValueError("required measurement needs source support")
         elif self.measurement_evidence is not None and not self.measurement_evidence.strip():
