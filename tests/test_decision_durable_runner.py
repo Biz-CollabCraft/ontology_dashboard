@@ -113,6 +113,36 @@ def test_completed_sibling_persists_before_other_read_finishes(store):
         assert future.result().session.proposal.recommended_action=="REQUEST_INSPECTION"
 
 
+def test_parallel_completion_order_does_not_change_session_order_or_result(store):
+    from threading import Event
+    base=agent_factory(IDENTITY)
+    inspection_done=Event()
+    completed=[]
+    class Tools:
+        def call(self,**kwargs):
+            tool=kwargs["tool_name"]
+            if tool==DecisionToolName.GET_ASSET_CONDITION:
+                assert inspection_done.wait(5)
+            result=base.tools.call(**kwargs)
+            completed.append(tool)
+            if tool==DecisionToolName.GET_INSPECTION_CONTEXT:
+                inspection_done.set()
+            return result
+    result=DurableDecisionRunner(ManufacturingDecisionAgent(tools=Tools()),store,max_workers=2).run(request(),"DS-order")
+    assert completed==[DecisionToolName.GET_INSPECTION_CONTEXT,DecisionToolName.GET_ASSET_CONDITION]
+    assert [c.tool_name for c in result.session.tool_calls]==[
+        DecisionToolName.GET_ASSET_CONDITION.value,
+        DecisionToolName.GET_INSPECTION_CONTEXT.value,
+    ]
+    assert list(result.tool_results)==[
+        DecisionToolName.GET_ASSET_CONDITION.value,
+        DecisionToolName.GET_INSPECTION_CONTEXT.value,
+    ]
+    assert result.session.proposal.recommended_action=="REQUEST_INSPECTION"
+    assert result.session.proposal.human_approval_required
+    assert not result.session.mutation_attempted
+
+
 def test_evidence_contents_change_rejects_reuse(store):
     service=DecisionSessionApplicationService(packet,agent_factory,store)
     service.create(identity=IDENTITY,actor_role="process_engineer",request_id="bound-request")

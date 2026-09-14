@@ -18,6 +18,7 @@
 2. operations 계층의 LLM planner/interpreter가 `httpx`와 `app.infra.llm.provider`를 직접 import했다. 동작은 가능했지만, 도메인/operations가 infra 구현을 알면 아키텍처 규칙을 위반한다.
 
 두 문제를 수정한 뒤 정적 아키텍처 검증과 관련 테스트를 통과했다.
+추가로 병렬 read가 실제 완료 순서에 흔들리지 않고, 세션의 tool call 기록과 최종 tool result 순서를 안정적으로 유지하는지 확인했다.
 
 ## 경계별 판정
 
@@ -31,7 +32,8 @@
 | Human-in-the-loop | Pass | 추천 버튼은 바로 mutation하지 않고 사용자 검토 영역을 연다. 실제 업무 요청은 기존 availableActions와 execution binding이 동시에 맞을 때만 열린다. |
 | Operations/Infra 의존성 | Pass after fix | planner/interpreter는 `app.common.llm_contract.LLMProvider` 포트만 알고, HTTP/provider 구현은 infra에 남긴다. |
 | LangGraph 품질 우위 | Not Proven | 구조적으로 bounded loop, durable checkpoint, 병렬 read는 검증했지만, fixture/gold-set 기준에서 LLM이 deterministic보다 제품 가치가 높다는 증거는 아직 없다. |
-| Live backend 성능/KPI | Not Measured | 현재 수치는 fixture/gold-set 또는 로컬 테스트 기준이다. 현장 운영 성과로 표현하지 않는다. |
+| Live PostgreSQL durable 경로 | Pass | 실행 중인 로컬 Postgres 컨테이너에 disposable DB를 만들고 migration, fenced lease, hard-process kill/resume을 검증했다. |
+| Live backend 성능/KPI | Not Measured | 라이브 Postgres 경로는 검증했지만, HTTP 서버 부하·현장 운영 성과·사람 판단 시간 단축은 측정하지 않았다. |
 
 ## 검증 명령과 결과
 
@@ -56,7 +58,14 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider \
   tests/test_decision_text_interpreter.py \
   tests/test_decision_ambiguous_evaluation.py \
   tests/test_backend_strict_architecture.py
-=> 126 passed
+=> 127 passed
+```
+
+```text
+TEST_POSTGRES_HOST=127.0.0.1 TEST_POSTGRES_PORT=63542 TEST_POSTGRES_USER=postgres \
+  PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q -p no:cacheprovider \
+  tests/test_decision_durable_postgresql.py
+=> 2 passed
 ```
 
 ```text
@@ -84,6 +93,8 @@ git diff --check
 - 서버 상태명과 화면 소비 계약이 일치한다.
 - LLM provider 장애나 malformed output은 planner/interpreter 경계에서 안전 실패로 접히고 deterministic fallback 또는 abstain 경로로 간다.
 - LangGraph durable runner는 read-only tool call을 병렬로 예약·저장·재시도하지만, checkpoint가 manufacturing mutation 권한을 갖지 않는다.
+- 병렬 조회에서 늦게 예약된 도구가 먼저 완료돼도 세션 기록과 최종 결과는 policy tool 순서로 안정화된다.
+- 라이브 로컬 Postgres에서는 disposable DB 기준으로 lease fencing과 process kill 이후 resume이 동작한다.
 - execution binding은 서버가 기존 closed-loop availableActions에서 허용된 action/target만 골라 내려준다.
 
 따라서 현재 PR에서 말할 수 있는 주장은 “Decision Agent를 기존 Operations 계약에 맞춰 안전하게 붙였다”이다. “LLM이 deterministic보다 낫다”, “현장 업무 시간이 줄었다”, “실제 공장 성과가 개선됐다”는 아직 말하면 안 된다.
@@ -95,7 +106,7 @@ git diff --check
 ## 남은 한계
 
 1. 구조화된 blocker, 추가 측정 요구, source-owned conflict 신호를 실제 운영 producer가 공급하는 통합은 아직 fixture-backed 검증이다.
-2. LangGraph 병렬 read와 durable checkpoint는 구조적으로 검증됐지만, live backend 지연/복구 성능 수치로 표현하지 않는다.
+2. LangGraph 병렬 read와 durable checkpoint는 로컬 Postgres disposable DB까지 검증했지만, live backend 지연/복구 성능 수치로 표현하지 않는다.
 3. MCP transport는 read-only tool contract 관점에서 구현되어 있으나, 외부 MCP 서버 운영 검증이나 배포 관측은 별도다.
 4. MONITOR, REQUEST_ADDITIONAL_DIAGNOSIS, REVIEW_PLANNED_MAINTENANCE의 독립 mutation 계약은 구현하지 않았다. 현재는 추천·검토 후보까지만 지원한다.
 5. 최종 승인 mutation은 기존 closed-loop API가 다시 검증한다. Decision Agent 출력은 승인 자체가 아니다.
