@@ -1,0 +1,1670 @@
+{
+  "scope": "Recorded model outputs replayed through LangGraph with synthetic read-only tools. Proposed text constraints only, no exact action ranking gold.",
+  "paired_batches_verified": 9,
+  "rows": [
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-01",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-02",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-03",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-04",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D05-01",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D05-02",
+      "iteration": 1,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-01",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-02",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-01",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-02",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-03",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-04",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D05-01",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D05-02",
+      "iteration": 1,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-01",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-02",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-03",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-04",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-01",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-02",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-03",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-04",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H05-01",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H05-02",
+      "iteration": 1,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-03",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-04",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-01",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-02",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-03",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-04",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H05-01",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H05-02",
+      "iteration": 1,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-01",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-02",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-03",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-04",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-01",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-02",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-03",
+      "iteration": 1,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-04",
+      "iteration": 1,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-01",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-02",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-03",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-04",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D05-01",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D05-02",
+      "iteration": 2,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-01",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-02",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-01",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-02",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-03",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-04",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D05-01",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D05-02",
+      "iteration": 2,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-01",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-02",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-03",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-04",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-01",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-02",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-03",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-04",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H05-01",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H05-02",
+      "iteration": 2,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-03",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-04",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-01",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-02",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-03",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-04",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H05-01",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H05-02",
+      "iteration": 2,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-01",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-02",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-03",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-04",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-01",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-02",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-03",
+      "iteration": 2,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-04",
+      "iteration": 2,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-01",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-02",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-03",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D03-04",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D05-01",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D05-02",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": false,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-01",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-02",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-01",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-02",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-03",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D03-04",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D05-01",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D05-02",
+      "iteration": 3,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-01",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-02",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-03",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "D06-04",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-01",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-02",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-03",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H03-04",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H05-01",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H05-02",
+      "iteration": 3,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-03",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "D06-04",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-01",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-02",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-03",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H03-04",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H05-01",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H05-02",
+      "iteration": 3,
+      "action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-01",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-02",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-03",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-4o-mini",
+      "id": "H06-04",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-01",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-02",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-03",
+      "iteration": 3,
+      "action": "REQUEST_INSPECTION",
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "id": "H06-04",
+      "iteration": 3,
+      "action": null,
+      "constraint_match": true,
+      "human_approval_required": true,
+      "mutation_attempted": false
+    }
+  ],
+  "models": {
+    "gpt-4o-mini": {
+      "all_six_labels_match": 38,
+      "meaning_match": 53,
+      "constraint_matches": 59,
+      "total": 60,
+      "mismatches": [
+        {
+          "id": "D03-04",
+          "iteration": 1,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "unresolved_conflict": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D05-01",
+          "iteration": 1,
+          "fields": {
+            "measurement_status": {
+              "proposed": "optional",
+              "actual": "not_required"
+            }
+          }
+        },
+        {
+          "id": "D06-04",
+          "iteration": 1,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "unresolved_conflict": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H03-01",
+          "iteration": 1,
+          "fields": {
+            "meaning": {
+              "proposed": "clear_other",
+              "actual": "ambiguous_request"
+            },
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "uncertain": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H03-04",
+          "iteration": 1,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "unresolved_conflict": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H05-01",
+          "iteration": 1,
+          "fields": {
+            "measurement_status": {
+              "proposed": "optional",
+              "actual": "not_required"
+            }
+          }
+        },
+        {
+          "id": "H06-04",
+          "iteration": 1,
+          "fields": {
+            "meaning": {
+              "proposed": "ambiguous_request",
+              "actual": "ambiguous_other"
+            }
+          }
+        },
+        {
+          "id": "D03-04",
+          "iteration": 2,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "unresolved_conflict": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D05-01",
+          "iteration": 2,
+          "fields": {
+            "measurement_status": {
+              "proposed": "optional",
+              "actual": "not_required"
+            }
+          }
+        },
+        {
+          "id": "D06-04",
+          "iteration": 2,
+          "fields": {
+            "meaning": {
+              "proposed": "ambiguous_request",
+              "actual": "ambiguous_other"
+            },
+            "unresolved_conflict": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H03-01",
+          "iteration": 2,
+          "fields": {
+            "meaning": {
+              "proposed": "clear_other",
+              "actual": "ambiguous_other"
+            },
+            "uncertain": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H03-04",
+          "iteration": 2,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "unresolved_conflict": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H05-01",
+          "iteration": 2,
+          "fields": {
+            "measurement_status": {
+              "proposed": "optional",
+              "actual": "not_required"
+            }
+          }
+        },
+        {
+          "id": "H06-04",
+          "iteration": 2,
+          "fields": {
+            "meaning": {
+              "proposed": "ambiguous_request",
+              "actual": "ambiguous_other"
+            },
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D03-04",
+          "iteration": 3,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "unresolved_conflict": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D05-01",
+          "iteration": 3,
+          "fields": {
+            "measurement_status": {
+              "proposed": "optional",
+              "actual": "not_required"
+            }
+          }
+        },
+        {
+          "id": "D05-02",
+          "iteration": 3,
+          "fields": {
+            "unresolved_conflict": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D06-04",
+          "iteration": 3,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "unresolved_conflict": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H03-01",
+          "iteration": 3,
+          "fields": {
+            "meaning": {
+              "proposed": "clear_other",
+              "actual": "ambiguous_request"
+            },
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "uncertain": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H03-04",
+          "iteration": 3,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "unresolved_conflict": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H05-01",
+          "iteration": 3,
+          "fields": {
+            "measurement_status": {
+              "proposed": "optional",
+              "actual": "not_required"
+            }
+          }
+        },
+        {
+          "id": "H06-04",
+          "iteration": 3,
+          "fields": {
+            "meaning": {
+              "proposed": "ambiguous_request",
+              "actual": "ambiguous_other"
+            },
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        }
+      ]
+    },
+    "gpt-5.6-luna": {
+      "all_six_labels_match": 33,
+      "meaning_match": 56,
+      "constraint_matches": 60,
+      "total": 60,
+      "mismatches": [
+        {
+          "id": "D03-01",
+          "iteration": 1,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D03-04",
+          "iteration": 1,
+          "fields": {
+            "meaning": {
+              "proposed": "ambiguous_request",
+              "actual": "ambiguous_other"
+            }
+          }
+        },
+        {
+          "id": "D05-02",
+          "iteration": 1,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D06-01",
+          "iteration": 1,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D06-02",
+          "iteration": 1,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_required",
+              "actual": "not_stated"
+            },
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D06-04",
+          "iteration": 1,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            }
+          }
+        },
+        {
+          "id": "H03-04",
+          "iteration": 1,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            }
+          }
+        },
+        {
+          "id": "H05-02",
+          "iteration": 1,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H06-01",
+          "iteration": 1,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H06-04",
+          "iteration": 1,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            }
+          }
+        },
+        {
+          "id": "D03-01",
+          "iteration": 2,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D05-02",
+          "iteration": 2,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D06-01",
+          "iteration": 2,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D06-02",
+          "iteration": 2,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_required",
+              "actual": "not_stated"
+            }
+          }
+        },
+        {
+          "id": "D06-04",
+          "iteration": 2,
+          "fields": {
+            "meaning": {
+              "proposed": "ambiguous_request",
+              "actual": "ambiguous_other"
+            }
+          }
+        },
+        {
+          "id": "H03-04",
+          "iteration": 2,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            }
+          }
+        },
+        {
+          "id": "H05-02",
+          "iteration": 2,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H06-04",
+          "iteration": 2,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            },
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D03-01",
+          "iteration": 3,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D03-04",
+          "iteration": 3,
+          "fields": {
+            "meaning": {
+              "proposed": "ambiguous_request",
+              "actual": "ambiguous_other"
+            }
+          }
+        },
+        {
+          "id": "D05-02",
+          "iteration": 3,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D06-01",
+          "iteration": 3,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D06-02",
+          "iteration": 3,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_required",
+              "actual": "not_stated"
+            },
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "D06-04",
+          "iteration": 3,
+          "fields": {
+            "meaning": {
+              "proposed": "ambiguous_request",
+              "actual": "ambiguous_other"
+            }
+          }
+        },
+        {
+          "id": "H03-04",
+          "iteration": 3,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            }
+          }
+        },
+        {
+          "id": "H05-02",
+          "iteration": 3,
+          "fields": {
+            "information_missing": {
+              "proposed": false,
+              "actual": true
+            }
+          }
+        },
+        {
+          "id": "H06-04",
+          "iteration": 3,
+          "fields": {
+            "measurement_status": {
+              "proposed": "not_stated",
+              "actual": "unclear"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
