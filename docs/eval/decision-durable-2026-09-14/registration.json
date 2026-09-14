@@ -1,0 +1,170 @@
+{
+  "binding": "a87e0e5185d9f205f6c002c03e27200e30db7dd28c9eeb032187b2da58b65c57",
+  "protocol": {
+    "cases": [
+      {
+        "id": "normal",
+        "first": [
+          "The existing log is present and its timestamp is verified."
+        ],
+        "second": [
+          "No additional physical measurements are needed."
+        ],
+        "expected": "REQUEST_INSPECTION",
+        "required": 2
+      },
+      {
+        "id": "early_conflict",
+        "first": [
+          "Two inspectors disagree about continued operation under the same current conditions; the disagreement remains unresolved."
+        ],
+        "second": [
+          "No additional physical measurements are needed."
+        ],
+        "expected": null,
+        "required": 1
+      },
+      {
+        "id": "timeout_recovered",
+        "first": [
+          "The existing log is present and its timestamp is verified."
+        ],
+        "second": [
+          "No additional physical measurements are needed."
+        ],
+        "fault": "once",
+        "expected": "REQUEST_INSPECTION",
+        "required": 2
+      },
+      {
+        "id": "timeout_exhausted",
+        "first": [
+          "The existing log is present and its timestamp is verified."
+        ],
+        "second": [
+          "No additional physical measurements are needed."
+        ],
+        "fault": "always",
+        "expected": null,
+        "required": 0,
+        "recovery": true
+      },
+      {
+        "id": "missing_context",
+        "first": [
+          "The existing log is present and its timestamp is verified."
+        ],
+        "second": [
+          "No additional physical measurements are needed."
+        ],
+        "missing": true,
+        "expected": null,
+        "required": 1,
+        "recovery": true
+      },
+      {
+        "id": "duplicate_sources",
+        "first": [
+          "Record 0 is present and verified.",
+          "Record 1 is present and verified.",
+          "Record 2 is present and verified.",
+          "Record 3 is present and verified.",
+          "Record 4 is present and verified.",
+          "Record 5 is present and verified.",
+          "Record 6 is present and verified.",
+          "Record 7 is present and verified.",
+          "Record 8 is present and verified.",
+          "Record 9 is present and verified.",
+          "Record 10 is present and verified.",
+          "Record 11 is present and verified.",
+          "Record 0 is present and verified."
+        ],
+        "expected": "REQUEST_INSPECTION",
+        "required": 2,
+        "second": [
+          "Record 0 is present and verified.",
+          "Record 1 is present and verified.",
+          "Record 2 is present and verified.",
+          "Record 3 is present and verified.",
+          "Record 4 is present and verified.",
+          "Record 5 is present and verified.",
+          "Record 6 is present and verified.",
+          "Record 7 is present and verified.",
+          "Record 8 is present and verified.",
+          "Record 9 is present and verified.",
+          "Record 10 is present and verified.",
+          "Record 11 is present and verified.",
+          "Record 0 is present and verified."
+        ]
+      },
+      {
+        "id": "stale_snapshot",
+        "first": [
+          "The existing log is present and its timestamp is verified."
+        ],
+        "second": [
+          "No additional physical measurements are needed."
+        ],
+        "fault": "stale",
+        "expected": null,
+        "required": 0,
+        "recovery": true
+      },
+      {
+        "id": "tool_budget",
+        "first": [
+          "The existing log is present and its timestamp is verified."
+        ],
+        "second": [
+          "No additional physical measurements are needed."
+        ],
+        "max_calls": 1,
+        "expected": null,
+        "required": 1,
+        "recovery": true
+      },
+      {
+        "id": "late_explicit_conflict",
+        "first": [
+          "New vibration readings are required before assessment."
+        ],
+        "second": [
+          "Two inspectors disagree about continued operation under the same current conditions; the disagreement remains unresolved."
+        ],
+        "expected": null
+      },
+      {
+        "id": "three_independent_reads",
+        "maintenance": true,
+        "expected": "REVIEW_PLANNED_MAINTENANCE"
+      }
+    ],
+    "workers": [
+      1,
+      3
+    ],
+    "iterations": 3,
+    "warmup": "one unscored normal run per arm before measurements",
+    "injected_read_delay_seconds": 0.1,
+    "scope": "Actual SQLite durable runner; synthetic tool values/faults and predefined text labels. No external LLM, no production latency claim.",
+    "source_hashes": {
+      "scripts/evaluate_decision_durable.py": "9d99ec40cc9df431db07fb0346937c3d42ec4ca223d749e51b5fe6f5c18ce105",
+      "scripts/evaluate_decision_structure.py": "722c01d5f6ebbcbcd55f3a2803979c7040205079d42ab7c4d1fc6099fe44d083",
+      "scripts/evaluate_decision_agent_ambiguous.py": "d1de4a44251129c7c5446178de212723c250d6ce63a8847eae7cd50b71cb833a",
+      "systems/backend/app/operations/decision_durable_runner.py": "a14aaa742bf96ab4570c1b26941b0a88fe654f25783ba000e595fab0faf081a7",
+      "systems/backend/app/operations/decision_evidence.py": "e38599a5e6bfdb5f3d0de29db701b8cd0c6c030ac719488fb4498c18baca1b07",
+      "systems/backend/app/operations/decision_llm_planner.py": "3196123f5bdc5674d6f4a180cb6eecb4bcb22df889b1f53761c07ed0f1516504",
+      "systems/backend/app/operations/decision_mcp.py": "57b287f6b3291a7c71498d43acf1264421499a393de6e4038ebe9582d9c14e99",
+      "systems/backend/app/operations/decision_policy.py": "f50aff31da220cf1ca48a14548fd84cb92e0671e57b897e0347bbbc3eb7a73e2",
+      "systems/backend/app/operations/decision_retry.py": "3a26653dbe02019f3f0718818e66501f30dd2dac48743885dc4642f2b71b40fb",
+      "systems/backend/app/operations/decision_run_store.py": "311fc61c18a7b732de85e34a99007047f68280ed75514a71032b106715400a72",
+      "systems/backend/app/operations/decision_session_service.py": "ac9dd24cebd50a68dc8e278befa2738610edb3f6dcde080f1405029f7672eb65",
+      "systems/backend/app/operations/decision_support_agent.py": "d8035c9dd53e14e3037f0de8a5e4270686b89694c76e3003aa6ad6abdbeeefa0",
+      "systems/backend/app/operations/decision_support_contract.py": "0ff81f7e7c87e6ae6b11be19390b40d9ea75585f27e2dc2a3c07a65e7cbf511d",
+      "systems/backend/app/operations/decision_text_interpreter.py": "d1d4cdb3f86d8a8bf2aadccb2378aebdc0344dc1466c9f18ff768d728c936fe9",
+      "systems/backend/app/operations/decision_tools.py": "15462cc8410a80e4fead6aa56f823013530925d92365015d2a48212bf5ef15b2",
+      "systems/backend/app/infra/db/decision_run_repository.py": "5afb4ca8a574af3cf9250e68ede8e82ead5c10799c4483b4865e7dbca3a61b74"
+    },
+    "excluded": "Prior early_measurement case has contradictory later evidence and invalid action gold; it is not used as accuracy evidence."
+  }
+}

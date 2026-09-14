@@ -7,7 +7,7 @@ from tests.test_decision_text_interpreter import Classifier
 
 
 @pytest.mark.parametrize('enabled,mode',[(False,None),(True,None),(True,'llm')])
-def test_dependency_wiring_and_session_readback(monkeypatch,enabled,mode):
+def test_dependency_wiring_and_session_readback(monkeypatch,tmp_path,enabled,mode):
     import app.dependencies as deps
     source=packet();source['limitations']=['A repeat measurement is required before assessment.']
     classifier=Classifier(measurement=True)
@@ -21,9 +21,15 @@ def test_dependency_wiring_and_session_readback(monkeypatch,enabled,mode):
     class Repository:
         def __init__(self,target):pass
         def capture(self,identity):return self
+        def version_fingerprint(self,identity):return "synthetic-context-v1"
         def ports(self):return tools().operational_ports
     monkeypatch.setattr(deps,'get_service',lambda:SimpleNamespace(agent_review_packet=lambda *args:source))
-    monkeypatch.setattr(deps,'database_target',lambda:'synthetic-test-db')
+    import sqlite3
+    from pathlib import Path
+    db = tmp_path / 'runs.db'
+    with sqlite3.connect(db) as connection:
+        connection.executescript(Path('systems/backend/migrations/sqlite/0052_decision_agent_runs.sql').read_text())
+    monkeypatch.setattr(deps,'database_target',lambda:str(db))
     monkeypatch.setattr(deps,'OperationalContextRepository',Repository)
     monkeypatch.setattr(deps,'configured_provider',lambda:classifier)
     monkeypatch.setenv('LLM_PROVIDER','openai-compatible' if enabled else 'deterministic')

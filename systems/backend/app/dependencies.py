@@ -300,11 +300,14 @@ def get_decision_session_service() -> DecisionSessionApplicationService:
             packet_loader=packet_loader,
             operational_ports=repository.ports(),
         )
-        return ManufacturingDecisionAgent(tools=tools, planner=planner, text_interpreter=text_interpreter)
+        return ManufacturingDecisionAgent(tools=tools, planner=planner, text_interpreter=text_interpreter,
+            context_fingerprint=repository.version_fingerprint(identity))
 
+    from app.infra.db.decision_run_repository import DecisionRunRepository
     return DecisionSessionApplicationService(
         packet_loader=packet_loader,
         agent_factory=agent_factory,
+        run_store=DecisionRunRepository(target),
     )
 
 

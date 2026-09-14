@@ -29,8 +29,12 @@ PARAMS = {
 
 
 @pytest.fixture()
-def api_client(tmp_path: Path):
+def api_client(tmp_path: Path, monkeypatch):
     database_path = tmp_path / "decision-session-api.db"
+    monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.setenv("ONTOLOGY_DASHBOARD_DB", str(database_path))
+    from app.dependencies import get_predictive_maintenance_runtime_service
+    get_predictive_maintenance_runtime_service.cache_clear()
     identity: IdentityService = build_identity_service(database_path, app_env="test", seed_demo=True)
     manufacturing = build_manufacturing_service(database_path, root=ROOT)
 
@@ -43,13 +47,15 @@ def api_client(tmp_path: Path):
             sleep=lambda _seconds: None,
         )
 
-    sessions = DecisionSessionApplicationService(packet_loader=packet_loader, agent_factory=agent_factory)
+    from app.infra.db.decision_run_repository import DecisionRunRepository
+    sessions = DecisionSessionApplicationService(packet_loader=packet_loader, agent_factory=agent_factory, run_store=DecisionRunRepository(database_path))
     app.dependency_overrides[get_service] = lambda: manufacturing
     app.dependency_overrides[get_identity_service] = lambda: identity
     app.dependency_overrides[get_decision_session_service] = lambda: sessions
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
+    get_predictive_maintenance_runtime_service.cache_clear()
 
 
 def login(client: TestClient):
@@ -68,7 +74,7 @@ def test_create_and_read_decision_session_is_read_only_and_policy_bounded(api_cl
     created = client.post(url, params=PARAMS, headers=csrf(client))
     assert created.status_code == 200, created.text
     body = created.json()
-    assert body["engine"] == "langgraph"
+    assert body["engine"] == "langgraph+durable+parallel"
     assert body["session"]["mutation_attempted"] is False
     assert body["session"]["proposal"]["human_approval_required"] is True
     assert body["session"]["proposal"]["recommended_action"] in body["session"]["allowed_actions"]
@@ -87,3 +93,15 @@ def test_decision_session_requires_csrf_for_creation(api_client):
     login(client)
     response = client.post(f"/api/objects/{ASSET_ID}/decision-sessions", params=PARAMS)
     assert response.status_code == 403
+
+
+def test_request_id_reuses_persisted_session(api_client):
+    login(api_client)
+    url=f"/api/objects/{ASSET_ID}/decision-sessions"
+    params={**PARAMS,"request_id":"http-retry-001"}
+    first=api_client.post(url,params=params,headers=csrf(api_client))
+    second=api_client.post(url,params=params,headers=csrf(api_client))
+    assert first.status_code==second.status_code==200
+    assert first.json()==second.json()
+    invalid=api_client.post(url,params={**PARAMS,"request_id":"bad"},headers=csrf(api_client))
+    assert invalid.status_code==422

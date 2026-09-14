@@ -426,3 +426,12 @@ docs/eval/**/*.cjs
 docs/eval/**/*.py
 docs/eval/**/artifacts/
 docs/eval/**/screenshots/
+
+# Reviewed, credential-free durable decision evaluation evidence
+!docs/eval/decision-durable-2026-09-14/registration.json
+!docs/eval/decision-durable-2026-09-14/results.json
+!docs/eval/decision-durable-2026-09-14/http-proof.json
+!docs/eval/decision-durable-2026-09-14/http-cleanup.json
+
+!docs/eval/decision-durable-2026-09-14/http-client-recovery.json
+!docs/eval/decision-durable-2026-09-14/http-client-cleanup.json
