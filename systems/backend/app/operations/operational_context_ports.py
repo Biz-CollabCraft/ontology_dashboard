@@ -223,6 +223,8 @@ class FixtureProductionDecisionContextReadPort:
                     "alternative_resources"
                 )
                 or [],
+                "due_pressure": self.context.get("due_pressure") or "unknown",
+                "schedule_slack_minutes": self.context.get("schedule_slack_minutes"),
                 "limitations": self.context.get("limitations") or [],
             }
         )
@@ -275,6 +277,8 @@ class FixtureProductionDecisionContextReadPort:
                     item.model_dump(mode="json")
                     for item in selected_alternatives
                 ],
+                "due_pressure": parsed.due_pressure.value,
+                "schedule_slack_minutes": parsed.schedule_slack_minutes,
             }
             if not selected_orders:
                 limitations = (
@@ -375,6 +379,8 @@ class FixtureMaintenanceReadinessContextReadPort:
                     "technician_candidates"
                 )
                 or [],
+                "blocking_reasons": self.context.get("blocking_reasons") or [],
+                "recommendation_blockers": self.context.get("recommendation_blockers") or [],
                 "limitations": self.context.get("limitations") or [],
             }
         )
@@ -435,6 +441,8 @@ class FixtureMaintenanceReadinessContextReadPort:
                     item.model_dump(mode="json")
                     for item in parsed.technician_candidates
                 ],
+                "blocking_reasons": list(parsed.blocking_reasons),
+                "recommendation_blockers": list(parsed.recommendation_blockers),
                 "readiness": _maintenance_readiness(parsed),
                 "execution_records": {
                     "part_reservations": [],
