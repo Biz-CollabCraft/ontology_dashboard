@@ -1,7 +1,7 @@
 # Ontology Dashboard — Engineering Foundations Upgrade
 
 - 작성일: 2026-09-20
-- 상태: P0 implemented and verified / P1-P2 planned
+- 상태: P0-P1 implemented and verified / P2 planned
 - 대상: `Biz-CollabCraft/ontology_dashboard`
 - 기준 문서:
   - `docs/operations/current-operations-implementation-baseline.md`
@@ -41,6 +41,8 @@
 문서: `02-ai-authority-security.md`
 
 LLM과 deterministic system의 책임 경계를 문서화하고 malformed output, stale context, prompt/evidence 공격면을 검증한다.
+
+2026-09-20 기준 S1~S5 security regression과 evidence-injection fixture, unknown action-token fail-closed 검증을 완료했다.
 
 ### P2 — Scalability Evaluation
 문서: `03-scalability-evaluation.md`

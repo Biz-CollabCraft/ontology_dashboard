@@ -44,6 +44,22 @@ FORBIDDEN_SUMMARY_CLAIMS = (
     "auto_approve",
 )
 
+ACTION_TOKEN_HINTS = (
+    "approve",
+    "complete",
+    "create",
+    "delete",
+    "execute",
+    "mutate",
+    "patch",
+    "replay",
+    "restart",
+    "shutdown",
+    "start",
+    "stop",
+    "update",
+)
+
 FORBIDDEN_PROSE_CLAIMS = (
     "승인 절차가 자동으로 진행",
     "자동승인 완료",
@@ -652,6 +668,14 @@ def _validate_natural_language_grounding(
     if echoed_actions:
         errors.append(f"available_action_echo:{','.join(echoed_actions)}")
 
+    unsupported_actions = sorted(
+        _unsupported_action_tokens(prose_values, packet=packet)
+    )
+    if unsupported_actions:
+        errors.append(
+            f"unsupported_action_token:{','.join(unsupported_actions)}"
+        )
+
     probability_errors = _validate_prose_probabilities(prose_values, packet=packet)
     errors.extend(probability_errors)
     loss_errors = _validate_prose_lost_units(prose_values, packet=packet)
@@ -752,6 +776,43 @@ def _available_action_echoes(values: list[str], *, packet: dict[str, Any]) -> se
             or []
         )
         if action_id and _normalize_claim_text(action_id) in text
+    }
+
+
+def _unsupported_action_tokens(
+    values: list[str],
+    *,
+    packet: dict[str, Any],
+) -> set[str]:
+    """Fail closed on action-like internal identifiers in generated prose.
+
+    Evidence may contain arbitrary operator text, including instruction-shaped
+    strings. The model-facing prose surface is not an execution channel, so
+    snake_case identifiers that resemble commands are never valid user-facing
+    output, regardless of whether the backend currently exposes that action.
+    """
+
+    available = {
+        str(item).casefold()
+        for item in (packet.get("closed_loop_boundary") or {}).get(
+            "available_action_ids"
+        )
+        or []
+        if str(item)
+    }
+    tokens = {
+        match.casefold()
+        for value in values
+        for match in re.findall(
+            r"(?<![A-Za-z0-9_])[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+(?![A-Za-z0-9_])",
+            value,
+        )
+    }
+    return {
+        token
+        for token in tokens
+        if token not in available
+        and any(hint in token for hint in ACTION_TOKEN_HINTS)
     }
 
 
