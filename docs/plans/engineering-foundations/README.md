@@ -1,7 +1,7 @@
 # Ontology Dashboard — Engineering Foundations Upgrade
 
 - 작성일: 2026-09-20
-- 상태: P0-P1 implemented and verified / P2 planned
+- 상태: P0-P2 implemented and verified
 - 대상: `Biz-CollabCraft/ontology_dashboard`
 - 기준 문서:
   - `docs/operations/current-operations-implementation-baseline.md`
@@ -48,6 +48,8 @@ LLM과 deterministic system의 책임 경계를 문서화하고 malformed output
 문서: `03-scalability-evaluation.md`
 
 100/500/1000 asset 시나리오에서 watcher/change detection/candidate generation/LLM call 구조를 측정해 실제 병목을 찾는다.
+
+2026-09-20 기준 local detection 실측 + 기존 live-provider latency replay 기반 scale evaluation과 bounded-queue challenger 비교를 완료했다. serial baseline은 9개 중 8개 scenario에서 10초 deadline을 초과했고, 주 병목은 provider/concurrency projection으로 확인됐다. Kubernetes/HPA 필요성은 입증되지 않았다.
 
 ## 완료 조건
 

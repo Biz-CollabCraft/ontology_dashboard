@@ -1,0 +1,1247 @@
+{
+  "commit": "1e3da69edace2c460fde306a8fb956e1acc75b27",
+  "environment": {
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "python": "3.12.9"
+  },
+  "method": {
+    "challenger_cycles": 6,
+    "challenger_workers": 8,
+    "local_detection": "real decide_generation calls measured with perf_counter/process_time",
+    "memory_measurement": "not_measured",
+    "new_external_provider_calls": 0,
+    "poll_interval_ms": 10000,
+    "provider_projection": "recorded live-provider duration_ms replay; reference artifact says provider call + local validation end-to-end",
+    "repeats": 3,
+    "token_projection": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage"
+  },
+  "provider_reference": {
+    "completion_tokens": {
+      "average": 172.625,
+      "p50": 178,
+      "p95": 180
+    },
+    "cost_status": "not_configured",
+    "latency_ms": {
+      "average": 4066.857,
+      "p50": 3904.235,
+      "p95": 5788.544
+    },
+    "model": "gpt-4o-mini",
+    "path": "tests/eval/results/agent_summary_llm_eval_live_120_20260905_pm_fix.json",
+    "prompt_tokens": {
+      "average": 1626,
+      "p50": 1683,
+      "p95": 1749
+    },
+    "provider": "openai-compatible",
+    "sample_size": 120,
+    "total_tokens": {
+      "average": 1798.625,
+      "p50": 1861,
+      "p95": 1929
+    }
+  },
+  "recorded_at": "2026-09-20T03:38:28.431424+00:00",
+  "scenarios": [
+    {
+      "asset_count": 100,
+      "baseline": {
+        "architecture": "current_serial_watcher_projection",
+        "candidate_count": 1,
+        "completed_within_poll_deadline_rate": 1,
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycle_processing_ms": 4103.717,
+        "effective_poll_period_ms": 14103.717,
+        "end_to_end_ms": {
+          "average": 4103.64,
+          "p50": 4103.64,
+          "p95": 4103.64
+        },
+        "generated_count": 1,
+        "llm_calls_per_minute_effective_watcher": 4.254,
+        "poll_deadline_missed": false,
+        "projected_backlog_at_deadline": 0,
+        "provider_concurrency": 1,
+        "provider_latency_ms": {
+          "average": 4103.64,
+          "p50": 4103.64,
+          "p95": 4103.64
+        },
+        "queue_wait_ms": {
+          "average": 0,
+          "p50": 0,
+          "p95": 0
+        },
+        "reused_count": 99,
+        "tokens": {
+          "completion": 178,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 1627,
+          "total": 1805
+        },
+        "worker_count": 1,
+        "worker_utilization": 1
+      },
+      "challenger": {
+        "architecture": "bounded_queue_latest_per_asset_projection",
+        "candidate_events": 6,
+        "coalesced_candidate_count": 0,
+        "completed_within_poll_deadline_rate": 1,
+        "correctness": {
+          "candidate_drop_count": 0,
+          "important_event_detection_recall": 1,
+          "latest_changed_asset_materialized_rate": 1,
+          "mandatory_evidence_recall": {
+            "note": "scale harness changes scheduling only and does not alter evidence selection",
+            "status": "guarded_by_existing_regression",
+            "test": "tests/test_operational_evidence_selection.py"
+          },
+          "snapshot_consistency_rate": 1
+        },
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycles": 6,
+        "dropped_candidate_count": 0,
+        "end_to_end_ms": {
+          "average": 3990.354,
+          "p50": 4097.795,
+          "p95": 4165.249
+        },
+        "generated_count": 6,
+        "latest_changed_asset_materialized_rate": 1,
+        "llm_calls_per_minute_completed_projection": 6.7,
+        "llm_calls_per_minute_requested": 6,
+        "provider_concurrency": 1,
+        "provider_latency_ms": {
+          "average": 3990.354,
+          "p50": 4097.796,
+          "p95": 4165.249
+        },
+        "queue_capacity": 100,
+        "queue_depth": {
+          "max": 1,
+          "p50": 1,
+          "p95": 1
+        },
+        "queue_wait_ms": {
+          "average": 0,
+          "p50": 0,
+          "p95": 0
+        },
+        "reused_count": 594,
+        "tokens": {
+          "completion": 1068,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 9762,
+          "total": 10830
+        },
+        "worker_count": 8,
+        "worker_utilization": 0.055696
+      },
+      "change_rate": 0.01,
+      "changed_assets_per_poll": 1,
+      "detection": {
+        "candidate_generation_rate_per_sec": 13071.895,
+        "cpu_ms": {
+          "p50": 0.075,
+          "p95": 0.076,
+          "samples": [
+            0.075,
+            0.073,
+            0.076
+          ]
+        },
+        "generated_count": 1,
+        "important_event_detection_recall": 1,
+        "measurement": "local_wall_and_process_cpu",
+        "poll_read_ops_per_sec": 1307189.535,
+        "repeat_count": 3,
+        "reused_count": 99,
+        "wall_ms": {
+          "p50": 0.077,
+          "p95": 0.077,
+          "samples": [
+            0.077,
+            0.074,
+            0.077
+          ]
+        }
+      },
+      "poll_interval_ms": 10000,
+      "profile": "low_change"
+    },
+    {
+      "asset_count": 100,
+      "baseline": {
+        "architecture": "current_serial_watcher_projection",
+        "candidate_count": 10,
+        "completed_within_poll_deadline_rate": 0.2,
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycle_processing_ms": 40176.555,
+        "effective_poll_period_ms": 50176.555,
+        "end_to_end_ms": {
+          "average": 22034.011,
+          "p50": 22075.066,
+          "p95": 38205.517
+        },
+        "generated_count": 10,
+        "llm_calls_per_minute_effective_watcher": 11.958,
+        "poll_deadline_missed": true,
+        "projected_backlog_at_deadline": 8,
+        "provider_concurrency": 1,
+        "provider_latency_ms": {
+          "average": 4017.648,
+          "p50": 4097.796,
+          "p95": 4446.957
+        },
+        "queue_wait_ms": {
+          "average": 18016.363,
+          "p50": 18346.512,
+          "p95": 33770.749
+        },
+        "reused_count": 90,
+        "tokens": {
+          "completion": 1780,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 16270,
+          "total": 18050
+        },
+        "worker_count": 1,
+        "worker_utilization": 1
+      },
+      "challenger": {
+        "architecture": "bounded_queue_latest_per_asset_projection",
+        "candidate_events": 60,
+        "coalesced_candidate_count": 0,
+        "completed_within_poll_deadline_rate": 1,
+        "correctness": {
+          "candidate_drop_count": 0,
+          "important_event_detection_recall": 1,
+          "latest_changed_asset_materialized_rate": 1,
+          "mandatory_evidence_recall": {
+            "note": "scale harness changes scheduling only and does not alter evidence selection",
+            "status": "guarded_by_existing_regression",
+            "test": "tests/test_operational_evidence_selection.py"
+          },
+          "snapshot_consistency_rate": 1
+        },
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycles": 6,
+        "dropped_candidate_count": 0,
+        "end_to_end_ms": {
+          "average": 4830.898,
+          "p50": 4063.321,
+          "p95": 8093.336
+        },
+        "generated_count": 60,
+        "latest_changed_asset_materialized_rate": 1,
+        "llm_calls_per_minute_completed_projection": 62.695,
+        "llm_calls_per_minute_requested": 60,
+        "provider_concurrency": 8,
+        "provider_latency_ms": {
+          "average": 4087.047,
+          "p50": 3959.083,
+          "p95": 5129.172
+        },
+        "queue_capacity": 100,
+        "queue_depth": {
+          "max": 10,
+          "p50": 10,
+          "p95": 10
+        },
+        "queue_wait_ms": {
+          "average": 743.851,
+          "p50": 0,
+          "p95": 3854.403
+        },
+        "reused_count": 540,
+        "tokens": {
+          "completion": 10560,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 100365,
+          "total": 110925
+        },
+        "worker_count": 8,
+        "worker_utilization": 0.533831
+      },
+      "change_rate": 0.1,
+      "changed_assets_per_poll": 10,
+      "detection": {
+        "candidate_generation_rate_per_sec": 136986.296,
+        "cpu_ms": {
+          "p50": 0.074,
+          "p95": 0.076,
+          "samples": [
+            0.076,
+            0.073,
+            0.074
+          ]
+        },
+        "generated_count": 10,
+        "important_event_detection_recall": 1,
+        "measurement": "local_wall_and_process_cpu",
+        "poll_read_ops_per_sec": 1369862.96,
+        "repeat_count": 3,
+        "reused_count": 90,
+        "wall_ms": {
+          "p50": 0.073,
+          "p95": 0.076,
+          "samples": [
+            0.077,
+            0.073,
+            0.073
+          ]
+        }
+      },
+      "poll_interval_ms": 10000,
+      "profile": "medium_change"
+    },
+    {
+      "asset_count": 100,
+      "baseline": {
+        "architecture": "current_serial_watcher_projection",
+        "candidate_count": 50,
+        "completed_within_poll_deadline_rate": 0.04,
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycle_processing_ms": 207868.097,
+        "effective_poll_period_ms": 217868.097,
+        "end_to_end_ms": {
+          "average": 105201.912,
+          "p50": 106327.779,
+          "p95": 198481.286
+        },
+        "generated_count": 50,
+        "llm_calls_per_minute_effective_watcher": 13.77,
+        "poll_deadline_missed": true,
+        "projected_backlog_at_deadline": 48,
+        "provider_concurrency": 1,
+        "provider_latency_ms": {
+          "average": 4157.36,
+          "p50": 4014.124,
+          "p95": 5470.108
+        },
+        "queue_wait_ms": {
+          "average": 101044.551,
+          "p50": 102369.49,
+          "p95": 193727.561
+        },
+        "reused_count": 50,
+        "tokens": {
+          "completion": 8880,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 84615,
+          "total": 93495
+        },
+        "worker_count": 1,
+        "worker_utilization": 1
+      },
+      "challenger": {
+        "architecture": "bounded_queue_latest_per_asset_projection",
+        "candidate_events": 300,
+        "coalesced_candidate_count": 150,
+        "completed_within_poll_deadline_rate": 0.493333,
+        "correctness": {
+          "candidate_drop_count": 0,
+          "important_event_detection_recall": 1,
+          "latest_changed_asset_materialized_rate": 1,
+          "mandatory_evidence_recall": {
+            "note": "scale harness changes scheduling only and does not alter evidence selection",
+            "status": "guarded_by_existing_regression",
+            "test": "tests/test_operational_evidence_selection.py"
+          },
+          "snapshot_consistency_rate": 1
+        },
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycles": 6,
+        "dropped_candidate_count": 0,
+        "end_to_end_ms": {
+          "average": 11131.015,
+          "p50": 10341.041,
+          "p95": 25042.908
+        },
+        "generated_count": 150,
+        "latest_changed_asset_materialized_rate": 1,
+        "llm_calls_per_minute_completed_projection": 113.779,
+        "llm_calls_per_minute_requested": 300,
+        "provider_concurrency": 8,
+        "provider_latency_ms": {
+          "average": 4080.849,
+          "p50": 3913.378,
+          "p95": 5776.951
+        },
+        "queue_capacity": 100,
+        "queue_depth": {
+          "max": 50,
+          "p50": 50,
+          "p95": 50
+        },
+        "queue_wait_ms": {
+          "average": 7050.166,
+          "p50": 5959.319,
+          "p95": 20082.214
+        },
+        "reused_count": 300,
+        "tokens": {
+          "completion": 26055,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 245625,
+          "total": 271680
+        },
+        "worker_count": 8,
+        "worker_utilization": 0.967321
+      },
+      "change_rate": 0.5,
+      "changed_assets_per_poll": 50,
+      "detection": {
+        "candidate_generation_rate_per_sec": 692837.513,
+        "cpu_ms": {
+          "p50": 0.072,
+          "p95": 0.073,
+          "samples": [
+            0.073,
+            0.072,
+            0.072
+          ]
+        },
+        "generated_count": 50,
+        "important_event_detection_recall": 1,
+        "measurement": "local_wall_and_process_cpu",
+        "poll_read_ops_per_sec": 1385675.026,
+        "repeat_count": 3,
+        "reused_count": 50,
+        "wall_ms": {
+          "p50": 0.072,
+          "p95": 0.074,
+          "samples": [
+            0.074,
+            0.072,
+            0.072
+          ]
+        }
+      },
+      "poll_interval_ms": 10000,
+      "profile": "burst_change"
+    },
+    {
+      "asset_count": 500,
+      "baseline": {
+        "architecture": "current_serial_watcher_projection",
+        "candidate_count": 5,
+        "completed_within_poll_deadline_rate": 0.4,
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycle_processing_ms": 20208.344,
+        "effective_poll_period_ms": 30208.344,
+        "end_to_end_ms": {
+          "average": 12294.946,
+          "p50": 12388.639,
+          "p95": 19463.41
+        },
+        "generated_count": 5,
+        "llm_calls_per_minute_effective_watcher": 9.931,
+        "poll_deadline_missed": true,
+        "projected_backlog_at_deadline": 3,
+        "provider_concurrency": 1,
+        "provider_latency_ms": {
+          "average": 4041.602,
+          "p50": 4099.214,
+          "p95": 4169.356
+        },
+        "queue_wait_ms": {
+          "average": 8253.344,
+          "p50": 8289.425,
+          "p95": 15665.741
+        },
+        "reused_count": 495,
+        "tokens": {
+          "completion": 890,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 8135,
+          "total": 9025
+        },
+        "worker_count": 1,
+        "worker_utilization": 1
+      },
+      "challenger": {
+        "architecture": "bounded_queue_latest_per_asset_projection",
+        "candidate_events": 30,
+        "coalesced_candidate_count": 0,
+        "completed_within_poll_deadline_rate": 1,
+        "correctness": {
+          "candidate_drop_count": 0,
+          "important_event_detection_recall": 1,
+          "latest_changed_asset_materialized_rate": 1,
+          "mandatory_evidence_recall": {
+            "note": "scale harness changes scheduling only and does not alter evidence selection",
+            "status": "guarded_by_existing_regression",
+            "test": "tests/test_operational_evidence_selection.py"
+          },
+          "snapshot_consistency_rate": 1
+        },
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycles": 6,
+        "dropped_candidate_count": 0,
+        "end_to_end_ms": {
+          "average": 4136.815,
+          "p50": 4024.022,
+          "p95": 5093.267
+        },
+        "generated_count": 30,
+        "latest_changed_asset_materialized_rate": 1,
+        "llm_calls_per_minute_completed_projection": 33.277,
+        "llm_calls_per_minute_requested": 30,
+        "provider_concurrency": 5,
+        "provider_latency_ms": {
+          "average": 4136.815,
+          "p50": 4024.022,
+          "p95": 5093.267
+        },
+        "queue_capacity": 500,
+        "queue_depth": {
+          "max": 5,
+          "p50": 5,
+          "p95": 5
+        },
+        "queue_wait_ms": {
+          "average": 0,
+          "p50": 0,
+          "p95": 0
+        },
+        "reused_count": 2970,
+        "tokens": {
+          "completion": 5340,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 50505,
+          "total": 55845
+        },
+        "worker_count": 8,
+        "worker_utilization": 0.286791
+      },
+      "change_rate": 0.01,
+      "changed_assets_per_poll": 5,
+      "detection": {
+        "candidate_generation_rate_per_sec": 14868.032,
+        "cpu_ms": {
+          "p50": 0.336,
+          "p95": 0.345,
+          "samples": [
+            0.346,
+            0.336,
+            0.335
+          ]
+        },
+        "generated_count": 5,
+        "important_event_detection_recall": 1,
+        "measurement": "local_wall_and_process_cpu",
+        "poll_read_ops_per_sec": 1486803.153,
+        "repeat_count": 3,
+        "reused_count": 495,
+        "wall_ms": {
+          "p50": 0.336,
+          "p95": 0.348,
+          "samples": [
+            0.349,
+            0.336,
+            0.336
+          ]
+        }
+      },
+      "poll_interval_ms": 10000,
+      "profile": "low_change"
+    },
+    {
+      "asset_count": 500,
+      "baseline": {
+        "architecture": "current_serial_watcher_projection",
+        "candidate_count": 50,
+        "completed_within_poll_deadline_rate": 0.04,
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycle_processing_ms": 207868.368,
+        "effective_poll_period_ms": 217868.368,
+        "end_to_end_ms": {
+          "average": 105201.912,
+          "p50": 106327.779,
+          "p95": 198481.286
+        },
+        "generated_count": 50,
+        "llm_calls_per_minute_effective_watcher": 13.77,
+        "poll_deadline_missed": true,
+        "projected_backlog_at_deadline": 48,
+        "provider_concurrency": 1,
+        "provider_latency_ms": {
+          "average": 4157.36,
+          "p50": 4014.124,
+          "p95": 5470.108
+        },
+        "queue_wait_ms": {
+          "average": 101044.551,
+          "p50": 102369.49,
+          "p95": 193727.561
+        },
+        "reused_count": 450,
+        "tokens": {
+          "completion": 8880,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 84615,
+          "total": 93495
+        },
+        "worker_count": 1,
+        "worker_utilization": 1
+      },
+      "challenger": {
+        "architecture": "bounded_queue_latest_per_asset_projection",
+        "candidate_events": 300,
+        "coalesced_candidate_count": 150,
+        "completed_within_poll_deadline_rate": 0.493333,
+        "correctness": {
+          "candidate_drop_count": 0,
+          "important_event_detection_recall": 1,
+          "latest_changed_asset_materialized_rate": 1,
+          "mandatory_evidence_recall": {
+            "note": "scale harness changes scheduling only and does not alter evidence selection",
+            "status": "guarded_by_existing_regression",
+            "test": "tests/test_operational_evidence_selection.py"
+          },
+          "snapshot_consistency_rate": 1
+        },
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycles": 6,
+        "dropped_candidate_count": 0,
+        "end_to_end_ms": {
+          "average": 11131.015,
+          "p50": 10341.041,
+          "p95": 25042.908
+        },
+        "generated_count": 150,
+        "latest_changed_asset_materialized_rate": 1,
+        "llm_calls_per_minute_completed_projection": 113.778,
+        "llm_calls_per_minute_requested": 300,
+        "provider_concurrency": 8,
+        "provider_latency_ms": {
+          "average": 4080.849,
+          "p50": 3913.378,
+          "p95": 5776.951
+        },
+        "queue_capacity": 500,
+        "queue_depth": {
+          "max": 50,
+          "p50": 50,
+          "p95": 50
+        },
+        "queue_wait_ms": {
+          "average": 7050.166,
+          "p50": 5959.319,
+          "p95": 20082.214
+        },
+        "reused_count": 2700,
+        "tokens": {
+          "completion": 26055,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 245625,
+          "total": 271680
+        },
+        "worker_count": 8,
+        "worker_utilization": 0.967318
+      },
+      "change_rate": 0.1,
+      "changed_assets_per_poll": 50,
+      "detection": {
+        "candidate_generation_rate_per_sec": 145967.496,
+        "cpu_ms": {
+          "p50": 0.339,
+          "p95": 0.347,
+          "samples": [
+            0.348,
+            0.339,
+            0.339
+          ]
+        },
+        "generated_count": 50,
+        "important_event_detection_recall": 1,
+        "measurement": "local_wall_and_process_cpu",
+        "poll_read_ops_per_sec": 1459674.956,
+        "repeat_count": 3,
+        "reused_count": 450,
+        "wall_ms": {
+          "p50": 0.343,
+          "p95": 0.348,
+          "samples": [
+            0.348,
+            0.34,
+            0.343
+          ]
+        }
+      },
+      "poll_interval_ms": 10000,
+      "profile": "medium_change"
+    },
+    {
+      "asset_count": 500,
+      "baseline": {
+        "architecture": "current_serial_watcher_projection",
+        "candidate_count": 250,
+        "completed_within_poll_deadline_rate": 0.008,
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycle_processing_ms": 1016222.646,
+        "effective_poll_period_ms": 1026222.646,
+        "end_to_end_ms": {
+          "average": 512763.127,
+          "p50": 510097.959,
+          "p95": 966490.799
+        },
+        "generated_count": 250,
+        "llm_calls_per_minute_effective_watcher": 14.617,
+        "poll_deadline_missed": true,
+        "projected_backlog_at_deadline": 248,
+        "provider_concurrency": 1,
+        "provider_latency_ms": {
+          "average": 4064.889,
+          "p50": 3906.412,
+          "p95": 5787.524
+        },
+        "queue_wait_ms": {
+          "average": 508698.238,
+          "p50": 506369.405,
+          "p95": 962894.565
+        },
+        "reused_count": 250,
+        "tokens": {
+          "completion": 43210,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 406510,
+          "total": 449720
+        },
+        "worker_count": 1,
+        "worker_utilization": 1
+      },
+      "challenger": {
+        "architecture": "bounded_queue_latest_per_asset_projection",
+        "candidate_events": 1500,
+        "coalesced_candidate_count": 1150,
+        "completed_within_poll_deadline_rate": 0.211429,
+        "correctness": {
+          "candidate_drop_count": 0,
+          "important_event_detection_recall": 1,
+          "latest_changed_asset_materialized_rate": 1,
+          "mandatory_evidence_recall": {
+            "note": "scale harness changes scheduling only and does not alter evidence selection",
+            "status": "guarded_by_existing_regression",
+            "test": "tests/test_operational_evidence_selection.py"
+          },
+          "snapshot_consistency_rate": 1
+        },
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycles": 6,
+        "dropped_candidate_count": 0,
+        "end_to_end_ms": {
+          "average": 50148.772,
+          "p50": 41270.214,
+          "p95": 122150.944
+        },
+        "generated_count": 350,
+        "latest_changed_asset_materialized_rate": 1,
+        "llm_calls_per_minute_completed_projection": 116.87,
+        "llm_calls_per_minute_requested": 1500,
+        "provider_concurrency": 8,
+        "provider_latency_ms": {
+          "average": 4069.389,
+          "p50": 3906.412,
+          "p95": 5798.746
+        },
+        "queue_capacity": 500,
+        "queue_depth": {
+          "max": 250,
+          "p50": 250,
+          "p95": 250
+        },
+        "queue_wait_ms": {
+          "average": 46079.382,
+          "p50": 37512.121,
+          "p95": 117190.094
+        },
+        "reused_count": 1500,
+        "tokens": {
+          "completion": 60365,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 567970,
+          "total": 628335
+        },
+        "worker_count": 8,
+        "worker_utilization": 0.990815
+      },
+      "change_rate": 0.5,
+      "changed_assets_per_poll": 250,
+      "detection": {
+        "candidate_generation_rate_per_sec": 661958.831,
+        "cpu_ms": {
+          "p50": 0.378,
+          "p95": 0.379,
+          "samples": [
+            0.378,
+            0.379,
+            0.374
+          ]
+        },
+        "generated_count": 250,
+        "important_event_detection_recall": 1,
+        "measurement": "local_wall_and_process_cpu",
+        "poll_read_ops_per_sec": 1323917.663,
+        "repeat_count": 3,
+        "reused_count": 250,
+        "wall_ms": {
+          "p50": 0.378,
+          "p95": 0.38,
+          "samples": [
+            0.378,
+            0.38,
+            0.374
+          ]
+        }
+      },
+      "poll_interval_ms": 10000,
+      "profile": "burst_change"
+    },
+    {
+      "asset_count": 1000,
+      "baseline": {
+        "architecture": "current_serial_watcher_projection",
+        "candidate_count": 10,
+        "completed_within_poll_deadline_rate": 0.2,
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycle_processing_ms": 40177.211,
+        "effective_poll_period_ms": 50177.211,
+        "end_to_end_ms": {
+          "average": 22034.011,
+          "p50": 22075.067,
+          "p95": 38205.517
+        },
+        "generated_count": 10,
+        "llm_calls_per_minute_effective_watcher": 11.958,
+        "poll_deadline_missed": true,
+        "projected_backlog_at_deadline": 8,
+        "provider_concurrency": 1,
+        "provider_latency_ms": {
+          "average": 4017.648,
+          "p50": 4097.796,
+          "p95": 4446.957
+        },
+        "queue_wait_ms": {
+          "average": 18016.363,
+          "p50": 18346.512,
+          "p95": 33770.749
+        },
+        "reused_count": 990,
+        "tokens": {
+          "completion": 1780,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 16270,
+          "total": 18050
+        },
+        "worker_count": 1,
+        "worker_utilization": 1
+      },
+      "challenger": {
+        "architecture": "bounded_queue_latest_per_asset_projection",
+        "candidate_events": 60,
+        "coalesced_candidate_count": 0,
+        "completed_within_poll_deadline_rate": 1,
+        "correctness": {
+          "candidate_drop_count": 0,
+          "important_event_detection_recall": 1,
+          "latest_changed_asset_materialized_rate": 1,
+          "mandatory_evidence_recall": {
+            "note": "scale harness changes scheduling only and does not alter evidence selection",
+            "status": "guarded_by_existing_regression",
+            "test": "tests/test_operational_evidence_selection.py"
+          },
+          "snapshot_consistency_rate": 1
+        },
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycles": 6,
+        "dropped_candidate_count": 0,
+        "end_to_end_ms": {
+          "average": 4830.898,
+          "p50": 4063.321,
+          "p95": 8093.336
+        },
+        "generated_count": 60,
+        "latest_changed_asset_materialized_rate": 1,
+        "llm_calls_per_minute_completed_projection": 62.695,
+        "llm_calls_per_minute_requested": 60,
+        "provider_concurrency": 8,
+        "provider_latency_ms": {
+          "average": 4087.047,
+          "p50": 3959.083,
+          "p95": 5129.172
+        },
+        "queue_capacity": 1000,
+        "queue_depth": {
+          "max": 10,
+          "p50": 10,
+          "p95": 10
+        },
+        "queue_wait_ms": {
+          "average": 743.851,
+          "p50": 0,
+          "p95": 3854.403
+        },
+        "reused_count": 5940,
+        "tokens": {
+          "completion": 10560,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 100365,
+          "total": 110925
+        },
+        "worker_count": 8,
+        "worker_utilization": 0.533825
+      },
+      "change_rate": 0.01,
+      "changed_assets_per_poll": 10,
+      "detection": {
+        "candidate_generation_rate_per_sec": 13713.508,
+        "cpu_ms": {
+          "p50": 0.729,
+          "p95": 0.74,
+          "samples": [
+            0.741,
+            0.729,
+            0.706
+          ]
+        },
+        "generated_count": 10,
+        "important_event_detection_recall": 1,
+        "measurement": "local_wall_and_process_cpu",
+        "poll_read_ops_per_sec": 1371350.841,
+        "repeat_count": 3,
+        "reused_count": 990,
+        "wall_ms": {
+          "p50": 0.729,
+          "p95": 0.743,
+          "samples": [
+            0.745,
+            0.729,
+            0.71
+          ]
+        }
+      },
+      "poll_interval_ms": 10000,
+      "profile": "low_change"
+    },
+    {
+      "asset_count": 1000,
+      "baseline": {
+        "architecture": "current_serial_watcher_projection",
+        "candidate_count": 100,
+        "completed_within_poll_deadline_rate": 0.02,
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycle_processing_ms": 410007.483,
+        "effective_poll_period_ms": 420007.483,
+        "end_to_end_ms": {
+          "average": 208053.318,
+          "p50": 209733.072,
+          "p95": 394591.347
+        },
+        "generated_count": 100,
+        "llm_calls_per_minute_effective_watcher": 14.285,
+        "poll_deadline_missed": true,
+        "projected_backlog_at_deadline": 98,
+        "provider_concurrency": 1,
+        "provider_latency_ms": {
+          "average": 4100.068,
+          "p50": 3947.57,
+          "p95": 5788.544
+        },
+        "queue_wait_ms": {
+          "average": 203953.251,
+          "p50": 206003.38,
+          "p95": 391238.823
+        },
+        "reused_count": 900,
+        "tokens": {
+          "completion": 17345,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 162965,
+          "total": 180310
+        },
+        "worker_count": 1,
+        "worker_utilization": 1
+      },
+      "challenger": {
+        "architecture": "bounded_queue_latest_per_asset_projection",
+        "candidate_events": 600,
+        "coalesced_candidate_count": 400,
+        "completed_within_poll_deadline_rate": 0.37,
+        "correctness": {
+          "candidate_drop_count": 0,
+          "important_event_detection_recall": 1,
+          "latest_changed_asset_materialized_rate": 1,
+          "mandatory_evidence_recall": {
+            "note": "scale harness changes scheduling only and does not alter evidence selection",
+            "status": "guarded_by_existing_regression",
+            "test": "tests/test_operational_evidence_selection.py"
+          },
+          "snapshot_consistency_rate": 1
+        },
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycles": 6,
+        "dropped_candidate_count": 0,
+        "end_to_end_ms": {
+          "average": 18662.042,
+          "p50": 11646.559,
+          "p95": 48777.019
+        },
+        "generated_count": 200,
+        "latest_changed_asset_materialized_rate": 1,
+        "llm_calls_per_minute_completed_projection": 114.297,
+        "llm_calls_per_minute_requested": 600,
+        "provider_concurrency": 8,
+        "provider_latency_ms": {
+          "average": 4079.314,
+          "p50": 3913.378,
+          "p95": 5788.544
+        },
+        "queue_capacity": 1000,
+        "queue_depth": {
+          "max": 100,
+          "p50": 100,
+          "p95": 100
+        },
+        "queue_wait_ms": {
+          "average": 14582.728,
+          "p50": 8050.13,
+          "p95": 44883.095
+        },
+        "reused_count": 5400,
+        "tokens": {
+          "completion": 34870,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 329695,
+          "total": 364565
+        },
+        "worker_count": 8,
+        "worker_utilization": 0.971359
+      },
+      "change_rate": 0.1,
+      "changed_assets_per_poll": 100,
+      "detection": {
+        "candidate_generation_rate_per_sec": 142222.222,
+        "cpu_ms": {
+          "p50": 0.699,
+          "p95": 0.71,
+          "samples": [
+            0.695,
+            0.699,
+            0.711
+          ]
+        },
+        "generated_count": 100,
+        "important_event_detection_recall": 1,
+        "measurement": "local_wall_and_process_cpu",
+        "poll_read_ops_per_sec": 1422222.225,
+        "repeat_count": 3,
+        "reused_count": 900,
+        "wall_ms": {
+          "p50": 0.703,
+          "p95": 0.711,
+          "samples": [
+            0.696,
+            0.703,
+            0.712
+          ]
+        }
+      },
+      "poll_interval_ms": 10000,
+      "profile": "medium_change"
+    },
+    {
+      "asset_count": 1000,
+      "baseline": {
+        "architecture": "current_serial_watcher_projection",
+        "candidate_count": 500,
+        "completed_within_poll_deadline_rate": 0.004,
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycle_processing_ms": 2032708.729,
+        "effective_poll_period_ms": 2042708.729,
+        "end_to_end_ms": {
+          "average": 1021133.027,
+          "p50": 1019110.743,
+          "p95": 1933549.7
+        },
+        "generated_count": 500,
+        "llm_calls_per_minute_effective_watcher": 14.686,
+        "poll_deadline_missed": true,
+        "projected_backlog_at_deadline": 498,
+        "provider_concurrency": 1,
+        "provider_latency_ms": {
+          "average": 4065.416,
+          "p50": 3902.058,
+          "p95": 5787.524
+        },
+        "queue_wait_ms": {
+          "average": 1017067.611,
+          "p50": 1014032.307,
+          "p95": 1930028.83
+        },
+        "reused_count": 500,
+        "tokens": {
+          "completion": 86420,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 813585,
+          "total": 900005
+        },
+        "worker_count": 1,
+        "worker_utilization": 1
+      },
+      "challenger": {
+        "architecture": "bounded_queue_latest_per_asset_projection",
+        "candidate_events": 3000,
+        "coalesced_candidate_count": 2400,
+        "completed_within_poll_deadline_rate": 0.123333,
+        "correctness": {
+          "candidate_drop_count": 0,
+          "important_event_detection_recall": 1,
+          "latest_changed_asset_materialized_rate": 1,
+          "mandatory_evidence_recall": {
+            "note": "scale harness changes scheduling only and does not alter evidence selection",
+            "status": "guarded_by_existing_regression",
+            "test": "tests/test_operational_evidence_selection.py"
+          },
+          "snapshot_consistency_rate": 1
+        },
+        "cost": {
+          "estimated_total_cost": null,
+          "status": "not_configured"
+        },
+        "cycles": 6,
+        "dropped_candidate_count": 0,
+        "end_to_end_ms": {
+          "average": 109981.614,
+          "p50": 104542.327,
+          "p95": 241998.345
+        },
+        "generated_count": 600,
+        "latest_changed_asset_materialized_rate": 1,
+        "llm_calls_per_minute_completed_projection": 117.421,
+        "llm_calls_per_minute_requested": 3000,
+        "provider_concurrency": 8,
+        "provider_latency_ms": {
+          "average": 4066.857,
+          "p50": 3904.235,
+          "p95": 5788.544
+        },
+        "queue_capacity": 1000,
+        "queue_depth": {
+          "max": 500,
+          "p50": 500,
+          "p95": 500
+        },
+        "queue_wait_ms": {
+          "average": 105914.756,
+          "p50": 100752.677,
+          "p95": 238137.224
+        },
+        "reused_count": 3000,
+        "tokens": {
+          "completion": 103575,
+          "measurement": "reference artifact prompt/completion counters; repository evidence classifies the 120-run token values as payload/output-size estimates, not provider billing usage",
+          "prompt": 975600,
+          "total": 1079175
+        },
+        "worker_count": 8,
+        "worker_utilization": 0.994866
+      },
+      "change_rate": 0.5,
+      "changed_assets_per_poll": 500,
+      "detection": {
+        "candidate_generation_rate_per_sec": 688112.848,
+        "cpu_ms": {
+          "p50": 0.723,
+          "p95": 0.728,
+          "samples": [
+            0.723,
+            0.729,
+            0.723
+          ]
+        },
+        "generated_count": 500,
+        "important_event_detection_recall": 1,
+        "measurement": "local_wall_and_process_cpu",
+        "poll_read_ops_per_sec": 1376225.695,
+        "repeat_count": 3,
+        "reused_count": 500,
+        "wall_ms": {
+          "p50": 0.727,
+          "p95": 0.731,
+          "samples": [
+            0.723,
+            0.731,
+            0.727
+          ]
+        }
+      },
+      "poll_interval_ms": 10000,
+      "profile": "burst_change"
+    }
+  ],
+  "schema_version": "briefing-scalability-evaluation-v1.0",
+  "summary": {
+    "baseline_poll_deadline_miss_scenarios": 8,
+    "bounded_queue_worker_split_justified": true,
+    "challenger_full_deadline_scenarios": 4,
+    "kubernetes_hpa_justified": false,
+    "max_detection_wall_p95_ms": 0.743,
+    "primary_bottleneck": "provider_queue",
+    "reason": "Local detection remains far below the 10s poll interval while recorded provider latency causes serial deadline misses. The 8-worker bounded queue reduces queue wait but does not clear all medium/burst scenarios, so provider concurrency/demand control remains the next measured constraint. Horizontal orchestration infrastructure is not proven necessary by this harness alone.",
+    "scenario_count": 9
+  }
+}
