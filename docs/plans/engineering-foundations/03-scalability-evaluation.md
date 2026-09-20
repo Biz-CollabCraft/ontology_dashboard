@@ -131,6 +131,44 @@ Baseline은 현행 serial watcher 형태이고, baseline deadline miss가 확인
 
 따라서 다음 우선순위는 provider concurrency limit, demand generation, batching/coalescing 정책의 재평가다. 이 결과만으로 Kubernetes/HPA 도입을 정당화하지 않는다. host memory도 측정하지 않았으므로 memory headroom 주장은 하지 않는다.
 
+### 핵심 해석
+
+이 평가에서 확인한 것은 "1000대 지원 가능"이 아니라 **설비 수 증가 시 어느 계층이 먼저 병목이 되는지**다.
+
+- polling/change detection 자체는 현재 측정 범위에서 병목이 아니었다.
+- serial LLM generation은 작은 변화율에서도 asset 수가 커지면 poll deadline을 넘겼다.
+- worker 병렬화는 효과가 있었지만 burst workload에서는 provider-side backlog가 남았다.
+- 따라서 다음 설계 판단은 서버 증설보다 generation demand를 줄이고 provider concurrency를 제어하는 쪽이 우선이다.
+
+즉 아키텍처 판단 순서는 다음과 같다.
+
+```text
+더 큰 서버 / Kubernetes 선도입
+        X
+        |
+실측 병목 확인
+        ↓
+change detection은 충분히 작음
+        ↓
+provider latency / concurrency가 병목
+        ↓
+demand generation + coalescing + bounded worker
+        ↓
+그래도 host/resource 병목이 측정될 때 수평 확장 검토
+```
+
+### 포트폴리오/면접 표현
+
+권장 문장:
+
+> 100·500·1000대 설비 시나리오를 평가해 로컬 변경 감지보다 LLM provider latency가 주요 병목임을 확인하고, bounded queue·coalescing 구조의 효과와 한계를 비교했습니다.
+
+설명형 답변:
+
+> 처음에는 polling 자체가 병목일 수 있다고 생각해 설비 수를 100·500·1000대로 늘려 측정했습니다. local change detection p95는 최대 약 0.743ms였지만, 기존 live-provider latency를 replay한 serial generation은 9개 시나리오 중 8개에서 10초 deadline을 넘었습니다. 8-worker 구조로 개선됐지만 medium/burst workload에는 backlog가 남아, Kubernetes보다 provider concurrency와 demand generation을 먼저 개선해야 한다고 판단했습니다.
+
+주의: 위 수치에서 local detection은 실제 코드 실행 측정이고, provider/queue는 기존 live-provider latency를 이용한 replay/projection이다. 따라서 "1000대 실제 OpenAI 부하 테스트", "1000대 지원 검증", "10초 SLA 보장"으로 표현하지 않는다.
+
 ### Correctness invariant
 
 - important-event detection: synthetic changed labels 기준 100%

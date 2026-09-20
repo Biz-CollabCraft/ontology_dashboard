@@ -60,6 +60,14 @@ Safe claim:
 
 > In a 100/500/1000-asset synthetic scale evaluation, local change-detection stayed well below the 10-second poll interval, while replaying previously measured live-provider latency made serial generation miss the deadline in 8/9 scenarios. An 8-worker bounded queue improved latency but did not clear all medium/burst cases, so the current bottleneck is provider/concurrency policy rather than a proven need for Kubernetes.
 
+Korean portfolio-safe claim:
+
+> 100·500·1000대 설비 시나리오를 평가해 로컬 변경 감지보다 LLM provider latency가 주요 병목임을 확인하고, bounded queue·coalescing 구조의 효과와 한계를 비교했습니다.
+
+Korean interview explanation:
+
+> 처음에는 polling 자체가 병목일 수 있다고 생각해 100·500·1000대 조건으로 측정했습니다. local change detection p95는 최대 약 0.743ms였지만, 기존 live-provider latency를 replay한 순차 생성은 9개 시나리오 중 8개에서 10초 deadline을 넘었습니다. 8-worker로 개선해도 medium/burst workload에는 backlog가 남아, 인프라를 먼저 키우기보다 provider concurrency와 demand generation을 먼저 최적화해야 한다고 판단했습니다.
+
 Do not claim:
 
 - "The system supports 1000 assets in production."

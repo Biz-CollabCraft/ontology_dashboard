@@ -51,6 +51,46 @@ LLM과 deterministic system의 책임 경계를 문서화하고 malformed output
 
 2026-09-20 기준 local detection 실측 + 기존 live-provider latency replay 기반 scale evaluation과 bounded-queue challenger 비교를 완료했다. serial baseline은 9개 중 8개 scenario에서 10초 deadline을 초과했고, 주 병목은 provider/concurrency projection으로 확인됐다. Kubernetes/HPA 필요성은 입증되지 않았다.
 
+## Engineering 결론
+
+2026-09-20 P0~P2 결과를 합치면 이 프로젝트의 핵심은 단순한 "LLM 브리핑 생성"이 아니다.
+
+1. **신뢰성 — P0**
+   - briefing 하나가 어떤 Event/Evidence snapshot과 selection 결과를 사용했는지 `trace_id`로 추적한다.
+   - 생성/재사용 이유, provider/validation 실패, fallback, token/latency를 서로 구분한다.
+
+2. **권한 경계 — P1**
+   - LLM은 grounded summary와 설명을 생성하는 expression layer다.
+   - RBAC, `available_actions`, 승인, 상태전이, snapshot consistency, fallback 선택은 deterministic system이 소유한다.
+   - evidence 안의 instruction-like text는 data로 취급하며 system instruction으로 승격하지 않는다.
+
+3. **확장성 — P2**
+   - 100/500/1000 asset synthetic workload에서 local change detection p95 최대는 evaluator artifact 기준 약 **0.743 ms**였다.
+   - 10초 poll 조건에서 serial provider replay는 **9개 scenario 중 8개**에서 deadline을 초과했다.
+   - 8-worker bounded queue는 end-to-end latency를 개선했지만 모든 medium/burst workload를 해소하지 못했다.
+   - 따라서 현재 확인된 우선 병목은 watcher CPU가 아니라 **provider latency/concurrency와 generation scheduling**이다.
+   - Kubernetes/HPA 또는 단순 서버 증설 필요성은 이 평가만으로 입증되지 않았다.
+
+### 대외 설명 / 포트폴리오 경계
+
+다음 표현은 현재 evidence 범위에서 사용할 수 있다.
+
+> 100·500·1000대 설비 시나리오를 평가해 로컬 변경 감지보다 LLM provider latency가 주요 병목임을 확인하고, bounded queue·coalescing 구조의 효과와 한계를 비교했습니다.
+
+면접에서 구조적 판단까지 설명할 때는 다음과 같이 말할 수 있다.
+
+> 처음에는 polling 자체가 병목일 수 있다고 가정했지만, 100/500/1000대 조건에서 측정한 결과 local change detection은 10초 주기에 비해 매우 작았습니다. 반면 기존 live-provider latency를 replay하면 순차 생성은 대부분의 workload에서 deadline을 넘었습니다. 그래서 인프라를 바로 확장하기보다 변경 감지 후 필요한 건만 생성하고, 같은 설비의 아직 시작하지 않은 오래된 candidate를 최신 candidate로 합치는 구조를 먼저 검증했습니다.
+
+다음 표현은 사용하지 않는다.
+
+- "1000대 설비를 실시간으로 지원한다."
+- "1000대 환경에서 실제 OpenAI throughput을 검증했다."
+- "8-worker 구조가 10초 SLA를 보장한다."
+- "Kubernetes가 필요하다/불필요하다가 확정됐다."
+- "실제 운영 비용 절감이 검증됐다."
+
+P2에서 local detection은 실제 코드 실행 측정이지만 provider 구간은 기존 live-provider 측정 latency를 재생한 projection이다. 이 둘을 같은 종류의 실측으로 표현하지 않는다.
+
 ## 완료 조건
 
 - 한 briefing lifecycle을 end-to-end trace로 설명할 수 있다.
