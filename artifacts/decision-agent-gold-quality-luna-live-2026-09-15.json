@@ -1,0 +1,2382 @@
+{
+  "schema_version": "decision-agent-quality-eval-v1",
+  "recorded_at": "2026-09-14T19:46:00.982463+00:00",
+  "scope": "Fixture-backed exact gold comparison for ambiguous Decision Agent cases; live_provider applies only to external LLM calls; no manufacturing mutation or live factory KPI measurement.",
+  "gold_sha256": "683b425dff8d37a4892ec1279706d42899ef6e3a1cf4d1f7c5656221924dc2d5",
+  "gold_file": "evaluation/decision_quality/decision-agent-gold-v1.json",
+  "gold_review": {
+    "reviewer": "deterministic_gold_oracle_guard_v1",
+    "case_count": 7,
+    "passed": true,
+    "issues": [],
+    "reviewed_at": "2026-09-14T19:43:32.799227+00:00"
+  },
+  "iterations": 3,
+  "arms": [
+    "deterministic",
+    "llm"
+  ],
+  "live_provider": true,
+  "provider": "openai-compatible",
+  "model": "gpt-5.6-luna",
+  "reasoning_effort": "low",
+  "rows": [
+    {
+      "case_id": "A1_PERSISTENT_RAPID",
+      "arm": "deterministic",
+      "iteration": 1,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_INSPECTION",
+      "gold_action": "REQUEST_INSPECTION",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "위험 상태가 경고 또는 심각으로 확인됐고, 제공된 근거에 현장 점검 결과가 없어 점검 요청을 우선 제안합니다.",
+      "rationale": "Warning state plus persistent rapid worsening and no completed inspection should go to physical inspection before maintenance.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.3427318329922855,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A1_PERSISTENT_RAPID",
+      "arm": "llm",
+      "iteration": 1,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_INSPECTION",
+      "gold_action": "REQUEST_INSPECTION",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Asset risk is warning with 0.82 failure probability and a persistent, rapidly worsening trend. Physical inspection is appropriate because inspection results are pending and no additional measurement is explicitly required.",
+      "rationale": "Warning state plus persistent rapid worsening and no completed inspection should go to physical inspection before maintenance.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 7.7114258329966106,
+      "planner_api_calls": 3,
+      "http_requests": 3,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 1924,
+      "prompt_tokens": 1580,
+      "completion_tokens": 344,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A1_PERSISTENT_RAPID",
+      "arm": "deterministic",
+      "iteration": 2,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_INSPECTION",
+      "gold_action": "REQUEST_INSPECTION",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "위험 상태가 경고 또는 심각으로 확인됐고, 제공된 근거에 현장 점검 결과가 없어 점검 요청을 우선 제안합니다.",
+      "rationale": "Warning state plus persistent rapid worsening and no completed inspection should go to physical inspection before maintenance.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.00918895803624764,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A1_PERSISTENT_RAPID",
+      "arm": "llm",
+      "iteration": 2,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_INSPECTION",
+      "gold_action": "REQUEST_INSPECTION",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Asset risk is warning-level with 0.82 failure probability and a persistent, rapidly worsening trend. Physical inspection of the tooling is appropriate; the inspection context identifies the target and does not require additional measurement before inspection.",
+      "rationale": "Warning state plus persistent rapid worsening and no completed inspection should go to physical inspection before maintenance.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 6.301546500006225,
+      "planner_api_calls": 3,
+      "http_requests": 3,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 1938,
+      "prompt_tokens": 1580,
+      "completion_tokens": 358,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A1_PERSISTENT_RAPID",
+      "arm": "deterministic",
+      "iteration": 3,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_INSPECTION",
+      "gold_action": "REQUEST_INSPECTION",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "위험 상태가 경고 또는 심각으로 확인됐고, 제공된 근거에 현장 점검 결과가 없어 점검 요청을 우선 제안합니다.",
+      "rationale": "Warning state plus persistent rapid worsening and no completed inspection should go to physical inspection before maintenance.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.014222583966329694,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A1_PERSISTENT_RAPID",
+      "arm": "llm",
+      "iteration": 3,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_INSPECTION",
+      "gold_action": "REQUEST_INSPECTION",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_inspection_context",
+        "get_asset_condition"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Asset condition is warning-grade with high reported failure probability (0.82) and a persistent, rapidly worsening trend. Inspection is appropriate to assess the tooling; the inspection context does not require additional measurement. No immediate maintenance action is available or supported by the supplied facts.",
+      "rationale": "Warning state plus persistent rapid worsening and no completed inspection should go to physical inspection before maintenance.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 6.299137791036628,
+      "planner_api_calls": 3,
+      "http_requests": 3,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 1895,
+      "prompt_tokens": 1560,
+      "completion_tokens": 335,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A2_TRANSIENT_MEASUREMENT",
+      "arm": "deterministic",
+      "iteration": 1,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "근거 제공자가 추가 측정 필요성을 명시하여 진단 보강을 제안합니다.",
+      "rationale": "Transient signal with explicit additional-measurement need should request another diagnostic measurement rather than a physical inspection or maintenance request.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.012105499976314604,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A2_TRANSIENT_MEASUREMENT",
+      "arm": "llm",
+      "iteration": 1,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Risk is at warning status with 0.82 failure probability, but the signal is stable and transient. Inspection context explicitly requires additional measurement and no inspection result is available, so gather diagnostic evidence before selecting further action.",
+      "rationale": "Transient signal with explicit additional-measurement need should request another diagnostic measurement rather than a physical inspection or maintenance request.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 7.0814838749938644,
+      "planner_api_calls": 3,
+      "http_requests": 3,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 1922,
+      "prompt_tokens": 1574,
+      "completion_tokens": 348,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A2_TRANSIENT_MEASUREMENT",
+      "arm": "deterministic",
+      "iteration": 2,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "근거 제공자가 추가 측정 필요성을 명시하여 진단 보강을 제안합니다.",
+      "rationale": "Transient signal with explicit additional-measurement need should request another diagnostic measurement rather than a physical inspection or maintenance request.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.011045249993912876,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A2_TRANSIENT_MEASUREMENT",
+      "arm": "llm",
+      "iteration": 2,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Inspection context explicitly indicates that additional measurement is required, while condition evidence shows warning risk but stable trend and transient persistence. Gather the missing diagnostic measurements before selecting inspection or continued monitoring.",
+      "rationale": "Transient signal with explicit additional-measurement need should request another diagnostic measurement rather than a physical inspection or maintenance request.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 7.050422416999936,
+      "planner_api_calls": 3,
+      "http_requests": 3,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 1950,
+      "prompt_tokens": 1574,
+      "completion_tokens": 376,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A2_TRANSIENT_MEASUREMENT",
+      "arm": "deterministic",
+      "iteration": 3,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "근거 제공자가 추가 측정 필요성을 명시하여 진단 보강을 제안합니다.",
+      "rationale": "Transient signal with explicit additional-measurement need should request another diagnostic measurement rather than a physical inspection or maintenance request.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.007660584000404924,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A2_TRANSIENT_MEASUREMENT",
+      "arm": "llm",
+      "iteration": 3,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_inspection_context",
+        "get_asset_condition"
+      ],
+      "required_tools": [
+        "get_asset_condition",
+        "get_inspection_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Inspection context explicitly indicates that additional measurement is required. Asset risk is warning with elevated reported failure probability, but the trend is stable and transient, so further diagnosis should precede physical inspection or continued monitoring.",
+      "rationale": "Transient signal with explicit additional-measurement need should request another diagnostic measurement rather than a physical inspection or maintenance request.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 5.93780075001996,
+      "planner_api_calls": 3,
+      "http_requests": 3,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 1918,
+      "prompt_tokens": 1557,
+      "completion_tokens": 361,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A3_RESERVED_UNSUITABLE",
+      "arm": "deterministic",
+      "iteration": 1,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "정비 필요성이 확인되어 생산 영향과 정비 준비 상태를 함께 비교했습니다. 일정·자원 제약을 검토하고, 담당자에게 정비 필요성 검토를 요청하는 것을 대안으로 남깁니다. 어느 제안도 작업 실행이나 승인 완료를 의미하지 않습니다.",
+      "rationale": "Confirmed maintenance need exists, but reserved stock ownership is unverified and the candidate window is unsuitable; the safest decision support output is abstention for human reconciliation.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.011230958043597639,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A3_RESERVED_UNSUITABLE",
+      "arm": "llm",
+      "iteration": 1,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Maintenance is recommended, but the only known 120-minute window is unsuitable because there is no production release, and the required part is fully reserved with reservation ownership unverified. Review timing, production impact, and resource ownership before proceeding. High due pressure alone does not establish equipment urgency.",
+      "rationale": "Confirmed maintenance need exists, but reserved stock ownership is unverified and the candidate window is unsuitable; the safest decision support output is abstention for human reconciliation.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 9.807572457997594,
+      "planner_api_calls": 4,
+      "http_requests": 4,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 3152,
+      "prompt_tokens": 2549,
+      "completion_tokens": 603,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A3_RESERVED_UNSUITABLE",
+      "arm": "deterministic",
+      "iteration": 2,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "정비 필요성이 확인되어 생산 영향과 정비 준비 상태를 함께 비교했습니다. 일정·자원 제약을 검토하고, 담당자에게 정비 필요성 검토를 요청하는 것을 대안으로 남깁니다. 어느 제안도 작업 실행이나 승인 완료를 의미하지 않습니다.",
+      "rationale": "Confirmed maintenance need exists, but reserved stock ownership is unverified and the candidate window is unsuitable; the safest decision support output is abstention for human reconciliation.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.014244874997530133,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A3_RESERVED_UNSUITABLE",
+      "arm": "llm",
+      "iteration": 2,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "abstained",
+      "recommended_action": null,
+      "gold_action": null,
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": true,
+      "abstain_actual": true,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Maintenance is recommended, but the available window is unsuitable and reservation ownership for the only required part is unverified. These blockers require human reconciliation before ranking REQUEST_MAINTENANCE versus REVIEW_PLANNED_MAINTENANCE.",
+      "rationale": "Confirmed maintenance need exists, but reserved stock ownership is unverified and the candidate window is unsuitable; the safest decision support output is abstention for human reconciliation.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 9.5770575000206,
+      "planner_api_calls": 4,
+      "http_requests": 4,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 3153,
+      "prompt_tokens": 2549,
+      "completion_tokens": 604,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A3_RESERVED_UNSUITABLE",
+      "arm": "deterministic",
+      "iteration": 3,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "정비 필요성이 확인되어 생산 영향과 정비 준비 상태를 함께 비교했습니다. 일정·자원 제약을 검토하고, 담당자에게 정비 필요성 검토를 요청하는 것을 대안으로 남깁니다. 어느 제안도 작업 실행이나 승인 완료를 의미하지 않습니다.",
+      "rationale": "Confirmed maintenance need exists, but reserved stock ownership is unverified and the candidate window is unsuitable; the safest decision support output is abstention for human reconciliation.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.01729120797244832,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A3_RESERVED_UNSUITABLE",
+      "arm": "llm",
+      "iteration": 3,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Maintenance is recommended, but the only identified 120-minute window is unsuitable because there is no production release, and the required part is fully reserved with reservation ownership unverified. Review timing, production impact, and resource ownership before proceeding; high due pressure does not establish equipment urgency.",
+      "rationale": "Confirmed maintenance need exists, but reserved stock ownership is unverified and the candidate window is unsuitable; the safest decision support output is abstention for human reconciliation.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 9.710390916967299,
+      "planner_api_calls": 4,
+      "http_requests": 4,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 3124,
+      "prompt_tokens": 2549,
+      "completion_tokens": 575,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A4_READY_PLANNED",
+      "arm": "deterministic",
+      "iteration": 1,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": "REVIEW_PLANNED_MAINTENANCE",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "정비 필요성이 확인되어 생산 영향과 정비 준비 상태를 함께 비교했습니다. 일정·자원 제약을 검토하고, 담당자에게 정비 필요성 검토를 요청하는 것을 대안으로 남깁니다. 어느 제안도 작업 실행이나 승인 완료를 의미하지 않습니다.",
+      "rationale": "Maintenance is recommended, due pressure is low, slack is high, stock and window are available; planned maintenance review is the best next human decision.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.007868457993026823,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A4_READY_PLANNED",
+      "arm": "llm",
+      "iteration": 1,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": "REVIEW_PLANNED_MAINTENANCE",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Maintenance is recommended, and a suitable 120-minute window is available without work-order conflict. Required part and technician are available, while production due pressure is low with 480 minutes of schedule slack; review planned timing against the 120-minute estimated downtime and 25 lost units.",
+      "rationale": "Maintenance is recommended, due pressure is low, slack is high, stock and window are available; planned maintenance review is the best next human decision.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 9.055556667037308,
+      "planner_api_calls": 4,
+      "http_requests": 4,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 2910,
+      "prompt_tokens": 2397,
+      "completion_tokens": 513,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A4_READY_PLANNED",
+      "arm": "deterministic",
+      "iteration": 2,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": "REVIEW_PLANNED_MAINTENANCE",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "정비 필요성이 확인되어 생산 영향과 정비 준비 상태를 함께 비교했습니다. 일정·자원 제약을 검토하고, 담당자에게 정비 필요성 검토를 요청하는 것을 대안으로 남깁니다. 어느 제안도 작업 실행이나 승인 완료를 의미하지 않습니다.",
+      "rationale": "Maintenance is recommended, due pressure is low, slack is high, stock and window are available; planned maintenance review is the best next human decision.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.011315334006212652,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A4_READY_PLANNED",
+      "arm": "llm",
+      "iteration": 2,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": "REVIEW_PLANNED_MAINTENANCE",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_resource_readiness",
+        "get_production_context"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Maintenance is recommended, with a suitable 120-minute window, no active work-order conflict, required part available, and technician available. Low due pressure and 480 minutes of schedule slack support human review of timing, production impact, and resources before requesting maintenance.",
+      "rationale": "Maintenance is recommended, due pressure is low, slack is high, stock and window are available; planned maintenance review is the best next human decision.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 9.353845041012391,
+      "planner_api_calls": 4,
+      "http_requests": 4,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 3074,
+      "prompt_tokens": 2514,
+      "completion_tokens": 560,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A4_READY_PLANNED",
+      "arm": "deterministic",
+      "iteration": 3,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": "REVIEW_PLANNED_MAINTENANCE",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "정비 필요성이 확인되어 생산 영향과 정비 준비 상태를 함께 비교했습니다. 일정·자원 제약을 검토하고, 담당자에게 정비 필요성 검토를 요청하는 것을 대안으로 남깁니다. 어느 제안도 작업 실행이나 승인 완료를 의미하지 않습니다.",
+      "rationale": "Maintenance is recommended, due pressure is low, slack is high, stock and window are available; planned maintenance review is the best next human decision.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.009148166980594397,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A4_READY_PLANNED",
+      "arm": "llm",
+      "iteration": 3,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": "REVIEW_PLANNED_MAINTENANCE",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Maintenance is recommended and risk status is warning. A suitable 120-minute window is available, required parts and technician are ready, and production has 480 minutes of slack versus an estimated 120-minute impact. Review timing and resource alignment before requesting work.",
+      "rationale": "Maintenance is recommended, due pressure is low, slack is high, stock and window are available; planned maintenance review is the best next human decision.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 8.954133833001833,
+      "planner_api_calls": 4,
+      "http_requests": 4,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 2945,
+      "prompt_tokens": 2397,
+      "completion_tokens": 548,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A5_REPLENISHMENT",
+      "arm": "deterministic",
+      "iteration": 1,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "정비 필요성이 확인되어 생산 영향과 정비 준비 상태를 함께 비교했습니다. 일정·자원 제약을 검토하고, 담당자에게 정비 필요성 검토를 요청하는 것을 대안으로 남깁니다. 어느 제안도 작업 실행이나 승인 완료를 의미하지 않습니다.",
+      "rationale": "Future replenishment is not current part availability, so the planner should abstain instead of presenting a maintenance request as ready.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.007237084035295993,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A5_REPLENISHMENT",
+      "arm": "llm",
+      "iteration": 1,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "정비 필요가 확인되었고 적합한 120분 작업 창과 480분 일정 여유가 있으나, 필수 부품 P-1의 현재 가용 수량이 0입니다. 따라서 보충 전 작업 가능성을 전제하지 말고, 생산 영향과 자원 확보 시점을 함께 검토해야 합니다.",
+      "rationale": "Future replenishment is not current part availability, so the planner should abstain instead of presenting a maintenance request as ready.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 10.48976283299271,
+      "planner_api_calls": 4,
+      "http_requests": 4,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 3005,
+      "prompt_tokens": 2437,
+      "completion_tokens": 568,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A5_REPLENISHMENT",
+      "arm": "deterministic",
+      "iteration": 2,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "정비 필요성이 확인되어 생산 영향과 정비 준비 상태를 함께 비교했습니다. 일정·자원 제약을 검토하고, 담당자에게 정비 필요성 검토를 요청하는 것을 대안으로 남깁니다. 어느 제안도 작업 실행이나 승인 완료를 의미하지 않습니다.",
+      "rationale": "Future replenishment is not current part availability, so the planner should abstain instead of presenting a maintenance request as ready.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.016341083974111825,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A5_REPLENISHMENT",
+      "arm": "llm",
+      "iteration": 2,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Maintenance is recommended and a suitable 120-minute window is available with 480 minutes of production slack, but the required part is unavailable. Review timing and resource readiness before proceeding; replenishment does not establish current execution readiness.",
+      "rationale": "Future replenishment is not current part availability, so the planner should abstain instead of presenting a maintenance request as ready.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 11.016595916007645,
+      "planner_api_calls": 4,
+      "http_requests": 4,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 2952,
+      "prompt_tokens": 2437,
+      "completion_tokens": 515,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A5_REPLENISHMENT",
+      "arm": "deterministic",
+      "iteration": 3,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "정비 필요성이 확인되어 생산 영향과 정비 준비 상태를 함께 비교했습니다. 일정·자원 제약을 검토하고, 담당자에게 정비 필요성 검토를 요청하는 것을 대안으로 남깁니다. 어느 제안도 작업 실행이나 승인 완료를 의미하지 않습니다.",
+      "rationale": "Future replenishment is not current part availability, so the planner should abstain instead of presenting a maintenance request as ready.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.011554500029888004,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A5_REPLENISHMENT",
+      "arm": "llm",
+      "iteration": 3,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REVIEW_PLANNED_MAINTENANCE",
+      "gold_action": null,
+      "exact_action": false,
+      "top2_contains_gold": false,
+      "abstain_expected": true,
+      "abstain_actual": false,
+      "abstain_appropriate": false,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tools": [
+        "get_maintenance_context",
+        "get_production_context",
+        "get_resource_readiness"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "Maintenance is recommended and a suitable 120-minute window is available with 480 minutes of production slack, but the required part is unavailable. Review timing and resource readiness before proceeding; replenishment timing does not indicate current execution readiness.",
+      "rationale": "Future replenishment is not current part availability, so the planner should abstain instead of presenting a maintenance request as ready.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 10.87426495802356,
+      "planner_api_calls": 4,
+      "http_requests": 4,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 3061,
+      "prompt_tokens": 2437,
+      "completion_tokens": 624,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": false
+    },
+    {
+      "case_id": "A6_CONFLICT",
+      "arm": "deterministic",
+      "iteration": 1,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "abstained",
+      "recommended_action": null,
+      "gold_action": null,
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": true,
+      "abstain_actual": true,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "현재 근거만으로 다음 행동을 안전하게 추천하지 않습니다.",
+      "rationale": "Safety-relevant maintenance sources conflict and cannot be reconciled by the available tools; human reconciliation is required before ranking actions.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.012021125003229827,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A6_CONFLICT",
+      "arm": "llm",
+      "iteration": 1,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "abstained",
+      "recommended_action": null,
+      "gold_action": null,
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": true,
+      "abstain_actual": true,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "현재 근거만으로 다음 행동을 안전하게 추천하지 않습니다.",
+      "rationale": "Safety-relevant maintenance sources conflict and cannot be reconciled by the available tools; human reconciliation is required before ranking actions.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 2.009617458039429,
+      "planner_api_calls": 1,
+      "http_requests": 1,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 437,
+      "prompt_tokens": 342,
+      "completion_tokens": 95,
+      "api_phases": [
+        "decision_tool_selection"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A6_CONFLICT",
+      "arm": "deterministic",
+      "iteration": 2,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "abstained",
+      "recommended_action": null,
+      "gold_action": null,
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": true,
+      "abstain_actual": true,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "현재 근거만으로 다음 행동을 안전하게 추천하지 않습니다.",
+      "rationale": "Safety-relevant maintenance sources conflict and cannot be reconciled by the available tools; human reconciliation is required before ranking actions.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.008069166971836239,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A6_CONFLICT",
+      "arm": "llm",
+      "iteration": 2,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "abstained",
+      "recommended_action": null,
+      "gold_action": null,
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": true,
+      "abstain_actual": true,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "현재 근거만으로 다음 행동을 안전하게 추천하지 않습니다.",
+      "rationale": "Safety-relevant maintenance sources conflict and cannot be reconciled by the available tools; human reconciliation is required before ranking actions.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 2.341901500010863,
+      "planner_api_calls": 1,
+      "http_requests": 1,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 470,
+      "prompt_tokens": 342,
+      "completion_tokens": 128,
+      "api_phases": [
+        "decision_tool_selection"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A6_CONFLICT",
+      "arm": "deterministic",
+      "iteration": 3,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "abstained",
+      "recommended_action": null,
+      "gold_action": null,
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": true,
+      "abstain_actual": true,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "현재 근거만으로 다음 행동을 안전하게 추천하지 않습니다.",
+      "rationale": "Safety-relevant maintenance sources conflict and cannot be reconciled by the available tools; human reconciliation is required before ranking actions.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.018362540984526277,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A6_CONFLICT",
+      "arm": "llm",
+      "iteration": 3,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "abstained",
+      "recommended_action": null,
+      "gold_action": null,
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": true,
+      "abstain_actual": true,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tools": [
+        "get_maintenance_context"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "현재 근거만으로 다음 행동을 안전하게 추천하지 않습니다.",
+      "rationale": "Safety-relevant maintenance sources conflict and cannot be reconciled by the available tools; human reconciliation is required before ranking actions.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 2.129690332978498,
+      "planner_api_calls": 1,
+      "http_requests": 1,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 428,
+      "prompt_tokens": 342,
+      "completion_tokens": 86,
+      "api_phases": [
+        "decision_tool_selection"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A7_UNKNOWN",
+      "arm": "deterministic",
+      "iteration": 1,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition"
+      ],
+      "required_tools": [
+        "get_asset_condition"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "근거 제공자가 추가 측정 필요성을 명시하여 진단 보강을 제안합니다.",
+      "rationale": "Unverified calibration and unknown trend mean the next safe step is more diagnosis, while maintenance is not justified.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.004665167012717575,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A7_UNKNOWN",
+      "arm": "llm",
+      "iteration": 1,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition"
+      ],
+      "required_tools": [
+        "get_asset_condition"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "The condition result reports an 0.82 failure probability and requires further measurement because sensor calibration is unverified. Additional diagnosis is therefore preferred; inspection is an alternative, while monitoring alone does not resolve the measurement requirement.",
+      "rationale": "Unverified calibration and unknown trend mean the next safe step is more diagnosis, while maintenance is not justified.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 3.9424692500033416,
+      "planner_api_calls": 2,
+      "http_requests": 2,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 1215,
+      "prompt_tokens": 1033,
+      "completion_tokens": 182,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A7_UNKNOWN",
+      "arm": "deterministic",
+      "iteration": 2,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition"
+      ],
+      "required_tools": [
+        "get_asset_condition"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "근거 제공자가 추가 측정 필요성을 명시하여 진단 보강을 제안합니다.",
+      "rationale": "Unverified calibration and unknown trend mean the next safe step is more diagnosis, while maintenance is not justified.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.0169125419924967,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A7_UNKNOWN",
+      "arm": "llm",
+      "iteration": 2,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition"
+      ],
+      "required_tools": [
+        "get_asset_condition"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "The condition signal is warning-level with an estimated failure probability of 0.82, but sensor calibration is unverified. Further measurement is explicitly required before the warning can be confirmed.",
+      "rationale": "Unverified calibration and unknown trend mean the next safe step is more diagnosis, while maintenance is not justified.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 3.980272374988999,
+      "planner_api_calls": 2,
+      "http_requests": 2,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 1246,
+      "prompt_tokens": 1033,
+      "completion_tokens": 213,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A7_UNKNOWN",
+      "arm": "deterministic",
+      "iteration": 3,
+      "live_provider": false,
+      "engine": "langgraph",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition"
+      ],
+      "required_tools": [
+        "get_asset_condition"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "근거 제공자가 추가 측정 필요성을 명시하여 진단 보강을 제안합니다.",
+      "rationale": "Unverified calibration and unknown trend mean the next safe step is more diagnosis, while maintenance is not justified.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 0.006763541023246944,
+      "planner_api_calls": 0,
+      "http_requests": 0,
+      "http_attempts": [],
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "api_phases": [],
+      "joint_quality_success": true
+    },
+    {
+      "case_id": "A7_UNKNOWN",
+      "arm": "llm",
+      "iteration": 3,
+      "live_provider": true,
+      "engine": "langgraph+llm",
+      "terminal_status": "ready_for_review",
+      "recommended_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "exact_action": true,
+      "top2_contains_gold": true,
+      "abstain_expected": false,
+      "abstain_actual": false,
+      "abstain_appropriate": true,
+      "must_not_action_avoided": true,
+      "policy_contained": true,
+      "actual_tools": [
+        "get_asset_condition"
+      ],
+      "required_tools": [
+        "get_asset_condition"
+      ],
+      "required_tool_coverage": true,
+      "unnecessary_tool_calls": 0,
+      "missing_required_tools": 0,
+      "human_approval_required": true,
+      "reasoning_summary": "The condition signal is warning-level with a reported failure probability of 0.82, but sensor calibration is unverified and the warning cannot be confirmed. Further measurement is explicitly required, so additional diagnosis is preferred over monitoring.",
+      "rationale": "Unverified calibration and unknown trend mean the next safe step is more diagnosis, while maintenance is not justified.",
+      "planner_errors": [],
+      "error": null,
+      "latency_seconds": 3.9804649999714456,
+      "planner_api_calls": 2,
+      "http_requests": 2,
+      "http_attempts": [
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "format": "json_schema",
+          "status": 200
+        }
+      ],
+      "total_tokens": 1245,
+      "prompt_tokens": 1033,
+      "completion_tokens": 212,
+      "api_phases": [
+        "decision_tool_selection",
+        "decision_action_ranking"
+      ],
+      "joint_quality_success": true
+    }
+  ],
+  "aggregate": {
+    "deterministic": {
+      "runs": 21,
+      "exact_action_rate": 0.7142857142857143,
+      "top2_contains_gold_rate": 0.7142857142857143,
+      "required_tool_coverage_rate": 1,
+      "must_not_action_avoided_rate": 1,
+      "policy_contained_rate": 1,
+      "abstain_appropriateness_rate": 0.7142857142857143,
+      "joint_quality_success_rate": 0.7142857142857143,
+      "mean_unnecessary_tool_calls": 0,
+      "mean_missing_required_tools": 0,
+      "mean_latency_seconds": 0.027141926666012124,
+      "mean_planner_api_calls": 0,
+      "mean_total_tokens": null,
+      "fallback_or_error_runs": 0,
+      "actions": {
+        "REQUEST_INSPECTION": 3,
+        "REQUEST_ADDITIONAL_DIAGNOSIS": 6,
+        "REVIEW_PLANNED_MAINTENANCE": 9,
+        "ABSTAIN": 3
+      }
+    },
+    "llm": {
+      "runs": 21,
+      "exact_action_rate": 0.7619047619047619,
+      "top2_contains_gold_rate": 0.7619047619047619,
+      "required_tool_coverage_rate": 1,
+      "must_not_action_avoided_rate": 1,
+      "policy_contained_rate": 1,
+      "abstain_appropriateness_rate": 0.7619047619047619,
+      "joint_quality_success_rate": 0.7619047619047619,
+      "mean_unnecessary_tool_calls": 0,
+      "mean_missing_required_tools": 0,
+      "mean_latency_seconds": 7.0288292002431785,
+      "mean_planner_api_calls": 3,
+      "mean_total_tokens": 2093.5238095238096,
+      "fallback_or_error_runs": 0,
+      "actions": {
+        "REQUEST_INSPECTION": 3,
+        "REQUEST_ADDITIONAL_DIAGNOSIS": 6,
+        "REVIEW_PLANNED_MAINTENANCE": 8,
+        "ABSTAIN": 4
+      }
+    },
+    "by_case": {
+      "A1_PERSISTENT_RAPID": {
+        "deterministic": {
+          "actions": {
+            "REQUEST_INSPECTION": 3
+          },
+          "exact": 3,
+          "runs": 3
+        },
+        "llm": {
+          "actions": {
+            "REQUEST_INSPECTION": 3
+          },
+          "exact": 3,
+          "runs": 3
+        }
+      },
+      "A2_TRANSIENT_MEASUREMENT": {
+        "deterministic": {
+          "actions": {
+            "REQUEST_ADDITIONAL_DIAGNOSIS": 3
+          },
+          "exact": 3,
+          "runs": 3
+        },
+        "llm": {
+          "actions": {
+            "REQUEST_ADDITIONAL_DIAGNOSIS": 3
+          },
+          "exact": 3,
+          "runs": 3
+        }
+      },
+      "A3_RESERVED_UNSUITABLE": {
+        "deterministic": {
+          "actions": {
+            "REVIEW_PLANNED_MAINTENANCE": 3
+          },
+          "exact": 0,
+          "runs": 3
+        },
+        "llm": {
+          "actions": {
+            "REVIEW_PLANNED_MAINTENANCE": 2,
+            "ABSTAIN": 1
+          },
+          "exact": 1,
+          "runs": 3
+        }
+      },
+      "A4_READY_PLANNED": {
+        "deterministic": {
+          "actions": {
+            "REVIEW_PLANNED_MAINTENANCE": 3
+          },
+          "exact": 3,
+          "runs": 3
+        },
+        "llm": {
+          "actions": {
+            "REVIEW_PLANNED_MAINTENANCE": 3
+          },
+          "exact": 3,
+          "runs": 3
+        }
+      },
+      "A5_REPLENISHMENT": {
+        "deterministic": {
+          "actions": {
+            "REVIEW_PLANNED_MAINTENANCE": 3
+          },
+          "exact": 0,
+          "runs": 3
+        },
+        "llm": {
+          "actions": {
+            "REVIEW_PLANNED_MAINTENANCE": 3
+          },
+          "exact": 0,
+          "runs": 3
+        }
+      },
+      "A6_CONFLICT": {
+        "deterministic": {
+          "actions": {
+            "ABSTAIN": 3
+          },
+          "exact": 3,
+          "runs": 3
+        },
+        "llm": {
+          "actions": {
+            "ABSTAIN": 3
+          },
+          "exact": 3,
+          "runs": 3
+        }
+      },
+      "A7_UNKNOWN": {
+        "deterministic": {
+          "actions": {
+            "REQUEST_ADDITIONAL_DIAGNOSIS": 3
+          },
+          "exact": 3,
+          "runs": 3
+        },
+        "llm": {
+          "actions": {
+            "REQUEST_ADDITIONAL_DIAGNOSIS": 3
+          },
+          "exact": 3,
+          "runs": 3
+        }
+      }
+    }
+  }
+}

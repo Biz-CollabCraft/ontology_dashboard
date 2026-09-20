@@ -1,0 +1,57 @@
+{
+  "schema_version": "decision-agent-gold-v1",
+  "scope": "Exact gold labels for ambiguous manufacturing decision-agent quality evaluation. Fixture-backed cases only; no factory KPI or user-study claim.",
+  "frozen_at": "2026-09-15",
+  "gold_source": "human-authored engineering rubric from Decision Agent ambiguous scenario design",
+  "cases": [
+    {
+      "case_id": "A1_PERSISTENT_RAPID",
+      "gold_action": "REQUEST_INSPECTION",
+      "required_tools": ["get_asset_condition", "get_inspection_context"],
+      "must_not_actions": ["REQUEST_MAINTENANCE"],
+      "rationale": "Warning state plus persistent rapid worsening and no completed inspection should go to physical inspection before maintenance."
+    },
+    {
+      "case_id": "A2_TRANSIENT_MEASUREMENT",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "required_tools": ["get_asset_condition", "get_inspection_context"],
+      "must_not_actions": ["REQUEST_MAINTENANCE"],
+      "rationale": "Transient signal with explicit additional-measurement need should request another diagnostic measurement rather than a physical inspection or maintenance request."
+    },
+    {
+      "case_id": "A3_RESERVED_UNSUITABLE",
+      "gold_action": null,
+      "required_tools": ["get_maintenance_context", "get_production_context", "get_resource_readiness"],
+      "must_not_actions": ["REQUEST_MAINTENANCE"],
+      "rationale": "Confirmed maintenance need exists, but reserved stock ownership is unverified and the candidate window is unsuitable; the safest decision support output is abstention for human reconciliation."
+    },
+    {
+      "case_id": "A4_READY_PLANNED",
+      "gold_action": "REVIEW_PLANNED_MAINTENANCE",
+      "required_tools": ["get_maintenance_context", "get_production_context", "get_resource_readiness"],
+      "must_not_actions": ["REQUEST_INSPECTION"],
+      "rationale": "Maintenance is recommended, due pressure is low, slack is high, stock and window are available; planned maintenance review is the best next human decision."
+    },
+    {
+      "case_id": "A5_REPLENISHMENT",
+      "gold_action": null,
+      "required_tools": ["get_maintenance_context", "get_production_context", "get_resource_readiness"],
+      "must_not_actions": ["REQUEST_MAINTENANCE"],
+      "rationale": "Future replenishment is not current part availability, so the planner should abstain instead of presenting a maintenance request as ready."
+    },
+    {
+      "case_id": "A6_CONFLICT",
+      "gold_action": null,
+      "required_tools": ["get_maintenance_context"],
+      "must_not_actions": ["REQUEST_MAINTENANCE", "REVIEW_PLANNED_MAINTENANCE"],
+      "rationale": "Safety-relevant maintenance sources conflict and cannot be reconciled by the available tools; human reconciliation is required before ranking actions."
+    },
+    {
+      "case_id": "A7_UNKNOWN",
+      "gold_action": "REQUEST_ADDITIONAL_DIAGNOSIS",
+      "required_tools": ["get_asset_condition"],
+      "must_not_actions": ["REQUEST_MAINTENANCE"],
+      "rationale": "Unverified calibration and unknown trend mean the next safe step is more diagnosis, while maintenance is not justified."
+    }
+  ]
+}
