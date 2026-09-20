@@ -401,10 +401,25 @@ class AuditRepository:
             connection.execute(
                 """
                 UPDATE agent_review_workflow_runs
-                SET status=?, completed_at=?, updated_at=?, error_type=?, error_message=?, trace_json=?
-                WHERE workflow_run_id=? AND status='running'
+                SET status=?,
+                    completed_at=COALESCE(completed_at, ?),
+                    updated_at=?,
+                    error_type=?,
+                    error_message=?,
+                    trace_json=?
+                WHERE workflow_run_id=?
+                  AND (status='running' OR status=?)
                 """,
-                tuple(payload.values()),
+                (
+                    payload["status"],
+                    payload["completed_at"],
+                    payload["updated_at"],
+                    payload["error_type"],
+                    payload["error_message"],
+                    payload["trace_json"],
+                    payload["workflow_run_id"],
+                    payload["status"],
+                ),
             )
             row = connection.execute(
                 "SELECT * FROM agent_review_workflow_runs WHERE workflow_run_id=?",

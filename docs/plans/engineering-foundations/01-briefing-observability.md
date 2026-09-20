@@ -82,10 +82,41 @@
 
 표본이 작으면 절대적인 운영 성능으로 일반화하지 않는다.
 
+## 구현 상태 — 2026-09-20
+
+P0는 기존 `agent_review_workflow_runs.trace_json`과 summary materialization 경로를 확장하는 방식으로 구현했다. Event/Evidence/Decision/Action 제품 계약이나 briefing 출력 schema는 변경하지 않았다.
+
+구현된 operational trace schema는 `briefing-operational-trace-v1.0`이며 다음을 한 lifecycle에 연결한다.
+
+- 생성/조회마다 별도 `trace_id`
+- project/workspace/asset/event/snapshot identity와 evidence fingerprint
+- evidence 후보/선택/필수/필수 보존 개수와 deterministic selection policy version
+- generation policy, generate/reuse/defer 결정, regeneration reason
+- provider/model, provider-reported token usage, provider latency
+- event/evidence load → evidence selection → fingerprint validation → generation decision → provider → validation → persistence → read/reuse의 단계별 latency
+- provider failure / validation failure / generation failure 구분
+- fallback 여부와 reason, content repair retry count
+- 최종 summary artifact id, workflow run id, summary key
+- 저장본 조회 시 과거 생성 token/latency를 현재 조회 비용으로 재계상하지 않음
+
+생성 lifecycle의 최종 operational trace는 `agent_review_workflow_runs.trace_json.observability`에도 저장한다. raw prompt, evidence 전문, API key는 trace 필수값에 포함하지 않는다.
+
+### 검증
+
+다음 검증을 현재 P0 working tree에서 통과했다.
+
+- `tests/test_briefing_observability.py`: 3 passed
+- `tests/test_materialization_lease_fencing.py`: 10 passed
+- `tests/test_operations.py -k 'agent_review'`: 30 passed
+- watcher / scan retry / selected evidence / briefing HTTP / workflow reliability·stability 묶음: 18 passed
+- generation-policy의 현재 구현과 일치하는 묶음: 21 passed
+
+`tests/test_agent_review_generation_policy.py` 전체의 나머지 18개 실패는 P0 변경 이전 clean HEAD에서도 동일하게 재현된다. 현행 `cached_agent_review_summary_for_packet()`의 `LATEST_STORED` serving 정책과, exact cache가 무효이면 `None`이어야 한다고 가정하는 해당 테스트들이 서로 충돌한다. P0에서는 이 기존 정책 충돌을 임의 수정하지 않는다.
+
 ## 완료 조건
 
-- trace_id 하나로 lifecycle 재구성 가능
-- 재사용/재생성 이유 추적 가능
-- provider failure와 validation failure 구분 가능
-- raw secret/API key 미기록
-- 기존 report/product contract 비파괴
+- [x] trace_id 하나로 생성 lifecycle 재구성 가능
+- [x] 재사용/재생성 이유 추적 가능
+- [x] provider failure와 validation failure 구분 가능
+- [x] raw secret/API key 미기록
+- [x] 기존 report/product contract 비파괴

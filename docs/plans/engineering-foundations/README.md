@@ -1,7 +1,7 @@
 # Ontology Dashboard — Engineering Foundations Upgrade
 
 - 작성일: 2026-09-20
-- 상태: planned
+- 상태: P0 implemented and verified / P1-P2 planned
 - 대상: `Biz-CollabCraft/ontology_dashboard`
 - 기준 문서:
   - `docs/operations/current-operations-implementation-baseline.md`
@@ -34,6 +34,8 @@
 문서: `01-briefing-observability.md`
 
 한 briefing 생성/재사용 결정의 입력 근거, snapshot, selection, model call, validation, cache/reuse, latency를 추적한다.
+
+2026-09-20 기준 `briefing-operational-trace-v1.0` 구현과 회귀 검증을 완료했다. 구현·검증 상세와 기존 baseline test conflict는 P0 문서에 기록한다.
 
 ### P1 — AI Authority & Security Boundary
 문서: `02-ai-authority-security.md`

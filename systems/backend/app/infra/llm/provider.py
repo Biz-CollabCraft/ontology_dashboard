@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any
 
 import httpx
@@ -55,6 +56,7 @@ class VertexAIProvider:
             raise ProviderUnavailable("google-genai is not installed") from exc
 
         client = genai.Client(vertexai=True, project=self.project, location=self.location)
+        provider_started = time.perf_counter()
         response = client.models.generate_content(
             model=self.model,
             contents=json.dumps(payload, ensure_ascii=False),
@@ -72,6 +74,7 @@ class VertexAIProvider:
             "provider_metadata": {
                 "usage": usage,
                 "usage_measurement": "provider_reported" if usage else "not_reported",
+                "latency_ms": round((time.perf_counter() - provider_started) * 1000, 3),
             },
         }
 
@@ -143,6 +146,7 @@ class OpenAICompatibleProvider:
             request_body["reasoning_effort"] = self.reasoning_effort
         if self.max_completion_tokens is not None:
             request_body["max_completion_tokens"] = self.max_completion_tokens
+        provider_started = time.perf_counter()
         response = self._post_chat_completion(request_body)
         if response_schema and response.status_code == 400:
             request_body["response_format"] = {"type": "json_object"}
@@ -159,6 +163,7 @@ class OpenAICompatibleProvider:
             "provider_metadata": {
                 "usage": usage,
                 "usage_measurement": "provider_reported" if usage else "not_reported",
+                "latency_ms": round((time.perf_counter() - provider_started) * 1000, 3),
             },
         }
 

@@ -36,6 +36,10 @@ from app.operations.agent_review_summary_generation_policy import (
     SnapshotGuardedRepository, cached_record_is_valid, decide_generation,
     packet_is_current, policy_fingerprint, material_change_required, background_generation_required,
 )
+from app.operations.briefing_observability import (
+    compose_briefing_operational_trace,
+    new_briefing_trace_id,
+)
 from app.operations.asset_detail_view_model import (
     AssetDetailViewModelService,
     compose_asset_detail_view_model,
@@ -339,6 +343,7 @@ class ManufacturingPredictiveMaintenanceService:
         *,
         dataset_version_id: str | None = None,
         history_window: str = "24h",
+        observability: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         fixture = self._fixture_for_asset(asset_id, project_id, dataset_version_id=dataset_version_id)
         artifact = self._product_result_artifact(fixture)
@@ -368,6 +373,7 @@ class ManufacturingPredictiveMaintenanceService:
                 artifact=artifact,
                 project_id=project_id,
                 event_id=fixture.get("event_id"),
+                observability=observability,
             ),
             data_status={
                 "source": "canonical",
@@ -391,6 +397,7 @@ class ManufacturingPredictiveMaintenanceService:
         workspace_id: str = "manufacturing-demo",
         context_repository: Any | None = None,
         retrieved_at: datetime | None = None,
+        observability: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         retrieved_at = retrieved_at or datetime.now(timezone.utc)
         if retrieved_at.tzinfo is None:
@@ -404,9 +411,16 @@ class ManufacturingPredictiveMaintenanceService:
             evidence_snapshot_id=str(artifact.get("artifact_id") or event_id or asset_id),
             decision_as_of=observed_at,
         )
+        context_load_started = time.monotonic()
         contexts = (context_repository or self.operational_context_repository).contexts(
             identity=identity, retrieved_at=retrieved_at,
         )
+        if observability is not None:
+            observability["event_evidence_load"] = (
+                observability.get("event_evidence_load", 0.0)
+                + (time.monotonic() - context_load_started) * 1000
+            )
+        selection_started = time.monotonic()
         relations = resolve_operational_relations(identity=identity, contexts=contexts)
         candidates = project_evidence_candidates(
             identity=identity,
@@ -419,6 +433,11 @@ class ManufacturingPredictiveMaintenanceService:
             role=role,
             max_candidates=max_candidates,
         )
+        if observability is not None:
+            observability["evidence_selection"] = (
+                observability.get("evidence_selection", 0.0)
+                + (time.monotonic() - selection_started) * 1000
+            )
         selected_basis = [candidate.model_dump(mode="json") for candidate in selected.selected]
         rejected_basis = [candidate.model_dump(mode="json") for candidate in selected.rejected]
         selected_relation_paths = [
@@ -491,6 +510,7 @@ class ManufacturingPredictiveMaintenanceService:
         *,
         dataset_version_id: str | None = None,
         history_window: str = "24h",
+        observability: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         fixture = self._fixture_for_asset(asset_id, project_id, dataset_version_id=dataset_version_id)
         artifact = self._product_result_artifact(fixture)
@@ -499,6 +519,7 @@ class ManufacturingPredictiveMaintenanceService:
             project_id,
             dataset_version_id=dataset_version_id,
             history_window=history_window,
+            observability=observability,
         )
         return compose_agent_review_packet(
             project_id=project_id,
@@ -626,11 +647,13 @@ class ManufacturingPredictiveMaintenanceService:
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Return a materialized read-only review summary for this evidence snapshot."""
 
+        preparation_metrics: dict[str, float] = {}
         packet = self.agent_review_packet(
             asset_id,
             project_id,
             dataset_version_id=dataset_version_id,
             history_window=history_window,
+            observability=preparation_metrics,
         )
         return self._materialize_agent_review_packet(
             packet=packet,
@@ -640,6 +663,7 @@ class ManufacturingPredictiveMaintenanceService:
             history_window=history_window,
             trigger=trigger,
             engine=engine,
+            preparation_metrics=preparation_metrics,
             packet_loader=lambda: self.agent_review_packet(
                 asset_id, project_id, dataset_version_id=dataset_version_id,
                 history_window=history_window,
@@ -657,6 +681,7 @@ class ManufacturingPredictiveMaintenanceService:
         trigger: str,
         engine: str,
         generation_policy: str = "always",
+        preparation_metrics: dict[str, float] | None = None,
         packet_loader=None,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         # Coalesce only background work. Explicit event-bound requests retain their
@@ -680,7 +705,8 @@ class ManufacturingPredictiveMaintenanceService:
             return self._materialize_agent_review_packet_now(
                 packet=packet, project_id=project_id, organization_id=organization_id,
                 workspace_id=workspace_id, history_window=history_window, trigger=trigger,
-                engine=engine, generation_policy=generation_policy, packet_loader=packet_loader,
+                engine=engine, generation_policy=generation_policy,
+                preparation_metrics=preparation_metrics, packet_loader=packet_loader,
             )
         if not background:
             return run()
@@ -717,13 +743,18 @@ class ManufacturingPredictiveMaintenanceService:
         trigger: str,
         engine: str,
         generation_policy: str = "always",
+        preparation_metrics: dict[str, float] | None = None,
         packet_loader=None,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        lifecycle_started = time.monotonic()
+        trace_id = new_briefing_trace_id()
+        stage_durations_ms: dict[str, float | int | None] = dict(preparation_metrics or {})
         materializer = AgentReviewSummaryMaterializer(
             self.repository,
             self.agent_review_summary_provider,
         )
         force = trigger == "ui_manual_regeneration"
+        snapshot_started = time.monotonic()
         key_payload = summary_key_payload(
             packet=packet,
             organization_id=organization_id,
@@ -733,6 +764,37 @@ class ManufacturingPredictiveMaintenanceService:
             provider=self.agent_review_summary_provider,
         )
         materialization_key = summary_key(key_payload)
+        stage_durations_ms["snapshot_fingerprint_validation"] = round(
+            (time.monotonic() - snapshot_started) * 1000, 3
+        )
+
+        def operational_trace(
+            trace: dict[str, Any],
+            policy_trace: dict[str, Any] | None,
+            *,
+            serving_kind: str,
+        ) -> dict[str, Any]:
+            durations = dict(stage_durations_ms)
+            generation_metrics = trace.get("generation_metrics") or {}
+            for stage, key in (
+                ("provider_call", "provider_latency_ms"),
+                ("output_validation", "validation_latency_ms"),
+                ("persistence", "persistence_latency_ms"),
+            ):
+                value = generation_metrics.get(key)
+                if isinstance(value, (int, float)):
+                    durations[stage] = value
+            return compose_briefing_operational_trace(
+                trace_id=trace_id,
+                packet=packet,
+                key_payload=key_payload,
+                generation_policy=policy_trace,
+                materialization=trace.get("materialization") or {},
+                generation_trace=trace,
+                stage_durations_ms=durations,
+                total_latency_ms=(time.monotonic() - lifecycle_started) * 1000,
+                serving_kind=serving_kind,
+            )
 
         def validate_binding():
             for current_packet in (packet, packet_loader() if packet_loader else packet):
@@ -756,6 +818,7 @@ class ManufacturingPredictiveMaintenanceService:
             ),
         )
         with _agent_review_summary_lock(materialization_key):
+            lookup_started = time.monotonic()
             cached_summary, cached_trace = materializer.lookup(
                 packet=packet,
                 organization_id=organization_id,
@@ -763,6 +826,10 @@ class ManufacturingPredictiveMaintenanceService:
                 workspace_id=workspace_id,
                 history_window=history_window,
             )
+            stage_durations_ms["read_reuse_serving"] = round(
+                (time.monotonic() - lookup_started) * 1000, 3
+            )
+            decision_started = time.monotonic()
             retry_fallback = (
                 (cached_trace.get("materialization") or {}).get("status") == "fallback"
                 and self.agent_review_summary_provider is not None
@@ -807,9 +874,21 @@ class ManufacturingPredictiveMaintenanceService:
                 material_change=material_change,
                 minor_change_deferral_expired=minor_change_deferral_expired,
             )
-            _record_briefing_event("decision", scope, **policy_trace)
+            stage_durations_ms["generation_decision"] = round(
+                (time.monotonic() - decision_started) * 1000, 3
+            )
+            _record_briefing_event("decision", scope, trace_id=trace_id, **policy_trace)
             if policy_trace["generation_action"] == "DEFER":
-                return cached_summary, {**cached_trace, "generation_policy": policy_trace}
+                observability = operational_trace(
+                    cached_trace,
+                    policy_trace,
+                    serving_kind="stored_reuse" if cached_summary is not None else "pending",
+                )
+                return cached_summary, {
+                    **cached_trace,
+                    "generation_policy": policy_trace,
+                    "observability": observability,
+                }
 
             try:
                 run = self._start_agent_review_workflow_run(
@@ -834,7 +913,16 @@ class ManufacturingPredictiveMaintenanceService:
                     "decision_reason": "concurrent_materialization_completed_for_exact_key",
                 }
                 self._briefing_minor_change_deferred_since.pop(scope, None)
-                return summary, {**trace, "generation_policy": policy_trace}
+                observability = operational_trace(
+                    trace,
+                    policy_trace,
+                    serving_kind="concurrent_stored_reuse",
+                )
+                return summary, {
+                    **trace,
+                    "generation_policy": policy_trace,
+                    "observability": observability,
+                }
             try:
                 summary, trace = materializer.materialize(
                     packet=packet,
@@ -850,8 +938,20 @@ class ManufacturingPredictiveMaintenanceService:
                     self._briefing_generation_baselines[scope] = (deepcopy(packet), deepcopy(key_payload))
                     self._briefing_observation_baselines.pop(scope, None)
                     self._briefing_minor_change_deferred_since.pop(scope, None)
-                _record_briefing_event("completion", scope, fallback=trace.get("fallback"),
-                                       reason=trace.get("reason"), generation_metrics=trace.get("generation_metrics"))
+                observability = operational_trace(
+                    trace,
+                    policy_trace,
+                    serving_kind="generated",
+                )
+                _record_briefing_event(
+                    "completion",
+                    scope,
+                    trace_id=trace_id,
+                    fallback=trace.get("fallback"),
+                    reason=trace.get("reason"),
+                    generation_metrics=trace.get("generation_metrics"),
+                    observability=observability,
+                )
                 status = _workflow_run_status(trace)
                 finished = self.repository.finish_agent_review_workflow_run(
                     run["workflow_run_id"],
@@ -865,22 +965,56 @@ class ManufacturingPredictiveMaintenanceService:
                         "reason": trace.get("reason"),
                         "validation_errors": trace.get("validation_errors") or [],
                         "generation_metrics": trace.get("generation_metrics"),
+                        "observability": observability,
                     },
                 )
                 return summary, {
                     **trace,
                     "generation_policy": policy_trace,
                     "workflow_run": _workflow_run_trace(finished),
+                    "observability": observability,
                 }
             except Exception as exc:
-                _record_briefing_event("failure", scope, error_type=type(exc).__name__,
-                                       summary_key=materialization_key)
+                failure_trace = {
+                    "provider": getattr(self.agent_review_summary_provider, "name", "none")
+                    if self.agent_review_summary_provider is not None
+                    else "none",
+                    "fallback": False,
+                    "reason": type(exc).__name__,
+                    "validation_errors": [],
+                    "materialization": {
+                        "summary_id": None,
+                        "summary_key": materialization_key,
+                        "workflow_run_id": run["workflow_run_id"],
+                        "status": "failed",
+                        "reused": False,
+                        "model_version": key_payload["model_version"],
+                    },
+                }
+                observability = operational_trace(
+                    failure_trace,
+                    policy_trace,
+                    serving_kind="failed",
+                )
+                _record_briefing_event(
+                    "failure",
+                    scope,
+                    trace_id=trace_id,
+                    error_type=type(exc).__name__,
+                    summary_key=materialization_key,
+                    observability=observability,
+                )
                 finished = self.repository.finish_agent_review_workflow_run(
                     run["workflow_run_id"],
                     status="failed",
                     error_type=type(exc).__name__,
                     error_message=str(exc),
-                    trace={"stage": "failed", "error_type": type(exc).__name__, "generation_policy": policy_trace},
+                    trace={
+                        "stage": "failed",
+                        "error_type": type(exc).__name__,
+                        "generation_policy": policy_trace,
+                        "observability": observability,
+                    },
                 )
                 raise RuntimeError(
                     f"agent_review_summary_workflow_failed:{finished['workflow_run_id']}"
@@ -898,11 +1032,13 @@ class ManufacturingPredictiveMaintenanceService:
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         """Return a stored read-only review summary without triggering generation."""
 
+        preparation_metrics: dict[str, float] = {}
         packet = self.agent_review_packet(
             asset_id,
             project_id,
             dataset_version_id=dataset_version_id,
             history_window=history_window,
+            observability=preparation_metrics,
         )
         summary, trace = self.cached_agent_review_summary_for_packet(
             packet=packet,
@@ -910,6 +1046,7 @@ class ManufacturingPredictiveMaintenanceService:
             project_id=project_id,
             workspace_id=workspace_id,
             history_window=history_window,
+            preparation_metrics=preparation_metrics,
         )
         workflow_run_id = (trace.get("materialization") or {}).get("workflow_run_id")
         if isinstance(workflow_run_id, str) and workflow_run_id:
@@ -926,13 +1063,21 @@ class ManufacturingPredictiveMaintenanceService:
         organization_id: str = "org-ontology-demo",
         workspace_id: str = "manufacturing-demo",
         history_window: str = "24h",
+        preparation_metrics: dict[str, float] | None = None,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        lifecycle_started = time.monotonic()
+        trace_id = new_briefing_trace_id()
+        stage_durations_ms: dict[str, float | int | None] = dict(preparation_metrics or {})
+        snapshot_started = time.monotonic()
         key_payload = summary_key_payload(
             packet=packet, organization_id=organization_id, project_id=project_id,
             workspace_id=workspace_id, history_window=history_window,
             provider=self.agent_review_summary_provider,
         )
         materialization_key = summary_key(key_payload)
+        stage_durations_ms["snapshot_fingerprint_validation"] = round(
+            (time.monotonic() - snapshot_started) * 1000, 3
+        )
         repository = SnapshotGuardedRepository(
             self.repository, lambda: None,
             lambda record: cached_record_is_valid(
@@ -940,6 +1085,7 @@ class ManufacturingPredictiveMaintenanceService:
                 materialization_key=materialization_key,
             ),
         )
+        lookup_started = time.monotonic()
         summary, trace = AgentReviewSummaryMaterializer(
             repository,
             self.agent_review_summary_provider,
@@ -949,6 +1095,9 @@ class ManufacturingPredictiveMaintenanceService:
             project_id=project_id,
             workspace_id=workspace_id,
             history_window=history_window,
+        )
+        stage_durations_ms["read_reuse_serving"] = round(
+            (time.monotonic() - lookup_started) * 1000, 3
         )
         reuse_eligibility = "EXACT_VALIDATED" if summary is not None else "INELIGIBLE"
         if summary is None:
@@ -968,12 +1117,41 @@ class ManufacturingPredictiveMaintenanceService:
                     "latest_stored": True,
                 }
                 reuse_eligibility = "LATEST_STORED"
-        _record_briefing_event("lookup", (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window),
-                               summary_key=materialization_key, hit=summary is not None,
-                               status=(trace.get("materialization") or {}).get("status"))
+        lookup_policy = {
+            "policy": "read_only_lookup",
+            "generation_decision": "REUSE" if summary is not None else "ON_DEMAND",
+            "generation_action": "DEFER",
+            "decision_reason": (
+                "stored_summary_served"
+                if summary is not None
+                else "summary_not_materialized"
+            ),
+        }
+        stage_durations_ms["generation_decision"] = 0.0
+        observability = compose_briefing_operational_trace(
+            trace_id=trace_id,
+            packet=packet,
+            key_payload=key_payload,
+            generation_policy=lookup_policy,
+            materialization=trace.get("materialization") or {},
+            generation_trace=trace,
+            stage_durations_ms=stage_durations_ms,
+            total_latency_ms=(time.monotonic() - lifecycle_started) * 1000,
+            serving_kind="stored_reuse" if summary is not None else "cache_miss",
+        )
+        _record_briefing_event(
+            "lookup",
+            (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window),
+            trace_id=trace_id,
+            summary_key=materialization_key,
+            hit=summary is not None,
+            status=(trace.get("materialization") or {}).get("status"),
+            observability=observability,
+        )
         return summary, {
             **trace,
             "reuse_eligibility": reuse_eligibility,
+            "observability": observability,
         }
 
     def agent_review_workflow_runs(
@@ -1037,12 +1215,14 @@ class ManufacturingPredictiveMaintenanceService:
                     asset_id = str(candidate.get("asset_id") or "")
                     if not asset_id:
                         continue
+                    preparation_metrics: dict[str, float] = {}
                     if candidate.get("source_kind") == "fixture":
                         packet = self.agent_review_packet(
                             asset_id,
                             project_id,
                             dataset_version_id=candidate.get("dataset_version_id"),
                             history_window=history_window,
+                            observability=preparation_metrics,
                         )
                     else:
                         packet = self._runtime_agent_review_packet_for_candidate(
@@ -1051,6 +1231,7 @@ class ManufacturingPredictiveMaintenanceService:
                             organization_id=organization_id,
                             workspace_id=workspace_id,
                             history_window=history_window,
+                            observability=preparation_metrics,
                         )
                     summary, trace = self._materialize_agent_review_packet(
                         packet=packet,
@@ -1061,6 +1242,7 @@ class ManufacturingPredictiveMaintenanceService:
                         trigger="ui_manual_regeneration" if explicit_refresh else "polling_watcher",
                         engine="simple",
                         generation_policy=generation_policy,
+                        preparation_metrics=preparation_metrics,
                         packet_loader=(
                             (lambda: self.agent_review_packet(
                                 asset_id, project_id,
@@ -1097,6 +1279,8 @@ class ManufacturingPredictiveMaintenanceService:
                             "workflow_status": (trace.get("workflow_run") or {}).get(
                                 "status"
                             ),
+                            "trace_id": (trace.get("observability") or {}).get("trace_id"),
+                            "observability": trace.get("observability"),
                         }
                     )
 
@@ -1225,9 +1409,11 @@ class ManufacturingPredictiveMaintenanceService:
         organization_id: str,
         workspace_id: str,
         history_window: str,
+        observability: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         if self.runtime_asset_detail_service is None:
             raise RuntimeError("runtime AssetDetail service is not configured")
+        load_started = time.monotonic()
         view_model = self.runtime_asset_detail_service.latest_detail_view(
             organization_id=organization_id,
             project_id=project_id,
@@ -1251,6 +1437,11 @@ class ManufacturingPredictiveMaintenanceService:
         )
         repository = self.operational_context_repository.capture(identity)
         view_model["operation_context"] = planning_context(repository, identity)
+        if observability is not None:
+            observability["event_evidence_load"] = (
+                observability.get("event_evidence_load", 0.0)
+                + (time.monotonic() - load_started) * 1000
+            )
         view_model["evidence_context"] = self.evidence_context_for_snapshot(
             asset_id=identity.asset_id,
             artifact={
@@ -1262,6 +1453,7 @@ class ManufacturingPredictiveMaintenanceService:
             organization_id=organization_id,
             workspace_id=workspace_id,
             context_repository=repository,
+            observability=observability,
         )
         return compose_agent_review_packet(
             project_id=project_id,
