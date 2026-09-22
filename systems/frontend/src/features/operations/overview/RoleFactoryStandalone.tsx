@@ -173,7 +173,7 @@ function RoleFactoryStandaloneLegacy({ canGenerateBrief = false, projectId, work
 
       <section className="engineer-factory-card role-primary-work">
         <header><strong>{persona === "maintenance" ? "점검 및 정비 처리" : "생산 대응 검토"}</strong><div className="maintenance-work-status"><span>업무 단계별 확인</span>{persona === "maintenance" ? (() => {
-          const state = workOrderError ? "offline" : !selectedWorkOrder?.inspection_result ? "online"
+          const state = workOrderError ? "offline" : !selectedWorkOrder ? "online"
             : coordinationConnection?.workOrderId === selectedWorkOrder.work_order_id ? coordinationConnection.state : "loading";
           return <span role="status" className={`maintenance-connection is-${state}`}><i/>{state === "online" ? "연결 정상" : state === "offline" ? "연결 확인 필요" : "연결 확인 중"}</span>;
         })() : null}</div></header>

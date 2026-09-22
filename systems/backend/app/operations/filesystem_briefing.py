@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 from functools import lru_cache
 from app.operations.sop_retrieval import retrieve_inspection_sops
+from app.diagnosis.runtime_contracts import filesystem_event_artifact, latest_complete_file_tick
 
 
 class BriefingHistoryUnavailable(RuntimeError):
@@ -84,7 +85,6 @@ def _recorded_tick(stream_name, asset_id, event_id, run_id):
 
 
 def _bound_ticks(asset_id, event_id, dataset_version_id):
-    from app.diagnosis.runtime_router import _latest_complete_file_tick
     parts = event_id.split('#', 2)
     if len(parts) != 3 or not re.fullmatch(r'[A-Za-z0-9_-]+', parts[1]):
         raise KeyError(event_id)
@@ -92,7 +92,7 @@ def _bound_ticks(asset_id, event_id, dataset_version_id):
     if dataset_version_id and dataset_version_id != run_id:
         raise KeyError(event_id)
     try:
-        stream, latest_at, records, complete_ticks = _latest_complete_file_tick()
+        stream, latest_at, records, complete_ticks = latest_complete_file_tick()
         if stream.parents[1].name == run_id:
             ticks = complete_ticks or [(latest_at, {str(row['asset_id']): row for row in records})]
             if any(f"FILE#{run_id}#{rows.get(asset_id, {}).get('observation_id', '')}" == event_id for _, rows in ticks):
@@ -112,7 +112,6 @@ def _bound_ticks(asset_id, event_id, dataset_version_id):
 
 def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, project_id, history_window,
     service=None, organization_id="org-ontology-demo", workspace_id="manufacturing-demo"):
-    from app.diagnosis.runtime_router import _latest_complete_file_tick, _filesystem_event_artifact
     if project_id != "manufacturing-demo-project" or not event_id.startswith("FILE#"):
         raise KeyError(event_id)
     run_id, ticks = _bound_ticks(asset_id, event_id, dataset_version_id)
@@ -123,7 +122,7 @@ def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, projec
         expected = f"FILE#{run_id}#{record.get('observation_id', asset_id)}"
         if expected != event_id:
             continue
-        artifact = _filesystem_event_artifact(run_id=run_id, observed_at=observed_at, record=record, event_id=event_id)
+        artifact = filesystem_event_artifact(run_id=run_id, observed_at=observed_at, record=record, event_id=event_id)
         for rank, factor in enumerate(artifact.get("top_factors", []), 1):
             factor.setdefault("rank", rank)
             factor.setdefault("explanation_method", "filesystem-risk-policy-v1")
