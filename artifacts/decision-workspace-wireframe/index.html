@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Decision Workspace</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#e5e7e8;color:#262d32;font:14px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}button,select,textarea{font:inherit}button{cursor:pointer;border:1px solid #aab2b8;background:white;color:inherit;padding:10px 15px;border-radius:4px}button:hover{background:#edf1f3}button:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #46748e;outline-offset:3px}.primary{background:#344d5d;color:white;border-color:#344d5d}.primary:hover{background:#243c4c}h1,h2,h3,p{margin:0}h1{font-size:26px;letter-spacing:-.8px}h2{font-size:17px}h3{font-size:14px}p{line-height:1.7}.muted,small{color:#69747b}.eyebrow{font-size:11px;letter-spacing:1.5px;color:#69747b;margin-bottom:8px}.frame{background:#fafbfb;position:relative}.toolbar{height:42px;background:#eff1f2;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #cbd1d4;font-size:12px}.toolbar select{padding:5px;border:1px solid #adb6bc;background:white}.appbar{height:64px;border-bottom:1px solid #d4dade;display:flex;align-items:center;justify-content:space-between;padding:0 28px}.brand{font-weight:750;font-size:17px}.nav{display:flex;gap:28px;margin-left:48px;color:#7b8389}.nav b{color:#263e4d}.barleft{display:flex;align-items:center}main{padding:22px 30px}.heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.tag{display:inline-block;padding:5px 9px;border:1px solid #b9c2c8;border-radius:3px;background:#f2f4f5;font-size:12px}.case-sub{margin-top:7px;color:#69747b}.back{padding:0;border:0;background:none;color:#536f80;font-size:12px;margin-bottom:12px}.flow{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid #c4cdd3;margin-bottom:20px;background:#fff}.step{padding:14px 17px;border-right:1px solid #d6dde1;color:#8a9297}.step:last-child{border:0}.step.active{background:#e5edf1;color:#273f4e;box-shadow:inset 0 3px #496879}.step.done{color:#53636c}.step small{display:block;font-size:11px;margin-top:5px}.workspace{display:grid;grid-template-columns:268px 1fr 324px;gap:22px;height:425px}.pane{border:1px solid #cbd3d8;background:white;padding:20px}.pane-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.metric{padding:14px 0;border-bottom:1px solid #e0e4e7}.metric:first-of-type{padding-top:0}.metric label{display:block;color:#6b757d;font-size:12px;margin-bottom:6px}.metric strong{font-size:22px}.metric p{font-size:12px;margin-top:5px}.row{display:grid;grid-template-columns:118px 1fr auto;align-items:start;gap:10px;padding:12px 0;border-bottom:1px solid #e0e4e7;font-size:13px}.row span:first-child{color:#65727b}.state{font-size:11px;white-space:nowrap;background:#f1f3f4;padding:3px 6px}.state.issue{border-bottom:2px solid #8395a0}.ai{margin-top:17px;background:#f0f4f6;border-left:3px solid #647e8f;padding:14px 16px}.ai p{font-size:13px;margin-top:6px}.evidence-btn{font-size:12px;border:0;padding:8px 0;color:#456579;background:none}.actions p{margin:12px 0;font-size:13px}.actions button{width:100%;margin-top:10px;text-align:left;display:flex;justify-content:space-between}.actions .note{font-size:11px;border-top:1px solid #dbe1e5;padding-top:14px;margin-top:18px;color:#6a767e}.history{margin-top:18px;display:flex;align-items:center;gap:30px;border-top:1px solid #d3dbe0;padding-top:14px;font-size:12px}.history strong{font-size:13px}.footer{position:absolute;bottom:0;left:0;right:0;padding:12px 30px;border-top:1px solid #d5dde1;display:flex;justify-content:space-between;font-size:11px;color:#738088}.overview-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:22px}.summary{display:flex;gap:70px;padding:18px 0 24px}.summary strong{display:block;font-size:29px;margin-top:7px}.factory{height:386px;border:1px solid #bdc7cd;background:#f2f4f5;padding:24px}.line{display:flex;gap:15px;align-items:center;margin-top:26px}.machine{width:138px;height:98px;text-align:left;border:1px dashed #a6b1b9;background:#fafbfb}.machine strong,.machine small{display:block;margin:6px 0}.machine.selected{border:2px solid #496778;background:#e7edf1}.event{border-bottom:1px solid #dbe0e4;padding:18px 0}.event button{float:right;font-size:12px}.dialog-overlay{position:absolute;inset:42px 0 0;background:#25323d55;display:flex;align-items:center;justify-content:center;z-index:4}.dialog{width:610px;max-height:685px;overflow:auto;background:white;padding:28px;border:1px solid #9caab3;box-shadow:0 16px 60px #24333d22}.dialog p{margin:14px 0}.dialog label{display:block;margin:12px 0}.dialog textarea{width:100%;height:76px;padding:10px;border:1px solid #b7c1c8}.dialog-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}.hidden{display:none!important}.toast{position:absolute;bottom:62px;left:50%;transform:translateX(-50%);padding:13px 24px;background:#344d5d;color:white;z-index:10}.evidence-table{width:100%;border-collapse:collapse;font-size:13px}.evidence-table td,.evidence-table th{text-align:left;padding:12px 6px;border-bottom:1px solid #dde2e5}
+
+/* Fluid workspace: preserve readable text and reflow by available width. */
+body{background:#fafbfb;overflow-wrap:anywhere}
+.frame{width:100%;min-height:100dvh;height:auto;overflow:visible;display:flex;flex-direction:column}
+main{width:100%;flex:1}
+.toolbar{height:auto;min-height:42px;gap:12px;padding:10px 24px;flex-wrap:wrap}
+.toolbar label{display:flex;align-items:center;gap:8px;min-width:0}
+.toolbar select{min-width:0;max-width:100%}
+.appbar{height:auto;min-height:64px;gap:20px;padding:18px 28px;flex-wrap:wrap}
+.barleft{flex-wrap:wrap;gap:18px;min-width:0}
+.nav{margin-left:24px;gap:24px;flex-wrap:wrap}
+.heading{gap:16px}
+.heading>div{min-width:0}
+.heading>.tag{flex-shrink:0}
+.workspace{grid-template-columns:minmax(220px,.85fr) minmax(380px,1.8fr) minmax(260px,1fr);height:auto;align-items:stretch}
+.pane,.factory{min-width:0}
+.pane-head{gap:12px;flex-wrap:wrap}
+.row{grid-template-columns:100px minmax(0,1fr) auto}
+.metric svg{max-width:100%;height:auto}
+.overview-grid{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+.factory{height:auto;min-height:386px}
+.line{display:grid;grid-template-columns:52px repeat(3,minmax(0,1fr))}
+.machine{width:100%;height:auto;min-height:98px;padding:12px}
+.history,.footer{flex-wrap:wrap;gap:14px 24px}
+.footer{position:static;margin-top:auto}
+.dialog-overlay{position:fixed;inset:0;padding:20px}
+.dialog{width:min(610px,100%);max-height:calc(100dvh - 40px);overscroll-behavior:contain}
+.toast{position:fixed;bottom:24px;width:max-content;max-width:calc(100% - 32px)}
+body:has(.dialog-overlay:not(.hidden)){overflow:hidden}
+@media(min-width:1600px){main{padding:28px 40px}.workspace{gap:28px}.pane{padding:24px}}
+@media(max-width:1100px){
+.nav{margin-left:0}
+.workspace{grid-template-columns:minmax(220px,.8fr) minmax(0,1.6fr)}
+.actions{grid-column:1/-1}
+#actions{display:flex;gap:12px}
+#actions button{flex:1;min-width:0}
+.overview-grid{grid-template-columns:1fr}
+.factory{min-height:0}
+.summary{gap:40px}
+}
+@media(max-width:700px){
+main{padding:20px 16px}
+.toolbar{padding:10px 16px;align-items:flex-start}
+.toolbar label{width:100%}
+.toolbar select{flex:1}
+.appbar{padding:16px;gap:12px}
+.barleft{width:100%}
+.nav{gap:12px 20px;font-size:13px}
+.appbar>.muted{font-size:12px}
+h1{font-size:23px;line-height:1.35}
+.heading{align-items:flex-start;flex-wrap:wrap}
+.workspace{grid-template-columns:minmax(0,1fr);gap:16px}
+.pane{padding:18px}
+.actions{grid-column:auto}
+.flow{grid-template-columns:repeat(5,minmax(0,1fr))}
+.step{padding:10px 5px;font-size:11px;text-align:center}
+.step small{display:none}
+.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.summary strong{font-size:24px}
+.summary small{font-size:11px}
+.factory{padding:16px}
+.line{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:20px}
+.line>b{grid-column:1/-1}
+.machine{padding:9px!important;font-size:12px}
+.machine small{font-size:10px}
+.row{grid-template-columns:80px minmax(0,1fr) auto;gap:8px}
+.history{gap:10px 14px;line-height:1.6}
+.history strong{width:100%}
+.footer{padding:16px}
+.dialog-overlay{padding:12px}
+.dialog{padding:20px;max-height:calc(100dvh - 24px)}
+.dialog-foot{flex-wrap:wrap}
+.evidence-table{font-size:12px}
+}
+@media(max-width:420px){
+#actions{flex-direction:column;gap:0}
+.row{grid-template-columns:minmax(0,1fr) auto}
+.row>span:first-child{grid-column:1/-1}
+}
+
+</style>
+<div class="frame" id="frame">
+<div class="toolbar"><span>제조 운영 · Decision Workspace</span><label>상태 보기 <select id="scenario"><option value="inspect">01 · 이상 감지 / 점검 전</option><option value="gap">02 · 근거 부족</option><option value="maintenance">03 · 점검 완료 / 정비 검토</option><option value="monitor">04 · 점검 완료 / 모니터링</option><option value="recheck">05 · 정비 완료 / 재평가 대기</option></select></label></div>
+<header class="appbar"><div class="barleft"><span class="brand">▦ Ontology Dashboard</span><nav class="nav"><b>공장 현황</b><span>점검·정비</span><span>판단 검토</span><span>보고서</span><span>이력 추적</span></nav></div><span class="muted">생산기술 담당자 · 김민수</span></header>
+<main id="overview">
+<div class="heading"><div class="eyebrow">FACTORY OVERVIEW</div><span class="tag">현재 스냅샷 · 09.13 10:24</span></div><h1>공장 현황</h1><div class="summary"><div><small>가동 설비</small><strong>11 / 12</strong></div><div><small>판단이 필요한 사건</small><strong>2건</strong></div><div><small>진행 중 점검·정비</small><strong>1건</strong></div></div>
+<div class="overview-grid"><section class="factory"><div class="pane-head"><h2>설비 상태 맵</h2><small>설비 선택 → 연결된 사건</small></div><div class="line"><b>A 라인</b><div class="machine" style="padding:12px"><small>정상</small><strong>프레스 A-01</strong><small>진행 사건 없음</small></div><button class="machine selected" id="asset"><small>● 주의 · 사건 1건</small><strong>프레스 A-02</strong><small>진동 상승 ↗</small></button><div class="machine" style="padding:12px"><small>정상</small><strong>프레스 A-03</strong><small>진행 사건 없음</small></div></div><div class="line"><b>B 라인</b><div class="machine" style="padding:12px"><small>정상</small><strong>조립 B-01</strong></div><div class="machine" style="padding:12px"><small>정비 중</small><strong>조립 B-02</strong></div><div class="machine" style="padding:12px"><small>정상</small><strong>조립 B-03</strong></div></div></section><section class="pane"><h2>최근 사건</h2><div class="event"><button id="caseLink">사건 열기 ↗</button><small>10:12 · CASE-024</small><h3 style="margin-top:9px">프레스 A-02 · 진동 상승</h3><p class="muted">점검 전 · 현장 확인 필요</p></div><div class="event"><small>09:48 · CASE-023</small><h3 style="margin-top:9px">조립 B-02 · 정비 진행 중</h3><p class="muted">작업 완료 후 재평가 예정</p></div><div class="event"><small>09:16 · CASE-022</small><h3 style="margin-top:9px">포장 C-01 · 관찰 지속</h3><p class="muted">추가 관측 대기</p></div></section></div></main>
+<main id="case" class="hidden"><button class="back" id="back">← 공장 현황</button><div class="heading"><div><div class="eyebrow">CASE-024 / A 라인 · 프레스 A-02</div><h1>진동 상승에 대한 다음 대응 판단</h1><p class="case-sub">최초 감지 09.13 10:12 · 담당 김민수 · <span id="status"></span></p></div><span class="tag" id="badge"></span></div>
+<div class="flow" id="flow"></div>
+<div class="workspace"><section class="pane"><div class="pane-head"><h2>사건 요약</h2><span class="tag">주의</span></div><div class="metric"><label>최근 진동 관측</label><strong>6.8 <small>mm/s</small></strong><p>10:24 관측 · 기준선 대비 상승</p></div><div class="metric"><label>생산 영향</label><strong>25개 <small>예상 손실</small></strong><p>산정 기준 · 정지 120분</p></div><div class="metric"><label>관측 흐름 · 최근 6시간</label><svg width="222" height="51" viewBox="0 0 222 51" role="img" aria-label="최근 진동 추세"><path d="M0 40H222M0 16H222" stroke="#d3dbe0" stroke-dasharray="3 4"/><path d="M0 40L28 37L56 39L84 30L112 32L140 21L166 24L190 12L219 7" fill="none" stroke="#586f7d" stroke-width="2"/></svg><p>최근 6시간 진동 추세</p></div></section>
+<section class="pane"><div class="pane-head"><h2>판단 조건과 근거</h2><small>기준 시각 10:24</small></div><div id="conditions"></div><div class="ai"><h3>AI 근거 설명</h3><p id="ai"></p></div><button class="evidence-btn" id="evidence">연결된 근거 4개 · 시각 / 출처 확인 ↗</button></section>
+<aside class="pane actions"><div class="eyebrow">NEXT DECISION</div><h2 id="actionTitle"></h2><p id="actionDesc"></p><div id="actions"></div></aside></div><div class="history"><strong>사건 이력</strong><span>10:12 이상 감지</span><span>→</span><span>10:18 담당자 배정</span><span>→</span><span id="lastHistory"></span></div></main>
+
+<div id="overlay" class="dialog-overlay hidden"><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle"><h2 id="dialogTitle"></h2><div id="dialogBody"></div><div class="dialog-foot"><button id="close">닫기</button><button class="primary" id="confirm">검토 완료</button></div></section></div><div id="toast" class="toast hidden" role="status"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const states={
+inspect:{status:"점검 전 · 현장 확인 필요",badge:"판단 필요",step:1,rows:[["현장 점검","점검 결과 없음","미확인"],["생산 영향","120분 정지 / 25개 손실","추정"],["정비 준비","작업 범위 · 부품 미확정","미확인"]],ai:"진동 상승은 확인되지만 원인과 작업 범위는 아직 확인되지 않았습니다. 현장 점검으로 근거를 보완할 수 있습니다. [E1 · E2]",title:"현장 확인이 필요합니다",desc:"작업 범위를 정하기 전에 점검을 요청하거나 추가 진단 근거를 수집합니다.",actions:["점검 요청","추가 진단 요청"],history:"10:24 판단 대기"},
+gap:{status:"근거 부족 · 추가 진단 대기",badge:"근거 부족",step:1,rows:[["센서 이력","최근 2시간 일부 누락","미확인"],["현장 점검","점검 결과 없음","미확인"],["판단 제한","지속 상승 여부 확인 불가","제한"]],ai:"관측 누락으로 진동 상승이 지속되는지 설명하기 어렵습니다. 추가 진단에서 센서 이력과 현장 측정값을 확인할 수 있습니다. [E1 · E2]",title:"추가 근거를 확보하세요",desc:"현재 근거로 정비 필요성이나 작업 범위를 확정하기 어렵습니다.",actions:["추가 진단 요청"],history:"10:24 관측 누락 확인"},
+maintenance:{status:"점검 완료 · 정비 검토",badge:"정비 판단 필요",step:3,rows:[["점검 결과","커플링 마모 징후 확인","확인"],["작업시간","산정 기준 120분 / 예상 180분","충돌"],["정비 준비","내일 14시 작업창 / 부품 확인 필요","미확인"]],ai:"점검에서 마모 징후가 확인되었습니다. 예상 작업 180분과 생산 영향 산정 기준 120분이 달라 손실을 재계산해야 합니다. 작업창과 부품 준비는 확정되지 않았습니다. [E2 · E3 · E4]",title:"정비 방식과 시점을 검토하세요",desc:"정비 요청을 준비하거나 생산 일정과 정비 준비 조건을 비교합니다.",actions:["정비 요청","계획 정비 검토"],history:"11:10 점검 결과 등록"},
+monitor:{status:"점검 완료 · 추가 이상 미확인",badge:"관찰 지속 검토",step:3,rows:[["점검 결과","추가 이상 징후 미확인","확인"],["최근 관측","진동 추세 안정화","확인"],["다음 확인","다음 관측 수신 후 재평가","대기"]],ai:"점검에서 추가 이상이 확인되지 않았고 최근 추세는 안정화되었습니다. 원인 해소가 확정된 것은 아니며 후속 관측으로 재평가가 필요합니다. [E1 · E2]",title:"후속 관측을 이어가세요",desc:"관찰 지속 판단을 남기고 새 근거가 수신되면 사건을 다시 평가합니다.",actions:["계속 모니터링"],history:"11:10 관찰 지속 검토"},
+recheck:{status:"정비 완료 · 새 관측 대기",badge:"재평가 대기",step:4,rows:[["정비 작업","작업 완료 기록 수신","확인"],["정비 후 관측","새 센서 관측 없음","미확인"],["종결 조건","재평가 결과 확인 필요","대기"]],ai:"작업 완료 기록만으로 설비 회복을 확인할 수 없습니다. 새 관측과 재평가 결과를 확인한 뒤 사건 종결 여부를 판단해야 합니다. [E1 · E2]",title:"정비 후 상태를 확인하세요",desc:"새 관측을 기다리거나 정비 후 진단을 요청합니다.",actions:["계속 모니터링","추가 진단 요청"],history:"14:10 정비 완료 · 재평가 대기"}
+};
+let current="inspect",opener=null;
+function render(){const s=states[current];$("status").textContent=s.status;$("badge").textContent=s.badge;$("flow").innerHTML=["이상 감지","판단 준비","점검","대응 검토","재평가"].map((v,i)=>'<div class="step '+(i===s.step?'active':i<s.step?'done':'')+'">'+(i+1)+' · '+v+'<small>'+(i===s.step?'현재 단계':i<s.step?'확인 이력':'조건 충족 후 진행')+'</small></div>').join("");$("conditions").innerHTML=s.rows.map(r=>'<div class="row"><span>'+r[0]+'</span><b>'+r[1]+'</b><span class="state issue">'+r[2]+'</span></div>').join("");$("ai").textContent=s.ai;$("actionTitle").textContent=s.title;$("actionDesc").textContent=s.desc;$("lastHistory").textContent=s.history;$("actions").innerHTML=s.actions.map((a,i)=>'<button class="'+(i===0?'primary':'')+'" data-action="'+a+'">'+a+'<span>→</span></button>').join("");}
+function openCase(){$("overview").classList.add("hidden");$("case").classList.remove("hidden");render()}
+$("asset").onclick=$("caseLink").onclick=openCase;$("back").onclick=()=>{$("overview").classList.remove("hidden");$("case").classList.add("hidden")};
+$("scenario").onchange=e=>{current=e.target.value;openCase()};
+function modal(title,body,save=true){opener=document.activeElement;$("dialogTitle").textContent=title;$("dialogBody").innerHTML=body;$("confirm").classList.toggle("hidden",!save);$("overlay").classList.remove("hidden");$("close").focus()}
+function closeModal(){$("overlay").classList.add("hidden");opener?.focus()}
+$("close").onclick=closeModal;
+document.addEventListener("keydown",e=>{if($("overlay").classList.contains("hidden"))return;if(e.key==="Escape")closeModal();if(e.key==="Tab"){const items=[...$("overlay").querySelectorAll("button:not(.hidden),textarea,input,select")];const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
+$("actions").onclick=e=>{const b=e.target.closest("[data-action]");if(!b)return;const a=b.dataset.action;let body='<p class="muted">CASE-024 · 프레스 A-02 · '+states[current].status+'</p>';
+if(a==="정비 요청")body+='<h3>작업 범위 · 담당자가 선택</h3><label><input type="checkbox"> 조정 / 재체결</label><label><input type="checkbox"> 세척</label><label><input type="checkbox"> 부품 교체 · 부품과 수량은 확인 필요</label><label><input type="checkbox"> 추가 점검</label><p>예상 작업시간 180분 · 부품 준비 미확인</p>';
+else if(a==="계획 정비 검토")body+='<div class="row"><span>작업창 후보</span><b>내일 14:00 이후</b><span>미확정</span></div><div class="row"><span>예상 작업</span><b>180분</b><span>추정</span></div><div class="row"><span>부품 / 인력</span><b>부품 확인 필요 / 인력 미확인</b></div><div class="ai"><h3>AI · 충돌과 미확인</h3><p>생산 영향은 정지 120분 기준으로 계산되었습니다. 180분 작업의 손실 재계산과 작업창 길이, 동시 작업, 부품·인력 준비 확인이 필요합니다.</p></div><p>검토 후보를 초안으로 남깁니다. 일정 예약은 포함되지 않습니다.</p>';
+else if(a==="추가 진단 요청")body+='<h3>확인할 근거</h3><label><input type="checkbox" checked> 최근 24시간 센서 추세 및 누락 확인</label><label><input type="checkbox"> 현장 진동 측정</label><label><input type="checkbox"> 동일 부위 점검 이력 확인</label>';
+else if(a==="점검 요청")body+='<p>점검 대상: 프레스 A-02 구동부<br>확인 사항: 진동 상승 원인과 현장 이상 징후<br>정비 방법은 점검 결과 확인 후 검토합니다.</p>';
+else body+='<p>계속 모니터링 판단을 기록합니다.<br>후속 확인: 다음 관측 수신 시 재평가<br>추세 악화 또는 새로운 이상 근거 발생 시 다시 판단합니다.</p>';
+body+='<label for="memo">검토 메모</label><textarea id="memo" placeholder="담당자 확인 사항을 입력하세요"></textarea>';modal(a+" · 초안",body)};
+$("confirm").onclick=()=>{closeModal();$("toast").textContent="초안 검토를 마쳤습니다.";$("toast").classList.remove("hidden");setTimeout(()=>$("toast").classList.add("hidden"),3500)};
+$("evidence").onclick=()=>modal("연결된 근거",'<table class="evidence-table"><tr><th>근거</th><th>출처 / 내용</th><th>시각</th></tr><tr><td>E1</td><td>센서 관측 · 진동 및 추세</td><td>10:24</td></tr><tr><td>E2</td><td>점검 / 작업 이력</td><td>상태별 상이</td></tr><tr><td>E3</td><td>생산 영향 계산 · 정지 120분 기준</td><td>10:20</td></tr><tr><td>E4</td><td>정비 계획 · 작업창 후보와 자재 확인</td><td>10:22</td></tr></table>',false);
+render();
+</script></html>
