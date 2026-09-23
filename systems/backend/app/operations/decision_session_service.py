@@ -122,6 +122,26 @@ class DecisionSessionApplicationService:
             )
         )
 
+    def resume_pending(
+        self,
+        *,
+        identity: OperationalRequestIdentity,
+        limit: int = 50,
+    ) -> list[WorkerHandle]:
+        """Requeue expired/incomplete runs for one tenant/project scope."""
+        if self.run_store is None:
+            raise ValueError("durable decision storage unavailable")
+        pending = self.run_store.list_pending(identity, limit=limit)
+        handles: list[WorkerHandle] = []
+        for session_id, state in pending:
+            request = DecisionAgentRequest.model_validate(state["request"])
+            if request.identity != identity:
+                continue
+            handle = self.resume(session_id=session_id, identity=identity)
+            if handle is not None:
+                handles.append(handle)
+        return handles
+
     def stop_workers(self, *, wait: bool = True) -> None:
         if self.worker_supervisor is not None:
             self.worker_supervisor.stop(wait=wait)

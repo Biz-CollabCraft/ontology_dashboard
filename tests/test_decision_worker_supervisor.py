@@ -1,9 +1,12 @@
+from hashlib import sha256
 from pathlib import Path
 
 from app.infra.db.migrations import migrate
 from app.infra.db.decision_run_repository import DecisionRunRepository
-from app.operations.decision_session_service import DecisionSessionApplicationService
-from app.operations.decision_support_agent import ManufacturingDecisionAgent
+from app.operations.decision_session_service import DecisionSessionApplicationService, _packet_binding
+from app.operations.decision_durable_runner import DurableDecisionRunner, configuration_binding
+from app.operations.decision_policy import decision_policy_facts_from_packet
+from app.operations.decision_support_agent import DecisionAgentRequest, ManufacturingDecisionAgent
 from app.operations.decision_tools import ManufacturingDecisionTools
 from tests.test_decision_session_service import IDENTITY, agent_factory, packet
 
@@ -50,3 +53,40 @@ def test_enqueue_registers_durable_run_and_worker_completes(tmp_path: Path):
     resumed = service.resume(session_id=session_id, identity=IDENTITY)
     assert resumed is None
     service.stop_workers(wait=True)
+
+
+def test_fresh_service_resumes_pending_run_for_tenant_scope(tmp_path: Path):
+    database = tmp_path / "decision-worker-resume.db"
+    migrate(str(database))
+    store = DecisionRunRepository(database, lease_seconds=0.1)
+    packet_value = packet(IDENTITY)
+    agent_value = agent_factory(IDENTITY)
+    request = DecisionAgentRequest(
+        identity=IDENTITY,
+        actor_role="process_engineer",
+        policy_facts=decision_policy_facts_from_packet(packet_value),
+    )
+    session_id = "DS-pending-resume-001"
+    binding = _packet_binding(packet_value)
+    initial = DurableDecisionRunner.initial_state(request, evidence_binding=binding)
+    initial["created_at"] = agent_value.now().isoformat()
+    _, token = store.claim(
+        session_id,
+        IDENTITY,
+        sha256((configuration_binding(agent_value, request) + binding).encode()).hexdigest(),
+        initial,
+    )
+    assert token is not None
+    store.release(session_id, IDENTITY, token)
+
+    fresh = DecisionSessionApplicationService(
+        packet_loader=packet,
+        agent_factory=lambda identity: agent_factory(identity),
+        run_store=store,
+    )
+    handles = fresh.resume_pending(identity=IDENTITY)
+    assert len(handles) == 1
+    result = handles[0].future.result(timeout=10)
+    assert result.session.decision_session_id == session_id
+    assert fresh.get(decision_session_id=session_id, identity=IDENTITY).proposal is not None
+    fresh.stop_workers(wait=True)

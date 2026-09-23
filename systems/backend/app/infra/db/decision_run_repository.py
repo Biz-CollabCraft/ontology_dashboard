@@ -40,6 +40,20 @@ class DecisionRunRepository:
             row=self.execute(c,'SELECT state_json FROM decision_agent_runs WHERE decision_session_id=? AND organization_id=? AND project_id=? AND identity_hash=?',self.scope(session_id,identity)).fetchone()
             return json.loads(row['state_json']) if row else None
 
+    def list_pending(self, identity, *, limit=50):
+        """List incomplete, lease-free rows within one tenant/project scope."""
+        if not 1 <= limit <= 500:
+            raise ValueError('invalid pending run limit')
+        with self.connection(identity) as c:
+            now=self.clock(c)
+            rows=self.execute(c,'SELECT decision_session_id,state_json FROM decision_agent_runs WHERE organization_id=? AND project_id=? AND (lease_owner IS NULL OR lease_until<=?) ORDER BY updated_at ASC LIMIT ?', (identity.organization_id, identity.project_id, now, limit)).fetchall()
+            pending=[]
+            for row in rows:
+                state=json.loads(row['state_json'])
+                if state.get('result') is None:
+                    pending.append((row['decision_session_id'], state))
+            return pending
+
     def claim(self,session_id,identity,binding,initial):
         scope=self.scope(session_id,identity)
         with self.connection(identity) as c:

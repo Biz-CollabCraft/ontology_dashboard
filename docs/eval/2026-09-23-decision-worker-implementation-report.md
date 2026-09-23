@@ -20,7 +20,7 @@ The product source is committed and pushed on `codex/decision-worker-lifecycle`.
 - `systems/backend/app/operations/decision_worker.py`
   - owns worker id, pool creation, submit, active job snapshot and graceful stop
 - `systems/backend/app/operations/decision_session_service.py`
-  - durable `enqueue()`, persisted `resume()`, worker shutdown
+  - durable `enqueue()`, persisted `resume()`, tenant-scoped `resume_pending()`, worker shutdown
   - queue creation time is separated from evidence `decision_as_of`
 - `systems/backend/app/operations/router.py`
   - `execution_mode=async` returns 202 and a Location header
@@ -28,6 +28,8 @@ The product source is committed and pushed on `codex/decision-worker-lifecycle`.
 - `systems/backend/app/main.py`
   - startup starts the supervisor
   - shutdown drains and stops workers
+- `systems/backend/app/infra/db/decision_run_repository.py`
+  - tenant/project-scoped pending-row enumeration using the database clock
 - tests
   - `tests/test_decision_worker_supervisor.py`
   - async API coverage in `tests/test_decision_session_api.py`
@@ -55,7 +57,8 @@ The new API test verified:
 2. the response includes a durable session id and Location;
 3. GET initially observes the queued/running state;
 4. GET eventually observes the persisted completed proposal;
-5. supervisor startup and shutdown complete without leaving active jobs.
+5. supervisor startup and shutdown complete without leaving active jobs;
+6. a fresh service instance enumerates a pending row within the tenant scope and resumes it.
 
 A first test failure exposed and fixed a real bug: enqueue used the evidence timestamp as the run creation timestamp, causing a durable result to appear expired. The queue now records the worker clock timestamp separately.
 
@@ -69,8 +72,8 @@ The sync route is intentionally preserved for compatibility. It is not the targe
 
 This is not yet the complete production lifecycle.
 
-- The supervisor queue is in-process; the durable row survives, but automatic startup scanning of all queued/expired rows is not implemented.
-- `resume(session_id, identity)` and an HTTP resume endpoint exist for an explicit resumer, but a periodic tenant-scoped resumer loop still needs to enumerate pending rows and dispatch them.
+- The supervisor queue is in-process; the durable row survives, and tenant-scoped pending enumeration plus `resume_pending()` now rebuilds the queue for a supplied identity scope.
+- A periodic startup resumer loop still needs to call that scope-aware operation from a configured tenant identity provider.
 - End-to-end process kill, fresh-process automatic recovery, old-worker fencing under the new async path, and lease fault injection remain to be verified.
 - FastAPI lifecycle hooks currently use deprecated `on_event` APIs; the behavior is tested, but migration to a lifespan context should follow.
 - The Career DB canonical PostgreSQL endpoint was not configured. The new seed was loaded into an isolated PostgreSQL 16 verification database after the existing project seed; DEC/PRB/EV/EXP relationship queries passed.
