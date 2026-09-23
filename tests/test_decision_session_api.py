@@ -115,6 +115,29 @@ def test_async_execution_is_server_owned_and_get_observes_completion(api_client)
     assert read.json()["session"]["proposal"] is not None
 
 
+def test_resume_endpoint_is_idempotent_after_completion(api_client):
+    client = api_client
+    login(client)
+    url = f"/api/objects/{ASSET_ID}/decision-sessions"
+    params = {**PARAMS, "request_id": "resume-api-001", "execution_mode": "async"}
+    queued = client.post(url, params=params, headers=csrf(client))
+    assert queued.status_code == 202, queued.text
+    session_id = queued.json()["decision_session_id"]
+    resume_params = {key: value for key, value in PARAMS.items() if key != "role"}
+    for _ in range(40):
+        read = client.get(f"{url}/{session_id}", params=resume_params)
+        if read.json()["session"]["proposal"] is not None:
+            break
+        time.sleep(0.05)
+    resumed = client.post(
+        f"{url}/{session_id}/resume",
+        params=resume_params,
+        headers=csrf(client),
+    )
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()["status"] == "completed"
+
+
 def test_request_id_reuses_persisted_decision_session(api_client):
     client = api_client
     login(client)

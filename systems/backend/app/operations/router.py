@@ -1469,6 +1469,48 @@ def get_decision_session(
     return {"session": session.model_dump(mode="json"), "execution_bindings": _decision_execution_bindings(session, principal)}
 
 
+@router.post("/objects/{asset_id}/decision-sessions/{decision_session_id}/resume")
+def resume_decision_session(
+    asset_id: str,
+    decision_session_id: str,
+    project_id: str = Query(default="manufacturing-demo-project"),
+    workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
+    evidence_snapshot_id: str = Query(min_length=1, max_length=240),
+    decision_as_of: datetime = Query(),
+    principal: Principal = Depends(require_permission("events.read")),
+    _: None = Depends(require_csrf),
+    session_service: DecisionSessionApplicationService = Depends(get_decision_session_service),
+):
+    """Requeue an incomplete durable run after a worker or process restart."""
+    identity = _decision_support_identity(
+        principal=principal,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        asset_id=asset_id,
+        evidence_snapshot_id=evidence_snapshot_id,
+        decision_as_of=decision_as_of,
+    )
+    try:
+        handle = session_service.resume(session_id=decision_session_id, identity=identity)
+    except ValueError as exc:
+        detail = str(exc)
+        status = 404 if detail == "decision_session_not_found" else 409
+        raise HTTPException(status_code=status, detail=detail) from exc
+    except (KeyError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail="decision_worker_unavailable") from exc
+    return JSONResponse(
+        status_code=200 if handle is None else 202,
+        content={
+            "decision_session_id": decision_session_id,
+            "status": "completed" if handle is None else "queued",
+            "worker_id": session_service.worker_supervisor.worker_id
+            if session_service.worker_supervisor is not None else None,
+            "job_id": handle.job_id if handle is not None else None,
+        },
+        headers={"Location": f"/api/objects/{asset_id}/decision-sessions/{decision_session_id}"},
+    )
+
+
 @router.get("/objects/{asset_id}/decision-support-brief")
 def get_decision_support_brief(
     asset_id: str,

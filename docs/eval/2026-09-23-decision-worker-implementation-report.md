@@ -10,6 +10,7 @@ DecisionSession 실행을 API 요청 lifecycle과 분리하는 첫 vertical slic
 - GET polling of the persisted run
 - FastAPI startup worker start and shutdown drain/stop hooks
 - explicit persisted-run resume API for a fresh service instance
+- HTTP resume endpoint for operator-triggered requeue after restart
 - existing synchronous POST behavior preserved for compatibility
 
 The product source remains uncommitted on the reviewed isolated worktree HEAD `891f4567542b4a6d1af7fbef0d2f0f3525f98132`.
@@ -46,7 +47,7 @@ tests/test_decision_retry.py
 tests/test_decision_planner_wire.py
 ```
 
-Result: **42 passed** in 13.35 seconds.
+Result: **42 passed** in 13.35 seconds for the focused suite; the resume endpoint slice adds **14 passed** in its API/service subset.
 
 The new API test verified:
 
@@ -69,7 +70,7 @@ The sync route is intentionally preserved for compatibility. It is not the targe
 This is not yet the complete production lifecycle.
 
 - The supervisor queue is in-process; the durable row survives, but automatic startup scanning of all queued/expired rows is not implemented.
-- `resume(session_id, identity)` exists for an explicit resumer, but a periodic resumer loop still needs to enumerate pending rows and dispatch them.
+- `resume(session_id, identity)` and an HTTP resume endpoint exist for an explicit resumer, but a periodic tenant-scoped resumer loop still needs to enumerate pending rows and dispatch them.
 - End-to-end process kill, fresh-process automatic recovery, old-worker fencing under the new async path, and lease fault injection remain to be verified.
 - FastAPI lifecycle hooks currently use deprecated `on_event` APIs; the behavior is tested, but migration to a lifespan context should follow.
 - The Career DB canonical PostgreSQL endpoint was not configured. The new seed was loaded into an isolated PostgreSQL 16 verification database after the existing project seed; DEC/PRB/EV/EXP relationship queries passed.
