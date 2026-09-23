@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 from pathlib import Path
 
 import pytest
@@ -86,6 +87,32 @@ def test_create_and_read_decision_session_is_read_only_and_policy_bounded(api_cl
     )
     assert read.status_code == 200, read.text
     assert read.json()["session"]["decision_session_id"] == session_id
+
+
+def test_async_execution_is_server_owned_and_get_observes_completion(api_client):
+    client = api_client
+    login(client)
+    url = f"/api/objects/{ASSET_ID}/decision-sessions"
+    params = {**PARAMS, "request_id": "async-api-001", "execution_mode": "async"}
+    queued = client.post(url, params=params, headers=csrf(client))
+    assert queued.status_code == 202, queued.text
+    body = queued.json()
+    assert body["status"] == "queued"
+    assert body["worker_id"].startswith("decision-worker-")
+    session_id = body["decision_session_id"]
+    read = None
+    for _ in range(40):
+        read = client.get(
+            f"{url}/{session_id}",
+            params={key: value for key, value in PARAMS.items() if key != "role"},
+        )
+        assert read.status_code == 200, read.text
+        if read.json()["session"]["proposal"] is not None:
+            break
+        time.sleep(0.05)
+    assert read is not None
+    assert read.json()["session"]["decision_session_id"] == session_id
+    assert read.json()["session"]["proposal"] is not None
 
 
 def test_request_id_reuses_persisted_decision_session(api_client):

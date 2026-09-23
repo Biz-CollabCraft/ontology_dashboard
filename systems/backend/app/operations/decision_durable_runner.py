@@ -40,14 +40,28 @@ class DurableDecisionRunner:
             raise ValueError("decision parallelism must be between 1 and 3")
         self.agent, self.store, self.max_workers = agent, store, max_workers
 
+    @staticmethod
+    def initial_state(request: DecisionAgentRequest, *, evidence_binding: str = "") -> dict:
+        return {
+            "request": request.model_dump(mode="json"),
+            "created_at": request.identity.decision_as_of.isoformat(),
+            "phase": "gather",
+            "results": {},
+            "calls": [],
+            "budget": request.retry_budget,
+            "interpretations": [],
+            "text_errors": [],
+            "planner_errors": [],
+            "result": None,
+            "evidence_binding": evidence_binding,
+        }
+
     def run(self, request: DecisionAgentRequest, session_id: str, *, evidence_binding: str = ""):
         from langgraph.graph import END, StateGraph
         agent, store = self.agent, self.store
         policy = agent.policy_guard.evaluate(request.policy_facts)
-        initial = {"request": request.model_dump(mode="json"), "created_at": agent.now().isoformat(),
-            "phase": "gather", "results": {}, "calls": [], "budget": request.retry_budget,
-            "interpretations": [], "text_errors": [], "planner_errors": [], "result": None,
-            "evidence_binding": evidence_binding}
+        initial = self.initial_state(request, evidence_binding=evidence_binding)
+        initial["created_at"] = agent.now().isoformat()
         state, token = store.claim(session_id, request.identity, sha256((configuration_binding(agent, request) + evidence_binding).encode()).hexdigest(), initial)
         if token is None:
             return DecisionAgentRunResult.model_validate(state["result"])

@@ -1,0 +1,26 @@
+{
+  "status": "implemented_pending_parent_review",
+  "head": "891f4567542b4a6d1af7fbef0d2f0f3525f98132",
+  "detached": true,
+  "execution_environment": "local tool fallback on the same worktree after DevSpace Max approval block",
+  "versions": {
+    "langgraph": "1.2.12",
+    "psycopg": "3.3.6",
+    "fastapi": "0.141.1",
+    "httpx": "0.28.1",
+    "pytest": "9.1.1"
+  },
+  "offline_checks": {
+    "tests_passed": 6,
+    "python_ast_parse": "passed",
+    "preflight": "passed",
+    "tracked_product_diff": "empty"
+  },
+  "postgresql_contacted": false,
+  "databases_created": 0,
+  "measurements_run": false,
+  "load_authorized": false,
+  "measurement_results": null,
+  "run_command_after_parent_authorization": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python experiments/decision_workspace_p0_20260923/harness.py --parent-authorized",
+  "runtime_artifacts": ["runs/<unique-run>/raw.jsonl", "runs/<unique-run>/manifest.json", "runs/<unique-run>/summary.json", "runs/<unique-run>/recovery/"]
+}

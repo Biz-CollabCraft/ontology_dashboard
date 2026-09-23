@@ -12,7 +12,8 @@ from threading import Lock
 from typing import Callable
 from uuid import uuid4
 
-from app.operations.decision_durable_runner import DurableDecisionRunner
+from app.operations.decision_durable_runner import DurableDecisionRunner, configuration_binding
+from app.operations.decision_worker import DecisionWorkerSupervisor, WorkerHandle
 from app.operations.decision_policy import DecisionPolicyGuard, decision_policy_facts_from_packet
 from app.operations.decision_run_store import DecisionRunStore
 from app.operations.decision_support_agent import DecisionAgentRequest, DecisionAgentRunResult, ManufacturingDecisionAgent
@@ -31,6 +32,99 @@ class DecisionSessionApplicationService:
     _sessions: dict[str, DecisionSession] = field(default_factory=dict)
     _lock: Lock = field(default_factory=Lock)
     _packets: dict[str, dict] = field(default_factory=dict)
+    worker_supervisor: DecisionWorkerSupervisor | None = None
+
+    def __post_init__(self) -> None:
+        if self.run_store is not None and self.worker_supervisor is None:
+            self.worker_supervisor = DecisionWorkerSupervisor(max_workers=2)
+
+    def enqueue(
+        self,
+        *,
+        identity: OperationalRequestIdentity,
+        actor_role: str,
+        request_id: str,
+        actor_id: str = "",
+    ) -> tuple[str, WorkerHandle | None, DecisionAgentRunResult | None]:
+        """Durably register a run, then dispatch it to the server-owned worker."""
+        if self.run_store is None:
+            raise ValueError("durable decision storage unavailable")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,128}", request_id):
+            raise ValueError("invalid decision request_id")
+        packet = deepcopy(self.packet_loader(identity))
+        self._validate_packet_identity(packet, identity)
+        request = DecisionAgentRequest(
+            identity=identity,
+            actor_role=actor_role,
+            policy_facts=decision_policy_facts_from_packet(packet),
+        )
+        agent = self.agent_factory(identity)
+        key = json.dumps(
+            [identity.model_dump(mode="json"), actor_id, actor_role, request_id],
+            sort_keys=True,
+        )
+        session_id = "DS-" + sha256(key.encode()).hexdigest()
+        binding = _packet_binding(packet)
+        initial = DurableDecisionRunner.initial_state(request, evidence_binding=binding)
+        initial["created_at"] = agent.now().isoformat()
+        state, token = self.run_store.claim(
+            session_id,
+            identity,
+            sha256((configuration_binding(agent, request) + binding).encode()).hexdigest(),
+            initial,
+        )
+        if token is not None:
+            self.run_store.release(session_id, identity, token)
+        if state.get("result") is not None:
+            return session_id, None, DecisionAgentRunResult.model_validate(state["result"])
+        supervisor = self.worker_supervisor
+        if supervisor is None:
+            raise RuntimeError("decision_worker_supervisor_unavailable")
+        handle = supervisor.submit(
+            lambda: self.create(
+                identity=identity,
+                actor_role=actor_role,
+                request_id=request_id,
+                actor_id=actor_id,
+            )
+        )
+        return session_id, handle, None
+
+    def resume(
+        self,
+        *,
+        session_id: str,
+        identity: OperationalRequestIdentity,
+    ) -> WorkerHandle | None:
+        """Dispatch a persisted, incomplete run after a process restart."""
+        if self.run_store is None:
+            raise ValueError("durable decision storage unavailable")
+        state = self.run_store.load(session_id, identity)
+        if state is None:
+            raise ValueError("decision_session_not_found")
+        if state.get("result") is not None:
+            return None
+        request = DecisionAgentRequest.model_validate(state["request"])
+        packet = deepcopy(self.packet_loader(identity))
+        self._validate_packet_identity(packet, identity)
+        binding = _packet_binding(packet)
+        if state.get("evidence_binding") != binding:
+            raise ValueError("decision_session_context_changed")
+        agent = self.agent_factory(identity)
+        supervisor = self.worker_supervisor
+        if supervisor is None:
+            raise RuntimeError("decision_worker_supervisor_unavailable")
+        return supervisor.submit(
+            lambda: DurableDecisionRunner(agent, self.run_store).run(
+                request,
+                session_id,
+                evidence_binding=binding,
+            )
+        )
+
+    def stop_workers(self, *, wait: bool = True) -> None:
+        if self.worker_supervisor is not None:
+            self.worker_supervisor.stop(wait=wait)
 
     def create(
         self,

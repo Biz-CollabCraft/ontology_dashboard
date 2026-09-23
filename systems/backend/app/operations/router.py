@@ -1360,6 +1360,7 @@ def create_decision_session(
     decision_as_of: datetime = Query(),
     request_id: str | None = Query(default=None, min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_-]+$"),
     role: DecisionBriefRole = Query(default=DecisionBriefRole.PROCESS_MANAGER),
+    execution_mode: Literal["sync", "async"] = Query(default="sync"),
     principal: Principal = Depends(require_permission("events.read")),
     _: None = Depends(require_csrf),
     session_service: DecisionSessionApplicationService = Depends(get_decision_session_service),
@@ -1390,12 +1391,35 @@ def create_decision_session(
         rule=DECISION_SESSION_CREATE_RATE,
     )
     try:
-        result = session_service.create(
-            identity=identity,
-            actor_role=role.value,
-            request_id=request_id,
-            actor_id=principal.user_id,
-        )
+        if execution_mode == "async":
+            async_request_id = request_id or f"async-{uuid.uuid4().hex[:16]}"
+            session_id, handle, completed = session_service.enqueue(
+                identity=identity,
+                actor_role=role.value,
+                request_id=async_request_id,
+                actor_id=principal.user_id,
+            )
+            if completed is not None:
+                result = completed
+            else:
+                return JSONResponse(
+                    status_code=202,
+                    content={
+                        "decision_session_id": session_id,
+                        "status": "queued",
+                        "worker_id": session_service.worker_supervisor.worker_id
+                        if session_service.worker_supervisor is not None else None,
+                        "job_id": handle.job_id if handle is not None else None,
+                    },
+                    headers={"Location": f"/api/objects/{asset_id}/decision-sessions/{session_id}"},
+                )
+        else:
+            result = session_service.create(
+                identity=identity,
+                actor_role=role.value,
+                request_id=request_id,
+                actor_id=principal.user_id,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (DecisionRunBusy, DecisionRunLeaseLost) as exc:

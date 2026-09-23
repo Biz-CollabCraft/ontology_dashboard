@@ -55,6 +55,27 @@ from app.common.exceptions import RateLimitExceeded
 app = create_app()
 
 
+def _decision_session_service_for_lifecycle():
+    factory = app.dependency_overrides.get(get_decision_session_service, get_decision_session_service)
+    return factory()
+
+
+@app.on_event("startup")
+async def start_decision_workers() -> None:
+    service = _decision_session_service_for_lifecycle()
+    supervisor = getattr(service, "worker_supervisor", None)
+    if supervisor is not None:
+        supervisor.start()
+
+
+@app.on_event("shutdown")
+async def stop_decision_workers() -> None:
+    service = _decision_session_service_for_lifecycle()
+    stop = getattr(service, "stop_workers", None)
+    if stop is not None:
+        stop(wait=True)
+
+
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_error_handler(_: Request, exc: RateLimitExceeded) -> JSONResponse:
     return JSONResponse(status_code=429, headers={"Retry-After": str(exc.retry_after)},
