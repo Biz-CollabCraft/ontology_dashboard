@@ -1100,6 +1100,32 @@ export function getOperationsAgentReviewPacket(input: {
   );
 }
 
+function normalizeOperationsAgentReviewSummaryResponse(
+  response: OperationsAgentReviewSummaryResponse,
+): OperationsAgentReviewSummaryResponse {
+  // During a staggered API/frontend rollout, older servers lack the explicit
+  // booleans but retain provenance or the legacy latest_stored marker.
+  const trace = response.trace ?? {} as OperationsAgentReviewSummaryResponse["trace"];
+  const known = trace.reuse_eligibility;
+  const reuse_eligibility =
+    known === "EXACT_VALIDATED" || known === "LATEST_STORED" || known === "INELIGIBLE"
+      ? known
+      : trace.latest_stored === true
+        ? "LATEST_STORED"
+        : response.summary && trace.materialization?.status === "ready" && !trace.fallback
+          ? "EXACT_VALIDATED"
+          : "INELIGIBLE";
+  return {
+    ...response,
+    trace: {
+      ...trace,
+      reuse_eligibility,
+      current_ready: reuse_eligibility === "EXACT_VALIDATED",
+      historical_available: reuse_eligibility === "LATEST_STORED",
+    },
+  };
+}
+
 export function getOperationsAgentReviewSummary(input: {
   assetId: string;
   projectId?: string;
@@ -1118,7 +1144,7 @@ export function getOperationsAgentReviewSummary(input: {
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
     { signal: input.signal },
-  );
+  ).then(normalizeOperationsAgentReviewSummaryResponse);
 }
 
 function briefingRequestId(): string {
@@ -1153,7 +1179,7 @@ export function createOperationsAgentReviewSummary(input: {
   return request<OperationsAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
     { method: "POST", signal: input.signal, headers: { "Idempotency-Key": briefingRequestId() } },
-  );
+  ).then(normalizeOperationsAgentReviewSummaryResponse);
 }
 
 export function getOperationsDecisionSupportBrief(input: {

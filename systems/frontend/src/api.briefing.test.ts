@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createOperationsAgentReviewSummary } from "./api";
+import { createOperationsAgentReviewSummary, getOperationsAgentReviewSummary } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -29,5 +29,32 @@ describe("briefing request identity", () => {
     const fetch = mockTransport();
     await createOperationsAgentReviewSummary(input);
     expect((fetch.mock.calls[0][1].headers as Headers).get("Idempotency-Key")).toBe("native-request-id");
+  });
+
+  it("normalizes legacy GET and POST readiness without calling stored history current", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({
+        summary: { asset_id: input.assetId },
+        trace: { fallback: false, latest_stored: true, materialization: { status: "ready" } },
+      }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({
+        summary: { asset_id: input.assetId },
+        trace: { fallback: false, materialization: { status: "ready" } },
+      }) });
+    vi.stubGlobal("fetch", fetch);
+
+    const historical = await getOperationsAgentReviewSummary(input);
+    const exact = await createOperationsAgentReviewSummary(input);
+
+    expect(historical.trace).toMatchObject({
+      reuse_eligibility: "LATEST_STORED",
+      current_ready: false,
+      historical_available: true,
+    });
+    expect(exact.trace).toMatchObject({
+      reuse_eligibility: "EXACT_VALIDATED",
+      current_ready: true,
+      historical_available: false,
+    });
   });
 });
