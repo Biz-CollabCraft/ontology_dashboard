@@ -47,6 +47,45 @@ def agent_factory(identity):
     return ManufacturingDecisionAgent(tools=tools, sleep=lambda _seconds: None)
 
 
+def test_jev_contract_separates_execution_parse_check_completeness_and_provenance():
+    service = DecisionSessionApplicationService(packet_loader=packet, agent_factory=agent_factory)
+    result = service.create(identity=IDENTITY, actor_role="process_engineer")
+    session = result.session.model_copy(update={
+        "job_state": "completed",
+        "parse_state": "parsed",
+        "check_state": "failed",
+        "completeness": "complete",
+        "provenance": ("artifact:ART-001",),
+    })
+    assert session.job_state == "completed"
+    assert session.parse_state == "parsed"
+    assert session.check_state == "failed"
+    assert session.completeness == "complete"
+    assert session.provenance == ("artifact:ART-001",)
+
+
+def test_jev_contract_exposes_incomplete_evidence_without_calling_it_success():
+    service = DecisionSessionApplicationService(packet_loader=packet, agent_factory=agent_factory)
+    result = service.create(identity=IDENTITY, actor_role="process_engineer")
+    session = result.session.model_copy(update={
+        "job_state": "completed",
+        "parse_state": "partial",
+        "check_state": "abstained",
+        "completeness": "incomplete",
+        "provenance": (),
+        "proposal": result.session.proposal.model_copy(update={
+            "recommended_action": None,
+            "abstain_reason": "required_context_incomplete",
+        }),
+        "status": "abstained",
+    })
+    assert session.job_state == "completed"
+    assert session.parse_state == "partial"
+    assert session.check_state == "abstained"
+    assert session.completeness == "incomplete"
+    assert session.proposal.recommended_action is None
+
+
 def test_session_service_derives_policy_server_side_and_reuses_identity_for_read():
     service = DecisionSessionApplicationService(packet_loader=packet, agent_factory=agent_factory)
     result = service.create(identity=IDENTITY, actor_role="process_engineer")
