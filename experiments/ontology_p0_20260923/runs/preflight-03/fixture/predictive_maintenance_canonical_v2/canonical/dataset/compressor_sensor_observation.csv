@@ -1,0 +1,6 @@
+observed_at,asset_id,site_id,cell_id,is_operating,operating_state,voltage_raw,rotation_raw,pressure_raw,vibration_raw,relative_vibration_z,relative_vibration_zone,generator_version
+2026-08-01T01:00:00+09:00,CMP-001,S01,S01-L01,1,running,220.0,1500.0,7.0,0.2,0.1,normal,canonical-independent-v1.0
+2026-08-01T01:00:00+09:00,CMP-002,S01,S01-L01,1,running,220.0,1500.0,7.0,0.2,0.1,normal,canonical-independent-v1.0
+2026-08-01T01:00:00+09:00,CMP-003,S01,S01-L01,1,running,220.0,1500.0,7.0,0.2,0.1,normal,canonical-independent-v1.0
+2026-08-01T01:00:00+09:00,CMP-004,S01,S01-L01,1,running,220.0,1500.0,7.0,0.2,0.1,normal,canonical-independent-v1.0
+2026-08-01T01:00:00+09:00,CMP-005,S01,S01-L01,1,running,220.0,1500.0,7.0,0.2,0.1,normal,canonical-independent-v1.0

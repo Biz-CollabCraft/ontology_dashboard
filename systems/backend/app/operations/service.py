@@ -974,6 +974,8 @@ class ManufacturingPredictiveMaintenanceService:
         return summary, {
             **trace,
             "reuse_eligibility": reuse_eligibility,
+            "current_ready": reuse_eligibility == "EXACT_VALIDATED",
+            "historical_available": reuse_eligibility == "LATEST_STORED",
         }
 
     def agent_review_workflow_runs(

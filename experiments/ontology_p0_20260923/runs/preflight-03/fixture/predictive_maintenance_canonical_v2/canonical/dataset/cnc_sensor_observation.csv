@@ -1,0 +1,6 @@
+observed_at,asset_id,site_id,cell_id,is_operating,operating_state,product_type,air_temperature_k,process_temperature_k,rotational_speed_rpm,torque_nm,tool_wear_min,generator_version
+2026-08-01T01:00:00+09:00,CNC-001,S01,S01-L01,1,running,H,300.0,310.0,1200,40.0,10.0,canonical-independent-v1.0
+2026-08-01T01:00:00+09:00,CNC-002,S01,S01-L01,1,running,H,300.0,310.0,1200,40.0,10.0,canonical-independent-v1.0
+2026-08-01T01:00:00+09:00,CNC-003,S01,S01-L01,1,running,H,300.0,310.0,1200,40.0,10.0,canonical-independent-v1.0
+2026-08-01T01:00:00+09:00,CNC-004,S01,S01-L01,1,running,H,300.0,310.0,1200,40.0,10.0,canonical-independent-v1.0
+2026-08-01T01:00:00+09:00,CNC-005,S01,S01-L01,1,running,H,300.0,310.0,1200,40.0,10.0,canonical-independent-v1.0

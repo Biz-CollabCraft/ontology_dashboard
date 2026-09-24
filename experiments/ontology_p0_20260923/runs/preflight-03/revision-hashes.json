@@ -1,0 +1,20 @@
+{
+  "head": "71337cddd755eaa8cdb762af4598e21b2f7d085f",
+  "dirty_diff_sha256": "e18dcf7343525965d5f33076ac78bb29b55af29dd0511d646e99bcf0f7ca3528",
+  "files": {
+    "runner.py": "0c163c5d2c6c134abe45c16136e9089d606ad76adf9f51beb3825899345377b7",
+    "fixture.py": "79c5fd55145141ea2bfb78d4a60067cca849802e8ff94ae5d3d5a2cde97392c0",
+    "oracle.py": "287358cd0d300b380c44dae71726de6abbd2a69b35485fef4a9b4540443a9a85",
+    "runs/preflight-03/raw.jsonl": "3558b87b21ca999556b106042d9158e54c15b13e94d89cce8d6ac523b54649dd",
+    "runs/preflight-03/manifest.json": "af9fd13da76d1152b5906fce0d1e47f1da8fd1feb038f1a36bb290deb3fc9ae3",
+    "runs/preflight-03/failed-workflow-forensic.json": "35e6ddea8e40f439ba074c8f8e125383a7b2c52ca119df552a9f0bbc3b2ff4f7"
+  },
+  "dependencies": {
+    "fastapi": "0.141.1",
+    "starlette": "1.6.0",
+    "httpx": "0.28.1",
+    "psycopg": "3.3.6",
+    "psycopg-pool": "3.3.3",
+    "jsonschema": "4.26.0"
+  }
+}

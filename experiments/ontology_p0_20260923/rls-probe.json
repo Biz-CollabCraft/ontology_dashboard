@@ -1,0 +1,18 @@
+{
+  "database": "ontology_p0_preflight03",
+  "host": "127.0.0.1",
+  "port": 55433,
+  "role": "ontology_p0_app",
+  "superuser": false,
+  "bypassrls": false,
+  "pm_assets_matching_scope": 10,
+  "pm_assets_wrong_project": 0,
+  "assertions_passed": true,
+  "scope": {
+    "organization_id": "org-ontology-demo",
+    "project_id": "manufacturing-demo-project"
+  },
+  "table": "pm_assets",
+  "procedure": "Restricted role created without ownership, superuser or BYPASSRLS; scope config set in transaction; SELECT count(*) repeated after wrong project change.",
+  "limitation": "This is a narrow table-level RLS visibility probe. Full application/auth/runtime under restricted role was not executed; preflight-03 runtime used bootstrap superuser. Does not retroactively establish RLS enforcement for preflight runtime."
+}

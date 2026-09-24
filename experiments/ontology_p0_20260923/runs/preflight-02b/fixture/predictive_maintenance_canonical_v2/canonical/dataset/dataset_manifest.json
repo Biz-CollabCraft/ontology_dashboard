@@ -1,0 +1,27 @@
+{
+  "dataset_version": "canonical-independent-v1.0",
+  "created_at": "2026-08-04T14:30:01+09:00",
+  "start_at": "2026-08-01T00:00:00+09:00",
+  "end_at": "2026-08-31T00:00:00+09:00",
+  "days": 30,
+  "seed": 42,
+  "rate_profile": "balanced_demo",
+  "observation_interval_minutes": 10,
+  "source_contract": {
+    "compressor_and_cnc_independent": true,
+    "topology_relation_is_not_causal_truth": true,
+    "upstream_features_in_source": false,
+    "synthetic_effect_columns_in_source": false,
+    "prediction_outputs_in_source": false,
+    "evaluation_truth_separate": true
+  },
+  "canonical_outputs": {
+    "asset_master.csv": "951f5fd206856b90e9f00f8ec0638b5b4c6a0c8ebafc8cf170600c33d6332dc2",
+    "asset_relation.csv": "62087adb02e2e68272f0a150f54f820d16f96134cef2496731241ef713c39eeb",
+    "compressor_sensor_observation.csv": "c8d21e5902284db24c0d9a3509944436ce50047e7b5f56f748e41fa3fef4ade4",
+    "cnc_sensor_observation.csv": "7e3e0558b3a90a0a7186ba8e202af0c86a339233bc344d453e6d4fa5659a63ff",
+    "cnc_production_cycle.csv": "abe1603a2e69246725257efec744c20bbfb141487dffa03b4b40a2ee7f3b7853",
+    "maintenance_event.csv": "069086a2349a283acee22982a7a4d10f4a5a595a4a594391e1dc34ff104c7540"
+  },
+  "evaluation_truth_outputs": {}
+}

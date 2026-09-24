@@ -1,0 +1,39 @@
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+_________ test_changed_snapshot_never_rebinds_and_get_never_generates __________
+
+service = <app.operations.service.ManufacturingPredictiveMaintenanceService object at 0x10e0256d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10e1ea7b0>
+
+    def test_changed_snapshot_never_rebinds_and_get_never_generates(service, monkeypatch):
+        first = watch(service, "hybrid")
+        original = service.agent_review_packet
+    
+        def changed(*args, **kwargs):
+            packet = deepcopy(original(*args, **kwargs))
+            packet["snapshot_basis"]["source_sha256"] = "changed-snapshot"
+            return packet
+    
+        monkeypatch.setattr(service, "agent_review_packet", changed)
+        asset = first["items"][0]["asset_id"]
+        summary, _ = service.cached_agent_review_summary(asset)
+>       assert summary is None
+E       AssertionError: assert {'asset_id': 'CNC-S01-L01-01', 'boundary_note': '이 초안은 담당자 검토를 돕기 위한 read-only 문서이며 작업요청 생성, 정비 승인, 자동 승인을 수행하지 않습니다.'...t name.', 'owner_domain': 'operations', 'source_refs': ['RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00']}, ...], ...} is None
+
+tests/test_agent_review_generation_policy.py:112: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /Users/hb/Projects/ontology-dashboard/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /Users/hb/Projects/ontology-dashboard/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_agent_review_generation_policy.py::test_changed_snapshot_never_rebinds_and_get_never_generates
+1 failed, 1 passed, 2 warnings in 1.70s
+
+
+Command exited with code 1

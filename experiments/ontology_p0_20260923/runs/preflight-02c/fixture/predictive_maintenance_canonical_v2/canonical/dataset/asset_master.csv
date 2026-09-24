@@ -1,0 +1,11 @@
+asset_id,asset_type,site_id,cell_id
+CMP-001,compressor,S01,S01-L01
+CNC-001,cnc,S01,S01-L01
+CMP-002,compressor,S01,S01-L01
+CNC-002,cnc,S01,S01-L01
+CMP-003,compressor,S01,S01-L01
+CNC-003,cnc,S01,S01-L01
+CMP-004,compressor,S01,S01-L01
+CNC-004,cnc,S01,S01-L01
+CMP-005,compressor,S01,S01-L01
+CNC-005,cnc,S01,S01-L01

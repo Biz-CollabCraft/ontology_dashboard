@@ -1,0 +1,813 @@
+{
+  "database_role": "ontology_p0 synthetic bootstrap superuser",
+  "rls_enforcement": "not established by this run; policy definitions migrated but superuser bypass",
+  "scenario": "normal",
+  "duration": 480,
+  "scope": {
+    "organization_id": "org-ontology-demo",
+    "project_id": "manufacturing-demo-project",
+    "workspace_id": "manufacturing-demo"
+  },
+  "fixture": {
+    "assets": [
+      "CMP-001",
+      "CNC-001",
+      "CMP-002",
+      "CNC-002",
+      "CMP-003",
+      "CNC-003",
+      "CMP-004",
+      "CNC-004",
+      "CMP-005",
+      "CNC-005"
+    ],
+    "dataset_version_id": "dsv-5ec14a7d-43fb-57fa-9092-b643cabfe036",
+    "fixture_sha256": "c75b77c5c8fc4d42b04cf411a8b746030f02751803d7599b1673ba1c1c20a8ee",
+    "migrations": [
+      "0001_platform_core",
+      "0002_project_layer",
+      "0003_operational_project_scope",
+      "0004_runtime_repository_support",
+      "0005_project_memberships",
+      "0006_outbox_worker",
+      "0007_analysis_engine",
+      "0008_dataset_projection_pipeline",
+      "0009_agent_orchestration",
+      "0010_analysis_run_lifecycle",
+      "0011_predictive_maintenance_domain_pack",
+      "0012_predictive_maintenance_v3_materialization",
+      "0013_project3_graph_projection",
+      "0014_predictive_maintenance_replay",
+      "0015_identity_permission_overrides",
+      "0016_adaptive_modeling_foundation",
+      "0017_adaptive_model_registry",
+      "0018_predictive_maintenance_dataset_selection",
+      "0019_tenant_transaction_convergence",
+      "0020_enterprise_identity_access",
+      "0021_distributed_execution_runtime",
+      "0022_object_storage_artifact_governance",
+      "0023_production_connectors_ingestion",
+      "0024_ontology_interfaces_actions_functions",
+      "0025_global_branching_lineage_markings",
+      "0026_object_views_search_application_runtime",
+      "0027_scalable_pipeline_analysis",
+      "0028_continuous_mlops_runtime",
+      "0029_governed_event_automation",
+      "0030_closed_loop_operations",
+      "0031_predictive_maintenance_runtime_overlay",
+      "0032_predictive_maintenance_append_only_results",
+      "0033_recommendation_materialization_strategy",
+      "0034_operations_manual_recommendation",
+      "0035_inspection_results",
+      "0036_prediction_result_inbox",
+      "0037_maintenance_cost_analyses",
+      "0038_cost_option_recommendation_lineage",
+      "0039_agent_review_summary_materialization",
+      "0040_agent_review_summary_runtime",
+      "0041_cooling_system_restore_cost_analysis",
+      "0042_cooling_system_restore_execution",
+      "0043_agent_review_materialize_permission",
+      "0044_cost_analysis_reference_lineage",
+      "0045_company_operational_context",
+      "0046_inspection_work_order_assignment",
+      "0047_operational_decision_support",
+      "0048_repair_legacy_inspection_assignment",
+      "0049_versioned_operational_context",
+      "0050_operational_context_versions_and_bindings",
+      "0051_factory_records"
+    ],
+    "organization_id": "org-ontology-demo",
+    "project_id": "manufacturing-demo-project",
+    "workspace_id": "manufacturing-demo",
+    "fixture_path": "experiments/ontology_p0_20260923/runs/preflight-03/fixture/predictive_maintenance_canonical_v2",
+    "source_record_count": 65
+  },
+  "watcher": {
+    "interval": 60,
+    "limit": null,
+    "policy": "always",
+    "max_attempts": 2,
+    "source": "live",
+    "sleep": "after completion"
+  },
+  "provider": {
+    "normal_delay": 0.1,
+    "slow_delay": 10,
+    "timeout_window": [
+      0,
+      60
+    ],
+    "timeout_delay_cap": 10,
+    "retries": "existing workflow max_attempts"
+  },
+  "api": "FastAPI TestClient in-process HTTP; no network socket",
+  "clock": "time.monotonic",
+  "sequence": [
+    {
+      "at": 0,
+      "asset_id": "CMP-001",
+      "event_id": "P0-E0000",
+      "kind": "new"
+    },
+    {
+      "at": 5,
+      "asset_id": "CNC-001",
+      "event_id": "P0-E0001",
+      "kind": "new"
+    },
+    {
+      "at": 10,
+      "asset_id": "CMP-002",
+      "event_id": "P0-E0002",
+      "kind": "new"
+    },
+    {
+      "at": 15,
+      "asset_id": "CNC-002",
+      "event_id": "P0-E0003",
+      "kind": "new"
+    },
+    {
+      "at": 20,
+      "asset_id": "CMP-003",
+      "event_id": "P0-E0004",
+      "kind": "new"
+    },
+    {
+      "at": 25,
+      "asset_id": "CNC-003",
+      "event_id": "P0-E0005",
+      "kind": "new"
+    },
+    {
+      "at": 30,
+      "asset_id": "CMP-004",
+      "event_id": "P0-E0006",
+      "kind": "new"
+    },
+    {
+      "at": 35,
+      "asset_id": "CNC-004",
+      "event_id": "P0-E0007",
+      "kind": "new"
+    },
+    {
+      "at": 35,
+      "asset_id": "CMP-001",
+      "event_id": "P0-EXACT",
+      "kind": "exact_repeat"
+    },
+    {
+      "at": 35.01,
+      "asset_id": "CMP-001",
+      "event_id": "P0-EXACT",
+      "kind": "exact_repeat"
+    },
+    {
+      "at": 35.02,
+      "asset_id": "CMP-001",
+      "event_id": "P0-EXACT",
+      "kind": "exact_repeat"
+    },
+    {
+      "at": 35.03,
+      "asset_id": "CMP-001",
+      "event_id": "P0-EXACT",
+      "kind": "exact_repeat"
+    },
+    {
+      "at": 35.04,
+      "asset_id": "CMP-001",
+      "event_id": "P0-EXACT",
+      "kind": "exact_repeat"
+    },
+    {
+      "at": 35.05,
+      "asset_id": "CMP-001",
+      "event_id": "P0-EXACT",
+      "kind": "exact_repeat"
+    },
+    {
+      "at": 35.06,
+      "asset_id": "CMP-001",
+      "event_id": "P0-EXACT",
+      "kind": "exact_repeat"
+    },
+    {
+      "at": 35.07,
+      "asset_id": "CMP-001",
+      "event_id": "P0-EXACT",
+      "kind": "exact_repeat"
+    },
+    {
+      "at": 35.08,
+      "asset_id": "CMP-001",
+      "event_id": "P0-EXACT",
+      "kind": "exact_repeat"
+    },
+    {
+      "at": 35.09,
+      "asset_id": "CMP-001",
+      "event_id": "P0-EXACT",
+      "kind": "exact_repeat"
+    },
+    {
+      "at": 40,
+      "asset_id": "CMP-005",
+      "event_id": "P0-E0008",
+      "kind": "new"
+    },
+    {
+      "at": 45,
+      "asset_id": "CNC-005",
+      "event_id": "P0-E0009",
+      "kind": "new"
+    },
+    {
+      "at": 50,
+      "asset_id": "CMP-001",
+      "event_id": "P0-E0010",
+      "kind": "new"
+    },
+    {
+      "at": 55,
+      "asset_id": "CNC-001",
+      "event_id": "P0-E0011",
+      "kind": "new"
+    },
+    {
+      "at": 60,
+      "asset_id": "CMP-002",
+      "event_id": "P0-E0012",
+      "kind": "new"
+    },
+    {
+      "at": 65,
+      "asset_id": "CNC-002",
+      "event_id": "P0-E0013",
+      "kind": "new"
+    },
+    {
+      "at": 70,
+      "asset_id": "CMP-003",
+      "event_id": "P0-E0014",
+      "kind": "new"
+    },
+    {
+      "at": 75,
+      "asset_id": "CNC-003",
+      "event_id": "P0-E0015",
+      "kind": "new"
+    },
+    {
+      "at": 75,
+      "asset_id": "CMP-001",
+      "event_id": "P0-BURST00",
+      "kind": "burst"
+    },
+    {
+      "at": 75.01,
+      "asset_id": "CMP-001",
+      "event_id": "P0-BURST01",
+      "kind": "burst"
+    },
+    {
+      "at": 75.02,
+      "asset_id": "CMP-001",
+      "event_id": "P0-BURST02",
+      "kind": "burst"
+    },
+    {
+      "at": 75.03,
+      "asset_id": "CMP-001",
+      "event_id": "P0-BURST03",
+      "kind": "burst"
+    },
+    {
+      "at": 75.04,
+      "asset_id": "CMP-001",
+      "event_id": "P0-BURST04",
+      "kind": "burst"
+    },
+    {
+      "at": 75.05,
+      "asset_id": "CMP-001",
+      "event_id": "P0-BURST05",
+      "kind": "burst"
+    },
+    {
+      "at": 75.06,
+      "asset_id": "CMP-001",
+      "event_id": "P0-BURST06",
+      "kind": "burst"
+    },
+    {
+      "at": 75.07,
+      "asset_id": "CMP-001",
+      "event_id": "P0-BURST07",
+      "kind": "burst"
+    },
+    {
+      "at": 75.08,
+      "asset_id": "CMP-001",
+      "event_id": "P0-BURST08",
+      "kind": "burst"
+    },
+    {
+      "at": 75.09,
+      "asset_id": "CMP-001",
+      "event_id": "P0-BURST09",
+      "kind": "burst"
+    },
+    {
+      "at": 80,
+      "asset_id": "CMP-004",
+      "event_id": "P0-E0016",
+      "kind": "new"
+    },
+    {
+      "at": 85,
+      "asset_id": "CNC-004",
+      "event_id": "P0-E0017",
+      "kind": "new"
+    },
+    {
+      "at": 90,
+      "asset_id": "CMP-005",
+      "event_id": "P0-E0018",
+      "kind": "new"
+    },
+    {
+      "at": 95,
+      "asset_id": "CNC-005",
+      "event_id": "P0-E0019",
+      "kind": "new"
+    },
+    {
+      "at": 100,
+      "asset_id": "CMP-001",
+      "event_id": "P0-E0020",
+      "kind": "new"
+    },
+    {
+      "at": 105,
+      "asset_id": "CNC-001",
+      "event_id": "P0-E0021",
+      "kind": "new"
+    },
+    {
+      "at": 110,
+      "asset_id": "CMP-002",
+      "event_id": "P0-E0022",
+      "kind": "new"
+    },
+    {
+      "at": 115,
+      "asset_id": "CNC-002",
+      "event_id": "P0-E0023",
+      "kind": "new"
+    },
+    {
+      "at": 120,
+      "asset_id": "CMP-003",
+      "event_id": "P0-E0024",
+      "kind": "new"
+    },
+    {
+      "at": 125,
+      "asset_id": "CNC-003",
+      "event_id": "P0-E0025",
+      "kind": "new"
+    },
+    {
+      "at": 130,
+      "asset_id": "CMP-004",
+      "event_id": "P0-E0026",
+      "kind": "new"
+    },
+    {
+      "at": 135,
+      "asset_id": "CNC-004",
+      "event_id": "P0-E0027",
+      "kind": "new"
+    },
+    {
+      "at": 140,
+      "asset_id": "CMP-005",
+      "event_id": "P0-E0028",
+      "kind": "new"
+    },
+    {
+      "at": 145,
+      "asset_id": "CNC-005",
+      "event_id": "P0-E0029",
+      "kind": "new"
+    },
+    {
+      "at": 150,
+      "asset_id": "CMP-001",
+      "event_id": "P0-E0030",
+      "kind": "new"
+    },
+    {
+      "at": 155,
+      "asset_id": "CNC-001",
+      "event_id": "P0-E0031",
+      "kind": "new"
+    },
+    {
+      "at": 160,
+      "asset_id": "CMP-002",
+      "event_id": "P0-E0032",
+      "kind": "new"
+    },
+    {
+      "at": 165,
+      "asset_id": "CNC-002",
+      "event_id": "P0-E0033",
+      "kind": "new"
+    },
+    {
+      "at": 170,
+      "asset_id": "CMP-003",
+      "event_id": "P0-E0034",
+      "kind": "new"
+    },
+    {
+      "at": 175,
+      "asset_id": "CNC-003",
+      "event_id": "P0-E0035",
+      "kind": "new"
+    },
+    {
+      "at": 180,
+      "asset_id": "CMP-004",
+      "event_id": "P0-E0036",
+      "kind": "new"
+    },
+    {
+      "at": 185,
+      "asset_id": "CNC-004",
+      "event_id": "P0-E0037",
+      "kind": "new"
+    },
+    {
+      "at": 190,
+      "asset_id": "CMP-005",
+      "event_id": "P0-E0038",
+      "kind": "new"
+    },
+    {
+      "at": 195,
+      "asset_id": "CNC-005",
+      "event_id": "P0-E0039",
+      "kind": "new"
+    },
+    {
+      "at": 200,
+      "asset_id": "CMP-001",
+      "event_id": "P0-E0040",
+      "kind": "new"
+    },
+    {
+      "at": 205,
+      "asset_id": "CNC-001",
+      "event_id": "P0-E0041",
+      "kind": "new"
+    },
+    {
+      "at": 210,
+      "asset_id": "CMP-002",
+      "event_id": "P0-E0042",
+      "kind": "new"
+    },
+    {
+      "at": 215,
+      "asset_id": "CNC-002",
+      "event_id": "P0-E0043",
+      "kind": "new"
+    },
+    {
+      "at": 220,
+      "asset_id": "CMP-003",
+      "event_id": "P0-E0044",
+      "kind": "new"
+    },
+    {
+      "at": 225,
+      "asset_id": "CNC-003",
+      "event_id": "P0-E0045",
+      "kind": "new"
+    },
+    {
+      "at": 230,
+      "asset_id": "CMP-004",
+      "event_id": "P0-E0046",
+      "kind": "new"
+    },
+    {
+      "at": 235,
+      "asset_id": "CNC-004",
+      "event_id": "P0-E0047",
+      "kind": "new"
+    },
+    {
+      "at": 240,
+      "asset_id": "CMP-005",
+      "event_id": "P0-E0048",
+      "kind": "new"
+    },
+    {
+      "at": 245,
+      "asset_id": "CNC-005",
+      "event_id": "P0-E0049",
+      "kind": "new"
+    },
+    {
+      "at": 250,
+      "asset_id": "CMP-001",
+      "event_id": "P0-E0050",
+      "kind": "new"
+    },
+    {
+      "at": 255,
+      "asset_id": "CNC-001",
+      "event_id": "P0-E0051",
+      "kind": "new"
+    },
+    {
+      "at": 260,
+      "asset_id": "CMP-002",
+      "event_id": "P0-E0052",
+      "kind": "new"
+    },
+    {
+      "at": 265,
+      "asset_id": "CNC-002",
+      "event_id": "P0-E0053",
+      "kind": "new"
+    },
+    {
+      "at": 270,
+      "asset_id": "CMP-003",
+      "event_id": "P0-E0054",
+      "kind": "new"
+    },
+    {
+      "at": 275,
+      "asset_id": "CNC-003",
+      "event_id": "P0-E0055",
+      "kind": "new"
+    },
+    {
+      "at": 280,
+      "asset_id": "CMP-004",
+      "event_id": "P0-E0056",
+      "kind": "new"
+    },
+    {
+      "at": 285,
+      "asset_id": "CNC-004",
+      "event_id": "P0-E0057",
+      "kind": "new"
+    },
+    {
+      "at": 290,
+      "asset_id": "CMP-005",
+      "event_id": "P0-E0058",
+      "kind": "new"
+    },
+    {
+      "at": 295,
+      "asset_id": "CNC-005",
+      "event_id": "P0-E0059",
+      "kind": "new"
+    },
+    {
+      "at": 300,
+      "asset_id": "CMP-001",
+      "event_id": "P0-E0060",
+      "kind": "new"
+    },
+    {
+      "at": 305,
+      "asset_id": "CNC-001",
+      "event_id": "P0-E0061",
+      "kind": "new"
+    },
+    {
+      "at": 310,
+      "asset_id": "CMP-002",
+      "event_id": "P0-E0062",
+      "kind": "new"
+    },
+    {
+      "at": 315,
+      "asset_id": "CNC-002",
+      "event_id": "P0-E0063",
+      "kind": "new"
+    },
+    {
+      "at": 320,
+      "asset_id": "CMP-003",
+      "event_id": "P0-E0064",
+      "kind": "new"
+    },
+    {
+      "at": 325,
+      "asset_id": "CNC-003",
+      "event_id": "P0-E0065",
+      "kind": "new"
+    },
+    {
+      "at": 330,
+      "asset_id": "CMP-004",
+      "event_id": "P0-E0066",
+      "kind": "new"
+    },
+    {
+      "at": 335,
+      "asset_id": "CNC-004",
+      "event_id": "P0-E0067",
+      "kind": "new"
+    },
+    {
+      "at": 340,
+      "asset_id": "CMP-005",
+      "event_id": "P0-E0068",
+      "kind": "new"
+    },
+    {
+      "at": 345,
+      "asset_id": "CNC-005",
+      "event_id": "P0-E0069",
+      "kind": "new"
+    },
+    {
+      "at": 350,
+      "asset_id": "CMP-001",
+      "event_id": "P0-E0070",
+      "kind": "new"
+    },
+    {
+      "at": 355,
+      "asset_id": "CNC-001",
+      "event_id": "P0-E0071",
+      "kind": "new"
+    },
+    {
+      "at": 360,
+      "asset_id": "CMP-002",
+      "event_id": "P0-E0072",
+      "kind": "new"
+    },
+    {
+      "at": 365,
+      "asset_id": "CNC-002",
+      "event_id": "P0-E0073",
+      "kind": "new"
+    },
+    {
+      "at": 370,
+      "asset_id": "CMP-003",
+      "event_id": "P0-E0074",
+      "kind": "new"
+    },
+    {
+      "at": 375,
+      "asset_id": "CNC-003",
+      "event_id": "P0-E0075",
+      "kind": "new"
+    },
+    {
+      "at": 380,
+      "asset_id": "CMP-004",
+      "event_id": "P0-E0076",
+      "kind": "new"
+    },
+    {
+      "at": 385,
+      "asset_id": "CNC-004",
+      "event_id": "P0-E0077",
+      "kind": "new"
+    },
+    {
+      "at": 390,
+      "asset_id": "CMP-005",
+      "event_id": "P0-E0078",
+      "kind": "new"
+    },
+    {
+      "at": 395,
+      "asset_id": "CNC-005",
+      "event_id": "P0-E0079",
+      "kind": "new"
+    },
+    {
+      "at": 400,
+      "asset_id": "CMP-001",
+      "event_id": "P0-E0080",
+      "kind": "new"
+    },
+    {
+      "at": 405,
+      "asset_id": "CNC-001",
+      "event_id": "P0-E0081",
+      "kind": "new"
+    },
+    {
+      "at": 410,
+      "asset_id": "CMP-002",
+      "event_id": "P0-E0082",
+      "kind": "new"
+    },
+    {
+      "at": 415,
+      "asset_id": "CNC-002",
+      "event_id": "P0-E0083",
+      "kind": "new"
+    },
+    {
+      "at": 420,
+      "asset_id": "CMP-003",
+      "event_id": "P0-E0084",
+      "kind": "new"
+    },
+    {
+      "at": 425,
+      "asset_id": "CNC-003",
+      "event_id": "P0-E0085",
+      "kind": "new"
+    },
+    {
+      "at": 430,
+      "asset_id": "CMP-004",
+      "event_id": "P0-E0086",
+      "kind": "new"
+    },
+    {
+      "at": 435,
+      "asset_id": "CNC-004",
+      "event_id": "P0-E0087",
+      "kind": "new"
+    },
+    {
+      "at": 440,
+      "asset_id": "CMP-005",
+      "event_id": "P0-E0088",
+      "kind": "new"
+    },
+    {
+      "at": 445,
+      "asset_id": "CNC-005",
+      "event_id": "P0-E0089",
+      "kind": "new"
+    },
+    {
+      "at": 450,
+      "asset_id": "CMP-001",
+      "event_id": "P0-E0090",
+      "kind": "new"
+    },
+    {
+      "at": 455,
+      "asset_id": "CNC-001",
+      "event_id": "P0-E0091",
+      "kind": "new"
+    },
+    {
+      "at": 460,
+      "asset_id": "CMP-002",
+      "event_id": "P0-E0092",
+      "kind": "new"
+    },
+    {
+      "at": 465,
+      "asset_id": "CNC-002",
+      "event_id": "P0-E0093",
+      "kind": "new"
+    },
+    {
+      "at": 470,
+      "asset_id": "CMP-003",
+      "event_id": "P0-E0094",
+      "kind": "new"
+    },
+    {
+      "at": 475,
+      "asset_id": "CNC-003",
+      "event_id": "P0-E0095",
+      "kind": "new"
+    }
+  ],
+  "sequence_sha256": "2c9b299f3b47b377af6d17d124662433ceb70b7b519a0f10d637679a1ff39876",
+  "execution_scope": "bounded preflight only; workload sequence saved but not replayed; warmup/measurement/drain not executed",
+  "context_probe": {
+    "enabled": true,
+    "baseline_provider_delay": 0.1,
+    "delayed_provider_delay": 10,
+    "mutation_after_provider_start_seconds": 0.25,
+    "mutations": "real immutable OperationalContextRepository production context snapshots versions1 and2",
+    "role": "synthetic bootstrap superuser; RLS enforcement not established"
+  }
+}

@@ -19,7 +19,7 @@ type Delivery = {
     operation_context:{estimated_downtime_minutes?:number; estimated_lost_units?:number} };
 };
 const API = "http://127.0.0.1:8328/api/demo-briefing";
-const pending = {summary:null,trace:{fallback:false,materialization:{status:"pending"}}} as OperationsAgentReviewSummaryResponse;
+const pending = {summary:null,trace:{fallback:false,reuse_eligibility:"INELIGIBLE",current_ready:false,historical_available:false,materialization:{status:"pending"}}} as OperationsAgentReviewSummaryResponse;
 const units: Record<string,string> = {min:"분", "N·m":"뉴턴미터", "N·m·min":"뉴턴미터·분"};
 // Reject incomplete responses before they enter React rendering or enable confirmation.
 function validDelivery(d: Delivery, caseId: number) {

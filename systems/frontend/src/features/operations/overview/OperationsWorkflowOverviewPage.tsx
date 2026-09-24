@@ -535,6 +535,8 @@ function displayPartLabel(value: boolean | null): string {
 }
 
 function agentSummaryStatusLabel(trace: OperationsAgentReviewSummaryResponse["trace"] | null, summary: OperationsAgentReviewSummary | null): string {
+  if (trace?.historical_available && !trace.current_ready) return "이전 저장본 제공 · 최신 준비 대기";
+  if (trace?.current_ready) return "현재 근거 기준 검증 완료";
   if (trace?.materialization?.reused) return "저장본 재사용";
   const status = trace?.materialization?.status;
   if (status === "pending") return "생성 대기";

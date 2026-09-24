@@ -10,7 +10,7 @@ const get = vi.mocked(getOperationsAgentReviewSummary), post = vi.mocked(createO
 function response(assetId = "A", quote = "**관측된 토크**와 점검 기록을 대조합니다. [[ref:1]]\n작업 시작 기록은 확인되지 않습니다."): OperationsAgentReviewSummaryResponse {
   return { summary: { asset_id: assetId, mode: "llm", summary: "공통 설명", source_refs: ["evidence:A"], limitations: [],
     role_summaries: [{ role: "process_engineer", quote }, { role: "maintenance_technician", quote: "보전 담당자의 자연어 설명" }, { role: "process_manager", quote: "생산 관리자의 자연어 설명" }] },
-    trace: { fallback: false, materialization: { status: "ready", summary_key: "summary-key-A" } } } as unknown as OperationsAgentReviewSummaryResponse;
+    trace: { fallback: false, reuse_eligibility: "EXACT_VALIDATED", current_ready: true, historical_available: false, materialization: { status: "ready", summary_key: "summary-key-A" } } } as unknown as OperationsAgentReviewSummaryResponse;
 }
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
@@ -52,6 +52,22 @@ it.each(["fallback", "stale"] as const)("shows stored %s prose when it is a save
   get.mockResolvedValue(value);
   await render();
   expect(host.textContent).toContain("저장된 이전 시점 설명");
+});
+it("discloses historical availability separately from current readiness", async () => {
+  const value = response("A", "이전 업무 시점 설명");
+  value.trace.reuse_eligibility = "LATEST_STORED";
+  value.trace.current_ready = false;
+  value.trace.historical_available = true;
+  get.mockResolvedValue(value);
+  await render();
+  expect(host.textContent).toContain("이전 업무 시점 기준");
+  expect(host.textContent).not.toContain("현재 근거 기준");
+});
+it("shows pending when neither current nor historical summary is available", async () => {
+  get.mockResolvedValue({ summary: null, trace: { fallback: false, reuse_eligibility: "INELIGIBLE", current_ready: false, historical_available: false, materialization: { status: "pending", summary_key: "pending" } } } as unknown as OperationsAgentReviewSummaryResponse);
+  await render();
+  expect(host.textContent).toContain("현재 근거의 브리핑이 아직 없습니다.");
+  expect(host.querySelector(".natural-briefing-line")).toBeNull();
 });
 it("discards late responses after selection changes", async () => {
   let finish!: (value: OperationsAgentReviewSummaryResponse) => void;

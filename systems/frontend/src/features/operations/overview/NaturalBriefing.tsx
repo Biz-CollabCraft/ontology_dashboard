@@ -38,9 +38,11 @@ function statusLabel(response: OperationsAgentReviewSummaryResponse, summary: Op
   if (!summary) return response.trace.fallback ? "검증된 자연어 브리핑이 없습니다. 아래 판단 근거를 확인하세요." : "현재 근거의 브리핑이 아직 없습니다.";
   return response.trace.materialization?.status === "fallback" || response.trace.fallback || summary.mode !== "llm"
     ? "저장된 보조 브리핑 · LLM 응답 검증 실패 시 기준 근거로 구성"
-    : response.trace.reuse_eligibility === "LATEST_STORED"
+    : response.trace.historical_available && !response.trace.current_ready
       ? "저장된 브리핑 · 이전 업무 시점 기준"
-      : "저장된 브리핑";
+      : response.trace.current_ready
+        ? "저장된 브리핑 · 현재 근거 기준"
+        : "저장된 브리핑 · 준비 상태 확인 필요";
 }
 
 function responseObservedAt(response: OperationsAgentReviewSummaryResponse, fallback?: string | null) {

@@ -1,0 +1,136 @@
+{
+  "raw": "experiments/ontology_p0_20260923/runs/preflight-03/raw.jsonl",
+  "rows": 179,
+  "get_n": 5,
+  "provider_start_n": 11,
+  "get_provider_calls": 0,
+  "get_provider_call_records": [],
+  "exact_response_n": 1,
+  "historical_response_n": 3,
+  "no_summary_n": 1,
+  "identity_mismatch_records": [
+    {
+      "request_id": "get-probe-historical",
+      "field": "summary_key",
+      "expected": "agent-review-summary:fa5a577ce5329b2e6b1768e4cb5e09bc370f4bb821a16429627136d8a1e2eeda",
+      "observed": "agent-review-summary:7e72472026f085535324b98490bcd74fe57082d49e28105573ba63b39f000d2c",
+      "historical_disclosed": true
+    },
+    {
+      "request_id": "get-probe-during-generation",
+      "field": "summary_key",
+      "expected": "agent-review-summary:8c52fb18e50f5f7d314b4a21bacaa365843b6d15a0aaac48bd41cc1004b3b5ef",
+      "observed": "agent-review-summary:7e72472026f085535324b98490bcd74fe57082d49e28105573ba63b39f000d2c",
+      "historical_disclosed": true
+    },
+    {
+      "request_id": "get-probe-after-generation",
+      "field": "summary_key",
+      "expected": "agent-review-summary:8c52fb18e50f5f7d314b4a21bacaa365843b6d15a0aaac48bd41cc1004b3b5ef",
+      "observed": "agent-review-summary:7e72472026f085535324b98490bcd74fe57082d49e28105573ba63b39f000d2c",
+      "historical_disclosed": true
+    }
+  ],
+  "missing_request_key_observation_n": 0,
+  "business_digest_comparison": {
+    "status": "equal",
+    "before": {
+      "closed_loop_recommendations": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_recommendation_decisions": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_work_orders": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_maintenance_actions": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_maintenance_events": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_equipment_state": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_activities": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_idempotency_records": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_inspection_results": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "after": {
+      "closed_loop_recommendations": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_recommendation_decisions": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_work_orders": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_maintenance_actions": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_maintenance_events": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_equipment_state": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_activities": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_idempotency_records": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "closed_loop_inspection_results": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  },
+  "duplicate_call_candidates": {},
+  "latency_seconds": {
+    "preflight/pending": {
+      "n": 1,
+      "p95": 0.10652991599636152,
+      "max": 0.10652991599636152
+    },
+    "preflight/exact": {
+      "n": 1,
+      "p95": 0.20434270800615195,
+      "max": 0.20434270800615195
+    },
+    "preflight/historical": {
+      "n": 3,
+      "p95": 0.13951808300043922,
+      "max": 0.13951808300043922
+    }
+  },
+  "measurement_seconds": null,
+  "measurement_poll_completions": 0,
+  "minimum_window_met": false,
+  "interpretation": "Historical disclosed mismatch is strict-exact-contract failure, not hidden rebinding. Duplicate candidates require retry/refresh classification. Business comparison only covers supplied digest tables. Missing fields and service-derived expected key limit independence. This analyzer does not establish input-event conservation, SLA or capacity."
+}

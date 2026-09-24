@@ -1044,6 +1044,24 @@ def _authorize_agent_review_summary(
         raise AuthError(403, "workspace_scope_denied", "허용된 Workspace 범위를 벗어난 Agent Review Summary입니다.")
 
 
+def _agent_review_readiness_trace(summary: dict[str, Any] | None, trace: dict[str, Any]) -> dict[str, Any]:
+    """Expose readiness independently from HTTP status and stored-history availability."""
+    reuse_eligibility = trace.get("reuse_eligibility")
+    if reuse_eligibility not in {"EXACT_VALIDATED", "LATEST_STORED", "INELIGIBLE"}:
+        materialization = trace.get("materialization") or {}
+        reuse_eligibility = (
+            "EXACT_VALIDATED"
+            if summary is not None and materialization.get("status") == "ready" and not trace.get("fallback")
+            else "INELIGIBLE"
+        )
+    return {
+        **trace,
+        "reuse_eligibility": reuse_eligibility,
+        "current_ready": reuse_eligibility == "EXACT_VALIDATED",
+        "historical_available": reuse_eligibility == "LATEST_STORED",
+    }
+
+
 @router.get("/objects/{asset_id}/agent-review-summary")
 def get_agent_review_summary(
     asset_id: str,
@@ -1069,6 +1087,7 @@ def get_agent_review_summary(
                 workspace_id=MANUFACTURING_WORKSPACE,
                 history_window=history_window,
             )
+            trace = _agent_review_readiness_trace(summary, trace)
             return JSONResponse(
                 status_code=200 if summary is not None else 202,
                 content={
@@ -1102,6 +1121,7 @@ def get_agent_review_summary(
             organization_id=principal.organization_id,
             workspace_id=MANUFACTURING_WORKSPACE, history_window=history_window,
         )
+    trace = _agent_review_readiness_trace(summary, trace)
     status_code = 200 if summary is not None else 202
     return JSONResponse(
         status_code=status_code,
@@ -1150,7 +1170,7 @@ def create_agent_review_summary(
                 workspace_id=MANUFACTURING_WORKSPACE,
                 history_window=history_window, trigger=trigger, engine="simple",
             )
-            return {"summary": summary, "trace": trace}
+            return {"summary": summary, "trace": _agent_review_readiness_trace(summary, trace)}
         except EventNotFound:
             raise
     try:
@@ -1179,7 +1199,7 @@ def create_agent_review_summary(
             workspace_id=MANUFACTURING_WORKSPACE,
             history_window=history_window, trigger=trigger, engine="simple",
         )
-    return {"summary": summary, "trace": trace}
+    return {"summary": summary, "trace": _agent_review_readiness_trace(summary, trace)}
 
 
 def _decision_support_identity(

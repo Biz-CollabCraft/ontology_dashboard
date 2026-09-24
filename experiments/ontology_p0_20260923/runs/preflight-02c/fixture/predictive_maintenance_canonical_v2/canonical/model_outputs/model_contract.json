@@ -1,0 +1,18 @@
+{
+  "model_version": "test-v1",
+  "dataset_version": "canonical-independent-v1.0",
+  "canonical_input_sha256": {
+    "asset_master.csv": "951f5fd206856b90e9f00f8ec0638b5b4c6a0c8ebafc8cf170600c33d6332dc2",
+    "asset_relation.csv": "62087adb02e2e68272f0a150f54f820d16f96134cef2496731241ef713c39eeb",
+    "compressor_sensor_observation.csv": "c8d21e5902284db24c0d9a3509944436ce50047e7b5f56f748e41fa3fef4ade4",
+    "cnc_sensor_observation.csv": "7e3e0558b3a90a0a7186ba8e202af0c86a339233bc344d453e6d4fa5659a63ff",
+    "cnc_production_cycle.csv": "abe1603a2e69246725257efec744c20bbfb141487dffa03b4b40a2ee7f3b7853",
+    "maintenance_event.csv": "069086a2349a283acee22982a7a4d10f4a5a595a4a594391e1dc34ff104c7540"
+  },
+  "outputs_are_not_source_data": true,
+  "output_sha256": {
+    "prediction_snapshot.jsonl": "1ba8fe29570639e52eab9be3677c17343902078804799114dacb056765c656d3",
+    "prediction_factor.jsonl": "8e6c1ec538c85000559ee237b80abc449260a1a51d041374c6a0aba254d2e227",
+    "prediction_timeline.jsonl": "bd039d6ae365d61297e4e3c3c3efa4ddcd67f6b44233c486bc6e39e3f36815af"
+  }
+}

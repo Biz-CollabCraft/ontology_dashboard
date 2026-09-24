@@ -1,0 +1,17 @@
+# Ontology P0 isolated baseline harness
+
+Execution outcome: [bounded PostgreSQL contract probe; full P0 incomplete; STOP](../../docs/eval/2026-09-23-ontology-p0-contract-boundary-report.md). No product improvement was applied. See `runs/preflight-03` for valid evidence and `attempts.md` for excluded fixture failures.
+
+Observed problem: existing snapshot/read-generation contracts lack sustained Product Result plus delayed provider evidence. Human hypothesis: unrecorded. AI hypothesis: sequential scan and provider delay increase freshness wait; independent HTTP GET can remain available. Decision required: user owns acceptable freshness, historical reuse contract, and whether one improvement is warranted. No product change is included.
+
+The harness uses the existing PostgreSQL migrations, real bundle ingestion and result-artifact DB boundary, real manufacturing service, watcher run_once, validation/materialization, and FastAPI HTTP router/auth. Provider alone is a deterministic valid-candidate test double. HTTP uses in-process TestClient: no socket, deployment workers or network latency are represented. The isolated PostgreSQL login is a synthetic database owner; RLS definitions are present but this role does not establish non-owner RLS enforcement. No paid model, operating DB, or deployment.
+
+Files: runner.py owns orchestration and test-only instance wrappers; fixture.py owns synthetic10 assets/Product Result inserts; oracle.py (independent reviewer) interprets evidence. Output directories are supplied at invocation and never overwrite raw.jsonl. Only localhost55433 ontology_p0_* databases are accepted. Environment is explicitly offline before imports. Product runtime files remain unchanged.
+
+Baseline defaults: always, live DB source, interval60 seconds AFTER each scan, no CLI limit (current internal page20), existing workflow max_attempts2. Workload is a fixed480-second sequence at aggregate0.2 new events/s plus explicit ten repeated offers and ten-snapshot burst; HTTP GET1/s rotates10 assets. The same source/event schedule is repeated across normal0.1s, slow10s, and timeout-window[0,60)s scenarios. Injected timeout calls wait up to10s; there is no real HTTP transport/retry simulation. Warmup includes2 polls and their60-second sleeps. Measurement validity requires3 complete polls; raw completed_poll_count must be checked. A run with fewer cycles is incomplete, not a baseline success.
+
+Raw JSONL has monotonic times and separate setup/preflight/warmup/measurement/drain boundaries, admission candidate identity, HTTP result and requested identity, request-attributed provider boundaries, existing stage traces, full watcher results, and scoped business table digests. The business digest excludes deliberate input and summary/audit writes. No prose/prompt from operating data exists: all records are synthetic. Pending is reconstructed from latest required state, never called broker queue depth.
+
+Limits: existing timeout fallback behavior and historical LATEST_STORED reuse require independent interpretation. Summary non-null/HTTP200 does not imply exact latest-ready. Superseded historical events are not data loss in this latest-only path. Provider quality, production latency/SLA, multi-process lease recovery, full non-owner RLS, and real token billing are not established.
+
+Only a supervisor-authorized preflight or scheduled load may execute. Freeze and retain evidence on any strict gate violation. Failure alternatives and user decision belong in the outcome; no automatic improvement loop or commit/push.

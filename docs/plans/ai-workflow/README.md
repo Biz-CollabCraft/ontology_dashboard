@@ -1,5 +1,9 @@
 # AI Workflow Plans
 
+## Engineering decision protocol
+
+새 active AI workflow slice와 중요한 후속 변경은 `docs/engineering/ai-assisted-engineering-workflow.md`를 따른다. 기존 과거 계획서를 현재 시점의 인간 가설로 재작성하지 않는다. 새 작업에서는 `Observed problem → Human hypothesis/unrecorded → Falsification → Alternatives → Discriminating experiment → Evidence → Human decision → Changed belief`를 남긴다.
+
 AI, LLM, agent review, SOP grounding, and evaluation-related implementation plans live here. Closed-loop runtime, AssetDetailViewModel, and non-AI product workflow plans remain in `docs/plans/`.
 
 ## Current Canonical Plan

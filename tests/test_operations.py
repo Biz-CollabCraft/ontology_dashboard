@@ -990,6 +990,9 @@ def test_agent_review_summary_reuses_materialized_snapshot(
     assert first_payload["trace"]["materialization"]["reused"] is False
     assert second_payload["trace"]["materialization"]["reused"] is True
     assert second_payload["trace"]["materialization"]["status"] == "ready"
+    assert second_payload["trace"]["reuse_eligibility"] == "EXACT_VALIDATED"
+    assert second_payload["trace"]["current_ready"] is True
+    assert second_payload["trace"]["historical_available"] is False
     assert first_payload["trace"]["workflow_run"]["trigger"] == "ui_manual_regeneration"
     assert first_payload["trace"]["workflow_run"]["status"] == "completed"
     assert second_payload["trace"]["workflow_run"]["status"] == "completed"
@@ -1029,8 +1032,34 @@ def test_agent_review_summary_lookup_keeps_latest_stored_when_snapshot_moves(
     assert summary == first_summary
     assert trace["reuse_eligibility"] == "LATEST_STORED"
     assert trace["latest_stored"] is True
+    assert trace["current_ready"] is False
+    assert trace["historical_available"] is True
     assert trace["materialization"]["summary_key"] == first_trace["materialization"]["summary_key"]
     assert trace["materialization"]["decision_as_of"] == first_trace["materialization"]["decision_as_of"]
+
+
+def test_agent_review_summary_lookup_is_pending_without_stored_summary(
+    client: TestClient,
+    service: FactorySignalService,
+) -> None:
+    packet = service.agent_review_packet("CNC-S04-L04-01")
+
+    summary, trace = service.cached_agent_review_summary_for_packet(
+        packet=packet,
+        project_id="manufacturing-demo-project",
+        organization_id="org-ontology-demo",
+        workspace_id="manufacturing-demo",
+        history_window="24h",
+    )
+
+    assert summary is None
+    assert trace["reuse_eligibility"] == "INELIGIBLE"
+    assert trace["current_ready"] is False
+    assert trace["historical_available"] is False
+    response = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
+    assert response.status_code == 202
+    assert response.json()["trace"]["current_ready"] is False
+    assert response.json()["trace"]["historical_available"] is False
 
 
 def test_agent_review_summary_regeneration_bypasses_cached_fallback(
