@@ -26,8 +26,8 @@ The product source is committed and pushed on `codex/decision-worker-lifecycle`.
   - `execution_mode=async` returns 202 and a Location header
   - synchronous mode remains available
 - `systems/backend/app/main.py`
-  - startup starts the supervisor
-  - shutdown drains and stops workers
+  - startup starts the supervisor and configured periodic resumer
+  - shutdown drains and stops workers/resumer
 - `systems/backend/app/infra/db/decision_run_repository.py`
   - tenant/project-scoped pending-row enumeration using the database clock
 - tests
@@ -73,8 +73,8 @@ The sync route is intentionally preserved for compatibility. It is not the targe
 This is not yet the complete production lifecycle.
 
 - The supervisor queue is in-process; the durable row survives, and tenant-scoped pending enumeration plus `resume_pending()` now rebuilds the queue for a supplied identity scope.
-- A periodic startup resumer loop still needs to call that scope-aware operation from a configured tenant identity provider.
-- End-to-end process kill, fresh-process automatic recovery, old-worker fencing under the new async path, and lease fault injection remain to be verified.
+- The periodic resumer is now lifecycle-owned and uses the explicit `DECISION_RESUMER_IDENTITIES` scope configuration; a broader dynamic tenant identity provider is still an operational follow-up.
+- Fresh-process automatic recovery is covered for the configured scope in SQLite; PostgreSQL process-kill recovery, old-worker fencing under the new async path, and lease fault injection remain to be verified.
 - FastAPI lifecycle hooks currently use deprecated `on_event` APIs; the behavior is tested, but migration to a lifespan context should follow.
 - The Career DB canonical PostgreSQL endpoint was not configured. The new seed was loaded into an isolated PostgreSQL 16 verification database after the existing project seed; DEC/PRB/EV/EXP relationship queries passed.
 - Career DB decision-contract and review-state-machine tests passed against that isolated database.

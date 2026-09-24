@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from threading import Event, Lock
+from threading import Event, Lock, Thread
 from typing import Callable, Generic, TypeVar
 from uuid import uuid4
 
@@ -18,6 +18,48 @@ T = TypeVar("T")
 class WorkerHandle:
     job_id: str
     future: Future
+
+
+class DecisionResumer:
+    """Periodic callback runner owned by the application lifecycle."""
+
+    def __init__(self, callback: Callable[[], object], *, interval_seconds: float = 5.0) -> None:
+        if interval_seconds < 0.1:
+            raise ValueError("resumer interval must be at least 0.1 seconds")
+        self.callback = callback
+        self.interval_seconds = interval_seconds
+        self._stop = Event()
+        self._thread: Thread | None = None
+        self._lock = Lock()
+
+    @property
+    def running(self) -> bool:
+        with self._lock:
+            return self._thread is not None and self._thread.is_alive()
+
+    def start(self) -> None:
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._stop.clear()
+            self._thread = Thread(target=self._run, name="decision-resumer", daemon=True)
+            self._thread.start()
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self.callback()
+            except Exception:
+                # A single scope/database failure must not kill the lifecycle loop.
+                pass
+            self._stop.wait(self.interval_seconds)
+
+    def stop(self, *, wait: bool = True) -> None:
+        self._stop.set()
+        with self._lock:
+            thread, self._thread = self._thread, None
+        if wait and thread is not None:
+            thread.join(timeout=max(1.0, self.interval_seconds + 1.0))
 
 
 class DecisionWorkerSupervisor(Generic[T]):

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -66,6 +68,13 @@ async def start_decision_workers() -> None:
     supervisor = getattr(service, "worker_supervisor", None)
     if supervisor is not None:
         supervisor.start()
+    identity_provider = getattr(service, "pending_identity_provider", None)
+    start_resumer = getattr(service, "start_resumer", None)
+    if identity_provider is not None and start_resumer is not None:
+        start_resumer(
+            identity_provider=identity_provider,
+            interval_seconds=float(os.getenv("DECISION_RESUMER_INTERVAL_SECONDS", "5")),
+        )
 
 
 @app.on_event("shutdown")

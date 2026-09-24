@@ -13,7 +13,7 @@ from typing import Callable
 from uuid import uuid4
 
 from app.operations.decision_durable_runner import DurableDecisionRunner, configuration_binding
-from app.operations.decision_worker import DecisionWorkerSupervisor, WorkerHandle
+from app.operations.decision_worker import DecisionResumer, DecisionWorkerSupervisor, WorkerHandle
 from app.operations.decision_policy import DecisionPolicyGuard, decision_policy_facts_from_packet
 from app.operations.decision_run_store import DecisionRunStore
 from app.operations.decision_support_agent import DecisionAgentRequest, DecisionAgentRunResult, ManufacturingDecisionAgent
@@ -33,6 +33,8 @@ class DecisionSessionApplicationService:
     _lock: Lock = field(default_factory=Lock)
     _packets: dict[str, dict] = field(default_factory=dict)
     worker_supervisor: DecisionWorkerSupervisor | None = None
+    resumer: DecisionResumer | None = None
+    pending_identity_provider: Callable[[], list[OperationalRequestIdentity]] | None = None
 
     def __post_init__(self) -> None:
         if self.run_store is not None and self.worker_supervisor is None:
@@ -142,7 +144,25 @@ class DecisionSessionApplicationService:
                 handles.append(handle)
         return handles
 
+    def start_resumer(
+        self,
+        *,
+        identity_provider: Callable[[], list[OperationalRequestIdentity]],
+        interval_seconds: float = 5.0,
+    ) -> None:
+        """Start a lifecycle-owned periodic tenant-scoped resumer."""
+        if self.run_store is None:
+            raise ValueError("durable decision storage unavailable")
+        if self.resumer is None:
+            def tick() -> None:
+                for identity in identity_provider():
+                    self.resume_pending(identity=identity)
+            self.resumer = DecisionResumer(tick, interval_seconds=interval_seconds)
+        self.resumer.start()
+
     def stop_workers(self, *, wait: bool = True) -> None:
+        if self.resumer is not None:
+            self.resumer.stop(wait=wait)
         if self.worker_supervisor is not None:
             self.worker_supervisor.stop(wait=wait)
 

@@ -7,6 +7,7 @@ prototype workbenches are intentionally not dependencies of ``app.main``.
 from __future__ import annotations
 
 import ipaddress
+import json
 import os
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -121,6 +122,7 @@ from app.operations.domain_context_adapters import ManufacturingFixtureReviewCon
 from app.operations.service import ManufacturingPredictiveMaintenanceService
 from app.operations.operational_decision_support_port import OperationalDecisionSupportService
 from app.operations.decision_session_service import DecisionSessionApplicationService
+from app.operations.operational_context_contract import OperationalRequestIdentity
 from app.operations.decision_support_agent import ManufacturingDecisionAgent
 from app.operations.decision_tools import ManufacturingDecisionTools
 from app.operations.decision_llm_planner import StructuredLLMDecisionPlanner
@@ -272,6 +274,18 @@ def get_operational_decision_support_service() -> OperationalDecisionSupportServ
     return PersistedOperationalDecisionSupportService(ROOT, Path(target))
 
 
+def decision_resumer_identity_provider() -> Callable[[], list[OperationalRequestIdentity]] | None:
+    raw = os.getenv("DECISION_RESUMER_IDENTITIES", "").strip()
+    if not raw:
+        return None
+    try:
+        values = json.loads(raw)
+        identities = [OperationalRequestIdentity.model_validate(value) for value in values]
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("DECISION_RESUMER_IDENTITIES must be a JSON array of identities") from exc
+    return lambda: list(identities)
+
+
 @lru_cache(maxsize=1)
 def get_decision_session_service() -> DecisionSessionApplicationService:
     service = get_service()
@@ -329,6 +343,7 @@ def get_decision_session_service() -> DecisionSessionApplicationService:
         packet_loader=packet_loader,
         agent_factory=agent_factory,
         run_store=DecisionRunRepository(target),
+        pending_identity_provider=decision_resumer_identity_provider(),
     )
 
 

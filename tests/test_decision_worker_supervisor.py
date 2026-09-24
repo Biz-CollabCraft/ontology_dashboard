@@ -1,5 +1,6 @@
 from hashlib import sha256
 from pathlib import Path
+import time
 
 from app.infra.db.migrations import migrate
 from app.infra.db.decision_run_repository import DecisionRunRepository
@@ -84,9 +85,12 @@ def test_fresh_service_resumes_pending_run_for_tenant_scope(tmp_path: Path):
         agent_factory=lambda identity: agent_factory(identity),
         run_store=store,
     )
-    handles = fresh.resume_pending(identity=IDENTITY)
-    assert len(handles) == 1
-    result = handles[0].future.result(timeout=10)
-    assert result.session.decision_session_id == session_id
-    assert fresh.get(decision_session_id=session_id, identity=IDENTITY).proposal is not None
+    fresh.start_resumer(identity_provider=lambda: [IDENTITY], interval_seconds=0.1)
+    for _ in range(50):
+        loaded = fresh.get(decision_session_id=session_id, identity=IDENTITY)
+        if loaded is not None and loaded.proposal is not None:
+            break
+        time.sleep(0.05)
+    assert loaded is not None
+    assert loaded.proposal is not None
     fresh.stop_workers(wait=True)
