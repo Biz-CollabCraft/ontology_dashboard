@@ -46,6 +46,11 @@ class DurableDecisionRunner:
             "request": request.model_dump(mode="json"),
             "created_at": request.identity.decision_as_of.isoformat(),
             "phase": "gather",
+            "job_state": "queued",
+            "parse_state": "not_started",
+            "check_state": "not_started",
+            "completeness": "unknown",
+            "provenance": [],
             "results": {},
             "calls": [],
             "budget": request.retry_budget,
@@ -65,6 +70,12 @@ class DurableDecisionRunner:
         state, token = store.claim(session_id, request.identity, sha256((configuration_binding(agent, request) + evidence_binding).encode()).hexdigest(), initial)
         if token is None:
             return DecisionAgentRunResult.model_validate(state["result"])
+        state["job_state"] = "running"
+        state["provenance"] = sorted({
+            ref
+            for result in state.get("results", {}).values()
+            for ref in result.get("source_refs", [])
+        })
         stopped, lost = Event(), Event()
 
         def save():
@@ -143,6 +154,8 @@ class DurableDecisionRunner:
                         call["completed_at"] = agent.now().isoformat()
                         save()
             state["phase"] = "interpret"
+            state["completeness"] = "complete" if len(results()) == len(required) else "incomplete"
+            state["parse_state"] = "partial" if state["completeness"] == "incomplete" else "not_started"
             save()
             return {}
 
@@ -162,6 +175,8 @@ class DurableDecisionRunner:
                 except TextInterpretationError as exc:
                     state["text_errors"].append(str(exc))
             state["phase"] = "final"
+            state["parse_state"] = "parsed" if not state["text_errors"] else "parse_failed"
+            state["check_state"] = "checking"
             save()
             return {}
 
@@ -187,12 +202,22 @@ class DurableDecisionRunner:
                     proposal = agent._planned_proposal(request=request, allowed=policy.allowed_actions,
                         results=values, failures=[], planner_errors=state["planner_errors"])
             status = DecisionSessionStatus.STALE if stale else DecisionSessionStatus.ABSTAINED if proposal.recommended_action is None else DecisionSessionStatus.READY_FOR_REVIEW
+            state["check_state"] = "abstained" if proposal.recommended_action is None else "passed"
+            state["job_state"] = "completed"
+            state["provenance"] = sorted({
+                ref
+                for value in values.values()
+                for ref in value.source_refs
+            })
             session = DecisionSession(decision_session_id=session_id, identity=request.identity, actor_role=request.actor_role,
                 status=status, allowed_actions=policy.allowed_actions, proposal=proposal,
                 created_at=state["created_at"], updated_at=agent.now(), retry_budget_remaining=state["budget"],
                 tool_calls=tuple(DecisionToolCall.model_validate(c) for c in state["calls"]),
                 text_interpretations=interpretations, text_interpretation_errors=tuple(state["text_errors"]),
-                planner_errors=tuple(state["planner_errors"]), recommendation_gate_reason=reason)
+                planner_errors=tuple(state["planner_errors"]), recommendation_gate_reason=reason,
+                job_state=state["job_state"], parse_state=state["parse_state"],
+                check_state=state["check_state"], completeness=state["completeness"],
+                provenance=tuple(state["provenance"]))
             result = DecisionAgentRunResult(engine="langgraph+durable+parallel" + ("+llm-ranking" if agent.planner else "") + ("+text-llm" if agent.text_interpreter else ""),
                 session=session, policy=policy, tool_results={k.value: v for k,v in values.items()})
             state["result"] = result.model_dump(mode="json")

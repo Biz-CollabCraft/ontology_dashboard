@@ -11,6 +11,7 @@ DecisionSession 실행을 API 요청 lifecycle과 분리하는 첫 vertical slic
 - FastAPI startup worker start and shutdown drain/stop hooks
 - explicit persisted-run resume API for a fresh service instance
 - HTTP resume endpoint for operator-triggered requeue after restart
+- JEV execution contract fields: job state, parse state, check state, completeness and provenance
 - existing synchronous POST behavior preserved for compatibility
 
 The product source is committed and pushed on `codex/decision-worker-lifecycle`.
@@ -68,6 +69,8 @@ The API request no longer has to own the execution thread when `execution_mode=a
 
 The sync route is intentionally preserved for compatibility. It is not the target production path for long-running runs.
 
+The JEV redesign is now represented in the durable state and GET response: execution (`job_state`), parsing (`parse_state`), validation (`check_state`), completeness and provenance are independent fields. This is a contract change in how a result is judged, not an additional model layer.
+
 ## Remaining gap
 
 This is not yet the complete production lifecycle.
@@ -75,6 +78,7 @@ This is not yet the complete production lifecycle.
 - The supervisor queue is in-process; the durable row survives, and tenant-scoped pending enumeration plus `resume_pending()` now rebuilds the queue for a supplied identity scope.
 - The periodic resumer is now lifecycle-owned and uses the explicit `DECISION_RESUMER_IDENTITIES` scope configuration; a broader dynamic tenant identity provider is still an operational follow-up.
 - Fresh-process automatic recovery is covered for the configured scope in SQLite; PostgreSQL process-kill recovery, old-worker fencing under the new async path, and lease fault injection remain to be verified.
+- JEV state transitions are covered in the API slice; parser/checker-specific failure injection and completeness/provenance acceptance cases remain to be expanded.
 - FastAPI lifecycle hooks currently use deprecated `on_event` APIs; the behavior is tested, but migration to a lifespan context should follow.
 - The Career DB canonical PostgreSQL endpoint was not configured. The new seed was loaded into an isolated PostgreSQL 16 verification database after the existing project seed; DEC/PRB/EV/EXP relationship queries passed.
 - Career DB decision-contract and review-state-machine tests passed against that isolated database.

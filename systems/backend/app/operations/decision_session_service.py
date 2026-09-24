@@ -240,6 +240,11 @@ class DecisionSessionApplicationService:
                 updated_at=state["created_at"],
                 retry_budget_remaining=state["budget"],
                 tool_calls=tuple(DecisionToolCall.model_validate(call) for call in state["calls"]),
+                job_state=state.get("job_state", "running"),
+                parse_state=state.get("parse_state", "not_started"),
+                check_state=state.get("check_state", "not_started"),
+                completeness=state.get("completeness", "unknown"),
+                provenance=tuple(state.get("provenance", ())),
                 snapshot_basis=dict(packet.get("snapshot_basis") or {}),
                 expires_at=datetime.fromisoformat(str(state["created_at"]).replace("Z", "+00:00")) + timedelta(minutes=5),
             )

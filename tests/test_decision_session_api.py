@@ -113,6 +113,12 @@ def test_async_execution_is_server_owned_and_get_observes_completion(api_client)
     assert read is not None
     assert read.json()["session"]["decision_session_id"] == session_id
     assert read.json()["session"]["proposal"] is not None
+    session = read.json()["session"]
+    assert session["job_state"] == "completed"
+    assert session["parse_state"] in {"parsed", "parse_failed"}
+    assert session["check_state"] in {"passed", "abstained"}
+    assert session["completeness"] in {"complete", "incomplete"}
+    assert isinstance(session["provenance"], list)
 
 
 def test_resume_endpoint_is_idempotent_after_completion(api_client):

@@ -135,6 +135,12 @@ class DecisionSession(FrozenModel):
     recommendation_gate_reason: str | None = None
     text_interpretations: tuple[DecisionTextInterpretation, ...] = ()
     text_interpretation_errors: tuple[str, ...] = ()
+    # JEV execution contract: execution, parsing, checking, completeness, provenance.
+    job_state: Literal["queued", "running", "completed", "failed"] = "completed"
+    parse_state: Literal["not_started", "partial", "parsed", "parse_failed"] = "not_started"
+    check_state: Literal["not_started", "checking", "passed", "failed", "abstained"] = "not_started"
+    completeness: Literal["unknown", "incomplete", "complete"] = "unknown"
+    provenance: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def validate_session_boundary(self) -> "DecisionSession":
