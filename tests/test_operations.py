@@ -2284,6 +2284,7 @@ def test_agent_review_summary_absorbs_adapter_context_into_role_quotes(
 
 
 def test_agent_review_summary_service_falls_back_when_provider_candidate_is_invalid(
+    client: TestClient,
     service: FactorySignalService,
 ) -> None:
     def payload_factory(packet: dict) -> dict:
@@ -2299,6 +2300,15 @@ def test_agent_review_summary_service_falls_back_when_provider_candidate_is_inva
     assert trace["fallback"] is True
     assert trace["reason"] == "summary_validation_failed"
     assert any(error.startswith("forbidden_claims:") for error in trace["validation_errors"])
+    assert trace["reuse_eligibility"] == "INELIGIBLE"
+    assert trace["current_ready"] is False
+    assert trace["historical_available"] is False
+
+    response = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
+    assert response.status_code == 200
+    assert response.json()["trace"]["reuse_eligibility"] == "INELIGIBLE"
+    assert response.json()["trace"]["current_ready"] is False
+    assert response.json()["trace"]["historical_available"] is False
 
 
 def test_domain_adapter_cnc_sop_guidance_does_not_match_compressor_assets() -> None:

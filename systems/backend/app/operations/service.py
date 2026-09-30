@@ -632,7 +632,7 @@ class ManufacturingPredictiveMaintenanceService:
             dataset_version_id=dataset_version_id,
             history_window=history_window,
         )
-        return self._materialize_agent_review_packet(
+        summary, trace = self._materialize_agent_review_packet(
             packet=packet,
             project_id=project_id,
             organization_id=organization_id,
@@ -645,6 +645,7 @@ class ManufacturingPredictiveMaintenanceService:
                 history_window=history_window,
             ),
         )
+        return summary, _with_agent_review_readiness(summary, trace)
 
     def _materialize_agent_review_packet(
         self,
@@ -971,12 +972,10 @@ class ManufacturingPredictiveMaintenanceService:
         _record_briefing_event("lookup", (organization_id, project_id, workspace_id, packet.get("asset_id"), history_window),
                                summary_key=materialization_key, hit=summary is not None,
                                status=(trace.get("materialization") or {}).get("status"))
-        return summary, {
-            **trace,
-            "reuse_eligibility": reuse_eligibility,
-            "current_ready": reuse_eligibility == "EXACT_VALIDATED",
-            "historical_available": reuse_eligibility == "LATEST_STORED",
-        }
+        return summary, _with_agent_review_readiness(
+            summary,
+            {**trace, "reuse_eligibility": reuse_eligibility},
+        )
 
     def agent_review_workflow_runs(
         self,
@@ -1723,6 +1722,31 @@ def _workflow_run_status(trace: dict[str, Any]) -> str:
     if status == "failed":
         return "failed"
     return "completed"
+
+
+def _with_agent_review_readiness(
+    summary: dict[str, Any] | None,
+    trace: dict[str, Any],
+) -> dict[str, Any]:
+    """Normalize current-readiness without promoting fallback to validated output."""
+    reuse_eligibility = trace.get("reuse_eligibility")
+    if reuse_eligibility not in {"EXACT_VALIDATED", "LATEST_STORED", "INELIGIBLE"}:
+        materialization = trace.get("materialization") or {}
+        reuse_eligibility = (
+            "EXACT_VALIDATED"
+            if summary is not None
+            and materialization.get("status") == "ready"
+            and not trace.get("fallback")
+            else "INELIGIBLE"
+        )
+    if trace.get("fallback"):
+        reuse_eligibility = "INELIGIBLE"
+    return {
+        **trace,
+        "reuse_eligibility": reuse_eligibility,
+        "current_ready": reuse_eligibility == "EXACT_VALIDATED",
+        "historical_available": reuse_eligibility == "LATEST_STORED",
+    }
 
 
 class _AgentReviewSummaryMaterializedWhileWaiting(Exception):
