@@ -104,7 +104,7 @@ def briefing_issues(candidate,facts):
             if term in findings and term not in technician:issues.append('보전 설명에 기록된 발견 사항 '+term+'을 반영하세요.')
         if r.get('outcome')=='maintenance_recommended' and 'maintenance_recommended' not in technician and not re.search(r'정비.{0,8}(권고|권장)',technician):
             issues.append('점검 결과 maintenance_recommended를 정비 권고로 설명하세요. 확정 실행으로 바꾸지 마세요.')
-    for order in facts['work_orders']:
+    for order in facts.get('production_coordination', []):
         coordination = order.get('production_coordination')
         if not coordination:
             continue

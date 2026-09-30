@@ -7,6 +7,7 @@ prototype workbenches are intentionally not dependencies of ``app.main``.
 from __future__ import annotations
 
 import ipaddress
+import json
 import os
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -120,6 +121,12 @@ from app.operations.context_providers import default_agent_review_context_regist
 from app.operations.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.operations.service import ManufacturingPredictiveMaintenanceService
 from app.operations.operational_decision_support_port import OperationalDecisionSupportService
+from app.operations.decision_session_service import DecisionSessionApplicationService
+from app.operations.operational_context_contract import OperationalRequestIdentity
+from app.operations.decision_support_agent import ManufacturingDecisionAgent
+from app.operations.decision_tools import ManufacturingDecisionTools
+from app.operations.decision_llm_planner import StructuredLLMDecisionPlanner
+from app.operations.decision_text_interpreter import StructuredTextEvidenceInterpreter
 
 
 ROOT = project_root()
@@ -265,6 +272,79 @@ def get_operational_decision_support_service() -> OperationalDecisionSupportServ
     if is_postgresql(target):
         return PersistedOperationalDecisionSupportService(ROOT, database_url=str(target))
     return PersistedOperationalDecisionSupportService(ROOT, Path(target))
+
+
+def decision_resumer_identity_provider() -> Callable[[], list[OperationalRequestIdentity]] | None:
+    raw = os.getenv("DECISION_RESUMER_IDENTITIES", "").strip()
+    if not raw:
+        return None
+    try:
+        values = json.loads(raw)
+        identities = [OperationalRequestIdentity.model_validate(value) for value in values]
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("DECISION_RESUMER_IDENTITIES must be a JSON array of identities") from exc
+    return lambda: list(identities)
+
+
+@lru_cache(maxsize=1)
+def get_decision_session_service() -> DecisionSessionApplicationService:
+    service = get_service()
+    target = database_target()
+    migrate(str(target))
+
+    def packet_loader(identity):
+        # Resolve the selected runtime event; never substitute the fixture packet.
+        from app.operations.decision_workflow_context import with_decision_workflow
+
+        packet = service.runtime_agent_review_packet(
+            identity.asset_id, identity.project_id,
+            organization_id=identity.organization_id, workspace_id=identity.workspace_id,
+            dataset_version_id=None, event_id=identity.evidence_snapshot_id,
+        )
+        lineage = get_maintenance_loop_service().event_lineage(
+            organization_id=identity.organization_id, project_id=identity.project_id,
+            workspace_id=identity.workspace_id, event_id=identity.evidence_snapshot_id,
+        )
+        return with_decision_workflow(packet, lineage, identity)
+
+    provider_name = os.getenv("LLM_PROVIDER", "deterministic").strip().lower()
+    planner_mode = os.getenv("DECISION_AGENT_PLANNER", "deterministic").strip().lower()
+    if planner_mode not in {"deterministic", "llm"}:
+        raise ValueError("DECISION_AGENT_PLANNER must be deterministic or llm")
+    planner = None
+    text_interpreter = None
+    if provider_name not in {"", "none", "deterministic", "offline"}:
+        provider = configured_provider()
+        if planner_mode == "llm":
+            planner = StructuredLLMDecisionPlanner(provider)
+        text_interpreter = StructuredTextEvidenceInterpreter(provider)
+    elif planner_mode == "llm":
+        raise ValueError("LLM planner requires an enabled LLM_PROVIDER")
+
+    def agent_factory(identity):
+        repository = OperationalContextRepository(str(target)).capture(identity)
+        tools = ManufacturingDecisionTools(
+            packet_loader=packet_loader,
+            operational_ports=repository.ports(),
+        )
+        return ManufacturingDecisionAgent(
+            tools=tools,
+            planner=planner,
+            text_interpreter=text_interpreter,
+            context_fingerprint=(
+                repository.version_fingerprint(identity)
+                if hasattr(repository, "version_fingerprint")
+                else None
+            ),
+        )
+
+    from app.infra.db.decision_run_repository import DecisionRunRepository
+    return DecisionSessionApplicationService(
+        packet_loader=packet_loader,
+        agent_factory=agent_factory,
+        run_store=DecisionRunRepository(target),
+        pending_identity_provider=decision_resumer_identity_provider(),
+    )
 
 
 def _password_hasher() -> PasswordHasher:

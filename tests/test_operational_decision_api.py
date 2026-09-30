@@ -77,7 +77,13 @@ def running_record(
 
 
 @pytest.fixture()
-def api_client(tmp_path: Path):
+def api_client(tmp_path: Path, monkeypatch):
+    # This suite verifies the exact fixture identity. Never consult/migrate a local DB.
+    from types import SimpleNamespace
+    import importlib
+    router_module = importlib.import_module("app.operations.router")
+    monkeypatch.setattr(router_module, "get_predictive_maintenance_runtime_service",
+                        lambda: SimpleNamespace(latest_results=lambda **kwargs: SimpleNamespace(items=[])))
     database_path = tmp_path / "decision-support-api.db"
     identity: IdentityService = build_identity_service(
         database_path,

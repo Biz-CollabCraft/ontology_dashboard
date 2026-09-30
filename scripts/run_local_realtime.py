@@ -202,9 +202,18 @@ def _simulation_start_at(
     history_backfill_hours: int = MODEL_MINIMUM_HISTORY_HOURS,
 ) -> datetime:
     """Choose a cadence-safe start without mixing histories from prior sessions."""
+    cadence_seconds = interval_minutes * 60
+    if cadence_seconds <= 0:
+        raise ValueError("interval_minutes must be positive")
+    # The inference reader selects epoch-aligned cadence rows. Preserve that
+    # contract at generation time instead of silently dropping every observation.
     if latest_observed_at is not None:
-        return latest_observed_at + timedelta(minutes=interval_minutes)
-    return now - timedelta(hours=history_backfill_hours)
+        next_tick = (latest_observed_at.timestamp() // cadence_seconds + 1) * cadence_seconds
+        return datetime.fromtimestamp(next_tick, tz=timezone.utc)
+    aligned_now = datetime.fromtimestamp(
+        (now.timestamp() // cadence_seconds) * cadence_seconds, tz=timezone.utc,
+    )
+    return aligned_now - timedelta(hours=history_backfill_hours)
 
 
 def _initial_fast_forward_target_hours(
@@ -584,7 +593,7 @@ def main() -> int:
                 "ONTOLOGY_DASHBOARD_OUTBOX_ORGANIZATION_ID": "org-ontology-demo",
                 "ONTOLOGY_DASHBOARD_OUTBOX_PROJECT_ID": "manufacturing-demo-project",
                 "ONTOLOGY_DASHBOARD_MAINTENANCE_REPLAY_EVENT_FILE": str(maintenance_file.resolve()),
-                "ONTOLOGY_DASHBOARD_ALLOW_ACCELERATED_SIMULATION": "1",
+                "ONTOLOGY_DASHBOARD_ALLOW_ACCELERATED_SIMULATION": "1" if args.speed > 1 else "0",
             }
         )
         processes.start(

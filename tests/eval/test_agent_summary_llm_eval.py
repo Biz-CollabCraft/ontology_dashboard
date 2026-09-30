@@ -108,6 +108,43 @@ def test_mock_holdout_run_uses_custom_manifest_and_gold_answers() -> None:
     assert aggregate["gold_accuracy"]["missing_required_points"] == 0
 
 
+def test_mock_holdout_run_uses_custom_manifest_and_gold_answers() -> None:
+    harness = _load_harness()
+    harness.GOLD_ANSWERS_PATH = (
+        harness.ROOT / "tests/fixtures/agent_review_packets_holdout/gold_answers.json"
+    )
+    harness._GOLD_ANSWERS_CACHE = None
+    manifest = harness._load_json(
+        harness.ROOT / "tests/fixtures/agent_review_packets_holdout/manifest.json"
+    )
+    packets = [
+        harness._load_json(harness.ROOT / case["fixture_path"])
+        for case in manifest["cases"]
+    ]
+
+    rows = [
+        harness._run_mock_candidate(
+            packet=packet,
+            iteration=1,
+            provider="mock-openai-compatible",
+            model="gpt-4o-mini",
+        )
+        for packet in packets
+    ]
+    aggregate = harness._aggregate(rows)
+
+    assert len(packets) == 8
+    assert rows[0]["gold_accuracy"]["answer_set_id"] == (
+        "agent-review-summary-holdout-gold-answers-v1"
+    )
+    assert aggregate["gold_accuracy"]["accuracy_goldset_score"] == 1.0
+    assert all(
+        row["gold_accuracy"]["role_scores"]["process_manager"]["score"] == 1.0
+        for row in rows
+    )
+    assert aggregate["gold_accuracy"]["missing_required_points"] == 0
+
+
 def test_quality_scores_detect_internal_language_and_missing_role_focus() -> None:
     harness = _load_harness()
     packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-004.json")

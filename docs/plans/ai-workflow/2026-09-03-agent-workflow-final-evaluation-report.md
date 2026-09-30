@@ -27,6 +27,14 @@
 | B3 | 24 | 0.6979 | 1.0000 | 16 |
 
 - Workflow value gate: **passed**
+- Post-run scorer calibration: the B3 `0.6979` gold mean is the original
+  exact-substring scorer result. A 2026-09-05 review found that most
+  `process_manager` misses were surface-form mismatches such as `25개` vs
+  `25건` and `승인 검토` vs `점검 승인`, while GS-007 remained a real
+  data-quality-hold miss. Re-scoring the stored B3 outputs with bounded
+  surface variants gives `0.883681` gold mean and `0.791667`
+  `process_manager` satisfaction. See
+  `docs/eval/2026-09-05-b3-gold-surface-match-analysis.md`.
 
 ## 5. Service and database reliability
 

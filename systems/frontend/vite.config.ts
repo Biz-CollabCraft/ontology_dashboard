@@ -9,13 +9,10 @@ const appBase = configuredBase
   ? `/${configuredBase.replace(/^\/+|\/+$/g, "")}/`
   : githubPagesBase;
 
-const apiProxy = {
-  "/api": { target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000" },
-  "/health": { target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000" },
-  "/docs": { target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000" },
-  "/redoc": { target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000" },
-  "/openapi.json": { target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000" },
-};
+const apiTarget = process.env.DEV_API_TARGET || process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8100";
+const apiProxy = Object.fromEntries(
+  ["/api", "/health", "/docs", "/redoc", "/openapi.json"].map(path => [path, { target: apiTarget }]),
+);
 
 function interactiveTeamShareRoute(): Plugin {
   const rewrite = (

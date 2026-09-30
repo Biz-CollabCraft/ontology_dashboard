@@ -18,10 +18,13 @@ from app.equipment.equipment_router import register_equipment_routes
 
 from .contracts import AgentQueryRequest, DecisionRequest, FollowUpRequest, LayoutRequest, NoteRequest, ReportRequest
 from .agent_context_tool_pipeline import run_read_only_tool_pipeline
-from .asset_detail_view_model import AssetDetailViewModelService, compose_asset_detail_view_model
+from .agent_review_summary import compose_deterministic_agent_review_summary, validate_agent_review_summary_contract
+from .asset_detail_view_model import AssetDetailViewModelService, compose_asset_detail_view_model, compose_closed_loop_read_model
 from app.dependencies import (
     MANUFACTURING_WORKSPACE,
     get_identity_service,
+    get_decision_session_service,
+    get_maintenance_loop_service,
     get_ontology_service,
     get_operational_decision_support_service,
     get_operational_context_repository,
@@ -44,6 +47,8 @@ from .operational_context_contract import OperationalRequestIdentity
 from .operational_planning_context import planning_context
 from .operational_context_read import OperationalContextRead
 from .operational_decision_brief import DecisionBriefRole
+from .decision_run_store import DecisionRunBusy, DecisionRunLeaseLost
+from .decision_session_service import DecisionSessionApplicationService
 from .operational_decision_support_port import (
     DecisionSupportMaterializationInProgress,
     OperationalDecisionSupportService,
@@ -53,6 +58,7 @@ from .sop_retrieval import retrieve_inspection_sops
 router = APIRouter(prefix="/api", tags=["manufacturing-domain-pack"])
 AGENT_REVIEW_SUMMARY_MATERIALIZE_RATE = RateLimitRule(limit=12, window_seconds=60)
 DECISION_SUPPORT_MATERIALIZE_RATE = RateLimitRule(limit=12, window_seconds=60)
+DECISION_SESSION_CREATE_RATE = RateLimitRule(limit=20, window_seconds=60)
 register_equipment_routes(
     router,
     service_dependency=get_service,
@@ -866,6 +872,7 @@ def get_asset_detail_view(
     principal: Principal = Depends(require_permission("events.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
     runtime_detail: AssetDetailViewModelService | None = Depends(get_runtime_asset_detail_service),
+    maintenance_service: Any = Depends(get_maintenance_loop_service),
 ):
     if not principal.is_admin and project_id not in principal.project_scopes:
         raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 Object입니다.")
@@ -873,6 +880,25 @@ def get_asset_detail_view(
         raise AuthError(403, "workspace_scope_denied", "허용된 Workspace 범위를 벗어난 Object입니다.")
     if principal.active_project_id != project_id:
         raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
+    def with_workflow(detail: dict[str, Any]) -> dict[str, Any]:
+        basis = detail.get("snapshot_basis") or {}
+        selected_event = basis.get("event_id")
+        if not selected_event:
+            return detail
+        roles = set(principal.roles) | set(principal.project_roles.get(project_id, []))
+        if principal.active_project_id == project_id:
+            roles.update(principal.active_project_roles)
+        context = maintenance_service.decision_context(
+            organization_id=principal.organization_id, project_id=project_id,
+            workspace_id=workspace_id, event_id=selected_event,
+            snapshot_basis=basis, roles=roles,
+            permissions=set(principal.permissions), actor_id=principal.user_id,
+        )
+        return {**detail, "closed_loop": compose_closed_loop_read_model(
+            context, prediction_available=detail.get("risk", {}).get("current") is not None,
+            evidence_available=bool(basis.get("artifact_id")),
+        )}
+
     if dataset_version_id and event_id and runtime_detail is not None:
         try:
             canonical = runtime_detail.latest_detail_view(
@@ -896,13 +922,36 @@ def get_asset_detail_view(
                     runtime_service=get_predictive_maintenance_runtime_service(),
                     context_service=service,
                 )
-                return _merge_runtime_detail_supplemental(canonical, supplemental)
+                canonical = _merge_runtime_detail_supplemental(canonical, supplemental)
             except Exception:
-                return canonical
+                pass
+            return with_workflow(canonical)
         except KeyError:
-            # Canonical prediction-only rows use the normalized runtime path;
-            # that path independently checks the exact selected event identity.
-            pass
+            # Index history remains readable, but is not an authorization artifact.
+            historical = _runtime_asset_detail_view_model(
+                asset_id=asset_id, project_id=project_id, workspace_id=workspace_id,
+                dataset_version_id=dataset_version_id, selected_event_id=event_id,
+                history_window=history_window, principal=principal,
+                runtime_service=get_predictive_maintenance_runtime_service(),
+            )
+            warning = "저장된 예측 이력에 원본 판단 근거가 없어 조치를 진행할 수 없습니다."
+            historical["data_status"] = {
+                **historical["data_status"], "source": "fallback",
+                "is_data_quality_hold": True,
+                "warnings": [*historical["data_status"].get("warnings", []), warning],
+            }
+            historical["snapshot_basis"]["source_sha256"] = None
+            historical["operation_context"] = None
+            historical["closed_loop"] = compose_closed_loop_read_model(
+                maintenance_service.event_lineage(
+                    organization_id=principal.organization_id, project_id=project_id,
+                    workspace_id=workspace_id, event_id=event_id,
+                ), prediction_available=True, evidence_available=False,
+            )
+            historical["evidence"]["gaps"].insert(0, {
+                "field": "canonical_evidence", "reason": warning, "owner_domain": "diagnosis",
+            })
+            return historical
     if event_id:
         try:
             return _runtime_asset_detail_view_model(
@@ -1295,6 +1344,191 @@ def get_operational_context(
     )
     risk = _trusted_decision_support_risk(identity, service)
     return repository.read_view(identity=identity, retrieved_at=datetime.now(timezone.utc), risk_status=risk)
+
+
+def _decision_execution_bindings(session, principal: Principal) -> dict:
+    """Recommendation eligibility never confers command permission."""
+    basis = session.snapshot_basis
+    required = ("artifact_id", "evidence_payload_reference", "asset_id", "event_id",
+                "observed_at", "model_version", "dataset_version", "source_sha256")
+    if any(not basis.get(key) for key in required):
+        return {}
+    roles = set(principal.roles) | set(principal.active_project_roles)
+    context = get_maintenance_loop_service().decision_context(
+        organization_id=principal.organization_id, project_id=session.identity.project_id,
+        workspace_id=session.identity.workspace_id, event_id=basis["event_id"],
+        snapshot_basis=basis, roles=roles, permissions=set(principal.permissions),
+        actor_id=principal.user_id,
+    )
+    closed_loop = compose_closed_loop_read_model(context, prediction_available=True, evidence_available=True)
+    bridges = {"REQUEST_INSPECTION": "request_inspection_work_order",
+               "REQUEST_MAINTENANCE": "create_operations_manual_recommendation"}
+    return {
+        action: {"actionId": candidate["action_id"], "targetId": candidate["target_id"], "targetType": candidate["target_type"]}
+        for action, command in bridges.items() if action in session.allowed_actions
+        for candidate in closed_loop["available_actions"]
+        if candidate["action_id"] == command and not candidate.get("disabled_reason")
+    }
+
+
+@router.post("/objects/{asset_id}/decision-sessions")
+def create_decision_session(
+    asset_id: str,
+    project_id: str = Query(default="manufacturing-demo-project"),
+    workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
+    evidence_snapshot_id: str = Query(min_length=1, max_length=240),
+    decision_as_of: datetime = Query(),
+    request_id: str | None = Query(default=None, min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_-]+$"),
+    role: DecisionBriefRole = Query(default=DecisionBriefRole.PROCESS_MANAGER),
+    execution_mode: Literal["sync", "async"] = Query(default="sync"),
+    principal: Principal = Depends(require_permission("events.read")),
+    _: None = Depends(require_csrf),
+    session_service: DecisionSessionApplicationService = Depends(get_decision_session_service),
+    limiter: RateLimiter = Depends(get_rate_limiter),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+):
+    identity = _decision_support_identity(
+        principal=principal,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        asset_id=asset_id,
+        evidence_snapshot_id=evidence_snapshot_id,
+        decision_as_of=decision_as_of,
+    )
+    roles = set(principal.roles) | set(principal.active_project_roles)
+    if role.value not in roles and not principal.is_admin:
+        raise HTTPException(status_code=403, detail="decision_role_denied")
+    limiter.check(
+        bucket="decision-session.create",
+        subject=rate_limit_subject(
+            principal.user_id,
+            project_id,
+            workspace_id,
+            asset_id,
+            evidence_snapshot_id,
+            role.value,
+        ),
+        rule=DECISION_SESSION_CREATE_RATE,
+    )
+    try:
+        if execution_mode == "async":
+            async_request_id = request_id or f"async-{uuid.uuid4().hex[:16]}"
+            session_id, handle, completed = session_service.enqueue(
+                identity=identity,
+                actor_role=role.value,
+                request_id=async_request_id,
+                actor_id=principal.user_id,
+            )
+            if completed is not None:
+                result = completed
+            else:
+                return JSONResponse(
+                    status_code=202,
+                    content={
+                        "decision_session_id": session_id,
+                        "status": "queued",
+                        "worker_id": session_service.worker_supervisor.worker_id
+                        if session_service.worker_supervisor is not None else None,
+                        "job_id": handle.job_id if handle is not None else None,
+                    },
+                    headers={"Location": f"/api/objects/{asset_id}/decision-sessions/{session_id}"},
+                )
+        else:
+            result = session_service.create(
+                identity=identity,
+                actor_role=role.value,
+                request_id=request_id,
+                actor_id=principal.user_id,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (DecisionRunBusy, DecisionRunLeaseLost) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (KeyError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail="decision_evidence_unavailable") from exc
+    return {
+        "engine": result.engine,
+        "execution_bindings": _decision_execution_bindings(result.session, principal),
+        "session": result.session.model_dump(mode="json"),
+        "policy": result.policy.model_dump(mode="json"),
+        "tool_results": {
+            name: tool.model_dump(mode="json")
+            for name, tool in result.tool_results.items()
+        },
+    }
+
+
+@router.get("/objects/{asset_id}/decision-sessions/{decision_session_id}")
+def get_decision_session(
+    asset_id: str,
+    decision_session_id: str,
+    project_id: str = Query(default="manufacturing-demo-project"),
+    workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
+    evidence_snapshot_id: str = Query(min_length=1, max_length=240),
+    decision_as_of: datetime = Query(),
+    principal: Principal = Depends(require_permission("events.read")),
+    session_service: DecisionSessionApplicationService = Depends(get_decision_session_service),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+):
+    identity = _decision_support_identity(
+        principal=principal,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        asset_id=asset_id,
+        evidence_snapshot_id=evidence_snapshot_id,
+        decision_as_of=decision_as_of,
+    )
+    try:
+        session = session_service.get(decision_session_id=decision_session_id, identity=identity)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (KeyError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail="decision_evidence_unavailable") from exc
+    if session is None:
+        raise HTTPException(status_code=404, detail="decision_session_not_found")
+    return {"session": session.model_dump(mode="json"), "execution_bindings": _decision_execution_bindings(session, principal)}
+
+
+@router.post("/objects/{asset_id}/decision-sessions/{decision_session_id}/resume")
+def resume_decision_session(
+    asset_id: str,
+    decision_session_id: str,
+    project_id: str = Query(default="manufacturing-demo-project"),
+    workspace_id: str = Query(default=MANUFACTURING_WORKSPACE, max_length=160),
+    evidence_snapshot_id: str = Query(min_length=1, max_length=240),
+    decision_as_of: datetime = Query(),
+    principal: Principal = Depends(require_permission("events.read")),
+    _: None = Depends(require_csrf),
+    session_service: DecisionSessionApplicationService = Depends(get_decision_session_service),
+):
+    """Requeue an incomplete durable run after a worker or process restart."""
+    identity = _decision_support_identity(
+        principal=principal,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        asset_id=asset_id,
+        evidence_snapshot_id=evidence_snapshot_id,
+        decision_as_of=decision_as_of,
+    )
+    try:
+        handle = session_service.resume(session_id=decision_session_id, identity=identity)
+    except ValueError as exc:
+        detail = str(exc)
+        status = 404 if detail == "decision_session_not_found" else 409
+        raise HTTPException(status_code=status, detail=detail) from exc
+    except (KeyError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail="decision_worker_unavailable") from exc
+    return JSONResponse(
+        status_code=200 if handle is None else 202,
+        content={
+            "decision_session_id": decision_session_id,
+            "status": "completed" if handle is None else "queued",
+            "worker_id": session_service.worker_supervisor.worker_id
+            if session_service.worker_supervisor is not None else None,
+            "job_id": handle.job_id if handle is not None else None,
+        },
+        headers={"Location": f"/api/objects/{asset_id}/decision-sessions/{decision_session_id}"},
+    )
 
 
 @router.get("/objects/{asset_id}/decision-support-brief")

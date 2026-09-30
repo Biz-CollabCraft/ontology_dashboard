@@ -132,7 +132,7 @@ def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, projec
         view = compose_asset_detail_view_model(
             asset={"asset_id": asset_id, "asset_type": artifact["asset_type"], "display_name": asset_id},
             result_artifact=artifact, event_id=event_id, history_window=history_window,
-            closed_loop=service._closed_loop_context_for_fixture({"event_id":event_id}) if service is not None else None,
+            closed_loop=closed_loop,
         )
         if service is not None:
             identity = OperationalRequestIdentity(
@@ -148,10 +148,12 @@ def filesystem_briefing_packet(*, asset_id, event_id, dataset_version_id, projec
                 workspace_id=workspace_id, context_repository=repository,
             )
         retrieval = _file_sops(view, artifact)
-        return compose_agent_review_packet(project_id=project_id, view_model=view,
+        packet = compose_agent_review_packet(project_id=project_id, view_model=view,
             sop_retrieval=retrieval,
             context=service.agent_review_context_registry.context_for_packet(view_model=view)
                 if service is not None and service.agent_review_context_registry else None)
+        packet["maintenance_history_summary"]["workflow_as_of"] = workflow_as_of
+        return packet
     raise KeyError(event_id)
 
 

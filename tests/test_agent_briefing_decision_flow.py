@@ -128,7 +128,7 @@ def test_prompt_payload_includes_same_decision_flow_on_both_context_paths():
 
 
 def test_prompt_version_and_system_prompt_explain_decision_flow_contract():
-    assert AGENT_REVIEW_SUMMARY_PROMPT_VERSION == "agent-review-summary-prompt-v3.7-economics-expression-boundaries"
+    assert AGENT_REVIEW_SUMMARY_PROMPT_VERSION == "agent-review-summary-prompt-v3.8-economics-grounded-directive-boundary"
     assert "상대 시간 계산 금지와 원문 일정 인용을 혼동하지" in AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT
     from app.operations.agent_review_summary_provider import _expression_policy
     policy = _expression_policy({})

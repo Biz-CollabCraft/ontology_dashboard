@@ -222,13 +222,13 @@ export function matchModelingPath(pathname: string): { projectId: string; worksp
 }
 
 export function usePathname() {
-  const [pathname, setPathname] = useState(() => normalizePathname(window.location.pathname));
+  const [locationKey, setLocationKey] = useState(() => `${window.location.pathname}${window.location.search}`);
 
   useEffect(() => {
-    const update = () => setPathname(normalizePathname(window.location.pathname));
+    const update = () => setLocationKey(`${window.location.pathname}${window.location.search}`);
     window.addEventListener("popstate", update);
     return () => window.removeEventListener("popstate", update);
   }, []);
 
-  return pathname;
+  return normalizePathname(locationKey.split("?", 1)[0]);
 }

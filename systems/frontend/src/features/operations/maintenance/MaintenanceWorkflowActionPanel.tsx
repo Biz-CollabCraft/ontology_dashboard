@@ -20,7 +20,8 @@ import {
   type MaintenanceActionCandidateReadModel,
   type MaintenanceEventLineageReadModel,
 } from "../../../api";
-import type { OperationsEvidenceSnapshotBasis, OperationsRoleLens } from "../api/operationsContracts";
+import type { OperationsClosedLoopAvailableAction, OperationsEvidenceSnapshotBasis, OperationsRoleLens } from "../api/operationsContracts";
+import { actionAllowed } from "../decision/decisionWorkspaceModel";
 
 function commandKey(eventId: string, action: string, target: string): string {
   return `operations-${eventId}-${action}-${target}`.replace(/[^a-zA-Z0-9_.:-]/g, "-").slice(0, 190);
@@ -130,6 +131,7 @@ export function MaintenanceWorkflowActionPanel({
   onChanged,
   onStatusChanged,
   onPostMaintenancePrediction,
+  permittedActions,
 }: {
   projectId: string;
   workspaceId: string;
@@ -145,6 +147,7 @@ export function MaintenanceWorkflowActionPanel({
   onChanged?: () => void;
   onStatusChanged?: (status: MaintenanceWorkflowDisplayStatus) => void;
   onPostMaintenancePrediction?: (prediction: PostMaintenancePredictionSummary) => void;
+  permittedActions?: OperationsClosedLoopAvailableAction[];
 }) {
   const [lineage, setLineage] = useState<MaintenanceEventLineageReadModel | null>(null);
   const [loading, setLoading] = useState(true);
@@ -549,6 +552,27 @@ export function MaintenanceWorkflowActionPanel({
     helper = "대상 설비 Overlay Observation을 생성하고 예측 결과를 기다리고 있습니다.";
     enabled = false;
     command = null;
+  }
+
+  if (permittedActions) {
+    const targets: Record<string, [string[], string | null | undefined]> = {
+      "점검 작업요청 생성": [["request_inspection_work_order", "create_inspection_work_order", "request_inspection"], eventId],
+      "요청 수락·내게 배정": [["accept_inspection_work_order"], state.inspectionWorkOrder?.work_order_id],
+      "점검 시작": [["start_inspection_work_order", "start_inspection"], state.inspectionWorkOrder?.work_order_id],
+      "점검 결과 기록·완료": [["complete_inspection_work_order", "complete_inspection"], state.inspectionWorkOrder?.work_order_id],
+      "정비안 생성": [["create_operations_manual_recommendation"], state.inspectionResult?.inspection_result_id],
+      "정비안 승인": [["decide_operations_manual_recommendation"], state.recommendation?.recommendation_id],
+      "정비 WorkOrder 승인": [["approve_maintenance_work_order"], state.maintenanceWorkOrder?.work_order_id],
+      "정비 시작": [["start_maintenance_action"], state.action?.maintenance_action_id],
+      "정비 완료": [["complete_maintenance_action"], state.action?.maintenance_action_id],
+      "정비 후 관측 재개": [["request_maintenance_replay"], state.maintenanceEvent?.maintenance_event_id],
+    };
+    const target = targets[label];
+    if (!target || !actionAllowed(permittedActions, target[0], target[1])) {
+      enabled = false;
+      command = null;
+      helper = "현재 조치 조건을 다시 확인해 주세요.";
+    }
   }
 
   return (

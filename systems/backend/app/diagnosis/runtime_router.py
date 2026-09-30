@@ -38,7 +38,7 @@ from app.operations.sensor_signal_bands import sensor_signal_bands
 from app.diagnosis.contracts import (
     CompleteFileTickNotFound,
     filesystem_event_artifact as _contract_filesystem_event_artifact,
-    latest_complete_file_tick as _contract_latest_complete_file_tick,
+    selected_complete_file_tick as _contract_latest_complete_file_tick,
     measurement_factors as _contract_measurement_factors,
     risk_from_file_record as _contract_risk_from_file_record,
     risk_status as _contract_risk_status,
@@ -66,10 +66,6 @@ def _measurement_factors(record: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _latest_complete_file_tick() -> tuple[Path, str, list[dict[str, Any]], list[tuple[str, dict[str, dict[str, Any]]]]]:
-    from app.diagnosis.demo_scenarios import selected_window
-    scenario = selected_window()
-    if scenario is not None:
-        return scenario
     try:
         return _contract_latest_complete_file_tick()
     except CompleteFileTickNotFound as exc:

@@ -1634,6 +1634,57 @@ class MaintenanceLoopService:
             maintenance_event_id=str(maintenance_event_id),
         )
 
+    def decision_context(
+        self, *, organization_id: str, project_id: str, workspace_id: str,
+        event_id: str, snapshot_basis: dict[str, Any], roles: set[str],
+        permissions: set[str], actor_id: str,
+    ) -> dict[str, Any]:
+        """Expose scoped workflow state using the same source checks as commands."""
+        from .decision_context import available_workflow_actions
+
+        scope = dict(organization_id=organization_id, project_id=project_id,
+                     workspace_id=workspace_id, event_id=event_id)
+        lineage = self.event_lineage(**scope)
+        actions = available_workflow_actions(
+            lineage, roles=roles, permissions=permissions, actor_id=actor_id,
+        )
+        orders = lineage.get("work_orders") or []
+        if not orders:
+            reason = None
+            try:
+                basis = EvidenceSnapshotBasis.model_validate({
+                    key: snapshot_basis.get(key)
+                    for key in EvidenceSnapshotBasis.model_fields
+                })
+                self.recommendation_input(**scope, snapshot_basis=basis)
+            except (KeyError, ValueError):
+                reason = "현재 판단 근거에서 점검 요청 조건이 확인되지 않았습니다."
+            if "process_manager" not in roles or "events.decision" not in permissions:
+                reason = "생산 관리자의 점검 요청을 기다리고 있습니다."
+            actions.append(dict(
+                action_id="request_inspection_work_order", target_type="event",
+                target_id=event_id, label="점검 요청", disabled_reason=reason,
+            ))
+        elif not actions and not lineage.get("recommendations"):
+            inspections = lineage.get("inspection_results") or []
+            if inspections and inspections[-1].get("outcome") == "maintenance_recommended":
+                inspection_id = inspections[-1]["inspection_result_id"]
+                candidates = self.list_action_candidates(
+                    organization_id=organization_id, project_id=project_id,
+                    workspace_id=workspace_id, inspection_result_id=inspection_id,
+                )
+                if candidates.get("items"):
+                    reason = (None if "process_manager" in roles and "events.decision" in permissions
+                              else "생산 관리자의 정비 검토를 기다리고 있습니다.")
+                    actions.extend(dict(
+                        action_id=action_id, target_type="inspection_result",
+                        target_id=inspection_id, label=label, disabled_reason=reason,
+                    ) for action_id, label in (
+                        ("create_operations_manual_recommendation", "정비 요청 준비"),
+                        ("calculate_maintenance_cost", "계획 정비 검토"),
+                    ))
+        return {**lineage, "available_actions": actions}
+
     def event_lineage(
         self,
         *,

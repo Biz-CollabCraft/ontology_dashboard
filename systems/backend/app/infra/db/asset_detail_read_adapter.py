@@ -99,15 +99,9 @@ class PostgreSQLAssetDetailReadAdapter:
         payload = row.get("prediction_result_payload")
         if not isinstance(payload, dict):
             return None
-        # Canonical V3.1 stores the prediction contract in this joined column;
-        # it has no producer Artifact. The runtime index has its own read path.
-        # An advertised Artifact must still pass the complete validator below.
-        if (
-            "artifact_type" not in payload
-            and "artifact_id" not in payload
-            and "contract_version" in payload
-            and "source_prediction_id" in payload
-        ):
+        # Legacy prediction rows have an index summary but no producer evidence.
+        # A payload declaring any artifact field must still pass strict validation.
+        if not any(key in payload for key in ("artifact_id", "artifact_type", "schema_version", "evidence_payload")):
             return None
         self.validate_artifact(payload)
         for field in ("artifact_id", "asset_id", "asset_type", "schema_version"):

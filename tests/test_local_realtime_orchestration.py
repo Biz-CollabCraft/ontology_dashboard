@@ -19,12 +19,25 @@ from scripts.run_local_realtime import (
 
 
 def test_simulation_continues_exactly_one_cadence_after_persisted_cursor() -> None:
-    latest = datetime(2026, 9, 2, 3, 41, 5, tzinfo=timezone.utc)
+    latest = datetime(2026, 9, 2, 3, 40, tzinfo=timezone.utc)
 
     assert _simulation_start_at(
         now=datetime(2026, 9, 2, 4, 0, tzinfo=timezone.utc),
         latest_observed_at=latest,
     ) == latest + timedelta(minutes=10)
+
+
+def test_first_run_aligns_seconds_and_minutes_to_inference_cadence() -> None:
+    start = _simulation_start_at(now=datetime(2026, 9, 14, 4, 1, 54, 123, tzinfo=timezone.utc), latest_observed_at=None, history_backfill_hours=24)
+    assert start == datetime(2026, 9, 13, 4, 0, tzinfo=timezone.utc)
+    assert int(start.timestamp()) % 600 == 0
+
+
+def test_resume_from_legacy_off_grid_cursor_uses_next_valid_tick() -> None:
+    latest = datetime(2026, 9, 2, 3, 41, 5, tzinfo=timezone.utc)
+    start = _simulation_start_at(now=latest, latest_observed_at=latest)
+    assert start == datetime(2026, 9, 2, 3, 50, tzinfo=timezone.utc)
+    assert start > latest
 
 
 def test_first_simulation_run_backfills_seven_days_of_history() -> None:

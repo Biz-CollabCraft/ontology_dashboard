@@ -123,6 +123,8 @@ export function MaintenanceCostDecisionPanel({
   guidance,
   onChanged,
   onEligibilityChanged,
+  permittedInspectionId,
+  blocked = false,
 }: {
   projectId: string;
   workspaceId: string;
@@ -130,6 +132,8 @@ export function MaintenanceCostDecisionPanel({
   guidance: OperationsInspectionGuidance | null;
   onChanged?: () => void;
   onEligibilityChanged?: (eligible: boolean) => void;
+  permittedInspectionId?: string | null;
+  blocked?: boolean;
 }) {
   const [lineage, setLineage] = useState<MaintenanceEventLineageReadModel | null>(null);
   const [actionCandidates, setActionCandidates] = useState<MaintenanceActionCandidateReadModel[]>([]);
@@ -212,7 +216,7 @@ export function MaintenanceCostDecisionPanel({
   const visibleCalculationComplete = visibleOptions.length > 0
     && visibleOptions.every((option) => option.calculation_status === "calculated");
   const calculate = async () => {
-    if (!inspection || !selectedActionCode) return;
+    if (!inspection || !selectedActionCode || blocked || (permittedInspectionId !== undefined && inspection.inspection_result_id !== permittedInspectionId)) return;
     if (!sopId.trim() || !sopVersion.trim()) {
       setError("점검에 참고한 SOP ID와 버전을 입력해 주세요.");
       return;
@@ -239,7 +243,9 @@ export function MaintenanceCostDecisionPanel({
     }
   };
 
-  const blocker = actionCandidates.length === 0
+  const blocker = blocked ? "최신 조치 조건을 확인하고 있습니다."
+    : permittedInspectionId !== undefined && inspection?.inspection_result_id !== permittedInspectionId ? "선택한 점검 결과와 요청 대상이 다릅니다."
+    : actionCandidates.length === 0
       ? "점검 결과에서 실행 가능한 정비 Action 후보가 확인되지 않았습니다."
     : !sopId.trim() || !sopVersion.trim()
       ? "점검에 참고한 SOP 기준정보가 필요합니다."

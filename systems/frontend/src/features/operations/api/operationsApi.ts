@@ -26,13 +26,16 @@ import {
 } from "./operationsAdapters";
 import type {
   AssetDetailViewModel,
+  OperationsAsset,
   OperationsBootstrapModel,
   OperationsCompanyContext,
   OperationsDecision,
   OperationsEvent,
   OperationsEventDetailModel,
+  OperationsFactor,
   OperationsEvidenceSnapshotBasis,
   OperationsMetrics,
+  OperationsProvenance,
   OperationsRoleLens,
   OperationsSensorWindowId,
 } from "./operationsContracts";
@@ -120,8 +123,9 @@ export async function loadOperationsAssetDetail(
   eventId: string,
   datasetVersionId: string,
   historyWindow: OperationsSensorWindowId,
+  checkObservationConnection = true,
 ): Promise<AssetDetailViewModel> {
-  await ensureObservationConnection();
+  if (checkObservationConnection) await ensureObservationConnection();
   const backendHistoryWindow = historyWindow === "30d"
     ? "30d"
     : historyWindow === "7d"
@@ -175,10 +179,105 @@ function sourceStatusLabel(value: string | null | undefined): string {
   return value ? String(value) : "상태 확인 중";
 }
 
+function localDemoProvenance(datasetVersionId: string, assetId: string): OperationsProvenance {
+  return {
+    datasetId: "local-ui-sample",
+    datasetVersionId,
+    datasetLabel: "로컬 UI 샘플 · CNC/압축기",
+    sourceVersion: "local-ui-sample-v1",
+    modelVersion: "local-ui-fixture-v1",
+    policyVersion: null,
+    schemaVersion: "operations-local-ui-sample-v1",
+    promptVersion: null,
+    sourceRefs: [`local-ui-sample:${assetId}`],
+  };
+}
+
+function localDemoFactors(kind: "cnc" | "compressor"): OperationsFactor[] {
+  if (kind === "compressor") {
+    return [
+      { id: "local-cmp-factor-1", feature: "air_filter_pressure_drop", label: "필터 차압", value: 18.4, unit: "kPa", contribution: 0.34, direction: "risk_up", explanationMethod: "local_demo_fixture" },
+      { id: "local-cmp-factor-2", feature: "oil_temperature", label: "오일 온도", value: 92.1, unit: "°C", contribution: 0.27, direction: "risk_up", explanationMethod: "local_demo_fixture" },
+      { id: "local-cmp-factor-3", feature: "compressor_vibration", label: "압축부 진동", value: 6.8, unit: "mm/s", contribution: 0.22, direction: "risk_up", explanationMethod: "local_demo_fixture" },
+    ];
+  }
+  return [
+    { id: "local-cnc-factor-1", feature: "temperature_difference_k", label: "공정-공기 온도차", value: 7, unit: "K", contribution: 0.31, direction: "risk_up", explanationMethod: "local_demo_fixture" },
+    { id: "local-cnc-factor-2", feature: "torque_nm", label: "토크", value: 45, unit: "Nm", contribution: 0.24, direction: "risk_up", explanationMethod: "local_demo_fixture" },
+    { id: "local-cnc-factor-3", feature: "mechanical_power_w", label: "모터 출력", value: 6120, unit: "W", contribution: 0.19, direction: "risk_up", explanationMethod: "local_demo_fixture" },
+  ];
+}
+
+function withLocalUiSamples(
+  assets: OperationsAsset[],
+  events: OperationsEvent[],
+): { assets: OperationsAsset[]; events: OperationsEvent[] } {
+  const observedAt = new Date().toISOString();
+  const datasetVersionId = events[0]?.datasetVersionId ?? "dsv-local-ui-sample";
+  const enrichedAssets = assets.map((asset) => (
+    asset.assetId === "CNC-S01-L04-03" && !asset.topFactors.length
+      ? {
+        ...asset,
+        topFactors: localDemoFactors("cnc"),
+        provenance: localDemoProvenance(datasetVersionId, asset.assetId),
+      }
+      : asset
+  ));
+  if (enrichedAssets.some((asset) => asset.assetType.toLowerCase().includes("compressor"))) {
+    return { assets: enrichedAssets, events };
+  }
+  const compressorEvent: OperationsEvent = {
+    eventId: "EVT-LOCAL-CMP-001",
+    scenarioId: "LOCAL-CMP",
+    assetId: "CMP-S01-L01-01",
+    assetName: "1구역 · 1셀 · 공기압축기",
+    line: "S01-L01",
+    status: "warning",
+    failureProbability: 0.72,
+    confidence: "medium",
+    predictedFailureType: "compressor_airend_risk",
+    recommendedDecision: "request_inspection",
+    criticality: "high",
+    assignedEngineer: "현장 점검반",
+    estimatedDowntimeMinutes: 90,
+    sparePartAvailable: true,
+    observedAt,
+    datasetVersionId,
+    ontologyObjectId: "ontology:asset:CMP-S01-L01-01",
+  };
+  const compressorAsset: OperationsAsset = {
+    assetId: compressorEvent.assetId,
+    displayName: compressorEvent.assetName,
+    assetType: "compressor",
+    site: "S01",
+    line: "S01-L01",
+    cell: "S01-L01",
+    status: compressorEvent.status,
+    failureProbability: compressorEvent.failureProbability,
+    confidence: compressorEvent.confidence,
+    confidenceScore: 0.78,
+    criticality: compressorEvent.criticality,
+    assignedEngineer: compressorEvent.assignedEngineer,
+    estimatedDowntimeMinutes: compressorEvent.estimatedDowntimeMinutes,
+    sparePartAvailable: compressorEvent.sparePartAvailable,
+    predictedFailureType: compressorEvent.predictedFailureType,
+    recommendedDecision: compressorEvent.recommendedDecision,
+    observedAt,
+    eventId: compressorEvent.eventId,
+    topFactors: localDemoFactors("compressor"),
+    provenance: localDemoProvenance(datasetVersionId, compressorEvent.assetId),
+  };
+  return {
+    assets: [...enrichedAssets, compressorAsset],
+    events: [...events, compressorEvent],
+  };
+}
+
 export async function loadOperationsBootstrap(
   projectId: string,
   requestedWorkspaceId?: string | null,
   selectedEventId?: string | null,
+  options: { allowLocalUiSamples?: boolean } = {},
 ): Promise<OperationsBootstrapModel> {
   const [project, workspaces] = await Promise.all([
     getProject(projectId),
@@ -223,8 +322,13 @@ export async function loadOperationsBootstrap(
   if (resultState.status === "rejected") {
     warnings.push(`설비 판단 결과 일부 지연: ${warningMessage(resultState.reason, "사용 불가")}`);
   }
-  const events = promoteRuntimeProductResultsToEvents(results, sortRisk(rawEvents.map(adaptEvent)));
-  const assets = mergeAssets(results, events);
+  let events = promoteRuntimeProductResultsToEvents(results, sortRisk(rawEvents.map(adaptEvent)));
+  let assets = mergeAssets(results, events);
+  if (options.allowLocalUiSamples !== false && project.id === "manufacturing-demo-project" && resultState.status === "rejected") {
+    const sampled = withLocalUiSamples(assets, events);
+    assets = sampled.assets;
+    events = sampled.events;
+  }
   const metrics = computeMetrics(assets, events);
   const lineRisk = computeLineRisk(assets);
   const latestObservedAt = assets
@@ -400,6 +504,30 @@ export async function loadOperationsEventDetail(input: {
   return assetDetailState.status === "fulfilled"
     ? applyAssetDetailViewModel(detail, assetDetailState.value)
     : detail;
+}
+
+/** Decision workspace reads the governed detail directly; no report generation. */
+export async function loadDecisionWorkspaceDetail(input: {
+  projectId: string;
+  workspaceId: string;
+  event: OperationsEvent;
+}): Promise<OperationsEventDetailModel> {
+  const view = await loadOperationsAssetDetail(
+    input.projectId, input.workspaceId, input.event.assetId,
+    input.event.eventId, input.event.datasetVersionId, "24h", false,
+  );
+  const basis = view.snapshot_basis;
+  if (basis.event_id !== input.event.eventId || basis.asset_id !== input.event.assetId
+      || view.asset.asset_id !== input.event.assetId || !basis.artifact_id
+      || basis.dataset_version !== input.event.datasetVersionId) {
+    throw new Error("선택한 이상 건과 근거가 일치하지 않습니다. 다시 조회해 주세요.");
+  }
+  if (!basis.evidence_payload_reference) {
+    throw new Error("원본 판단 근거가 없어 상세 검토를 진행할 수 없습니다. 근거 데이터 연결을 확인해 주세요.");
+  }
+  return applyAssetDetailViewModel(composeEventDetail({
+    event: { ...input.event, failureProbability: view.risk.current, status: view.data_status.is_data_quality_hold ? "data_quality_hold" : view.risk.status_grade ?? "data_quality_hold", observedAt: basis.observed_at }, evidence: null, report: null, activity: null, warnings: [],
+  }), view);
 }
 
 export async function loadOperationsReportVariant(input: {

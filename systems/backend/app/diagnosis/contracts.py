@@ -380,6 +380,16 @@ def latest_complete_file_tick() -> CompleteTickWindow:
     raise CompleteFileTickNotFound("완성된 gen_data 관측 틱을 찾지 못했습니다.")
 
 
+def selected_complete_file_tick() -> CompleteTickWindow:
+    """Resolve the selected demo window or live observations without HTTP semantics."""
+    # Demo selection consumes this module's parsing contract; defer that lookup
+    # until invocation to avoid a module-initialization cycle.
+    from app.diagnosis.demo_scenarios import selected_window
+
+    selected = selected_window()
+    return selected if selected is not None else latest_complete_file_tick()
+
+
 def filesystem_event_artifact(
     *, run_id: str, observed_at: str, record: dict[str, Any], event_id: str
 ) -> dict[str, Any]:

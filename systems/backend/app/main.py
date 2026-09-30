@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -53,6 +55,34 @@ from app.common.exceptions import RateLimitExceeded
 
 
 app = create_app()
+
+
+def _decision_session_service_for_lifecycle():
+    factory = app.dependency_overrides.get(get_decision_session_service, get_decision_session_service)
+    return factory()
+
+
+@app.on_event("startup")
+async def start_decision_workers() -> None:
+    service = _decision_session_service_for_lifecycle()
+    supervisor = getattr(service, "worker_supervisor", None)
+    if supervisor is not None:
+        supervisor.start()
+    identity_provider = getattr(service, "pending_identity_provider", None)
+    start_resumer = getattr(service, "start_resumer", None)
+    if identity_provider is not None and start_resumer is not None:
+        start_resumer(
+            identity_provider=identity_provider,
+            interval_seconds=float(os.getenv("DECISION_RESUMER_INTERVAL_SECONDS", "5")),
+        )
+
+
+@app.on_event("shutdown")
+async def stop_decision_workers() -> None:
+    service = _decision_session_service_for_lifecycle()
+    stop = getattr(service, "stop_workers", None)
+    if stop is not None:
+        stop(wait=True)
 
 
 @app.exception_handler(RateLimitExceeded)

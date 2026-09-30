@@ -2236,3 +2236,12 @@ export function decideModelReleaseRequest(
     },
   );
 }
+
+
+// Unknown responses are validated by the Decision Workspace adapter.
+export function requestManufacturingDecisionSession(assetId: string, query: URLSearchParams, signal: AbortSignal, sessionId?: string): Promise<unknown> {
+  const suffix = sessionId ? `/${encodeURIComponent(sessionId)}` : "";
+  return request<unknown>(`/api/objects/${encodeURIComponent(assetId)}/decision-sessions${suffix}?${query}`, {
+    method: sessionId ? "GET" : "POST", signal,
+  });
+}

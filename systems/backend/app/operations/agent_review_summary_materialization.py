@@ -72,6 +72,7 @@ class AgentReviewSummaryMaterializer:
         summary, trace = self._generate_summary(packet)
         trace = {**trace, "context_sha256": key_payload["context_sha256"]}
         status = "fallback" if trace["fallback"] else "ready"
+        persistence_started = time.monotonic()
         record = self.repository.save_agent_review_summary(
             summary_key=materialization_key,
             workflow_run_id=workflow_run_id,
@@ -96,8 +97,16 @@ class AgentReviewSummaryMaterializer:
             trace=trace,
             generated_at=summary.get("generated_at"),
         )
-        return record["summary"], {
+        persistence_latency_ms = round((time.monotonic() - persistence_started) * 1000, 3)
+        stored_trace = {
             **record["trace"],
+            "generation_metrics": {
+                **((record.get("trace") or {}).get("generation_metrics") or {}),
+                "persistence_latency_ms": persistence_latency_ms,
+            },
+        }
+        return record["summary"], {
+            **stored_trace,
             "materialization": _materialization_trace(record, reused=False),
         }
 
@@ -142,8 +151,15 @@ class AgentReviewSummaryMaterializer:
 
     def _generate_summary(self, packet: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         started = time.monotonic()
-        metrics = {"provider_invocations": 0, "content_attempt_count": None,
-                   "repair_count": None, "usage": None}
+        metrics = {
+            "provider_invocations": 0,
+            "content_attempt_count": None,
+            "repair_count": None,
+            "usage": None,
+            "provider_latency_ms": None,
+            "validation_latency_ms": None,
+            "persistence_latency_ms": None,
+        }
         summary, trace = self._generate_summary_measured(packet, metrics)
         return summary, {**trace, "generation_metrics": {
             **metrics, "duration_ms": round((time.monotonic() - started) * 1000, 3),
@@ -162,8 +178,14 @@ class AgentReviewSummaryMaterializer:
 
         try:
             metrics["provider_invocations"] = 1
+            provider_started = time.monotonic()
             if hasattr(provider, "generate_with_metadata"):
                 candidate, metadata = provider.generate_with_metadata(packet)
+                metrics["provider_latency_ms"] = metadata.get("provider_latency_ms")
+                if metrics["provider_latency_ms"] is None:
+                    metrics["provider_latency_ms"] = round(
+                        (time.monotonic() - provider_started) * 1000, 3
+                    )
                 attempts = metadata.get("content_review_attempts")
                 if isinstance(attempts, list):
                     metrics["content_attempt_count"] = len(attempts)
@@ -171,11 +193,18 @@ class AgentReviewSummaryMaterializer:
                 metrics["usage"] = metadata.get("usage")
             else:
                 candidate = provider.generate(packet)
+                metrics["provider_latency_ms"] = round(
+                    (time.monotonic() - provider_started) * 1000, 3
+                )
+            validation_started = time.monotonic()
             candidate_errors = validate_agent_review_summary_contract(
                 candidate, packet=packet
             )
             if candidate.get("mode") != "llm":
                 candidate_errors.append("mode_invalid_for_candidate")
+            metrics["validation_latency_ms"] = round(
+                (time.monotonic() - validation_started) * 1000, 3
+            )
             if not candidate_errors:
                 return candidate, {
                     "provider": provider.name,

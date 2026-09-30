@@ -168,6 +168,7 @@ class AgentReviewSummaryProvider:
         )
         attempts = []
         usages = []
+        provider_latencies_ms = []
         for attempt in range(2):
             if hasattr(self.provider, "generate_json_with_metadata"):
                 result = self.provider.generate_json_with_metadata(
@@ -177,6 +178,8 @@ class AgentReviewSummaryProvider:
                 )
                 payload = result["payload"]
                 metadata = dict(result.get("provider_metadata") or {})
+                if isinstance(metadata.get("latency_ms"), (int, float)):
+                    provider_latencies_ms.append(float(metadata["latency_ms"]))
             else:
                 payload = self.provider.generate_json(
                     AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT, deepcopy(prompt_payload),
@@ -222,8 +225,14 @@ class AgentReviewSummaryProvider:
         for role in summary["role_summaries"]:
             role["source_refs"] = list(dict.fromkeys([*role["source_refs"], *verified_refs]))
         return summary, {
-            "provider": self.name, "usage": usage,
+            "provider": self.name,
+            "usage": usage,
             "usage_measurement": "provider_reported" if usage else "not_reported",
+            "provider_latency_ms": (
+                round(sum(provider_latencies_ms), 3)
+                if provider_latencies_ms
+                else None
+            ),
             "content_review_attempts": attempts,
         }
 

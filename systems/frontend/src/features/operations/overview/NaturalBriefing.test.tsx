@@ -91,7 +91,7 @@ it("keeps the stored prose visible when regeneration fails", async () => {
   expect(host.querySelector<HTMLButtonElement>("button")!.disabled).toBe(false);
 });
 
-it("keeps stored prose visible when expanded evidence no longer matches the current basis", async () => {
+it("withdraws stored prose when expanded evidence no longer matches the current basis", async () => {
   packet.mockRejectedValue({ status: 409 });
   await render();
   expect(host.textContent).toContain("관측된 토크");
@@ -101,8 +101,8 @@ it("keeps stored prose visible when expanded evidence no longer matches the curr
     details.dispatchEvent(new Event("toggle", { bubbles: true }));
   });
   await act(async () => { await Promise.resolve(); });
-  expect(host.textContent).toContain("관측된 토크");
-  expect(host.textContent).toContain("저장된 브리핑을 유지");
+  expect(host.textContent).not.toContain("관측된 토크");
+  expect(host.textContent).toContain("근거가 변경되어 이전 브리핑을 숨겼습니다");
   expect(host.textContent).not.toContain("데이터 로딩 중");
 });
 

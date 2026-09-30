@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from typing import Protocol
 
-from .sensor_signal_bands import sensor_signal_bands
 
 DEFAULT_HISTORY_WINDOW = "24h"
 HISTORY_WINDOW_HOURS = {
@@ -664,7 +663,6 @@ def _feature(
                 "quality_status": current_quality,
             },
             "baseline": baseline,
-            "bands": sensor_signal_bands(key),
             "history": checked_history,
             "top_factor": top_factor_summary,
         },
@@ -1080,6 +1078,10 @@ _ACTIONS_REQUIRING_INPUT = {
     "complete_maintenance_action",
     "request_maintenance_replay",
 }
+
+
+def compose_closed_loop_read_model(closed_loop: dict[str, Any], *, prediction_available: bool, evidence_available: bool) -> dict[str, Any]:
+    return _closed_loop_read_model(closed_loop, prediction_available=prediction_available, evidence_available=evidence_available)
 
 
 def _closed_loop_read_model(

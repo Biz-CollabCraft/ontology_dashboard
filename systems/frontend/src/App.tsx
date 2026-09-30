@@ -8,7 +8,7 @@ const LoginPage = lazy(() => import("./features/auth/LoginPage").then(m => ({def
 const RegisterPage = lazy(() => import("./features/auth/RegisterPage").then(m => ({default: m.RegisterPage})));
 const PendingPage = lazy(() => import("./features/auth/PendingPage").then(m => ({default: m.PendingPage})));
 const AdminApp = lazy(() => import("./features/admin/AdminApp").then(m => ({default: m.AdminApp})));
-const Factory = lazy(() => import("./features/operations/overview/EngineerFactoryApplication"));
+const OperationsApplication = lazy(() => import("./features/operations/OperationsApplication"));
 
 function FullscreenLoading({ message = "화면을 준비하고 있습니다." }: { message?: string }) {
   return <main className="app-fullscreen-loading" aria-busy="true" role="status"><div><i /><strong>{message}</strong><p>설비 데이터와 업무 절차 화면을 연결하고 있습니다.</p></div></main>;
@@ -35,14 +35,21 @@ function Router() {
   const projectId = route && user.project_scopes.includes(route.projectId) ? route.projectId : user.active_project_id ?? user.project_scopes[0];
   if (!allowed || !projectId || !user.project_scopes.includes(projectId)) return <main><h1>사용 가능한 업무 화면이 없습니다.</h1><p>현재 엔지니어·보전팀·생산 관리자 화면만 제공합니다. 계정 권한은 관리자에게 문의해 주세요.</p><button onClick={() => void logout().then(() => navigate("/login", {replace: true}))}>로그아웃</button></main>;
   const query = new URLSearchParams(route?.projectId === projectId ? window.location.search : "");
-  const role = roles.includes("process_manager") ? "process_manager" : "field_operator";
+  const defaultRole = roles.includes("process_manager") ? "process_manager" : "field_operator";
   const workspace = query.get("workspace_id");
-  if (workspace && !user.workspace_scopes.includes(workspace)) return <main><p>이 작업 공간에 접근할 권한이 없습니다.</p><button onClick={() => navigate(operationsProjectPath(projectId) + "?dashboard=workflow&view=overview&role=" + role)}>업무 화면으로</button></main>;
-  if (pathname !== operationsProjectPath(projectId) || query.get("dashboard") !== "workflow" || query.get("view") !== "overview" || query.get("role") !== role) {
-    query.set("dashboard", "workflow"); query.set("view", "overview"); query.set("role", role); query.delete("report");
+  if (workspace && !user.workspace_scopes.includes(workspace)) return <main><p>이 작업 공간에 접근할 권한이 없습니다.</p><button onClick={() => navigate(operationsProjectPath(projectId) + "?dashboard=workflow&view=overview&role=" + defaultRole)}>업무 화면으로</button></main>;
+  if (pathname !== operationsProjectPath(projectId)) {
+    if (!query.get("dashboard")) query.set("dashboard", "workflow");
+    if (!query.get("view")) query.set("view", "overview");
+    if (!query.get("role")) query.set("role", defaultRole);
     return <Redirect to={operationsProjectPath(projectId) + "?" + query.toString()} />;
   }
-  return <Factory key={projectId} projectId={projectId} />;
+  let normalized = false;
+  if (!query.get("dashboard")) { query.set("dashboard", "workflow"); normalized = true; }
+  if (!query.get("view")) { query.set("view", "overview"); normalized = true; }
+  if (!query.get("role")) { query.set("role", defaultRole); normalized = true; }
+  if (normalized) return <Redirect to={operationsProjectPath(projectId) + "?" + query.toString()} />;
+  return <OperationsApplication key={projectId} projectId={projectId} />;
 }
 function ScopedRouter() {
   const {user} = useAuth();

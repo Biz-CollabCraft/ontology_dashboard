@@ -8,7 +8,7 @@ import { RoleFactoryStandalone } from "./RoleFactoryStandalone";
 import type { ComponentProps } from "react";
 vi.mock("./ProductionRequestBoard", () => ({ ProductionRequestBoard: () => null }));
 vi.mock("./InspectionWorkOrderEditor", () => ({ InspectionWorkOrderEditor: (props: { item: {work_order_id: string}; onConnectionChange: (value: unknown) => void }) =>
-  <div data-editor={props.item.work_order_id}><span>협의 요청서 {props.item.work_order_id}</span><button onClick={() => props.onConnectionChange({workOrderId: props.item.work_order_id, state: "offline"})}>연결 실패 모의</button></div>
+  <div data-editor={props.item.work_order_id}><span>협의 요청서 {props.item.work_order_id}</span><button data-check onClick={() => props.onConnectionChange({workOrderId: props.item.work_order_id, state: "loading"})}>연결 확인 모의</button><button onClick={() => props.onConnectionChange({workOrderId: props.item.work_order_id, state: "offline"})}>연결 실패 모의</button></div>
 }));
 let host: HTMLDivElement, root: Root;
 const props = {
@@ -46,8 +46,9 @@ it("places connection feedback after the workflow caption and reflects failure",
   const header = host.querySelector(".role-primary-work>header")!;
   expect(header.textContent).toContain("업무 단계별 확인연결 정상");
   await act(async () => host.querySelector<HTMLButtonElement>(".maintenance-request-item")!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>("[data-check]")!.click());
   expect(header.textContent).toContain("업무 단계별 확인연결 확인 중");
-  await act(async () => host.querySelector<HTMLButtonElement>("[data-editor] button")!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>("[data-editor] button:not([data-check])")!.click());
   expect(header.querySelector('[role="status"]')?.textContent).toBe("연결 확인 필요");
   expect(header.querySelector(".is-offline")).not.toBeNull();
 });
