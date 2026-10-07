@@ -1,9 +1,9 @@
 # AI Evidence Consistency(AI 근거 일관성) & Snapshot Reliability(스냅샷 신뢰성) — Evidence(근거)
 
-작성일: 2026-09-25  
-저장소: `/Users/hb/Projects/ontology-dashboard`  
-시작 revision(리비전): `05be8c8e0e73040420dfb8b040e8d0b74fe473fa` on `main`  
-실행 환경: DevSpace Max(DevSpace Max) workspace `ws_2273d631b2` 우선 사용.  
+작성일: 2026-09-25
+저장소: `/Users/hb/Projects/ontology-dashboard`
+시작 revision(리비전): `05be8c8e0e73040420dfb8b040e8d0b74fe473fa` on `main`
+실행 환경: DevSpace Max(DevSpace Max) workspace `ws_2273d631b2` 우선 사용.
 Working tree(작업 트리): 시작 시 clean(깨끗함); 이 파일과 계획·최소 변경은 이번 slice의 미커밋 변경이다.
 
 ## Observed code path(관측 코드 경로)

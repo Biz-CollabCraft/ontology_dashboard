@@ -1,9 +1,9 @@
 # AI Evidence Consistency(AI 근거 일관성) & Snapshot Reliability(스냅샷 신뢰성) 계획
 
-작성일: 2026-09-25  
-저장소: `/Users/hb/Projects/ontology-dashboard`  
-시작 기준: `main` @ `05be8c8e0e73040420dfb8b040e8d0b74fe473fa`  
-실행 환경: DevSpace Max(DevSpace Max) workspace `ws_2273d631b2`를 우선 사용한다.  
+작성일: 2026-09-25
+저장소: `/Users/hb/Projects/ontology-dashboard`
+시작 기준: `main` @ `05be8c8e0e73040420dfb8b040e8d0b74fe473fa`
+실행 환경: DevSpace Max(DevSpace Max) workspace `ws_2273d631b2`를 우선 사용한다.
 Source of truth(원본 진실원천): 이 저장소의 코드, 계획, evidence(근거), decision(결정)이다. Career OS는 원본 링크, 요약, 역량 연결만 가질 수 있다.
 
 ## Problem framing(문제 정의)
